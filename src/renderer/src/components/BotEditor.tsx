@@ -24,6 +24,7 @@ import {
 import { groupModels, type ModelProviderRow } from '../state/models'
 import { starterFace } from '../state/starterFaces'
 import { avatarChanged, useAvatar } from '../state/useBots'
+import { BotPluginRow } from './BotPluginRow'
 import { BotWorkSettings } from './BotWorkSettings'
 import { StarterFaceArt } from './StarterFaceArt'
 import { Icon } from './icons'
@@ -415,6 +416,7 @@ export function BotEditor({ bot, onClose, onSaved }: Props) {
           </section>
         ) : null}
         <BotWorkSettings bot={bot.name} botName={draft.title.trim() || bot.title} groups={groups} />
+        <BotPluginRow bot={bot.name} botName={draft.title.trim() || bot.title} />
       </div>
     </main>
   )

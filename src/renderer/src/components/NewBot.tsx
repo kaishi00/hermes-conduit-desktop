@@ -18,6 +18,7 @@ import { FACE_COUNT, faceHex, faceName, metaOutcome, normalizedPicture } from '.
 import { groupModels, type ModelProviderRow } from '../state/models'
 import { starterFace } from '../state/starterFaces'
 import { avatarChanged } from '../state/useBots'
+import { turnOnPluginForNewBot } from '../state/botPlugin'
 import { StarterFaceArt } from './StarterFaceArt'
 import { Icon } from './icons'
 
@@ -126,6 +127,9 @@ export function NewBot({ bots, protocol, onClose, onCreated }: Props) {
     }
     if (!lookSaved || (picture && !photoSaved)) warnings.push(t('The bot was created, but its picture or look was not saved. Edit the bot to try again.'))
     if (!modelPinned(params, created)) warnings.push(t('The model was not saved.'))
+    // The bot can use Conduit's features from the start: its profile gets the plugin turned on (issue 2803).
+    const pluginWarning = await turnOnPluginForNewBot(gateway.http, slug, !cloneFrom.trim())
+    if (pluginWarning) warnings.push(pluginWarning)
     // The hello is a real model turn: a bot that can't reach a model skips it and says so.
     const missing = needsModel(await gateway.rpc('setup.runtime_check', { profile: slug }).catch(() => null))
     if (missing) warnings.push(t('No model is ready for this bot yet, so it skipped its introduction. Edit the bot and pick a model.'))

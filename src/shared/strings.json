@@ -4154,6 +4154,21 @@
     "zh-Hans": "Conduit · {count} 项需要你处理",
     "zh-Hant": "Conduit · {count} 項需要你處理"
   },
+  "Conduit's features need the Conduit plugin turned on for this bot. Update the plugin, then turn it on in Edit Bot.": {
+    "de": "Für die Conduit-Funktionen muss das Conduit-Plugin für diesen Bot aktiviert sein. Aktualisiere das Plugin und aktiviere es dann unter „Bot bearbeiten“.",
+    "es": "Las funciones de Conduit necesitan el plugin de Conduit activado para este bot. Actualiza el plugin y luego actívalo en Editar bot.",
+    "fr": "Les fonctionnalités de Conduit exigent que le plugin Conduit soit activé pour ce bot. Mettez à jour le plugin, puis activez-le dans Modifier le bot.",
+    "id": "Fitur Conduit memerlukan plugin Conduit diaktifkan untuk bot ini. Perbarui plugin, lalu aktifkan di Edit Bot.",
+    "it": "Le funzioni di Conduit richiedono che il plugin di Conduit sia attivo per questo bot. Aggiorna il plugin, poi attivalo in Modifica bot.",
+    "ja": "Conduit の機能を使うには、このボットで Conduit プラグインをオンにする必要があります。プラグインをアップデートしてから、「ボットを編集」でオンにしてください。",
+    "ko": "Conduit 기능을 사용하려면 이 봇에서 Conduit 플러그인을 켜야 합니다. 플러그인을 업데이트한 다음 봇 편집에서 켜세요.",
+    "pl": "Funkcje Conduit wymagają włączenia wtyczki Conduit dla tego bota. Zaktualizuj wtyczkę, a potem włącz ją w Edytuj bota.",
+    "pt-BR": "Os recursos do Conduit precisam do plugin do Conduit ativado para este bot. Atualize o plugin e depois ative-o em Editar Bot.",
+    "ru": "Для функций Conduit у этого бота должен быть включён плагин Conduit. Обновите плагин, затем включите его в разделе «Изменить бота».",
+    "tr": "Conduit özellikleri için bu botta Conduit eklentisinin açık olması gerekir. Eklentiyi güncelleyin, ardından Botu Düzenle'de açın.",
+    "zh-Hans": "要使用 Conduit 的功能，需要为这个机器人打开 Conduit 插件。请先更新插件，然后在“编辑机器人”中打开。",
+    "zh-Hant": "要使用 Conduit 的功能，需要為這個機器人開啟 Conduit 外掛。請先更新外掛，然後在「編輯機器人」中開啟。"
+  },
   "Confident": {
     "de": "Selbstsicher",
     "es": "Segura",
@@ -10333,6 +10348,21 @@
     "tr": "Bu açıkken Hermes yeni devredilen ajan başlatmaz. Zaten çalışan ajanlar devam eder. Bu, bu Hermes’teki her profil için geçerlidir.",
     "zh-Hans": "开启后，Hermes 不会启动新的委派智能体。已在工作的智能体会继续运行。此设置适用于此 Hermes 上的所有配置文件。",
     "zh-Hant": "開啟時，Hermes 不會啟動新的委派代理程式。已在工作的代理程式會繼續執行。此設定適用於此 Hermes 上的所有設定檔。"
+  },
+  "Hermes still has the plugin off for this bot. Try again.": {
+    "de": "Hermes hat das Plugin für diesen Bot noch deaktiviert. Versuche es erneut.",
+    "es": "Hermes sigue teniendo el plugin desactivado para este bot. Inténtalo de nuevo.",
+    "fr": "Hermes a toujours désactivé le plugin pour ce bot. Réessayez.",
+    "id": "Hermes masih menonaktifkan plugin untuk bot ini. Coba lagi.",
+    "it": "Hermes ha ancora il plugin disattivato per questo bot. Riprova.",
+    "ja": "Hermes ではこのボットのプラグインがまだオフです。もう一度お試しください。",
+    "ko": "Hermes에서 이 봇의 플러그인이 아직 꺼져 있습니다. 다시 시도하세요.",
+    "pl": "Hermes nadal ma wyłączoną wtyczkę dla tego bota. Spróbuj ponownie.",
+    "pt-BR": "O Hermes ainda está com o plugin desativado para este bot. Tente novamente.",
+    "ru": "В Hermes плагин для этого бота всё ещё выключен. Попробуйте ещё раз.",
+    "tr": "Hermes bu bot için eklentiyi hâlâ kapalı tutuyor. Tekrar deneyin.",
+    "zh-Hans": "Hermes 仍为这个机器人关闭着插件。请重试。",
+    "zh-Hant": "Hermes 仍為這個機器人關閉著外掛。請再試一次。"
   },
   "Hermes stopped waiting for this.": {
     "de": "Hermes wartet nicht mehr darauf.",
@@ -23549,6 +23579,21 @@
     "zh-Hans": "这不是文件夹。",
     "zh-Hant": "這不是資料夾。"
   },
+  "The Conduit plugin is off for {name}, so its notifications, group rooms, Folder and cards don't work.": {
+    "de": "Das Conduit-Plugin ist für {name} deaktiviert, daher funktionieren Mitteilungen, Gruppenräume, Ordner und Karten nicht.",
+    "es": "El plugin de Conduit está desactivado para {name}, así que sus notificaciones, salas de grupo, Carpeta y tarjetas no funcionan.",
+    "fr": "Le plugin Conduit est désactivé pour {name} : ses notifications, salons de groupe, Dossier et cartes ne fonctionnent pas.",
+    "id": "Plugin Conduit nonaktif untuk {name}, jadi notifikasi, ruang grup, Folder, dan kartunya tidak berfungsi.",
+    "it": "Il plugin di Conduit è disattivato per {name}, quindi notifiche, stanze di gruppo, Cartella e schede non funzionano.",
+    "ja": "{name} では Conduit プラグインがオフのため、通知、グループルーム、フォルダ、カードが使えません。",
+    "ko": "{name}의 Conduit 플러그인이 꺼져 있어 알림, 그룹 룸, 폴더, 카드가 작동하지 않습니다.",
+    "pl": "Wtyczka Conduit jest wyłączona dla {name}, więc powiadomienia, pokoje grupowe, Folder i karty nie działają.",
+    "pt-BR": "O plugin do Conduit está desativado para {name}, então notificações, salas de grupo, Pasta e cartões não funcionam.",
+    "ru": "Плагин Conduit выключен для {name}, поэтому его уведомления, групповые комнаты, Папка и карточки не работают.",
+    "tr": "{name} için Conduit eklentisi kapalı, bu yüzden bildirimleri, grup odaları, Klasörü ve kartları çalışmıyor.",
+    "zh-Hans": "{name} 的 Conduit 插件已关闭，所以它的通知、群聊房间、文件夹和卡片都无法使用。",
+    "zh-Hant": "{name} 的 Conduit 外掛已關閉，所以它的通知、群組房間、檔案夾和卡片都無法使用。"
+  },
   "The Conduit plugin is up to date": {
     "de": "Das Conduit-Plugin ist aktuell",
     "es": "El plugin de Conduit está actualizado",
@@ -23593,6 +23638,21 @@
     "tr": "Hermes sunucunuzdaki Conduit eklentisi seçtiğiniz sesi onaylamadı.",
     "zh-Hans": "你的 Hermes 服务器上的 Conduit 插件没有确认你选择的声音。",
     "zh-Hant": "Hermes 伺服器上的 Conduit 外掛程式沒有確認你選擇的聲音。"
+  },
+  "The Conduit plugin wasn't turned on for this bot: {error} Edit the bot to try again.": {
+    "de": "Das Conduit-Plugin wurde für diesen Bot nicht aktiviert: {error} Bearbeite den Bot, um es erneut zu versuchen.",
+    "es": "No se activó el plugin de Conduit para este bot: {error} Edita el bot para intentarlo de nuevo.",
+    "fr": "Le plugin Conduit n’a pas été activé pour ce bot : {error} Modifiez le bot pour réessayer.",
+    "id": "Plugin Conduit tidak diaktifkan untuk bot ini: {error} Edit bot untuk mencoba lagi.",
+    "it": "Il plugin di Conduit non è stato attivato per questo bot: {error} Modifica il bot per riprovare.",
+    "ja": "このボットで Conduit プラグインをオンにできませんでした: {error} ボットを編集してもう一度お試しください。",
+    "ko": "이 봇의 Conduit 플러그인을 켜지 못했습니다: {error} 봇을 편집해 다시 시도하세요.",
+    "pl": "Nie włączono wtyczki Conduit dla tego bota: {error} Edytuj bota, aby spróbować ponownie.",
+    "pt-BR": "O plugin do Conduit não foi ativado para este bot: {error} Edite o bot para tentar novamente.",
+    "ru": "Плагин Conduit не был включён для этого бота: {error} Измените бота, чтобы попробовать ещё раз.",
+    "tr": "Bu bot için Conduit eklentisi açılamadı: {error} Tekrar denemek için botu düzenleyin.",
+    "zh-Hans": "未能为这个机器人打开 Conduit 插件：{error} 请编辑机器人后重试。",
+    "zh-Hant": "未能為這個機器人開啟 Conduit 外掛：{error} 請編輯機器人後再試一次。"
   },
   "The Folder is closed: Hermes couldn't say which folder it keeps files in. Check the files settings on the host.": {
     "de": "Der Ordner ist geschlossen: Hermes konnte nicht sagen, in welchem Ordner es Dateien ablegt. Prüfe die Dateieinstellungen auf dem Host.",
@@ -25903,6 +25963,21 @@
     "tr": "{seconds} sn sonra yeniden denenecek.",
     "zh-Hans": "{seconds} 秒后重试。",
     "zh-Hant": "{seconds} 秒後重試。"
+  },
+  "Turn On": {
+    "de": "Einschalten",
+    "es": "Activar",
+    "fr": "Activer",
+    "id": "Nyalakan",
+    "it": "Attiva",
+    "ja": "オンにする",
+    "ko": "켜기",
+    "pl": "Włącz",
+    "pt-BR": "Ativar",
+    "ru": "Включить",
+    "tr": "Aç",
+    "zh-Hans": "打开",
+    "zh-Hant": "開啟"
   },
   "Turn limit": {
     "de": "Schrittlimit",
