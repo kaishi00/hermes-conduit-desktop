@@ -15,13 +15,23 @@ export function BotPluginRow({ bot, botName }: { bot: string; botName: string })
 
   useEffect(() => {
     let live = true
+    let timer: ReturnType<typeof setTimeout> | undefined
     setState(null)
-    gateway
-      .http('GET', botPluginPath(bot), undefined, 30_000)
-      .then(body => live && setState(botPluginState(body)))
-      .catch(() => live && setState(null))
+    // A dropped read is tried again, so the row isn't lost while Edit Bot is open.
+    const delays = [3_000, 10_000, 30_000]
+    const read = () => {
+      gateway
+        .http('GET', botPluginPath(bot), undefined, 30_000)
+        .then(body => live && setState(botPluginState(body)))
+        .catch(() => {
+          const delay = delays.shift()
+          if (live && delay !== undefined) timer = setTimeout(read, delay)
+        })
+    }
+    read()
     return () => {
       live = false
+      if (timer) clearTimeout(timer)
     }
   }, [bot])
 
