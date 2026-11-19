@@ -24,9 +24,11 @@ export interface BotPluginState {
 
 export const botPluginPath = (name: string) => `${BOT_PLUGIN_PATH}?name=${encodeURIComponent(name)}`
 
-export function botPluginState(body: unknown): BotPluginState {
+/** Null for an answer that doesn't say whether it's on. */
+export function botPluginState(body: unknown): BotPluginState | null {
   const json = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
-  return { on: json.on === true, canTurnOn: json.can_turn_on === true }
+  if (typeof json.on !== 'boolean') return null
+  return { on: json.on, canTurnOn: json.can_turn_on === true }
 }
 
 export const offersTurnOn = (state: BotPluginState | null) => !!state && !state.on && state.canTurnOn
@@ -47,7 +49,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 /** Turns the plugin on for the bot: null once it's on, otherwise why not. */
 export async function turnOnBotPlugin(http: Http, name: string): Promise<string | null> {
   try {
-    return botPluginState(await http('POST', BOT_PLUGIN_PATH, { name }, TURN_ON_TIMEOUT_MS)).on
+    return botPluginState(await http('POST', BOT_PLUGIN_PATH, { name }, TURN_ON_TIMEOUT_MS))?.on
       ? null
       : t('Hermes still has the plugin off for this bot. Try again.')
   } catch (e) {

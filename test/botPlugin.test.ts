@@ -40,6 +40,7 @@ describe('botPluginState', () => {
     expect(offersTurnOn(botPluginState({ on: true, can_turn_on: true }))).toBe(false)
     expect(offersTurnOn(botPluginState({ on: false, can_turn_on: false }))).toBe(false)
     expect(offersTurnOn(botPluginState(null))).toBe(false)
+    expect(botPluginState({ can_turn_on: true })).toBeNull()
     expect(offersTurnOn(null)).toBe(false)
   })
   it('names the bot and no profile', () => {
