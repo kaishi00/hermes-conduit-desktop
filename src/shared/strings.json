@@ -8489,6 +8489,21 @@
     "zh-Hans": "平稳",
     "zh-Hant": "平穩"
   },
+  "Every chat here is marked done.": {
+    "de": "Jeder Chat hier ist als erledigt markiert.",
+    "es": "Todos los chats de aquí están marcados como terminados.",
+    "fr": "Toutes les conversations ici sont marquées comme terminées.",
+    "id": "Semua chat di sini sudah ditandai selesai.",
+    "it": "Tutte le chat qui sono segnate come completate.",
+    "ja": "ここのチャットはすべて完了になっています。",
+    "ko": "여기의 모든 채팅이 완료로 표시되어 있습니다.",
+    "pl": "Każdy czat tutaj jest oznaczony jako ukończony.",
+    "pt-BR": "Todos os chats aqui estão marcados como concluídos.",
+    "ru": "Все чаты здесь отмечены как завершённые.",
+    "tr": "Buradaki tüm sohbetler bitti olarak işaretli.",
+    "zh-Hans": "这里的聊天都已标记为已完成。",
+    "zh-Hant": "這裡的聊天都已標示為已完成。"
+  },
   "Every day": {
     "de": "Jeden Tag",
     "es": "Cada día",
@@ -14789,6 +14804,36 @@
     "zh-Hans": "地图",
     "zh-Hant": "地圖"
   },
+  "Mark as Done": {
+    "de": "Als erledigt markieren",
+    "es": "Marcar como terminado",
+    "fr": "Marquer comme terminé",
+    "id": "Tandai selesai",
+    "it": "Segna come completata",
+    "ja": "完了にする",
+    "ko": "완료로 표시",
+    "pl": "Oznacz jako ukończony",
+    "pt-BR": "Marcar como concluído",
+    "ru": "Отметить как завершённый",
+    "tr": "Bitti olarak işaretle",
+    "zh-Hans": "标记为已完成",
+    "zh-Hant": "標示為已完成"
+  },
+  "Mark as Not Done": {
+    "de": "Als nicht erledigt markieren",
+    "es": "Marcar como no terminado",
+    "fr": "Marquer comme non terminé",
+    "id": "Tandai belum selesai",
+    "it": "Segna come non completata",
+    "ja": "未完了にする",
+    "ko": "완료 해제",
+    "pl": "Oznacz jako nieukończony",
+    "pt-BR": "Marcar como não concluído",
+    "ru": "Снять отметку о завершении",
+    "tr": "Bitmedi olarak işaretle",
+    "zh-Hans": "标记为未完成",
+    "zh-Hant": "標示為未完成"
+  },
   "Mark as read": {
     "de": "Als gelesen markieren",
     "es": "Marcar como leído",
@@ -16603,6 +16648,21 @@
     "tr": "Açıklama yok.",
     "zh-Hans": "没有描述。",
     "zh-Hant": "沒有描述。"
+  },
+  "No done chats. Mark one done from its menu.": {
+    "de": "Keine erledigten Chats. Markiere einen über sein Menü als erledigt.",
+    "es": "No hay chats terminados. Marca uno como terminado desde su menú.",
+    "fr": "Aucune conversation terminée. Marquez-en une comme terminée depuis son menu.",
+    "id": "Tidak ada chat yang selesai. Tandai selesai dari menunya.",
+    "it": "Nessuna chat completata. Segnane una come completata dal suo menu.",
+    "ja": "完了したチャットはありません。メニューから完了にできます。",
+    "ko": "완료된 채팅이 없습니다. 채팅 메뉴에서 완료로 표시하세요.",
+    "pl": "Brak ukończonych czatów. Oznacz czat jako ukończony w jego menu.",
+    "pt-BR": "Nenhum chat concluído. Marque um como concluído no menu dele.",
+    "ru": "Нет завершённых чатов. Отметьте чат как завершённый в его меню.",
+    "tr": "Biten sohbet yok. Menüsünden bir sohbeti bitti olarak işaretleyin.",
+    "zh-Hans": "没有已完成的聊天。可在聊天的菜单中将其标记为已完成。",
+    "zh-Hant": "沒有已完成的聊天。可在聊天的選單中將其標示為已完成。"
   },
   "No fallback models yet.": {
     "de": "Noch keine Ersatzmodelle.",

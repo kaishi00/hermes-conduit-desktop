@@ -19,6 +19,11 @@ const FILTERS: { value: ChatFilter; label: () => string }[] = [
   { value: 'running', label: () => t('Running') },
   { value: 'waiting', label: () => t('Needs approval') }
 ]
+/** Done chats' chips, offered once the plugin keeps the marks. */
+const DONE_FILTERS: { value: ChatFilter; label: () => string }[] = [
+  { value: 'inprogress', label: () => t('In progress') },
+  { value: 'done', label: () => t('Done') }
+]
 
 /** A section of the list: a date's (or Pinned), or a profile's when grouped by profile. */
 interface ListSection {
@@ -52,6 +57,9 @@ interface Props {
   marks?: ChatMarks
   onStar?: (row: ChatRow) => void
   onToggleRead?: (row: ChatRow) => void
+  /** Done chats, kept by the plugin: left out on a plugin that doesn't keep them. */
+  isDone?: (row: ChatRow) => boolean
+  onDone?: (row: ChatRow) => void
   /** Opens Projects, the phone's Chats › Projects. */
   onProjects?: () => void
   /** The host, so a Hermes without message search isn't asked again. */
@@ -98,6 +106,8 @@ export function ChatList({
   marks,
   onStar,
   onToggleRead,
+  isDone,
+  onDone,
   onProjects,
   onPinnedReplies,
   searchScope = '',
@@ -163,7 +173,7 @@ export function ChatList({
   const { sections, listed, allowed, pinnedSection } = useMemo(() => {
     const q = query.trim().toLowerCase()
     const inProfile = profile ? (rows ?? []).filter(r => sameProfile(r, profile)) : (rows ?? [])
-    const marked = marks ? filterRows(inProfile, filter, marks, runningIds, waitingIds) : inProfile
+    const marked = marks ? filterRows(inProfile, isDone || !DONE_FILTERS.some(f => f.value === filter) ? filter : 'all', marks, runningIds, waitingIds, isDone) : inProfile
     const sourced = source ? marked.filter(r => underSource(r, source)) : marked
     const filtered = q ? sourced.filter(r => `${r.title} ${r.preview ?? ''}`.toLowerCase().includes(q)) : sourced
     const sections = sectionRows(filtered)
@@ -184,7 +194,7 @@ export function ChatList({
         ).map(group => ({ title: profileTitle(group.profile), rows: group.rows, profile: group.profile, hidden: group.hidden, extra: group.extra }))
       : sections.map(section => (section.rows[0]?.pinned ? { ...section, rows: pinned.filter(r => shown.has(r.id)) } : section))
     return { sections: arranged, listed: filtered, allowed: filter !== 'all' || source ? sourced : undefined, pinnedSection: pinned }
-  }, [rows, query, profile, marks, filter, runningIds, waitingIds, source, pinOrder.orders, grouped, showingAll, selectedId, bots])
+  }, [rows, query, profile, marks, filter, runningIds, waitingIds, isDone, source, pinOrder.orders, grouped, showingAll, selectedId, bots])
   const movePinned = (row: ChatRow, to: number) => {
     const from = pinnedSection.findIndex(r => r.id === row.id)
     const next = moved(pinnedSection, from, to)
@@ -255,7 +265,7 @@ export function ChatList({
       {showStrip ? <ProfileStrip bots={bots!} profile={profile} onProfile={onProfile!} /> : null}
       {marks ? (
         <div className="filter-chips" role="tablist" aria-label={t('Filter')}>
-          {FILTERS.map(({ value, label }) => (
+          {(isDone ? [...FILTERS, ...DONE_FILTERS] : FILTERS).map(({ value, label }) => (
             <button key={value} role="tab" aria-selected={filter === value} className={filter === value ? 'on' : undefined} onClick={() => setFilter(value)}>
               {label()}
             </button>
@@ -303,7 +313,11 @@ export function ChatList({
                   ? t('Nothing is running.')
                   : filter === 'waiting'
                     ? t('No chat is waiting on your answer.')
-                    : t('No chats yet. Start one with the + button.')}
+                    : filter === 'inprogress' && isDone
+                      ? t('Every chat here is marked done.')
+                      : filter === 'done' && isDone
+                        ? t('No done chats. Mark one done from its menu.')
+                        : t('No chats yet. Start one with the + button.')}
           </div>
         ) : null}
         {sections.map(section => (
@@ -384,12 +398,13 @@ export function ChatList({
                       onBlur={() => finishRename(true)}
                     />
                   ) : (
-                    <button className="row" aria-current={row.id === selectedId ? 'true' : undefined} onClick={() => onSelect(row)}>
+                    <button className={isDone?.(row) ? 'row done' : 'row'} aria-current={row.id === selectedId ? 'true' : undefined} onClick={() => onSelect(row)}>
                       <span className="row-top">
                         <span className="row-title">
                           {marks && isUnread(marks, row) && row.id !== selectedId ? <span className="unread-dot" role="img" aria-label={t('Unread')} /> : null}
                           {row.pinned ? <Icon name="pin" className="row-pin" /> : null}
                           {marks && isStarred(marks, row) ? <Icon name="star" className="row-pin row-star" /> : null}
+                          {isDone?.(row) ? <Icon name="check" className="row-pin row-done" aria-label={t('Done')} /> : null}
                           {row.title}
                         </span>
                         {row.sourceKind && row.sourceKind !== 'chat' ? <span className="row-source">{sourceName(row.sourceKind)}</span> : null}
@@ -543,6 +558,11 @@ export function ChatList({
               {onStar && marks ? (
                 <button role="menuitem" onClick={() => onStar(menu.row)}>
                   {isStarred(marks, menu.row) ? t('Unstar') : t('Star')}
+                </button>
+              ) : null}
+              {onDone && isDone ? (
+                <button role="menuitem" onClick={() => onDone(menu.row)}>
+                  {isDone(menu.row) ? t('Mark as Not Done') : t('Mark as Done')}
                 </button>
               ) : null}
               {onToggleRead && marks && menu.row.id !== selectedId ? (

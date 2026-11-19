@@ -3005,6 +3005,17 @@ html[data-window='quick'] body {
   fill: currentColor;
 }
 
+.row-done {
+  color: var(--success, #34c77b);
+}
+
+/* Done chats: the row dimmed, its live status left at full strength. */
+.row.done .row-title,
+.row.done .row-time,
+.row.done > .meta {
+  opacity: 0.55;
+}
+
 .unread-dot {
   display: inline-block;
   width: 8px;

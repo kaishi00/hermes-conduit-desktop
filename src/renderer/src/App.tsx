@@ -110,6 +110,7 @@ import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isUnread, type ChatMarks } from './state/chatMarks'
+import { isDone, useChatDone } from './state/chatDone'
 import { GO_TO, SCALES, applyScale, nextScale, readScale, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
@@ -684,6 +685,11 @@ function Shell({ status, onAddHost }: { status: ConnectionStatus; onAddHost: () 
   )
   // Stars and read state: on this computer, per host. Hermes' own unread flag is cleared too.
   const markHost = status.url ?? ''
+  // Done chats, kept by the plugin for every Conduit (state/chatDone): read again as the list changes.
+  const doneProfiles = useMemo(() => [...new Set((list.rows ?? []).map(r => r.profile ?? 'default'))].sort(), [list.rows])
+  const doneHttp = useCallback((method: 'GET' | 'POST', path: string, body?: unknown) => gateway.http(method, path, body), [])
+  const chatDone = useChatDone(doneHttp, connected, doneProfiles, `${list.rows?.length ?? 0}\t${list.rows?.[0]?.activeAt ?? 0}`, markHost)
+  const isRowDone = useCallback((row: ChatRow) => isDone(chatDone.marks, row), [chatDone.marks])
   const [marks, setMarks] = useState<ChatMarks>(() => loadMarks(markHost))
   useEffect(() => setMarks(loadMarks(markHost)), [markHost])
   const updateMarks = useCallback(
@@ -1162,6 +1168,8 @@ function Shell({ status, onAddHost }: { status: ConnectionStatus; onAddHost: () 
                 marks={marks}
                 onStar={row => updateMarks(current => toggleStar(current, row))}
                 onToggleRead={toggleRead}
+                isDone={chatDone.available ? isRowDone : undefined}
+                onDone={chatDone.available ? chatDone.toggle : undefined}
                 onDelete={row => {
                   if (window.confirm(`${t('Delete conversation?')}\n\n${t('This permanently deletes the conversation and cannot be undone.')}`))
                     void chatAction(row, null)

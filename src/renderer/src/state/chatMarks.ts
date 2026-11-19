@@ -6,7 +6,7 @@
  */
 import type { ChatRow } from './chats'
 
-export type ChatFilter = 'all' | 'starred' | 'unread' | 'running' | 'waiting'
+export type ChatFilter = 'all' | 'starred' | 'unread' | 'running' | 'waiting' | 'inprogress' | 'done'
 
 export interface ChatMarks {
   /** "profile\tid" of each starred chat. */
@@ -82,7 +82,9 @@ export function filterRows(
   filter: ChatFilter,
   marks: ChatMarks,
   running: ReadonlySet<string>,
-  waiting: ReadonlySet<string> = new Set()
+  waiting: ReadonlySet<string> = new Set(),
+  /** Done chats (state/chatDone): whether the row is marked done. */
+  done: (row: ChatRow) => boolean = () => false
 ): ChatRow[] {
   switch (filter) {
     case 'starred':
@@ -93,6 +95,10 @@ export function filterRows(
       return rows.filter(row => running.has(row.id) && !waiting.has(row.id))
     case 'waiting':
       return rows.filter(row => waiting.has(row.id))
+    case 'inprogress':
+      return rows.filter(row => !done(row))
+    case 'done':
+      return rows.filter(row => done(row))
     default:
       return rows
   }
