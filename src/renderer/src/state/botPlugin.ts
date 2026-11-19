@@ -3,7 +3,7 @@
  * 2803). Hermes serves a profile's plugin routes only once that profile turns
  * the plugin on, and a bot New Bot makes from a fresh profile hasn't, so its
  * Conduit features answer "Plugin not found". The dashboard's plugin turns it
- * on there (`/profiles/plugin`, plugin 0.180.0+): New Bot asks for every bot
+ * on there (`/profiles/plugin`, plugin 0.181.0+): New Bot asks for every bot
  * it makes, and Edit Bot offers Turn On for one that has it off.
  */
 import { t } from '../../../shared/i18n'

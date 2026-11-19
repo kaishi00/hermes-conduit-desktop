@@ -13,8 +13,8 @@ import type { PluginStatus } from '../src/renderer/src/state/plugin'
 
 const reported = (capabilities: string[]): PluginStatus => ({
   state: 'reported',
-  version: '0.180.0',
-  loadedVersion: '0.180.0',
+  version: '0.181.0',
+  loadedVersion: '0.181.0',
   restartNeeded: false,
   capabilities,
   managedBy: null,
