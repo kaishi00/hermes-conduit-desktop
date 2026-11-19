@@ -30,7 +30,10 @@ describe('newBotStep', () => {
     expect(newBotStep(reported(['session-usage']), true)).toBe('askForUpdate')
     expect(newBotStep(reported(['session-usage']), false)).toBe('nothing')
     expect(newBotStep({ state: 'unknown' }, true)).toBe('nothing')
-    expect(newBotStep({ state: 'missing' }, true)).toBe('nothing')
+  })
+  it('counts a plugin too old to say what it serves as older', () => {
+    expect(newBotStep({ state: 'missing' }, true)).toBe('askForUpdate')
+    expect(newBotStep({ state: 'missing' }, false)).toBe('nothing')
   })
 })
 
@@ -63,6 +66,22 @@ describe('turnOnPluginForNewBot', () => {
     const { http, calls } = host(false, () => ({ on: true, can_turn_on: true }))
     expect(await turnOnPluginForNewBot(http, 'furina', true)).toBeNull()
     expect(calls).toEqual([`GET ${STATUS_PATH}`, `GET ${botPluginPath('furina')}`, `POST ${BOT_PLUGIN_PATH}`])
+  })
+  it('tells a fresh bot to update a plugin too old to have the status route, and a clone nothing', async () => {
+    const calls: string[] = []
+    const http = async (method: string, path: string) => {
+      calls.push(`${method} ${path}`)
+      throw Object.assign(new Error('Not Found'), { code: 404 })
+    }
+    expect(await turnOnPluginForNewBot(http, 'furina', true)).toMatch(/Update the plugin/)
+    expect(await turnOnPluginForNewBot(http, 'furina', false)).toBeNull()
+    expect(calls).toEqual([`GET ${STATUS_PATH}`, `GET ${STATUS_PATH}`])
+  })
+  it('says nothing when the status read fails otherwise', async () => {
+    const http = async () => {
+      throw new Error('offline')
+    }
+    expect(await turnOnPluginForNewBot(http, 'furina', true)).toBeNull()
   })
   it('leaves a bot that has it already', async () => {
     const { http, calls } = host(true, () => ({}))

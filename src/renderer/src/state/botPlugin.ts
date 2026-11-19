@@ -37,8 +37,10 @@ export type NewBotStep = 'turnOn' | 'askForUpdate' | 'nothing'
 
 /** What New Bot does about the plugin once the bot exists, as the phone decides it. */
 export function newBotStep(status: PluginStatus, startsFresh: boolean): NewBotStep {
-  if (status.state !== 'reported') return 'nothing'
-  if (status.capabilities.includes(BOT_PLUGIN)) return 'turnOn'
+  // Not read yet: nothing to say.
+  if (status.state === 'unknown') return 'nothing'
+  if (status.state === 'reported' && status.capabilities.includes(BOT_PLUGIN)) return 'turnOn'
+  // An older plugin, one too old to say what it serves (or none) included.
   return startsFresh ? 'askForUpdate' : 'nothing'
 }
 
@@ -61,7 +63,9 @@ export async function turnOnBotPlugin(http: Http, name: string): Promise<string 
 export async function turnOnPluginForNewBot(http: Http, name: string, startsFresh: boolean): Promise<string | null> {
   const status = await http('GET', STATUS_PATH, undefined, 12_000)
     .then(pluginStatus)
-    .catch((): PluginStatus => ({ state: 'unknown' }))
+    // A 404 is a plugin too old to have the route (or none), as the plugin
+    // page reads it.
+    .catch((e): PluginStatus => ((e as { code?: unknown })?.code === 404 ? { state: 'missing' } : { state: 'unknown' }))
   const step = newBotStep(status, startsFresh)
   if (step === 'nothing') return null
   if (step === 'askForUpdate') {
