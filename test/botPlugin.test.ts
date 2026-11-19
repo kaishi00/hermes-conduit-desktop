@@ -77,11 +77,11 @@ describe('turnOnPluginForNewBot', () => {
       "The Conduit plugin wasn't turned on for this bot: Hermes refused to turn the plugin on: recalled Edit the bot to try again."
     )
   })
-  it("gives a fresh bot the host steps where the dashboard can't turn it on", async () => {
+  it("gives the host steps where the dashboard can't turn it on", async () => {
     const fresh = host(false, () => ({}), false)
     expect(await turnOnPluginForNewBot(fresh.http, 'furina', true)).toContain('“furina” profile')
     expect(fresh.calls).not.toContain(`POST ${BOT_PLUGIN_PATH}`)
     const clone = host(false, () => ({}), false)
-    expect(await turnOnPluginForNewBot(clone.http, 'furina', false)).toBeNull()
+    expect(await turnOnPluginForNewBot(clone.http, 'furina', false)).toContain('“furina” profile')
   })
 })

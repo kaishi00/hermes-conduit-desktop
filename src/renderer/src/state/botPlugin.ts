@@ -72,14 +72,12 @@ export async function turnOnPluginForNewBot(http: Http, name: string, startsFres
     .catch(() => null)
   if (state?.on) return null
   if (state && !state.canTurnOn) {
-    // A dashboard running a profile's own copy can't share it: a fresh bot
-    // is told the host steps instead.
-    return startsFresh
-      ? t(
-          "Hermes has the conduit_push plugin turned off for the “{profile}” profile. On the Hermes host, add conduit_push to plugins.enabled in that profile's config.yaml (and take it out of plugins.disabled), then restart Hermes.",
-          { profile: name }
-        )
-      : null
+    // A dashboard running a profile's own copy can't share it: the bot is
+    // told the host steps instead.
+    return t(
+      "Hermes has the conduit_push plugin turned off for the “{profile}” profile. On the Hermes host, add conduit_push to plugins.enabled in that profile's config.yaml (and take it out of plugins.disabled), then restart Hermes.",
+      { profile: name }
+    )
   }
   const failure = await turnOnBotPlugin(http, name)
   return failure ? t("The Conduit plugin wasn't turned on for this bot: {error} Edit the bot to try again.", { error: failure }) : null
