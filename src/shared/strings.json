@@ -9929,6 +9929,21 @@
     "zh-Hans": "Hermes 有个问题。",
     "zh-Hant": "Hermes 有個問題。"
   },
+  "Hermes has the conduit_push plugin turned off for the “{profile}” profile. On the Hermes host, add conduit_push to plugins.enabled in that profile's config.yaml (and take it out of plugins.disabled), then restart Hermes.": {
+    "de": "Für das Profil „{profile}“ ist das Hermes-Plugin conduit_push ausgeschaltet. Füge auf dem Hermes-Host conduit_push in der config.yaml dieses Profils zu plugins.enabled hinzu (und entferne es aus plugins.disabled) und starte Hermes dann neu.",
+    "es": "El perfil «{profile}» tiene desactivado el plugin conduit_push de Hermes. En el host de Hermes, añade conduit_push a plugins.enabled en el config.yaml de ese perfil (y quítalo de plugins.disabled) y luego reinicia Hermes.",
+    "fr": "Le plugin Hermes conduit_push est désactivé pour le profil « {profile} ». Sur l'hôte Hermes, ajoutez conduit_push à plugins.enabled dans le config.yaml de ce profil (et retirez-le de plugins.disabled), puis redémarrez Hermes.",
+    "id": "Plugin Hermes conduit_push dinonaktifkan untuk profil “{profile}”. Di host Hermes, tambahkan conduit_push ke plugins.enabled di config.yaml profil tersebut (dan hapus dari plugins.disabled), lalu mulai ulang Hermes.",
+    "it": "Il plugin Hermes conduit_push è disattivato per il profilo «{profile}». Sull'host di Hermes aggiungi conduit_push a plugins.enabled nel config.yaml di quel profilo (e toglilo da plugins.disabled), poi riavvia Hermes.",
+    "ja": "プロファイル「{profile}」で Hermes の conduit_push プラグインがオフになっています。Hermes のホストで、そのプロファイルの config.yaml の plugins.enabled に conduit_push を追加（plugins.disabled からは削除）してから、Hermes を再起動してください。",
+    "ko": "“{profile}” 프로필에서 Hermes의 conduit_push 플러그인이 꺼져 있습니다. Hermes 호스트에서 해당 프로필의 config.yaml에 있는 plugins.enabled에 conduit_push을(를) 추가(plugins.disabled에서는 제거)한 다음 Hermes를 다시 시작하세요.",
+    "pl": "Dla profilu „{profile}” wtyczka Hermesa conduit_push jest wyłączona. Na hoście Hermesa dodaj conduit_push do plugins.enabled w pliku config.yaml tego profilu (i usuń ją z plugins.disabled), a potem uruchom Hermesa ponownie.",
+    "pt-BR": "O perfil “{profile}” está com o plugin conduit_push do Hermes desativado. No host do Hermes, adicione conduit_push a plugins.enabled no config.yaml desse perfil (e remova-o de plugins.disabled) e reinicie o Hermes.",
+    "ru": "Для профиля «{profile}» плагин Hermes conduit_push выключен. На хосте Hermes добавьте conduit_push в plugins.enabled в config.yaml этого профиля (и уберите его из plugins.disabled), затем перезапустите Hermes.",
+    "tr": "“{profile}” profilinde Hermes'in conduit_push eklentisi kapalı. Hermes ana makinesinde bu profilin config.yaml dosyasındaki plugins.enabled listesine conduit_push ekleyin (ve plugins.disabled listesinden çıkarın), ardından Hermes'i yeniden başlatın.",
+    "zh-Hans": "“{profile}”配置文件已关闭 Hermes 的 conduit_push 插件。请在 Hermes 主机上将 conduit_push 添加到该配置文件 config.yaml 的 plugins.enabled 中（并将其从 plugins.disabled 中移除），然后重启 Hermes。",
+    "zh-Hant": "「{profile}」設定檔已關閉 Hermes 的 conduit_push 外掛。請在 Hermes 主機上將 conduit_push 加入該設定檔 config.yaml 的 plugins.enabled（並將其從 plugins.disabled 移除），然後重新啟動 Hermes。"
+  },
   "Hermes installs plugins for the host's default profile. Switch to it to change them.": {
     "de": "Hermes installiert Plugins für das Standardprofil des Hosts. Wechsle dorthin, um sie zu ändern.",
     "es": "Hermes instala los plugins para el perfil predeterminado del host. Cambia a él para modificarlos.",

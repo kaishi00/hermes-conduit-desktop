@@ -48,12 +48,12 @@ describe('botPluginState', () => {
 })
 
 describe('turnOnPluginForNewBot', () => {
-  const host = (on: boolean, post: () => unknown) => {
+  const host = (on: boolean, post: () => unknown, canTurnOn = true) => {
     const calls: string[] = []
     const http = async (method: string, path: string) => {
       calls.push(`${method} ${path}`)
       if (path === STATUS_PATH) return { ok: true, capabilities: [BOT_PLUGIN] }
-      if (method === 'GET') return { on, can_turn_on: true }
+      if (method === 'GET') return { on, can_turn_on: canTurnOn }
       return post()
     }
     return { http, calls }
@@ -75,5 +75,12 @@ describe('turnOnPluginForNewBot', () => {
     expect(await turnOnPluginForNewBot(http, 'furina', true)).toBe(
       "The Conduit plugin wasn't turned on for this bot: Hermes refused to turn the plugin on: recalled Edit the bot to try again."
     )
+  })
+  it("gives a fresh bot the host steps where the dashboard can't turn it on", async () => {
+    const fresh = host(false, () => ({}), false)
+    expect(await turnOnPluginForNewBot(fresh.http, 'furina', true)).toContain('“furina” profile')
+    expect(fresh.calls).not.toContain(`POST ${BOT_PLUGIN_PATH}`)
+    const clone = host(false, () => ({}), false)
+    expect(await turnOnPluginForNewBot(clone.http, 'furina', false)).toBeNull()
   })
 })
