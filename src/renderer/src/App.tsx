@@ -1350,8 +1350,8 @@ function Shell({
   // ...and their group chats: each room once, under the host you talk in it from (Eric, 2026-11-20).
   const keptRooms = useKeptRooms(keptHosts, botsListShown)
   const groupChats = useMemo(
-    () => combinedRooms(status.url ?? '', savedHostUrls, groupRooms.rooms ?? [], roomCopies.copies ?? [], keptRooms),
-    [status.url, savedHostUrls, groupRooms.rooms, roomCopies.copies, keptRooms]
+    () => combinedRooms(status.url ?? '', savedHostUrls, groupRooms.rooms ?? [], roomCopies.copies, keptRooms, copiesWaiting),
+    [status.url, savedHostUrls, groupRooms.rooms, roomCopies.copies, keptRooms, copiesWaiting]
   )
   useEffect(() => {
     if (botsListShown && hasOtherBots) void roomDrafts.refreshPeople()
@@ -1540,13 +1540,14 @@ function Shell({
   // A group chat opened on another host: open it here once its rooms or copies are read.
   useEffect(() => {
     if (!connected) return
-    const taken = takeRoomAfterSwitch(statusUrl, groupRooms.rooms, roomCopies.copies)
+    // Its copies only once they've been read: an unread list is empty, not missing the copy.
+    const taken = takeRoomAfterSwitch(statusUrl, groupRooms.rooms, roomCopies.loaded ? roomCopies.copies : null)
     if (!taken) return
     if ('room' in taken) return showRoom(taken.room)
     setOpenCopy(taken.copy.id)
     setOpenRoom(null)
     setSection('room')
-  }, [connected, statusUrl, groupRooms.rooms, roomCopies.copies, showRoom])
+  }, [connected, statusUrl, groupRooms.rooms, roomCopies.loaded, roomCopies.copies, showRoom])
   // A wait opened on another host before the switch: open it here once connected.
   useEffect(() => {
     if (!connected || list.rows === undefined) return
@@ -1823,7 +1824,7 @@ function Shell({
                     void roomDrafts.refreshPeople()
                   }
                 : undefined,
-    copies: roomCopies.copies ? groupChats.copies : undefined,
+    copies: groupChats.copies,
     otherRooms: groupChats.others,
     onOpenOtherRoom: openOtherRoom,
     copiesWaiting: copiesWaiting,

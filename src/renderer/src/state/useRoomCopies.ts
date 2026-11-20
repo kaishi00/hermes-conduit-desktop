@@ -140,6 +140,8 @@ export function useRoomCopies(connected: boolean, host: string, capabilities: re
     canLeave,
     leave,
     copies: served && copies ? copies : [],
+    /** The list has been read here (or isn't served, so there's none to read). */
+    loaded: !served || copies !== null,
     refresh,
     remove,
     approvals: served && canAnswer ? shownApprovals : [],

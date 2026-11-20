@@ -371,15 +371,18 @@ const sameMembers = (a: readonly string[], b: readonly string[]) => !a.length ||
  * from, so you're the same person in it whichever host is on screen. That's
  * the host whose Hermes hosts it (this one first, for one Hermes saved at
  * two addresses), else the first in Saved Dashboards order with a copy.
- * `copies`: this host's copies left to show; `others`: the other hosts'
- * group chats, in Saved Dashboards order, each one's newest first.
+ * `copies`: this host's copies left to show (one an agent of yours waits in
+ * for your approval, `waiting`, always stays, since only its row answers
+ * it); `others`: the other hosts' group chats, in Saved Dashboards order,
+ * each one's newest first.
  */
 export function combinedRooms(
   here: string,
   order: readonly string[],
   hereRooms: readonly Room[],
   hereCopies: readonly RoomCopy[],
-  kept: ReadonlyMap<string, HostRooms>
+  kept: ReadonlyMap<string, HostRooms>,
+  waiting: ReadonlySet<string> = new Set()
 ): { copies: RoomCopy[]; others: OtherRoom[] } {
   if (!kept.size) return { copies: [...hereCopies], others: [] }
   const lists = order.flatMap(url =>
@@ -392,7 +395,7 @@ export function combinedRooms(
     if (host) return host.url
     return lists.find(l => l.copies.some(c => c.roomId === roomId && sameMembers(memberIds(c.members), members)))?.url ?? null
   }
-  const copies = hereCopies.filter(c => (home(c.roomId, memberIds(c.members)) ?? here) === here)
+  const copies = hereCopies.filter(c => waiting.has(c.id) || (home(c.roomId, memberIds(c.members)) ?? here) === here)
   const others: OtherRoom[] = []
   for (const list of lists) {
     if (list.url === here) continue

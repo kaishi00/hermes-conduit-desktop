@@ -399,6 +399,8 @@ describe('group chats in a combined group', () => {
     expect(combinedRooms(vps, [mac, vps], [], [copy('plans', ['sam'])], kept).copies.map(c => c.roomId)).toEqual(['plans'])
     // One Hermes saved at two addresses: a room both list shows once, as this host's.
     expect(combinedRooms(vps, [mac, vps], [room('plans', ['raiden'])], [], kept).others.some(o => o.kind === 'room' && o.room.roomId === 'plans')).toBe(false)
+    // A copy an agent of yours waits in for your approval stays, since only its row answers it.
+    expect(combinedRooms(vps, [mac, vps], [], here, kept, new Set([here[0].id])).copies.map(c => c.roomId)).toEqual(['trip', 'solo'])
     // Nothing kept: this host's copies as they are.
     expect(combinedRooms(vps, [mac, vps], [], here, new Map()).copies).toHaveLength(3)
   })
