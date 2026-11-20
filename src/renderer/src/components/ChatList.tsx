@@ -933,6 +933,7 @@ interface RowHandlers {
 const ChatRowItem = memo(function ChatRowItem({
   row,
   depth,
+  today,
   selected,
   waits,
   running,
@@ -1011,7 +1012,7 @@ const ChatRowItem = memo(function ChatRowItem({
               {row.title}
             </span>
             {row.sourceKind && row.sourceKind !== 'chat' ? <span className="row-source">{sourceName(row.sourceKind)}</span> : null}
-            <span className="meta row-time">{timeLabel(row.activeAt)}</span>
+            <span className="meta row-time">{timeLabel(row.activeAt, today)}</span>
           </span>
           {waits ? (
             <span className="running waiting">{t('Needs approval')}</span>

@@ -97,9 +97,10 @@ export function mergeRows(existing: ChatRow[], page: ChatRow[]): ChatRow[] {
 /** Whether two rows say the same, field by field (rows hold only plain values). */
 export function sameRow<T extends object>(a: T, b: T): boolean {
   if (a === b) return true
-  const ak = Object.keys(a) as (keyof T)[]
-  const bk = Object.keys(b)
-  return ak.length === bk.length && ak.every(k => a[k] === b[k])
+  // A key left out and one set to undefined are the same: the saved list's JSON drops the undefined ones.
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof T>
+  for (const k of keys) if (a[k] !== b[k]) return false
+  return true
 }
 
 /**

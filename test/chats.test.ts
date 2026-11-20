@@ -112,3 +112,12 @@ describe('a refresh over the rows shown', () => {
     expect(sameRow({ ...row('a'), preview: 'x' }, { ...row('a'), preview: 'x' })).toBe(true)
   })
 })
+
+describe('the saved list against a fresh read', () => {
+  it('counts a key the JSON dropped the same as an undefined one', () => {
+    const fresh: ChatRow = { id: 'a', title: 'A', preview: undefined, activeAt: 1, pinned: false }
+    const saved = JSON.parse(JSON.stringify(fresh)) as ChatRow
+    expect(sameRow(saved, fresh)).toBe(true)
+    expect(keepSameRows([saved], [fresh])[0]).toBe(saved)
+  })
+})

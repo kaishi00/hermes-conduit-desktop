@@ -94,7 +94,8 @@ export function useChatList(connected: boolean, host = '') {
         found = [...found, ...rowsFromResponse(body).filter(r => r.autoArchived)]
         if (responseCount(body) < CHAT_LIST_PAGE) break
       }
-      const next = full ? found : mergeRows(archivedRef.current, found)
+      const next = keepSameRows(archivedRef.current, full ? found : mergeRows(archivedRef.current, found))
+      if (next === archivedRef.current) return
       archivedRef.current = next
       setArchived(next)
     } catch {
@@ -134,7 +135,9 @@ export function useChatList(connected: boolean, host = '') {
     const next = patch === null ? current.filter(r => r.id !== id) : current.map(r => (r.id === id ? { ...r, ...patch } : r))
     rowsRef.current = next
     setRows(next)
-  }, [])
+    // A refresh that confirms it changes nothing, so the saved copy takes it now.
+    saveChatList(host, next)
+  }, [host])
 
   return { rows, archived, error, updating, refresh: refreshSoon, patchRow }
 }
