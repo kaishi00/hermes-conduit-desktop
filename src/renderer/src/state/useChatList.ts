@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { gateway } from '../gateway'
 import { SAVED_ROWS, saveChatList, savedChatList } from './savedChatList'
-import { CHAT_LIST_MAX_PAGES, CHAT_LIST_PAGE, chatListPath, mergeRows, refreshFirstPage, responseCount, rowsFromResponse, type ChatRow } from './chats'
+import { CHAT_LIST_MAX_PAGES, CHAT_LIST_PAGE, chatListPath, keepSameRows, mergeRows, refreshFirstPage, responseCount, rowsFromResponse, type ChatRow } from './chats'
 
 /**
  * The chat list, read when the connection opens and again when Hermes says
@@ -51,10 +51,13 @@ export function useChatList(connected: boolean, host = '') {
       if (ticket !== generation.current) return
       const first = rowsFromResponse(body)
       const pageWasFull = dashboardList.current && responseCount(body) >= CHAT_LIST_PAGE
-      let all = !full && rowsRef.current ? refreshFirstPage(rowsRef.current, first, pageWasFull) : first
-      rowsRef.current = all
-      setRows(all)
-      saveChatList(host, all)
+      let all = keepSameRows(rowsRef.current, !full && rowsRef.current ? refreshFirstPage(rowsRef.current, first, pageWasFull) : first)
+      // A refresh that brings nothing new keeps the list as it is, and its saved copy.
+      if (all !== rowsRef.current) {
+        rowsRef.current = all
+        setRows(all)
+        saveChatList(host, all)
+      }
       setError(null)
       stale.current = false
       setUpdating(false)
@@ -65,7 +68,9 @@ export function useChatList(connected: boolean, host = '') {
       for (let page = 1; page < CHAT_LIST_MAX_PAGES && responseCount(body) >= CHAT_LIST_PAGE; page++) {
         body = await gateway.http('GET', chatListPath(page * CHAT_LIST_PAGE))
         if (ticket !== generation.current) return
-        all = mergeRows(all, rowsFromResponse(body))
+        const merged = mergeRows(all, rowsFromResponse(body))
+        if (merged.length === all.length) continue
+        all = merged
         rowsRef.current = all
         setRows(all)
         if (page * CHAT_LIST_PAGE < SAVED_ROWS) saveChatList(host, all)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { noteDashboardProfiles, setDashboardProfilesHost } from '../src/renderer/src/state/dashboardProfile'
-import { doing, parseItem, parseWork, sections, sideWorkstreams, statusText, stripText, workPath, needsYou } from '../src/renderer/src/state/work'
+import { doing, parseItem, parseWork, sections, sideWorkstreams, statusText, stripText, workPath, needsYou, sameWork } from '../src/renderer/src/state/work'
 
 const answer = {
   policy: 'on',
@@ -82,5 +82,14 @@ describe('a workstream on a model the bot named (app issue 2788)', () => {
   it("lists the bots sidebar's workstreams: those with a chat, what needs you first", () => {
     expect(sideWorkstreams(parseWork(answer)).map(i => i.ref)).toEqual(['W2', 'W1'])
     expect(sideWorkstreams(null)).toEqual([])
+  })
+})
+
+describe('a work read that says the same', () => {
+  it('keeps the state', () => {
+    const current = { sessions: new Set(['a', 'b']), byBot: new Map([['atlas', { working: 1, needsYou: 0 }]]) }
+    expect(sameWork(current, new Set(['b', 'a']), new Map([['atlas', { working: 1, needsYou: 0 }]]))).toBe(true)
+    expect(sameWork(current, new Set(['a']), new Map([['atlas', { working: 1, needsYou: 0 }]]))).toBe(false)
+    expect(sameWork(current, new Set(['a', 'b']), new Map([['atlas', { working: 1, needsYou: 1 }]]))).toBe(false)
   })
 })

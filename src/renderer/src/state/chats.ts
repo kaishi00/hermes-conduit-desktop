@@ -94,6 +94,32 @@ export function mergeRows(existing: ChatRow[], page: ChatRow[]): ChatRow[] {
   return [...existing, ...page.filter(r => !seen.has(r.id))]
 }
 
+/** Whether two rows say the same, field by field (rows hold only plain values). */
+export function sameRow<T extends object>(a: T, b: T): boolean {
+  if (a === b) return true
+  const ak = Object.keys(a) as (keyof T)[]
+  const bk = Object.keys(b)
+  return ak.length === bk.length && ak.every(k => a[k] === b[k])
+}
+
+/**
+ * A fresh read over the rows already shown: each row that says the same
+ * keeps its object, and the whole list keeps its array when nothing changed,
+ * so a refresh that brings nothing new redraws nothing (desktop#199).
+ */
+export function keepSameRows<T extends { id: string }>(previous: readonly T[] | null, next: T[]): T[] {
+  if (!previous?.length) return next
+  const before = new Map(previous.map(r => [r.id, r]))
+  let changed = previous.length !== next.length
+  const kept = next.map((row, i) => {
+    const old = before.get(row.id)
+    const same = old && sameRow(old, row) ? old : row
+    if (same !== previous[i]) changed = true
+    return same
+  })
+  return changed ? kept : (previous as T[])
+}
+
 const ACTIVITY_KEYS = ['last_active', 'updated_at', 'last_message_at', 'started_at', 'created_at'] as const
 
 /** Seconds, milliseconds, micro- or nanoseconds to milliseconds. */
@@ -147,7 +173,7 @@ export function rowsFromResponse(body: unknown): ChatRow[] {
   return rows
 }
 
-function startOfDay(ms: number): number {
+export function startOfDay(ms: number): number {
   const d = new Date(ms)
   d.setHours(0, 0, 0, 0)
   return d.getTime()

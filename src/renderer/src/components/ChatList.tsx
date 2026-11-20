@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { underSource } from '../state/voiceList'
 import { includedInAll, profileGroups, readClosedSections, readGroupByProfile, readLeftOut, shownInAll, writeClosedSections, writeGroupByProfile, writeLeftOut } from '../state/profileGroups'
-import { sectionRows, timeLabel, type ChatRow } from '../state/chats'
+import { sectionRows, startOfDay, timeLabel, type ChatRow } from '../state/chats'
 import type { Bot } from '../state/bots'
 import { BotAvatar } from './BotsHome'
 import { t } from '@shared/i18n'
@@ -119,6 +119,17 @@ const isOther = (row: ChatRow): row is OtherChatRow => typeof (row as Partial<Ot
 const searchHttp = (path: string) => gateway.http('GET', path)
 const prefsHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gateway.http(method, path, body)
 
+/** A row's words for the search, lowercased once per row object (rows keep theirs across refreshes: keepSameRows). */
+const searchTexts = new WeakMap<ChatRow, string>()
+function searchText(row: ChatRow): string {
+  let text = searchTexts.get(row)
+  if (text === undefined) {
+    text = `${row.title} ${row.preview ?? ''}`.toLowerCase()
+    searchTexts.set(row, text)
+  }
+  return text
+}
+
 const sameProfile = (row: ChatRow, name: string) => (row.profile ?? 'default').toLowerCase() === name.toLowerCase()
 
 export function ChatList({
@@ -218,6 +229,8 @@ export function ChatList({
   }
   // Pinned rows move while the list shows every pinned chat: not during a search or under a filter, nor grouped by profile.
   const canReorder = !query.trim() && filter === 'all' && !source
+  // Only grouped by profile does the open chat change what's listed (its section keeps it past the cap), so a click elsewhere doesn't list again.
+  const groupOpenId = grouped ? selectedId : null
   const { sections, listed, allowed, pinnedSection, nesting } = useMemo(() => {
     const q = query.trim().toLowerCase()
     const inProfile = profile
@@ -227,7 +240,7 @@ export function ChatList({
         : (rows ?? [])
     const marked = marks ? filterRows(inProfile, isDone || !DONE_FILTERS.some(f => f.value === filter) ? filter : 'all', marks, runningIds, waitingIds, isDone) : inProfile
     const sourced = source ? marked.filter(r => underSource(r, source)) : marked
-    const filtered = q ? sourced.filter(r => `${r.title} ${r.preview ?? ''}`.toLowerCase().includes(q)) : sourced
+    const filtered = q ? sourced.filter(r => searchText(r).includes(q)) : sourced
     // Another combined host's chats, only in All with no filter: found by title or by the host's name.
     const others =
       !profile && filter === 'all' && !source
@@ -245,7 +258,7 @@ export function ChatList({
             // A search or a status or Starred filter lists every match; a source filter is still a browse.
             capped: !q && filter === 'all',
             showsAll: p => showingAll.has(p),
-            openId: selectedId,
+            openId: groupOpenId,
             pinnedOrder: list => arrangePinned(list, pinOrder.orders)
           }
         ).map(group => ({ title: profileTitle(group.profile), rows: group.rows, profile: group.profile, hidden: group.hidden, extra: group.extra }))
@@ -273,7 +286,7 @@ export function ChatList({
           .filter(section => section.profile !== undefined || section.rows.length)
       : arranged
     return { sections: nestedOut, listed: filtered, allowed: filter !== 'all' || source ? sourced : undefined, pinnedSection: pinned, nesting }
-  }, [rows, query, profile, marks, filter, runningIds, waitingIds, isDone, source, pinOrder.orders, grouped, showingAll, selectedId, bots, botNames, allLeftOut, otherRows, badgeFor])
+  }, [rows, query, profile, marks, filter, runningIds, waitingIds, isDone, source, pinOrder.orders, grouped, showingAll, groupOpenId, bots, botNames, allLeftOut, otherRows, badgeFor])
   /**
    * The pins a pinned row moves among: the Pinned section, or grouped by
    * profile its own section's, so a move there orders only that profile's
@@ -350,6 +363,49 @@ export function ChatList({
     revealed.current = selectedId
     scroller.current?.querySelector('.row[aria-current="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [present, selectedId])
+
+  // What a row's handlers read, so they keep one identity and memoized rows skip a redraw (desktop#199).
+  const latest = useRef({ onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename })
+  latest.current = { onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename }
+  const rowHandlers = useMemo<RowHandlers>(
+    () => ({
+      select: row => latest.current.onSelect(row),
+      dragStart: (row, e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', row.title)
+        setDragging(row.id)
+      },
+      dragOver: (row, e) => {
+        e.preventDefault()
+        const box = e.currentTarget.getBoundingClientRect()
+        const after = e.clientY > box.top + box.height / 2
+        const at = latest.current.dropAt
+        if (at?.id !== row.id || at.after !== after) setDropAt({ id: row.id, after })
+      },
+      drop: (row, e) => {
+        e.preventDefault()
+        const { dragging, dropAt, pinsBeside, movePinned } = latest.current
+        const pins = pinsBeside(row)
+        const moving = pins.find(r => r.id === dragging)
+        const from = pins.findIndex(r => r.id === dragging)
+        let to = pins.findIndex(r => r.id === row.id) + (dropAt?.after ? 1 : 0)
+        if (from < to) to -= 1
+        if (moving) movePinned(moving, to)
+        setDragging(null)
+        setDropAt(null)
+      },
+      dragEnd: () => {
+        setDragging(null)
+        setDropAt(null)
+      },
+      menuAt: (row, x, y) => setMenu({ row, x, y }),
+      toggleMenu: (row, x, y) => setMenu(m => (m?.row.id === row.id ? null : { row, x, y })),
+      rename: (id, title) => setRenaming({ id, title }),
+      finishRename: save => latest.current.finishRename(save)
+    }),
+    []
+  )
+  const today = startOfDay(Date.now())
 
   return (
     <section className="chatlist" aria-label={t('Chats')}>
@@ -516,116 +572,29 @@ export function ChatList({
               }
               const waits = waitingIds.has(row.id)
               const running = !waits && runningIds.has(row.id)
+              const selected = row.id === selectedId
               return (
-                <div
+                <ChatRowItem
                   key={row.id}
-                  style={depth ? { marginInlineStart: `${14 + (depth - 1) * 16}px` } : undefined}
-                  className={`row-wrap${depth ? ' nested' : ''}${dragging === row.id ? ' dragging' : ''}${dropAt?.id === row.id ? (dropAt.after ? ' drop-after' : ' drop-before') : ''}`}
-                  draggable={canReorder && row.pinned && !renaming ? true : undefined}
-                  onDragStart={
-                    canReorder && row.pinned
-                      ? e => {
-                          e.dataTransfer.effectAllowed = 'move'
-                          e.dataTransfer.setData('text/plain', row.title)
-                          setDragging(row.id)
-                        }
-                      : undefined
-                  }
-                  onDragOver={
-                    dragging && row.pinned && pinsBeside(row).some(r => r.id === dragging)
-                      ? e => {
-                          e.preventDefault()
-                          const box = e.currentTarget.getBoundingClientRect()
-                          const after = e.clientY > box.top + box.height / 2
-                          if (dropAt?.id !== row.id || dropAt.after !== after) setDropAt({ id: row.id, after })
-                        }
-                      : undefined
-                  }
-                  onDrop={
-                    dragging && row.pinned && pinsBeside(row).some(r => r.id === dragging)
-                      ? e => {
-                          e.preventDefault()
-                          const pins = pinsBeside(row)
-                          const moving = pins.find(r => r.id === dragging)
-                          const from = pins.findIndex(r => r.id === dragging)
-                          let to = pins.findIndex(r => r.id === row.id) + (dropAt?.after ? 1 : 0)
-                          if (from < to) to -= 1
-                          if (moving) movePinned(moving, to)
-                          setDragging(null)
-                          setDropAt(null)
-                        }
-                      : undefined
-                  }
-                  onDragEnd={() => {
-                    setDragging(null)
-                    setDropAt(null)
-                  }}
-                  onContextMenu={
-                    hasActions
-                      ? e => {
-                          e.preventDefault()
-                          setMenu({ row, x: e.clientX, y: e.clientY })
-                        }
-                      : undefined
-                  }
-                >
-                  {renaming?.id === row.id ? (
-                    <input
-                      className="row-rename"
-                      aria-label={t('Rename')}
-                      autoFocus
-                      value={renaming.title}
-                      onChange={e => setRenaming({ id: row.id, title: e.target.value })}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') finishRename(true)
-                        else if (e.key === 'Escape') finishRename(false)
-                      }}
-                      onBlur={() => finishRename(true)}
-                    />
-                  ) : (
-                    <button className={isDone?.(row) ? 'row done' : 'row'} aria-current={row.id === selectedId ? 'true' : undefined} onClick={() => onSelect(row)}>
-                      <span className="row-top">
-                        <span className="row-title">
-                          {(marks && isUnread(marks, row) && row.id !== selectedId) || nestUnread ? <span className="unread-dot" role="img" aria-label={t('Unread')} /> : null}
-                          {row.pinned ? <Icon name="pin" className="row-pin" /> : null}
-                          {marks && isStarred(marks, row) ? <Icon name="star" className="row-pin row-star" /> : null}
-                          {isDone?.(row) ? <Icon name="check" className="row-pin row-done" aria-label={t('Done')} /> : null}
-                          {row.title}
-                        </span>
-                        {row.sourceKind && row.sourceKind !== 'chat' ? <span className="row-source">{sourceName(row.sourceKind)}</span> : null}
-                        <span className="meta row-time">{timeLabel(row.activeAt)}</span>
-                      </span>
-                      {waits ? (
-                        <span className="running waiting">{t('Needs approval')}</span>
-                      ) : running ? (
-                        <span className="running">
-                          {t('Running')}
-                          {runningStatus && row.id === selectedId ? ` · ${runningStatus}` : ''}
-                        </span>
-                      ) : row.preview || botName(row) ? (
-                        <span className="meta">
-                          {botName(row) ? `${botName(row)} · ` : ''}
-                          {row.preview ?? ''}
-                        </span>
-                      ) : null}
-                    </button>
-                  )}
-                  {hasActions && renaming?.id !== row.id ? (
-                    <button
-                      className="row-more"
-                      aria-label={t('More')}
-                      title={t('More')}
-                      aria-haspopup="menu"
-                      onClick={e => {
-                        e.stopPropagation()
-                        const box = e.currentTarget.getBoundingClientRect()
-                        setMenu(m => (m?.row.id === row.id ? null : { row, x: box.right, y: box.bottom }))
-                      }}
-                    >
-                      <Icon name="more" />
-                    </button>
-                  ) : null}
-                </div>
+                  row={row}
+                  depth={depth}
+                  today={today}
+                  selected={selected}
+                  waits={waits}
+                  running={running}
+                  status={running && selected ? runningStatus : undefined}
+                  unread={(!!marks && isUnread(marks, row) && !selected) || nestUnread}
+                  starred={!!marks && isStarred(marks, row)}
+                  done={!!isDone?.(row)}
+                  botName={botName(row)}
+                  draggable={canReorder && row.pinned && !renaming}
+                  dragging={dragging === row.id}
+                  drop={dropAt?.id === row.id ? (dropAt.after ? 'after' : 'before') : null}
+                  acceptsDrop={!!dragging && row.pinned && pinsBeside(row).some(r => r.id === dragging)}
+                  renameTitle={renaming?.id === row.id ? renaming.title : null}
+                  hasActions={hasActions}
+                  on={rowHandlers}
+                />
               )
             })}
             {section.profile && !closedSections.includes(section.profile) && (section.hidden || section.extra) ? (
@@ -942,3 +911,138 @@ export function ProfileStrip({
     </>
   )
 }
+
+interface RowHandlers {
+  select: (row: ChatRow) => void
+  dragStart: (row: ChatRow, e: React.DragEvent<HTMLDivElement>) => void
+  dragOver: (row: ChatRow, e: React.DragEvent<HTMLDivElement>) => void
+  drop: (row: ChatRow, e: React.DragEvent<HTMLDivElement>) => void
+  dragEnd: () => void
+  menuAt: (row: ChatRow, x: number, y: number) => void
+  toggleMenu: (row: ChatRow, x: number, y: number) => void
+  rename: (id: string, title: string) => void
+  finishRename: (save: boolean) => void
+}
+
+/**
+ * One chat's row. Memoized on plain values and the row itself, which keeps
+ * its object while a refresh brings nothing new for it (keepSameRows), so a
+ * click, a keystroke in the search or a running tick redraws only the rows
+ * it changes (desktop#199).
+ */
+const ChatRowItem = memo(function ChatRowItem({
+  row,
+  depth,
+  selected,
+  waits,
+  running,
+  status,
+  unread,
+  starred,
+  done,
+  botName,
+  draggable,
+  dragging,
+  drop,
+  acceptsDrop,
+  renameTitle,
+  hasActions,
+  on
+}: {
+  row: ChatRow
+  depth: number
+  /** Today's start, so the time reads again when the day turns. */
+  today: number
+  selected: boolean
+  waits: boolean
+  running: boolean
+  status?: string
+  unread: boolean
+  starred: boolean
+  done: boolean
+  botName: string | null
+  draggable: boolean
+  dragging: boolean
+  drop: 'before' | 'after' | null
+  acceptsDrop: boolean
+  renameTitle: string | null
+  hasActions: boolean
+  on: RowHandlers
+}) {
+  return (
+    <div
+      style={depth ? { marginInlineStart: `${14 + (depth - 1) * 16}px` } : undefined}
+      className={`row-wrap${depth ? ' nested' : ''}${dragging ? ' dragging' : ''}${drop ? (drop === 'after' ? ' drop-after' : ' drop-before') : ''}`}
+      draggable={draggable ? true : undefined}
+      onDragStart={draggable ? e => on.dragStart(row, e) : undefined}
+      onDragOver={acceptsDrop ? e => on.dragOver(row, e) : undefined}
+      onDrop={acceptsDrop ? e => on.drop(row, e) : undefined}
+      onDragEnd={on.dragEnd}
+      onContextMenu={
+        hasActions
+          ? e => {
+              e.preventDefault()
+              on.menuAt(row, e.clientX, e.clientY)
+            }
+          : undefined
+      }
+    >
+      {renameTitle !== null ? (
+        <input
+          className="row-rename"
+          aria-label={t('Rename')}
+          autoFocus
+          value={renameTitle}
+          onChange={e => on.rename(row.id, e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') on.finishRename(true)
+            else if (e.key === 'Escape') on.finishRename(false)
+          }}
+          onBlur={() => on.finishRename(true)}
+        />
+      ) : (
+        <button className={done ? 'row done' : 'row'} aria-current={selected ? 'true' : undefined} onClick={() => on.select(row)}>
+          <span className="row-top">
+            <span className="row-title">
+              {unread ? <span className="unread-dot" role="img" aria-label={t('Unread')} /> : null}
+              {row.pinned ? <Icon name="pin" className="row-pin" /> : null}
+              {starred ? <Icon name="star" className="row-pin row-star" /> : null}
+              {done ? <Icon name="check" className="row-pin row-done" aria-label={t('Done')} /> : null}
+              {row.title}
+            </span>
+            {row.sourceKind && row.sourceKind !== 'chat' ? <span className="row-source">{sourceName(row.sourceKind)}</span> : null}
+            <span className="meta row-time">{timeLabel(row.activeAt)}</span>
+          </span>
+          {waits ? (
+            <span className="running waiting">{t('Needs approval')}</span>
+          ) : running ? (
+            <span className="running">
+              {t('Running')}
+              {status ? ` · ${status}` : ''}
+            </span>
+          ) : row.preview || botName ? (
+            <span className="meta">
+              {botName ? `${botName} · ` : ''}
+              {row.preview ?? ''}
+            </span>
+          ) : null}
+        </button>
+      )}
+      {hasActions && renameTitle === null ? (
+        <button
+          className="row-more"
+          aria-label={t('More')}
+          title={t('More')}
+          aria-haspopup="menu"
+          onClick={e => {
+            e.stopPropagation()
+            const box = e.currentTarget.getBoundingClientRect()
+            on.toggleMenu(row, box.right, box.bottom)
+          }}
+        >
+          <Icon name="more" />
+        </button>
+      ) : null}
+    </div>
+  )
+})

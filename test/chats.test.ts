@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatListPath, isLegacyKanbanWorker, mergeRows, refreshFirstPage, responseCount, rowsFromResponse, sectionRows, toMillis } from '../src/renderer/src/state/chats'
+import { chatListPath, isLegacyKanbanWorker, keepSameRows, mergeRows, refreshFirstPage, responseCount, rowsFromResponse, sameRow, sectionRows, toMillis, type ChatRow } from '../src/renderer/src/state/chats'
 
 const now = new Date(2026, 10, 18, 15, 0).getTime()
 const hoursAgo = (h: number) => (now - h * 3_600_000) / 1000
@@ -89,5 +89,26 @@ describe('chat list pages', () => {
   it('cleans previews', () => {
     const [r] = rowsFromResponse([{ id: 'x', title: 'Report', preview: '@file:/tmp/q.pdf\nSummarize this' }])
     expect(r?.preview).toBe('Summarize this')
+  })
+})
+
+describe('a refresh over the rows shown', () => {
+  const row = (id: string, title = id, activeAt = 1): ChatRow => ({ id, title, activeAt, pinned: false })
+  it('keeps each row that says the same, and the list when nothing changed', () => {
+    const before = [row('a'), row('b')]
+    expect(keepSameRows(before, [row('a'), row('b')])).toBe(before)
+    const after = keepSameRows(before, [row('a'), row('b', 'renamed')])
+    expect(after).not.toBe(before)
+    expect(after[0]).toBe(before[0])
+    expect(after[1]!.title).toBe('renamed')
+    const moved = keepSameRows(before, [row('b'), row('a')])
+    expect(moved.map(r => r.id)).toEqual(['b', 'a'])
+    expect(moved[0]).toBe(before[1])
+    expect(keepSameRows(before, [row('a')])).toEqual([before[0]])
+    expect(keepSameRows(null, before)).toBe(before)
+  })
+  it('tells a field added or dropped', () => {
+    expect(sameRow(row('a'), { ...row('a'), unread: true })).toBe(false)
+    expect(sameRow({ ...row('a'), preview: 'x' }, { ...row('a'), preview: 'x' })).toBe(true)
   })
 })

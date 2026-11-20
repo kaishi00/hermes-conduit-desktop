@@ -276,3 +276,18 @@ export function sideWorkstreams(snapshot: WorkSnapshot | null | undefined): Work
   const { pinned, active, recent } = sections(items)
   return [...pinned, ...active, ...recent.slice(0, RECENT_SHOWN)]
 }
+
+/** Whether a read says what the state already does. */
+export function sameWork(
+  current: { sessions: ReadonlySet<string>; byBot: ReadonlyMap<string, { working: number; needsYou: number }> },
+  sessions: ReadonlySet<string>,
+  byBot: ReadonlyMap<string, { working: number; needsYou: number }>
+): boolean {
+  if (current.sessions.size !== sessions.size || current.byBot.size !== byBot.size) return false
+  for (const id of sessions) if (!current.sessions.has(id)) return false
+  for (const [bot, work] of byBot) {
+    const was = current.byBot.get(bot)
+    if (!was || was.working !== work.working || was.needsYou !== work.needsYou) return false
+  }
+  return true
+}

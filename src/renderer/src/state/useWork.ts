@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { gateway } from '../gateway'
-import { WORK, parseWork, workPath, type WorkSnapshot } from './work'
+import { WORK, parseWork, sameWork, workPath, type WorkSnapshot } from './work'
 import { everyWhileVisible } from './visibility'
 
 /**
@@ -87,7 +87,9 @@ export function useWorkSessions(profiles: string[], connected: boolean): { sessi
       answers.forEach((answer, index) => {
         if (answer) byBot.set(profiles[index]!, { working: answer.working, needsYou: answer.needsYou })
       })
-      setState({ sessions: new Set(answers.flatMap(answer => answer?.sessionIds ?? [])), byBot })
+      const sessions = new Set(answers.flatMap(answer => answer?.sessionIds ?? []))
+      // The same answer keeps the same state, so the Chats list and Bots home don't redraw for nothing (desktop#199).
+      setState(current => (sameWork(current, sessions, byBot) ? current : { sessions, byBot }))
     }
     void read()
     let timer: ReturnType<typeof setTimeout> | null = null
