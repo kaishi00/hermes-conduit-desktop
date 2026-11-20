@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { hasOwnModel, helperSummary, helperSwitch, intervalValue, parseInterval, parseModelSettings, switchValue } from '../src/renderer/src/state/helperModels'
+import {
+  groupRouterSlot,
+  hasOwnModel,
+  helperSummary,
+  helperSwitch,
+  intervalValue,
+  parseInterval,
+  parseModelSettings,
+  switchValue
+} from '../src/renderer/src/state/helperModels'
 
 describe('parseModelSettings', () => {
   const raw = {
@@ -67,5 +76,29 @@ describe('background review and MCP sampling', () => {
     expect(parseInterval('-1')).toBeNull()
     expect(parseInterval('2.5')).toBeNull()
     expect(parseInterval('')).toBeNull()
+  })
+})
+
+describe('group router', () => {
+  const raw = {
+    tasks: [
+      { task: 'vision', provider: 'auto', model: '' },
+      { task: 'group_router', provider: 'openrouter', model: 'fast/router' }
+    ]
+  }
+
+  it('is named and listed only for the default profile, which Hermes reads for every room (hermes-conduit#2909)', () => {
+    const slots = parseModelSettings(raw).slots
+    expect(slots.map(slot => slot.task)).toEqual(['vision', 'group_router'])
+    expect(slots[1].title).toBe('Group router')
+    expect(helperSwitch('group_router')).toBeNull()
+    expect(parseModelSettings(raw, 'default').slots).toHaveLength(2)
+    expect(parseModelSettings(raw, 'second').slots.map(slot => slot.task)).toEqual(['vision'])
+  })
+
+  it('gives Group Settings its slot, or nothing before the plugin lists it', () => {
+    expect(groupRouterSlot(raw)?.model).toBe('fast/router')
+    expect(groupRouterSlot({ tasks: [{ task: 'vision', provider: 'auto', model: '' }] })).toBeNull()
+    expect(groupRouterSlot(undefined)).toBeNull()
   })
 })

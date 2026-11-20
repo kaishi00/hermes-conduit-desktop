@@ -1,6 +1,51 @@
 import { useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { MAX_NOTES_BYTES, MAX_PURPOSE_CHARACTERS, contextSave, type Room, type RoomContext, type Routing } from '../state/groups'
+import { gateway } from '../gateway'
+import { answerKeeper, keptAnswer } from '../state/keptAnswers'
+import { groupRouterSlot, hasOwnModel, type HelperSlot } from '../state/helperModels'
+import { openModelsSettings } from '../state/modelsLink'
+
+const AUXILIARY = '/api/model/auxiliary'
+
+/**
+ * Pick who answers automatically: the model that picks, the default profile's Group router helper, which Hermes
+ * uses for every auto-routed room on this Hermes (hermes-conduit#2909). Change opens Settings > Models for the
+ * default profile. Shown once Hermes lists the slot (the plugin adds it from 0.186.0).
+ */
+function RouterModelRow({ mainBot, onOpen }: { mainBot: string; onOpen: () => void }) {
+  const [slot, setSlot] = useState<HelperSlot | null>(() => groupRouterSlot(keptAnswer(AUXILIARY)))
+  useEffect(() => {
+    let live = true
+    const keep = answerKeeper(AUXILIARY)
+    gateway
+      .http('GET', AUXILIARY)
+      .then(raw => {
+        if (!live) return
+        keep(raw)
+        setSlot(groupRouterSlot(raw))
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [])
+  if (!slot) return null
+  return (
+    <>
+      <div className="room-router">
+        <span>{t('Model')}</span>
+        <span className="meta">{hasOwnModel(slot) ? slot.model : t('Same as chats')}</span>
+        <button type="button" className="link" onClick={onOpen}>
+          {t('Change')}
+        </button>
+      </div>
+      <p className="meta">
+        {t('This is {name}’s Group router helper. It picks for every group chat on this Hermes that answers automatically.', { name: mainBot })}
+      </p>
+    </>
+  )
+}
 
 const modeTitle = (mode: Routing) =>
   mode === 'everyone' ? t('Everyone answers') : mode === 'lead' ? t('A lead picks who answers') : t('Pick who answers automatically')
@@ -26,6 +71,7 @@ export function RoomSettings({
   room,
   context,
   modes,
+  mainBot,
   onSave,
   onClose
 }: {
@@ -33,6 +79,8 @@ export function RoomSettings({
   context: RoomContext
   /** The Who answers choices the host offers; none on a host before routing. */
   modes: Routing[]
+  /** The default profile's bot, whose Group router helper picks in an automatic room. */
+  mainBot: string
   onSave: (save: Record<string, unknown>) => Promise<void>
   onClose: () => void
 }) {
@@ -155,6 +203,15 @@ export function RoomSettings({
               ))}
             </div>
             <p className="meta">{modeCaption(draft)}</p>
+            {draft.routing === 'auto' && !draft.newerRouting ? (
+              <RouterModelRow
+                mainBot={mainBot}
+                onOpen={() => {
+                  onClose()
+                  openModelsSettings('default')
+                }}
+              />
+            ) : null}
             {draft.routing === 'lead' && !draft.newerRouting ? (
               <>
                 <h3>{t('Lead')}</h3>

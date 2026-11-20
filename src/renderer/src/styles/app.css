@@ -8463,6 +8463,18 @@ a.ask-btn[aria-disabled='true'] {
   accent-color: var(--accent);
 }
 
+/* Pick who answers automatically: the model that picks. */
+.room-router {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-router .meta {
+  flex: 1;
+  text-align: right;
+}
+
 /* Settings' Last live call. */
 .call-trace-actions {
   display: flex;

@@ -25,6 +25,15 @@ export interface ModelSettings {
 /** Slots set elsewhere in Conduit: Pulse's memory runs on the main profile, set in Settings > Pulse. */
 const SET_ELSEWHERE = new Set(['pulse_memory'])
 
+/** Hermes' group router: who answers in a group chat set to pick automatically (hermes-conduit#2909). */
+export const GROUP_ROUTER = 'group_router'
+
+/**
+ * Slots Hermes reads only from the default profile: it asks the default profile's `group_router` for every
+ * auto-routed room, so another profile's list leaves it out.
+ */
+const DEFAULT_PROFILE_ONLY = new Set([GROUP_ROUTER])
+
 /** Hermes labels its own slots in its web page, not in the answer, so Conduit names them. */
 function builtIn(task: string): { title: string; caption: string } | null {
   switch (task) {
@@ -64,6 +73,14 @@ function builtIn(task: string): { title: string; caption: string } | null {
         title: t('Background review'),
         caption: t(
           'Every few turns, looks back over a chat to decide what goes into memory and which skills to improve. Its reasoning applies only on a model of its own, which starts without the chat’s prompt cache.'
+        )
+      }
+    case 'group_router':
+      // Listed by the Conduit plugin from 0.186.0 until Hermes lists it (hermes-conduit#2909).
+      return {
+        title: t('Group router'),
+        caption: t(
+          'Picks who answers a message that names nobody, in group chats set to pick automatically. Hermes uses this profile’s choice for every group chat on this Hermes.'
         )
       }
     case 'conduit_predict':
@@ -156,7 +173,8 @@ function slotTitle(task: string, label: string): string {
 type Row = Record<string, unknown>
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
 
-export function parseModelSettings(raw: unknown): ModelSettings {
+/** `profile` other than the default leaves out the slots only the default profile's config sets. */
+export function parseModelSettings(raw: unknown, profile = 'default'): ModelSettings {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Row
   const main = (o.main && typeof o.main === 'object' ? o.main : {}) as Row
   const rows = (Array.isArray(o.tasks) ? o.tasks : []).filter((r): r is Row => !!r && typeof r === 'object')
@@ -166,6 +184,7 @@ export function parseModelSettings(raw: unknown): ModelSettings {
   for (const row of rows) {
     const task = str(row.task).trim()
     if (!task || seen.has(task) || SET_ELSEWHERE.has(task)) continue
+    if (profile !== 'default' && DEFAULT_PROFILE_ONLY.has(task)) continue
     seen.add(task)
     const inherits = str(row.inherit_from)
     slots.push({
@@ -182,6 +201,9 @@ export function parseModelSettings(raw: unknown): ModelSettings {
 
 /** A slot with a model of its own; "auto" with no model is the chat model. */
 export const hasOwnModel = (slot: HelperSlot) => !!slot.model && slot.provider !== 'auto'
+
+/** The default profile's Group router slot in its /api/model/auxiliary answer, or null before plugin 0.186.0. */
+export const groupRouterSlot = (raw: unknown): HelperSlot | null => parseModelSettings(raw).slots.find(slot => slot.task === GROUP_ROUTER) ?? null
 
 /** "All use the chat model", or how many have one of their own. */
 export function helperSummary(slots: HelperSlot[]): string {

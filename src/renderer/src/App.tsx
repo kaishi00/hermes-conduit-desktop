@@ -86,6 +86,7 @@ import { HostActions } from './components/HostActions'
 import { ArtifactsPanel } from './components/ArtifactsPanel'
 import { CapabilitiesPage } from './components/CapabilitiesPage'
 import { onAppsDirectory, type AppsRequest } from './state/appsDirectory'
+import { onModelsSettings, type ModelsRequest } from './state/modelsLink'
 import { MemoryPage } from './components/MemoryPage'
 import { PlanDock } from './components/PlanDock'
 import { AgentsDock } from './components/AgentsDock'
@@ -418,6 +419,16 @@ function Shell({
     () =>
       onAppsDirectory(request => {
         setAppsRequest(request)
+        setSection('settings')
+      }),
+    []
+  )
+  // Group Settings' router model opens Settings > Models for the default profile.
+  const [modelsRequest, setModelsRequest] = useState<ModelsRequest | null>(null)
+  useEffect(
+    () =>
+      onModelsSettings(request => {
+        setModelsRequest(request)
         setSection('settings')
       }),
     []
@@ -2475,6 +2486,8 @@ function Shell({
             onShortcuts={() => setShortcutsOpen(true)}
             appsRequest={appsRequest}
             onAppsRequestTaken={() => setAppsRequest(null)}
+            modelsRequest={modelsRequest}
+            onModelsRequestTaken={() => setModelsRequest(null)}
             linkRequest={linkRequest}
             onLinkRequestTaken={() => setLinkRequest(null)}
             personPicture={personPicture}
@@ -2574,6 +2587,8 @@ function Settings({
   onShortcuts,
   appsRequest,
   onAppsRequestTaken,
+  modelsRequest,
+  onModelsRequestTaken,
   linkRequest,
   onLinkRequestTaken,
   personPicture,
@@ -2591,6 +2606,9 @@ function Settings({
   onShortcuts: () => void
   appsRequest: AppsRequest | null
   onAppsRequestTaken: () => void
+  /** Settings > Models for this profile, asked from Group Settings. */
+  modelsRequest: ModelsRequest | null
+  onModelsRequestTaken: () => void
   /** A Link invite opened from another app: Multiplayer opens it. */
   linkRequest: { url: string; at: number } | null
   onLinkRequestTaken: () => void
@@ -2631,6 +2649,14 @@ function Settings({
     setPage('capabilities')
     onAppsRequestTaken()
   }, [appsRequest, onAppsRequestTaken])
+  // A link into Models, taken once: it opens on that profile.
+  const [modelsProfile, setModelsProfile] = useState<{ profile: string; n: number } | null>(null)
+  useEffect(() => {
+    if (!modelsRequest) return
+    setModelsProfile(modelsRequest)
+    setPage('models')
+    onModelsRequestTaken()
+  }, [modelsRequest, onModelsRequestTaken])
   // A Link invite from another app, taken once: Multiplayer opens on it.
   const [linkInvite, setLinkInvite] = useState<{ url: string; at: number } | null>(null)
   useEffect(() => {
@@ -2694,7 +2720,15 @@ function Settings({
   if (page === 'models')
     return (
       <main className="settings">
-        <ModelsPage bots={bots} profile={profile} onBack={() => setPage('main')} />
+        <ModelsPage
+          key={modelsProfile ? `link:${modelsProfile.n}` : 'models'}
+          bots={bots}
+          profile={modelsProfile?.profile ?? profile}
+          onBack={() => {
+            setModelsProfile(null)
+            setPage('main')
+          }}
+        />
       </main>
     )
   if (page === 'appearance')

@@ -58,7 +58,7 @@ export function ModelsPage({ bots, profile: initialProfile, onBack }: Props) {
       const path = withProfile('/api/model/auxiliary', profile)
       const keep = answerKeeper(path)
       const raw = await gateway.http('GET', path)
-      const answer = parseModelSettings(raw)
+      const answer = parseModelSettings(raw, profile)
       if (generation.current === mine) {
         setSettings(answer)
         keep(raw)
@@ -74,7 +74,7 @@ export function ModelsPage({ bots, profile: initialProfile, onBack }: Props) {
   useEffect(() => {
     // The profile's settings as Hermes last gave them, until it answers again.
     const kept = keptAnswer(withProfile('/api/model/auxiliary', profile))
-    setSettings(kept ? parseModelSettings(kept) : null)
+    setSettings(kept ? parseModelSettings(kept, profile) : null)
     void load()
   }, [load])
 

@@ -498,6 +498,7 @@ export function RoomView({ room: givenRoom, storesFiles = false, readsStoredFile
           room={room}
           context={status.context}
           modes={routingChoices(status)}
+          mainBot={bots.find((bot) => bot.isDefault)?.title ?? "Hermes"}
           onSave={saveContext}
           onClose={() => setSettingsOpen(false)}
         />
