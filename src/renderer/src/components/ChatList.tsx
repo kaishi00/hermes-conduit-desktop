@@ -558,7 +558,7 @@ export function ChatList({
                           {badge ? <HostBadgeMark badge={badge} /> : null}
                           {row.title}
                         </span>
-                        <span className="meta row-time">{timeLabel(row.activeAt)}</span>
+                        <span className="meta row-time">{timeLabel(row.activeAt, today)}</span>
                       </span>
                       {row.preview || (row.profile && row.profile !== 'default') ? (
                         <span className="meta">
@@ -629,7 +629,7 @@ export function ChatList({
                 <button className="row" aria-current={match.row.id === selectedId ? 'true' : undefined} onClick={() => onSelect(match.row)}>
                   <span className="row-top">
                     <span className="row-title">{match.row.title || t('Untitled conversation')}</span>
-                    <span className="meta row-time">{timeLabel(match.row.activeAt)}</span>
+                    <span className="meta row-time">{timeLabel(match.row.activeAt, today)}</span>
                   </span>
                   <span className="meta content-snippet">
                     {botName(match.row) ? `${botName(match.row)} · ` : ''}

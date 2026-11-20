@@ -190,6 +190,7 @@ import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voice
 import type { CallResume } from './state/voiceSave'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
 import { ask, tell } from './state/dialogs'
+import { forgetTranscripts } from './state/transcriptCache'
 
 /** The host's synced preferences, for the bots' order. */
 const prefsHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gateway.http(method, path, body)
@@ -212,6 +213,9 @@ export function App() {
   // A new host signed in (or the sign-in screen otherwise left): back to the app.
   const url = status?.url
   useEffect(() => setAdding(false), [url])
+  // Another host's transcripts never draw here. An effect, so it runs after the
+  // old host's chat view has kept its own on unmount (desktop#201).
+  useEffect(() => forgetTranscripts(), [url])
   // The launch list's combined row opens the member used last.
   useEffect(() => {
     if (url) writeLastHost(url)
