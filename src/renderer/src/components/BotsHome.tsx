@@ -723,9 +723,11 @@ export function BotsHome({
       <Icon name={name} />
     </span>
   );
+  // Other hosts' group chats show though this host's rooms aren't read (or can't be).
   const showRooms =
-    !!rooms &&
-    (rooms.length > 0 || canDrag || !!onNewGroup || (invites?.length ?? 0) > 0 || (copies?.length ?? 0) > 0 || (drafts?.length ?? 0) > 0 || otherRooms.length > 0);
+    otherRooms.length > 0 ||
+    (!!rooms &&
+      (rooms.length > 0 || canDrag || !!onNewGroup || (invites?.length ?? 0) > 0 || (copies?.length ?? 0) > 0 || (drafts?.length ?? 0) > 0));
   return (
     <section className={`chatlist bot-side${draft ? " drafting" : ""}`} aria-label={t("Bots")}>
       <div className="chatlist-head bot-side-head">
@@ -811,7 +813,7 @@ export function BotsHome({
                 </button>
               ) : null}
             </div>
-            {rooms!.length === 0 && otherRooms.length === 0 && !draft && canDrag ? <p className="meta hint bot-side-hint">{t("Drag one bot onto another to start a group chat.")}</p> : null}
+            {rooms?.length === 0 && otherRooms.length === 0 && !draft && canDrag ? <p className="meta hint bot-side-hint">{t("Drag one bot onto another to start a group chat.")}</p> : null}
             {(drafts ?? []).map((d) => roomRow(d.id, glyph(d.status === "ended" ? "bell" : "clock"), d.name, draftLine(d), () => onOpenDraft?.(d), { className: `draft-tile ${d.status}` }))}
             {(copies ?? []).map((copy) =>
               roomRow(
@@ -835,7 +837,7 @@ export function BotsHome({
                   { className: `invite-tile ${invite.status}`, waiting: invite.status === "waiting" },
                 ),
               )}
-            {rooms!.map((room) =>
+            {(rooms ?? []).map((room) =>
               roomRow(
                 room.roomId,
                 <RoomFaces room={room} bots={bots ?? []} size={22} looks={room.linked ? roomLooks?.[room.roomId] : undefined} />,
@@ -851,7 +853,7 @@ export function BotsHome({
               return roomRow(
                 `${other.host}\u0000${other.kind === "room" ? other.room.roomId : other.copy.id}`,
                 <>
-                  <RoomFaces room={room} bots={[]} size={22} />
+                  <RoomFaces room={room} bots={otherBots.filter((o) => o.host === other.host).map((o) => o.bot)} size={22} />
                   {badge ? <span className="bot-tile-badge">{<HostBadgeMark badge={badge} />}</span> : null}
                 </>,
                 room.name,
