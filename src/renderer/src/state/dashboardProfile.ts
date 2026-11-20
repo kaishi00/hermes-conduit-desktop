@@ -55,11 +55,13 @@ export function watchDashboardProfiles(
   let live = true
   let cancel = () => {}
   const attempt = (n: number) => {
-    void ask().then(status => {
-      if (!live) return
-      if (status) noteDashboardProfiles(forHost, status.state === 'reported' ? status.capabilities : null)
-      else cancel = wait(askAgainMs(n), () => attempt(n + 1))
-    })
+    void ask()
+      .catch(() => null)
+      .then(status => {
+        if (!live) return
+        if (status) noteDashboardProfiles(forHost, status.state === 'reported' ? status.capabilities : null)
+        else cancel = wait(askAgainMs(n), () => attempt(n + 1))
+      })
   }
   attempt(0)
   return () => {

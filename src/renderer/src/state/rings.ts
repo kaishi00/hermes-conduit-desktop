@@ -181,7 +181,8 @@ export function useRings(connected: boolean, profiles: readonly string[]) {
         const profile = name || undefined
         if (!served.current.has(name)) {
           const status = await askPluginStatus(() => gateway.http('GET', withProfile(STATUS_PATH, profile), undefined, 12_000))
-          if (!status) return
+          // Only an answer is kept: a route that isn't there yet (a plugin installed or reloading) is asked again next poll.
+          if (status?.state !== 'reported') return
           served.current.set(name, serves(status, [RINGS_CAPABILITY]))
         }
         if (!served.current.get(name)) return
