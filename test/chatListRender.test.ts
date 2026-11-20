@@ -12,7 +12,9 @@ beforeAll(() => {
 
 describe('the chat list draws', () => {
   it('its rows, the open one current and a running one with its status', async () => {
-    const { ChatList } = await import('../src/renderer/src/components/ChatList')
+    // A path the node typecheck doesn't follow: the component is the renderer's, checked by tsconfig.web.json.
+    const path = '../src/renderer/src/components/ChatList.tsx'
+    const { ChatList } = (await import(/* @vite-ignore */ path)) as { ChatList: unknown }
     const now = Date.now()
     const rows = [
       { id: 'a', title: 'Alpha', activeAt: now, pinned: true },
