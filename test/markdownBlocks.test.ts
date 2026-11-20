@@ -5,8 +5,9 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import { describe, expect, it } from 'vitest'
 import { markdownBlocks } from '../src/renderer/src/state/markdownBlocks'
+import { remarkDesktopCards } from '../src/renderer/src/state/desktopCards'
 
-const plugins = [remarkGfm, remarkBreaks]
+const plugins = [remarkGfm, remarkBreaks, remarkDesktopCards]
 const draw = (text: string) => renderToStaticMarkup(createElement(ReactMarkdown, { remarkPlugins: plugins }, text))
 const drawBlocks = (blocks: string[]) =>
   renderToStaticMarkup(createElement(Fragment, null, ...blocks.map((b, i) => createElement(ReactMarkdown, { key: i, remarkPlugins: plugins }, b))))
@@ -19,7 +20,8 @@ const replies = [
   '| a | b |\n|---|---|\n| 1 | 2 |\n\n> quoted\n\n> another quote\n\n---\n\nEnd',
   'Indented:\n\n    code line\n\n    more code\n\nText',
   '~~~\nfence with ``` inside\n\n~~~\n\nok',
-  '- item\n\n  continued\n- next\n\nAfter'
+  '- item\n\n  continued\n- next\n\nAfter',
+  'A card:\n\n::chart{source="x" id="1"}\n\nAfter the card.'
 ]
 
 describe('a streaming reply in blocks', () => {
@@ -43,7 +45,7 @@ describe('a streaming reply in blocks', () => {
 
   it('draws the same at every point of a stream', () => {
     for (const reply of replies)
-      for (let n = 1; n <= reply.length; n += 3) {
+      for (let n = 1; n <= reply.length; n++) {
         const part = reply.slice(0, n)
         expect(squash(drawBlocks(markdownBlocks(part)))).toBe(squash(draw(part)))
       }

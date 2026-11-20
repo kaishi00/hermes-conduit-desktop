@@ -214,6 +214,9 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 /** A new chat's session came back after another chat opened (the phone's "A new chat that something waits on"). */
 class ChatMovedOn extends Error {}
 
+/** The longest a delta waits when no frame comes (a hidden window). */
+const DELTA_FLUSH_MS = 100
+
 export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string) {
   const [transcript, dispatchNow] = useReducer(reducer, emptyTranscript)
   /**
@@ -222,10 +225,15 @@ export function useChat(storedId: string | null, profile: string | undefined, se
    * chunk (desktop#197). Anything else this hook does goes after them.
    */
   const deltas = useRef<GatewayEventMessage[]>([])
-  const frame = useRef<number | null>(null)
-  const flushDeltas = useCallback(() => {
-    if (frame.current !== null) cancelAnimationFrame(frame.current)
+  const frame = useRef<{ raf: number; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const cancelFrame = () => {
+    if (!frame.current) return
+    cancelAnimationFrame(frame.current.raf)
+    clearTimeout(frame.current.timer)
     frame.current = null
+  }
+  const flushDeltas = useCallback(() => {
+    cancelFrame()
     const events = deltas.current
     if (!events.length) return
     deltas.current = []
@@ -239,9 +247,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     },
     [flushDeltas]
   )
-  useEffect(() => () => {
-    if (frame.current !== null) cancelAnimationFrame(frame.current)
-  }, [])
+  useEffect(() => () => cancelFrame(), [])
   const [chat, setChat] = useState<OpenChat>({ storedId, liveId: null })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -348,7 +354,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         }
         if (STREAMING_DELTAS.has(event.type)) {
           deltas.current.push(event)
-          if (frame.current === null) frame.current = requestAnimationFrame(flushDeltas)
+          // A hidden or minimized window gets no frames: a timer flushes there instead, so deltas never pile up.
+          if (!frame.current) frame.current = { raf: requestAnimationFrame(flushDeltas), timer: setTimeout(flushDeltas, DELTA_FLUSH_MS) }
           return
         }
         dispatch({ type: 'event', event })
