@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { noteDashboardProfiles, setDashboardProfilesHost } from '../src/renderer/src/state/dashboardProfile'
 import { contextFromUsage, money, normalizedPercent, parseBreakdown, parseSessionUsage, sessionUsagePath } from '../src/renderer/src/state/context'
 
 describe('the Context panel', () => {
@@ -34,6 +35,9 @@ describe('the Context panel', () => {
   })
 
   it('names a non-default profile on the usage route', () => {
+    // A plugin that reads ?conduit_profile=; until it answers, ?profile= goes.
+    setDashboardProfilesHost('https://usage-test')
+    noteDashboardProfiles('https://usage-test', ['dashboard-profiles'])
     expect(sessionUsagePath('abc', 'default')).toBe('/api/plugins/conduit_push/sessions/usage?session_id=abc')
     expect(sessionUsagePath('a b', 'work')).toBe('/api/plugins/conduit_push/sessions/usage?session_id=a%20b&conduit_profile=work')
   })

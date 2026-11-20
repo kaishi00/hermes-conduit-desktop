@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { declineBody, freshRings, ringChanges, ringsFrom } from '../src/renderer/src/state/rings'
+import { declineBody, freshRings, holdCallPresence, PRESENCE_CAPABILITY, PRESENCE_S, ringChanges, ringsFrom } from '../src/renderer/src/state/rings'
+import { askPluginStatus, type PluginStatus } from '../src/renderer/src/state/plugin'
 
 describe('calls from Hermes on this computer', () => {
   const body = {
@@ -72,5 +73,61 @@ describe('calls from Hermes on this computer', () => {
     expect(ringsFrom({ now: 1, paired: true, rings: raw }).rings[0].reportsMiss).toBe(false)
     // An older plugin says nothing: its calls rang an iPhone.
     expect(ringsFrom({ now: 1, rings: raw }).rings[0].reportsMiss).toBe(false)
+  })
+})
+
+describe('call presence', () => {
+  const reported = (capabilities: string[]): PluginStatus => ({
+    state: 'reported',
+    version: '0.187.0',
+    loadedVersion: '0.187.0',
+    restartNeeded: false,
+    capabilities,
+    managedBy: null,
+    degraded: []
+  })
+  const clock = () => {
+    let tick = () => {}
+    return { every: (_ms: number, t: () => void) => ((tick = t), () => (tick = () => {})), tick: () => tick() }
+  }
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0))
+
+  it('asks again at the next renewal after an ask that couldn’t tell, then holds', async () => {
+    const answers: (PluginStatus | null)[] = [null, reported([PRESENCE_CAPABILITY])]
+    const holds: number[] = []
+    const c = clock()
+    const stop = holdCallPresence(async () => answers.shift() ?? null, async s => void holds.push(s), c.every)
+    await settle()
+    expect(holds).toEqual([])
+    c.tick()
+    await settle()
+    expect(holds).toEqual([PRESENCE_S])
+    c.tick()
+    await settle()
+    expect(holds).toEqual([PRESENCE_S, PRESENCE_S])
+    stop()
+    expect(holds).toEqual([PRESENCE_S, PRESENCE_S, 0])
+  })
+
+  it('holds nothing on a plugin that answers without presence, and stops asking', async () => {
+    let asks = 0
+    const holds: number[] = []
+    const c = clock()
+    const stop = holdCallPresence(async () => (asks++, reported(['call-rings'])), async s => void holds.push(s), c.every)
+    await settle()
+    c.tick()
+    c.tick()
+    await settle()
+    stop()
+    expect(asks).toBe(1)
+    expect(holds).toEqual([])
+  })
+
+  it('a 404 counts as an answer, anything else is asked again', async () => {
+    expect(await askPluginStatus(() => Promise.reject(Object.assign(new Error('nope'), { code: 404 })))).toEqual({ state: 'missing' })
+    expect(await askPluginStatus(() => Promise.reject(Object.assign(new Error('busy'), { code: 503 })))).toBeNull()
+    expect(await askPluginStatus(() => Promise.reject(new Error('timed out')))).toBeNull()
+    expect(await askPluginStatus(() => Promise.resolve('<html>'))).toBeNull()
+    expect(await askPluginStatus(() => Promise.resolve({ capabilities: ['x'] }))).toMatchObject({ state: 'reported', capabilities: ['x'] })
   })
 })

@@ -45,6 +45,25 @@ export function pluginStatus(body: unknown): PluginStatus {
   }
 }
 
+/**
+ * One capabilities ask, told apart the way a caller that asks again needs:
+ * the plugin's answer, `missing` when the route isn't there (a 404: no
+ * plugin, or one too old to say), or null when it couldn't tell (a timeout,
+ * a dropped connection, a 5xx while the plugin host restarts, a body that
+ * isn't the plugin's), which is worth asking again.
+ */
+export async function askPluginStatus(get: () => Promise<unknown>): Promise<PluginStatus | null> {
+  try {
+    const status = pluginStatus(await get())
+    return status.state === 'reported' ? status : null
+  } catch (e) {
+    return (e as { code?: unknown } | null)?.code === 404 ? { state: 'missing' } : null
+  }
+}
+
+/** How long to wait before asking again after the nth ask (from 0) couldn't tell. */
+export const askAgainMs = (attempt: number) => Math.min(30_000, 5_000 * 2 ** attempt)
+
 export const runningVersion = (status: PluginStatus): string | null =>
   status.state === 'reported' ? (status.loadedVersion ?? (status.restartNeeded ? null : status.version)) : null
 

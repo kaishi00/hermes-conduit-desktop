@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { gateway } from '../gateway'
-import { STATUS_PATH, pluginStatus, serves } from './plugin'
+import { STATUS_PATH, askPluginStatus, serves, type PluginStatus } from './plugin'
 
 const withProfile = (path: string, profile?: string, query = '') => {
   const params = new URLSearchParams(query)
@@ -94,8 +94,8 @@ export function ringChanges(rings: Ring[], seen: ReadonlySet<string>): { added: 
 export const OUTCOMES_PATH = '/api/plugins/conduit_push/calls/outcomes'
 export const PRESENCE_PATH = '/api/plugins/conduit_push/calls/presence'
 export const PRESENCE_CAPABILITY = 'hermes-call-presence'
-const PRESENCE_S = 90
-const PRESENCE_RENEW_MS = 30_000
+export const PRESENCE_S = 90
+export const PRESENCE_RENEW_MS = 30_000
 
 /** The decline or miss Hermes hears in that chat's next turn, as the iPhone reports one; it also stops this ring wherever it still rings on a computer. */
 export const declineBody = (ring: Ring, outcome: 'declined' | 'missed' = 'declined') => ({
@@ -117,28 +117,50 @@ export function declineOnHost(ring: Ring, outcome: 'declined' | 'missed' = 'decl
  * While a call runs here, the host holds the user's call presence, as the
  * iPhone does for its calls: nothing Hermes calls about rings over it, and a
  * call from Hermes answered here counts as answered on every device.
- * 90 seconds, renewed every 30, let go at hang-up.
+ * 90 seconds, renewed every 30, let go at hang-up. A capabilities ask that
+ * can't tell (a timeout, a 5xx while the plugin host restarts) is asked
+ * again at the next renewal, as the phone's renewal loop keeps trying; only
+ * a plugin that answers without `hermes-call-presence` is left alone.
  */
+export function holdCallPresence(
+  ask: () => Promise<PluginStatus | null>,
+  hold: (seconds: number) => Promise<unknown>,
+  every: (ms: number, tick: () => void) => () => void = (ms, tick) => {
+    const timer = setInterval(tick, ms)
+    return () => clearInterval(timer)
+  }
+): () => void {
+  let live = true
+  /** null until the plugin answers whether it keeps presence. */
+  let served: boolean | null = null
+  let asking = false
+  const renew = async () => {
+    if (served === null) {
+      if (asking) return
+      asking = true
+      const status = await ask()
+      asking = false
+      if (!live || !status) return
+      served = serves(status, [PRESENCE_CAPABILITY])
+    }
+    if (served) await hold(PRESENCE_S).catch(() => undefined)
+  }
+  void renew()
+  const stop = every(PRESENCE_RENEW_MS, () => void renew())
+  return () => {
+    live = false
+    stop()
+    if (served) void hold(0).catch(() => undefined)
+  }
+}
+
 export function useCallPresence(calling: boolean, profile: string | undefined) {
   useEffect(() => {
     if (!calling) return
-    let live = true
-    let held = false
-    const hold = (seconds: number) => gateway.http('PUT', withProfile(PRESENCE_PATH, profile), { hold_s: seconds }, 10_000)
-    void (async () => {
-      const status = await gateway.http('GET', withProfile(STATUS_PATH, profile), undefined, 12_000).then(pluginStatus, () => null)
-      if (!live || !status || !serves(status, [PRESENCE_CAPABILITY])) return
-      held = true
-      await hold(PRESENCE_S).catch(() => undefined)
-    })()
-    const timer = window.setInterval(() => {
-      if (held) void hold(PRESENCE_S).catch(() => undefined)
-    }, PRESENCE_RENEW_MS)
-    return () => {
-      live = false
-      window.clearInterval(timer)
-      if (held) void hold(0).catch(() => undefined)
-    }
+    return holdCallPresence(
+      () => askPluginStatus(() => gateway.http('GET', withProfile(STATUS_PATH, profile), undefined, 12_000)),
+      seconds => gateway.http('PUT', withProfile(PRESENCE_PATH, profile), { hold_s: seconds }, 10_000)
+    )
   }, [calling, profile])
 }
 
@@ -158,7 +180,7 @@ export function useRings(connected: boolean, profiles: readonly string[]) {
       names.map(async name => {
         const profile = name || undefined
         if (!served.current.has(name)) {
-          const status = await gateway.http('GET', withProfile(STATUS_PATH, profile), undefined, 12_000).then(pluginStatus, () => null)
+          const status = await askPluginStatus(() => gateway.http('GET', withProfile(STATUS_PATH, profile), undefined, 12_000))
           if (!status) return
           served.current.set(name, serves(status, [RINGS_CAPABILITY]))
         }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { noteDashboardProfiles, setDashboardProfilesHost } from '../src/renderer/src/state/dashboardProfile'
 import { doing, parseItem, parseWork, sections, sideWorkstreams, statusText, stripText, workPath, needsYou } from '../src/renderer/src/state/work'
 
 const answer = {
@@ -60,6 +61,9 @@ describe('workstreams', () => {
   })
 
   it('names a secondary bot with conduit_profile', () => {
+    // A plugin that reads ?conduit_profile=; until it answers, ?profile= goes.
+    setDashboardProfilesHost('https://usage-test')
+    noteDashboardProfiles('https://usage-test', ['dashboard-profiles'])
     expect(workPath('/x')).toBe('/x')
     expect(workPath('/x', 'default')).toBe('/x')
     expect(workPath('/x?resolved=1', 'nahida')).toBe('/x?resolved=1&conduit_profile=nahida')

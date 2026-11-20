@@ -8,8 +8,14 @@
  * dashboard and the plugin scopes it to that profile. The dashboard's own
  * profile goes with neither. Only a plugin that lists `dashboard-profiles`
  * reads ?conduit_profile=; an older one keeps ?profile=, so it acts for the
- * profile named rather than the dashboard's own (#1336).
+ * profile named rather than the dashboard's own (#1336). Until the plugin
+ * answers, ?profile= goes, as on the phone (dashboardProfileParameter): the
+ * profile named is right on any plugin, where ?conduit_profile= on an older
+ * one would act for the dashboard's own. An ask that can't tell (a timeout,
+ * a 5xx while the plugin host restarts) is asked again until one answers.
  */
+
+import { askAgainMs, type PluginStatus } from './plugin'
 
 export const DASHBOARD_PROFILES_CAPABILITY = 'dashboard-profiles'
 
@@ -31,7 +37,36 @@ export function noteDashboardProfiles(forHost: string, capabilities: string[] | 
 }
 
 /** The query name for a profile the dashboard didn't start with. */
-const parameter = () => (served === false ? 'profile' : 'conduit_profile')
+const parameter = () => (served === true ? 'conduit_profile' : 'profile')
+
+/**
+ * Asks `forHost`'s plugin whether it reads ?conduit_profile=, again after an
+ * ask that couldn't tell, until one answers or the returned stop is called
+ * (the dashboard closed or changed).
+ */
+export function watchDashboardProfiles(
+  forHost: string,
+  ask: () => Promise<PluginStatus | null>,
+  wait: (ms: number, then: () => void) => () => void = (ms, then) => {
+    const timer = setTimeout(then, ms)
+    return () => clearTimeout(timer)
+  }
+): () => void {
+  let live = true
+  let cancel = () => {}
+  const attempt = (n: number) => {
+    void ask().then(status => {
+      if (!live) return
+      if (status) noteDashboardProfiles(forHost, status.state === 'reported' ? status.capabilities : null)
+      else cancel = wait(askAgainMs(n), () => attempt(n + 1))
+    })
+  }
+  attempt(0)
+  return () => {
+    live = false
+    cancel()
+  }
+}
 
 export function dashboardProfilePath(path: string, profile?: string | null): string {
   if (!profile || profile === 'default') return path
