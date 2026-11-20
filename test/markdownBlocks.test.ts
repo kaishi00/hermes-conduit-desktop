@@ -21,6 +21,8 @@ const replies = [
   'Indented:\n\n    code line\n\n    more code\n\nText',
   '~~~\nfence with ``` inside\n\n~~~\n\nok',
   '- item\n\n  continued\n- next\n\nAfter',
+  '``` a ` b\n```\n\ntext',
+  'See [x][1].\n\n> [1]: https://example.com\n\nAfter',
   'A card:\n\n::chart{source="x" id="1"}\n\nAfter the card.'
 ]
 
@@ -37,6 +39,8 @@ describe('a streaming reply in blocks', () => {
     expect(markdownBlocks('See [x][1].\n\n[1]: https://example.com')).toHaveLength(1)
     expect(markdownBlocks('Note[^a].\n\n[^a]: footnote')).toHaveLength(1)
     expect(markdownBlocks('<!--\n\n-->\n\ntext')).toHaveLength(1)
+    expect(markdownBlocks('See [x][1].\n\n> [1]: https://example.com')).toHaveLength(1)
+    expect(markdownBlocks('Note[^a].\n\n- [^a]: footnote')).toHaveLength(1)
   })
 
   it('draws the same as one parse', () => {

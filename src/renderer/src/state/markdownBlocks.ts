@@ -14,9 +14,11 @@
  * isn't split at all, since those reach across blocks.
  */
 
-const FENCE = /^\s{0,3}(`{3,}|~{3,})/
+// A backtick fence's info string has no backtick (CommonMark), or the line is a paragraph.
+const FENCE = /^\s{0,3}(`{3,}(?!.*`)|~{3,})/
 const LIST_ITEM = /^\s{0,3}([-*+]|\d{1,9}[.)])(\s|$)/
-const REACHES_ACROSS = /^\s{0,3}(\[[^\]]+\]:|<(!--|script|pre|style|textarea|\?|![A-Za-z]|!\[CDATA\[))/im
+// A definition counts inside a quote or list item too: it reaches the whole reply.
+const REACHES_ACROSS = /^(?:\s{0,3}(?:>|[-*+]|\d{1,9}[.)])\s?)*\s{0,3}(\[[^\]]+\]:|<(!--|script|pre|style|textarea|\?|![A-Za-z]|!\[CDATA\[))/im
 
 export function markdownBlocks(text: string): string[] {
   if (REACHES_ACROSS.test(text)) return [text]
