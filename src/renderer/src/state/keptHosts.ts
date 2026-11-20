@@ -13,6 +13,8 @@ import { CHAT_LIST_PAGE, CHAT_LIST_PATH, rowsFromResponse, type ChatRow } from '
 import { rosterFromProfiles, type Bot } from './bots'
 import { PULSE, parseFeed } from './pulse'
 import { listPath, parsePage, type ArtifactFilter, type ArtifactItem } from './artifacts'
+import { roomsFromList, type Room } from './groups'
+import { COPIES_PATH, parseCopies, type RoomCopy } from './roomCopies'
 
 export const keptStateLabel = (state: KeptHostState): string =>
   state === 'live'
@@ -292,6 +294,142 @@ export function takeChatAfterSwitch(host: string): ChatRow | null {
   const row = pendingChat.row
   pendingChat = null
   return row
+}
+
+/** Another combined host's group chat: a room its Hermes hosts, or its copy of a room another Hermes hosts. */
+export type OtherRoom = { host: string; kind: 'room'; room: Room } | { host: string; kind: 'copy'; copy: RoomCopy }
+
+/** One host's group chats, as last read. */
+export interface HostRooms {
+  rooms: Room[]
+  copies: RoomCopy[]
+}
+
+/**
+ * Every live kept host's group chats, read once a minute while Bots shows:
+ * the rooms it hosts (`groups.list` over its socket) and its copies of rooms
+ * elsewhere (the plugin's copies route). What can't be read keeps what it
+ * showed; a host let go shows nothing more.
+ */
+export function useKeptRooms(kept: readonly KeptHost[], on: boolean): Map<string, HostRooms> {
+  const [rooms, setRooms] = useState<Map<string, HostRooms>>(new Map())
+  const byHost = useRef(new Map<string, HostRooms>())
+  const live = on
+    ? kept
+        .filter(h => h.state === 'live')
+        .map(h => h.url)
+        .join('\n')
+    : ''
+
+  useEffect(() => {
+    const urls = live ? live.split('\n') : []
+    for (const url of [...byHost.current.keys()]) if (!urls.includes(url)) byHost.current.delete(url)
+    const show = () => setRooms(new Map(byHost.current))
+    show()
+    if (!urls.length) return
+    let stopped = false
+    const read = async () => {
+      if (document.hidden) return
+      await Promise.all(
+        urls.map(async url => {
+          const [listed, copied] = await Promise.all([
+            window.conduit.keptRpc(url, 'groups.list', { include_disbanded: false }),
+            window.conduit.keptHttp(url, COPIES_PATH)
+          ])
+          if (stopped) return
+          const last = byHost.current.get(url)
+          const rooms = listed.ok ? roomsFromList(listed.result).filter(r => !r.disbanded) : (last?.rooms ?? [])
+          const copies = (copied.ok ? parseCopies(copied.result) : null) ?? last?.copies ?? []
+          if (!listed.ok && !copied.ok && !last) return
+          byHost.current.set(url, { rooms, copies })
+        })
+      )
+      if (!stopped) show()
+    }
+    void read()
+    const timer = setInterval(() => void read(), KEPT_CHATS_POLL_MS)
+    const onVisible = () => {
+      if (!document.hidden) void read()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [live])
+
+  return rooms
+}
+
+/** A room's id is only unique on the Hermes that hosts it: two lists are one room's when they share a member too (or either names none). */
+const sameMembers = (a: readonly string[], b: readonly string[]) => !a.length || !b.length || a.some(m => b.includes(m))
+
+/**
+ * Group chats in a combined group, as the phone draws them (Eric,
+ * 2026-11-20): every host's, each room once, under the host you talk in it
+ * from, so you're the same person in it whichever host is on screen. That's
+ * the host whose Hermes hosts it (this one first, for one Hermes saved at
+ * two addresses), else the first in Saved Dashboards order with a copy.
+ * `copies`: this host's copies left to show; `others`: the other hosts'
+ * group chats, in Saved Dashboards order, each one's newest first.
+ */
+export function combinedRooms(
+  here: string,
+  order: readonly string[],
+  hereRooms: readonly Room[],
+  hereCopies: readonly RoomCopy[],
+  kept: ReadonlyMap<string, HostRooms>
+): { copies: RoomCopy[]; others: OtherRoom[] } {
+  if (!kept.size) return { copies: [...hereCopies], others: [] }
+  const lists = order.flatMap(url =>
+    url === here ? [{ url, rooms: hereRooms, copies: hereCopies }] : kept.has(url) ? [{ url, ...kept.get(url)! }] : []
+  )
+  const memberIds = (members: readonly { memberId: string }[]) => members.map(m => m.memberId)
+  const home = (roomId: string, members: readonly string[]): string | null => {
+    const hosts = lists.filter(l => l.rooms.some(r => r.roomId === roomId && sameMembers(memberIds(r.members), members)))
+    const host = hosts.find(l => l.url === here) ?? hosts[0]
+    if (host) return host.url
+    return lists.find(l => l.copies.some(c => c.roomId === roomId && sameMembers(memberIds(c.members), members)))?.url ?? null
+  }
+  const copies = hereCopies.filter(c => (home(c.roomId, memberIds(c.members)) ?? here) === here)
+  const others: OtherRoom[] = []
+  for (const list of lists) {
+    if (list.url === here) continue
+    const own: (OtherRoom & { at: number })[] = [
+      ...list.rooms
+        .filter(r => home(r.roomId, memberIds(r.members)) === list.url)
+        .map(room => ({ host: list.url, kind: 'room' as const, room, at: room.updatedAt ?? 0 })),
+      ...list.copies
+        .filter(c => home(c.roomId, memberIds(c.members)) === list.url)
+        .map(copy => ({ host: list.url, kind: 'copy' as const, copy, at: copy.updatedAt }))
+    ]
+    others.push(...own.sort((a, b) => b.at - a.at).map(({ at: _at, ...row }) => row as OtherRoom))
+  }
+  return { copies, others }
+}
+
+/** A group chat opened on another host: the new host's window opens it once its rooms or copies are read. */
+let pendingRoom: { host: string; kind: 'room' | 'copy'; id: string } | null = null
+
+export function openRoomAfterSwitch(other: OtherRoom): void {
+  pendingRoom = { host: other.host, kind: other.kind, id: other.kind === 'room' ? other.room.roomId : other.copy.id }
+}
+
+/** The room or copy to open here, once this host's list holds it; it waits while the list isn't read. */
+export function takeRoomAfterSwitch(host: string, rooms: readonly Room[] | null, copies: readonly RoomCopy[] | null): { room: Room } | { copy: RoomCopy } | null {
+  if (!pendingRoom || pendingRoom.host !== host) return null
+  const { kind, id } = pendingRoom
+  if (kind === 'room') {
+    if (!rooms) return null
+    pendingRoom = null
+    const room = rooms.find(r => r.roomId === id)
+    return room ? { room } : null
+  }
+  if (!copies) return null
+  pendingRoom = null
+  const copy = copies.find(c => c.id === id)
+  return copy ? { copy } : null
 }
 
 /** A bot on another combined host: its starter face (its picture is that host's), opening through a switch. */

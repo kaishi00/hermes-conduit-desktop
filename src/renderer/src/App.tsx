@@ -126,6 +126,7 @@ import {
   keptStateLabel,
   openAfterSwitch,
   openBotAfterSwitch,
+  openRoomAfterSwitch,
   openChatAfterSwitch,
   openPageAfterSwitch,
   newBotAfterSwitch,
@@ -135,9 +136,13 @@ import {
   otherHostsWaiting,
   takeBotAfterSwitch,
   takeChatAfterSwitch,
+  takeRoomAfterSwitch,
   takeOpenAfterSwitch,
   takePageAfterSwitch,
   useKeptBots,
+  useKeptRooms,
+  combinedRooms,
+  type OtherRoom,
   useKeptChats,
   useKeptPulse,
   pulseChips,
@@ -1308,6 +1313,12 @@ function Shell({
     [otherBots, roomDrafts.ownBots]
   )
   const hasOtherBots = otherBots.length > 0
+  // ...and their group chats: each room once, under the host you talk in it from (Eric, 2026-11-20).
+  const keptRooms = useKeptRooms(keptHosts, botsListShown)
+  const groupChats = useMemo(
+    () => combinedRooms(status.url ?? '', savedHostUrls, groupRooms.rooms ?? [], roomCopies.copies ?? [], keptRooms),
+    [status.url, savedHostUrls, groupRooms.rooms, roomCopies.copies, keptRooms]
+  )
   useEffect(() => {
     if (botsListShown && hasOtherBots) void roomDrafts.refreshPeople()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1487,6 +1498,21 @@ function Shell({
     const bot = takeBotAfterSwitch(statusUrl, roster.bots)
     if (bot) openBot(bot)
   }, [statusUrl, roster.bots, openBot])
+  const openOtherRoom = useCallback(async (other: OtherRoom) => {
+    if (!(await switchEndingCall(hostName(other.host)))) return
+    openRoomAfterSwitch(other)
+    void window.conduit.switchHost(other.host)
+  }, [])
+  // A group chat opened on another host: open it here once its rooms or copies are read.
+  useEffect(() => {
+    if (!connected) return
+    const taken = takeRoomAfterSwitch(statusUrl, groupRooms.rooms, roomCopies.copies)
+    if (!taken) return
+    if ('room' in taken) return showRoom(taken.room)
+    setOpenCopy(taken.copy.id)
+    setOpenRoom(null)
+    setSection('room')
+  }, [connected, statusUrl, groupRooms.rooms, roomCopies.copies, showRoom])
   // A wait opened on another host before the switch: open it here once connected.
   useEffect(() => {
     if (!connected || list.rows === undefined) return
@@ -1763,7 +1789,9 @@ function Shell({
                     void roomDrafts.refreshPeople()
                   }
                 : undefined,
-    copies: roomCopies.copies,
+    copies: roomCopies.copies ? groupChats.copies : undefined,
+    otherRooms: groupChats.others,
+    onOpenOtherRoom: openOtherRoom,
     copiesWaiting: copiesWaiting,
     onOpenCopy: copy => {
               setOpenCopy(copy.id)

@@ -16,6 +16,9 @@ import {
   otherHostsChats,
   keptChatsPath,
   mergeKeptChats,
+  combinedRooms,
+  openRoomAfterSwitch,
+  takeRoomAfterSwitch,
   KEPT_CHATS_PER_PROFILE,
   otherHostsWaiting,
   profileNames,
@@ -27,6 +30,8 @@ import {
   type OtherChatRow
 } from '../src/renderer/src/state/keptHosts'
 import type { WaitingRow } from '../src/renderer/src/state/needsYou'
+import type { Room } from '../src/renderer/src/state/groups'
+import type { RoomCopy } from '../src/renderer/src/state/roomCopies'
 
 class FakeSocket extends EventTarget {
   readyState = 0
@@ -115,8 +120,8 @@ describe('combined dashboards in the main process', () => {
     // Only reads go over a kept socket.
     await expect(h.kept.rpc('https://b.example', 'prompt.submit', {})).rejects.toThrow(/Only reads/)
     await expect(h.kept.rpc('https://b.example', 'profiles.set_asset', {})).rejects.toThrow(/Only reads/)
-    // Its bots' pictures are a read.
-    expect(KEPT_RPC_METHODS).toEqual(['profiles.list', 'profiles.get_asset'])
+    // Its bots' pictures are a read, and so is its list of group chats.
+    expect(KEPT_RPC_METHODS).toEqual(['profiles.list', 'profiles.get_asset', 'groups.list'])
     await expect(h.kept.rpc('https://d.example', 'profiles.list')).rejects.toThrow(/Not connected/)
   })
 
@@ -344,6 +349,69 @@ describe('combined dashboards in the window', () => {
     expect(rows.map(r => (r.kind === 'group' ? `group:${r.members.length}>${r.opens}` : r.host.url))).toEqual(['group:2>https://studio.example', 'https://alone.example'])
     expect(launchRows(hosts, null)[0]).toMatchObject({ kind: 'group', opens: 'https://home.example' })
     expect(launchRows([hosts[0]!, hosts[1]!], null).every(r => r.kind === 'host')).toBe(true)
+  })
+})
+
+describe('group chats in a combined group', () => {
+  const member = (memberId: string) => ({ memberId, profile: memberId })
+  const room = (roomId: string, members: string[], updatedAt = 1): Room => ({
+    roomId,
+    name: roomId,
+    members: members.map(member),
+    updatedAt,
+    disbanded: false,
+    linked: false
+  })
+  const copy = (roomId: string, members: string[]): RoomCopy => ({
+    id: `lk-${roomId}/${roomId}`,
+    roomId,
+    name: roomId,
+    link: `lk-${roomId}`,
+    from: 'Sam',
+    members: members.map(m => ({ memberId: m })),
+    yours: [],
+    justMe: false,
+    status: 'started',
+    reason: null,
+    working: false,
+    activity: [],
+    lastSeq: 1,
+    updatedAt: 1,
+    out: {}
+  })
+  const mac = 'https://mac.example'
+  const vps = 'https://vps.example'
+
+  it('shows each room once, under the host you talk in it from (Eric, 2026-11-20)', () => {
+    // Mac hosts "trip" (one of VPS' bots in it over the own Link) and
+    // "plans", and has a copy of Sam's "zoo"; VPS, on screen, has copies of
+    // "trip", "zoo" and "solo".
+    const kept = new Map([[mac, { rooms: [room('trip', ['raiden', 'furina'], 2), room('plans', ['raiden'], 3)], copies: [copy('zoo', ['sam', 'nahida'])] }]])
+    const here = [copy('trip', ['raiden', 'furina']), copy('zoo', ['sam', 'nahida']), copy('solo', ['sam'])]
+    const shown = combinedRooms(vps, [mac, vps], [room('standup', ['furina'])], here, kept)
+    expect(shown.copies.map(c => c.roomId)).toEqual(['solo'])
+    expect(shown.others.map(o => `${o.kind}:${o.kind === 'room' ? o.room.roomId : o.copy.roomId}@${o.host}`)).toEqual([
+      `room:plans@${mac}`,
+      `room:trip@${mac}`,
+      `copy:zoo@${mac}`
+    ])
+    // A room id another Hermes uses for another room (no member shared) isn't the same room.
+    expect(combinedRooms(vps, [mac, vps], [], [copy('plans', ['sam'])], kept).copies.map(c => c.roomId)).toEqual(['plans'])
+    // One Hermes saved at two addresses: a room both list shows once, as this host's.
+    expect(combinedRooms(vps, [mac, vps], [room('plans', ['raiden'])], [], kept).others.some(o => o.kind === 'room' && o.room.roomId === 'plans')).toBe(false)
+    // Nothing kept: this host's copies as they are.
+    expect(combinedRooms(vps, [mac, vps], [], here, new Map()).copies).toHaveLength(3)
+  })
+
+  it('opens another host\'s group chat once the new host has read it', () => {
+    openRoomAfterSwitch({ host: mac, kind: 'room', room: room('trip', ['raiden']) })
+    expect(takeRoomAfterSwitch(vps, [room('trip', ['raiden'])], [])).toBeNull()
+    expect(takeRoomAfterSwitch(mac, null, null)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null)).toEqual({ room: room('trip', ['raiden']) })
+    expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null)).toBeNull()
+    openRoomAfterSwitch({ host: mac, kind: 'copy', copy: copy('zoo', ['sam']) })
+    expect(takeRoomAfterSwitch(mac, [], null)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])])).toEqual({ copy: copy('zoo', ['sam']) })
   })
 })
 

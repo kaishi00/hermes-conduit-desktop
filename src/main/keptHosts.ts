@@ -16,7 +16,7 @@ import type { ConnectionStatus, KeptHost, KeptHostState } from '../shared/ipc'
 /** Kept beside the one on screen (stage 0's cap of four live dashboards). */
 export const MAX_KEPT = 3
 /** What the window may ask a kept host over its socket. */
-export const KEPT_RPC_METHODS: readonly string[] = ['profiles.list', 'profiles.get_asset']
+export const KEPT_RPC_METHODS: readonly string[] = ['profiles.list', 'profiles.get_asset', 'groups.list']
 export const KEPT_BACKOFF = { baseDelayMs: 30_000, capMs: 300_000, jitter: false }
 
 export interface KeptHostsDeps {
