@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { answerKeeper, keptAnswer } from '../state/keptAnswers'
@@ -39,6 +39,8 @@ interface Props {
   /** Puts a path in the chat's draft. */
   onInsertPath: (path: string) => void
   onClose: () => void
+  /** The side panel's tabs, atop it. */
+  tabs?: ReactNode
 }
 
 type Listed = WorkspaceListing | { error: string } | 'loading'
@@ -67,7 +69,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
  * row's menu makes. Without the plugin's routes it browses and reads through
  * Hermes' own, and offers no search or changes.
  */
-export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, onClose }: Props) {
+export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, onClose, tabs }: Props) {
   const [plugin, setPlugin] = useState<boolean | null>(null)
   const [listings, setListings] = useState<Record<string, Listed>>({})
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([root]))
@@ -465,6 +467,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
 
   return (
     <aside className="ws-panel" aria-label={t('Files')}>
+      {tabs}
       <div className="ws-head">
         <Icon name="folder" />
         <span className="ws-title" title={root}>

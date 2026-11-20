@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import { GatewayError, gateway } from '../gateway'
 import { answerKeeper, keptAnswer } from '../state/keptAnswers'
@@ -41,6 +41,8 @@ interface Props {
   /** Opens the chat an artifact came from, on the every-chat list. */
   onOpenChat?: (item: ArtifactItem) => void
   onClose?: () => void
+  /** The side panel's tabs, atop it. */
+  tabs?: ReactNode
   /** A page of its own rather than a panel beside the chat. */
   page?: boolean
   /** Combined dashboards, on the page: the hosts kept beside this one, whose artifacts list after its own. */
@@ -76,7 +78,7 @@ const inside = (path: string, folder?: string | null) =>
   !!folder && (path === folder || path.startsWith(folder.replace(/[\\/]+$/, '') + '/') || path.startsWith(folder.replace(/[\\/]+$/, '') + '\\'))
 
 /** Artifacts beside a chat, or every chat's on a page, after the phone's In This Chat sheet and Artifacts screen. */
-export function ArtifactsPanel({ profile, sessionIds, refreshKey, folder, onShowInFolder, onOpenChat, onClose, page, kept, dashboards, onOpenOtherChat }: Props) {
+export function ArtifactsPanel({ profile, sessionIds, refreshKey, folder, onShowInFolder, onOpenChat, onClose, page, kept, dashboards, onOpenOtherChat, tabs }: Props) {
   const [tab, setTab] = useState<Tab>('all')
   const [query, setQuery] = useState('')
   const [words, setWords] = useState('')
@@ -422,6 +424,7 @@ export function ArtifactsPanel({ profile, sessionIds, refreshKey, folder, onShow
   return (
     <PictureProfile.Provider value={profile}>
       <aside className={page ? 'artifacts-page' : 'ws-panel artifacts-panel'} aria-label={chats.size ? t('In This Chat') : t('Artifacts')}>
+        {tabs}
         <div className="ws-head">
           <Icon name="paperclip" />
           <span className="ws-title">{chats.size ? t('In This Chat') : t('Artifacts')}</span>

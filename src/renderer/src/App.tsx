@@ -28,7 +28,7 @@ import { setTurnSurfaceHost } from './state/turnSurface'
 import { useDashboardProfiles } from './state/useDashboardProfiles'
 import { setDesktopCardsHost } from './state/desktopCards'
 import { setKanbanHost } from './state/useKanban'
-import { LIST_COLUMN, PANEL_COLUMN, besideChatFits, readWidth, shownListWidth, shownPanelWidth, writeWidth } from './state/columnWidths'
+import { LIST_COLUMN, PANEL_COLUMN, besideChatFits, readListHidden, readWidth, shownListWidth, shownPanelWidth, writeListHidden, writeWidth } from './state/columnWidths'
 import { BesideChatPane, type BesideChat } from './components/BesideChat'
 import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
 import { absolutePath, pathForDraft } from './state/workspace'
@@ -158,8 +158,9 @@ import { PredictiveSettings } from './components/PredictiveSettings'
 import { advancedSections, chatSections, workspaceSections } from './state/profileConfig'
 import { canDelete, duplicateBot, writeMeta } from './state/botActions'
 import { WorkPanel } from './components/WorkPanel'
+import { PanelTabs, workCount, type PanelTab } from './components/PanelTabs'
 import { useWork, useWorkSessions } from './state/useWork'
-import { shownTitle, statusText, type WorkItem } from './state/work'
+import { shownTitle, statusText, workTone, type WorkItem } from './state/work'
 import { VoiceCall } from './components/VoiceCall'
 import { VoiceModeCapsule } from './components/VoiceModeCapsule'
 import { CallPictureControls } from './components/CallPictureControls'
@@ -461,8 +462,15 @@ function Shell({
     else if (action === 'text-normal') setChatScale(1)
     else if (action === 'stop') {
       if (section === 'chats' && transcript.running) void stop()
+    } else if (action === 'toggle-sidebar') {
+      if (section === 'chats') hideList(!listHidden)
+      else {
+        setSection('chats')
+        hideList(false)
+      }
     } else if (action === 'search') {
       setSection('chats')
+      hideList(false)
       // The list mounts with Chats.
       setTimeout(() => document.querySelector<HTMLInputElement>('.chatlist-search input')?.focus(), 0)
     } else if (action.startsWith('go-')) {
@@ -546,6 +554,8 @@ function Shell({
       cwd
         ? (path: string) => {
             setReveal(current => ({ path: absolutePath(path, cwd), id: (current?.id ?? 0) + 1 }))
+            setArtifactsOpen(false)
+            setWorkOpen(false)
             showFiles(true)
           }
         : null,
@@ -834,6 +844,23 @@ function Shell({
   useEffect(() => setScreenOpen(false), [screenProfile])
   // The chat's artifacts beside it, after the phone's In This Chat sheet.
   const [artifactsOpen, setArtifactsOpen] = useState(false)
+  // The side panel's tabs (Eric, 2026-11-20, option C, softer): the bot's Work, In This Chat and the chat's Files, where the chat has them, one open at a time.
+  const panelTabs: PanelTab[] = [
+    ...(workHere && (work.snapshot || work.error) ? (['work'] as const) : []),
+    ...(selected.id ? (['chat'] as const) : []),
+    ...(chat.cwd ? (['files'] as const) : [])
+  ]
+  const shownTab: PanelTab | null = artifactsOpen && selected.id ? 'chat' : showWork ? 'work' : filesOpen && chat.cwd ? 'files' : null
+  const lastTab = useRef<PanelTab>('work')
+  const openTab = (tab: PanelTab | null) => {
+    if (tab) lastTab.current = tab
+    setArtifactsOpen(tab === 'chat')
+    setWorkOpen(tab === 'work')
+    showFiles(tab === 'files')
+  }
+  const workDot = workHere ? workCount(work.snapshot) : null
+  // The tabs show where there's more than one to pick between.
+  const panelTabBar = shownTab && panelTabs.length > 1 ? <PanelTabs tabs={panelTabs} shown={shownTab} onPick={openTab} work={work.snapshot} /> : null
   // The list's and the side panel's widths, dragged by the lines beside them and kept on this device.
   const [listStored, setListStored] = useState(() => readWidth(LIST_COLUMN))
   const [panelStored, setPanelStored] = useState(() => readWidth(PANEL_COLUMN))
@@ -845,13 +872,20 @@ function Shell({
     window.addEventListener('resize', resized)
     return () => window.removeEventListener('resize', resized)
   }, [])
+  // The chat list hidden (the « at its top, ⌘\ or Ctrl+\, or a drag past its least width) until the » atop the rail brings it back.
+  const [listHidden, setListHidden] = useState(readListHidden)
+  const hideList = useCallback((hidden: boolean) => {
+    setListHidden(hidden)
+    writeListHidden(hidden)
+  }, [])
   const listWidth = shownListWidth(listLive ?? listStored, windowWidth)
-  const panelWidth = shownPanelWidth(panelLive ?? panelStored, windowWidth, listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28)))
+  const listTaken = section === 'chats' && listHidden ? 0 : (listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28)))
+  const panelWidth = shownPanelWidth(panelLive ?? panelStored, windowWidth, listTaken)
   // A chat beside the open one: only where both fit, else the pane hides until the window widens.
   const [beside, setBeside] = useState<BesideChat | null>(null)
   const besideBot = beside ? roster.bots?.find(b => b.name === (beside.profile ?? 'default')) : undefined
   const besideFace = useReplyFace(besideBot)
-  const besideFits = besideChatFits(windowWidth, listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28)))
+  const besideFits = besideChatFits(windowWidth, listTaken)
   const sameProfileAs = (a?: string, b?: string) => (a ?? 'default').toLowerCase() === (b ?? 'default').toLowerCase()
   // The chats in windows of their own (up to three), from the main process.
   const [chatWindowIds, setChatWindowIds] = useState<string[]>([])
@@ -1846,6 +1880,16 @@ function Shell({
         }
       >
         <nav className="rail" aria-label={t('Sections')}>
+          {section === 'chats' && listHidden ? (
+            <button
+              className="railbtn rail-show-list"
+              aria-label={t('Show Sidebar')}
+              title={`${t('Show Sidebar')} (${window.conduit.platform === 'darwin' ? '⌘\\' : 'Ctrl+\\'})`}
+              onClick={() => hideList(false)}
+            >
+              <Icon name="chevronsRight" />
+            </button>
+          ) : null}
           <button
             className="railbtn"
             aria-label={t('Bots')}
@@ -1925,7 +1969,7 @@ function Shell({
         {/* Chats stays mounted once shown, hidden while another section is open, so coming back doesn't rebuild every row and the open transcript. */}
         {chatsShown ? (
           <KeptPane away={section !== 'chats'}>
-            {projectsOpen ? (
+            {listHidden ? null : projectsOpen ? (
               <ProjectsPane
                 profile={chatProfile}
                 connected={connected}
@@ -1935,9 +1979,10 @@ function Shell({
                 onClose={() => setProjectsOpen(false)}
                 isUnread={projectChatUnread}
                 runningIds={runningIds}
+                onHide={() => hideList(true)}
               />
             ) : botsSideShown && orderedRoster ? (
-              <BotsHome {...botsHomeProps} side={{ openProfile: selected.profile ?? 'default' }} />
+              <BotsHome {...botsHomeProps} side={{ openProfile: selected.profile ?? 'default' }} onHide={() => hideList(true)} />
             ) : (
               <ChatList
                 rows={listedRows}
@@ -1974,14 +2019,32 @@ function Shell({
                 otherRows={otherChats}
                 badgeFor={badgeFor}
                 onOpenOther={openOtherChat}
+                onHide={() => hideList(true)}
               />
             )}
-            <ColumnDivider label={t('Chat list width')} bounds={LIST_COLUMN} sign={1} width={listWidth} onLive={setListLive} onCommit={commitList} />
+            {listHidden ? null : (
+              <ColumnDivider
+                label={t('Chat list width')}
+                bounds={LIST_COLUMN}
+                sign={1}
+                width={listWidth}
+                onLive={setListLive}
+                onCommit={commitList}
+                onCollapse={() => hideList(true)}
+              />
+            )}
             <main className="chat" ref={chatPane}>
-              <div className="chat-head">
+              <div className="chat-head soft">
                 <div className="chat-titles">
-                  {title ? <div className="chat-title">{title}</div> : null}
-                  {/* A Bot Chat's work is counted on the Workstreams button beside it (Eric, 2026-11-20), not again under its name. */}
+                  <div className="chat-title-line">
+                    {title ? <div className="chat-title">{title}</div> : null}
+                    {workItem ? (
+                      <span className={`status-chip tone-${workTone(workItem)}`} title={statusText(workItem)}>
+                        <span className="status-chip-text">{statusText(workItem)}</span>
+                      </span>
+                    ) : null}
+                  </div>
+                  {/* A Bot Chat's work is counted on the Work tab and the panel button (Eric, 2026-11-20), not again under its name. */}
                   {workItem && workBot ? (
                     <button
                       className="chat-subtitle"
@@ -1990,100 +2053,61 @@ function Shell({
                         if (workBot.botChatId) openBot(workBot)
                       }}
                     >
-                      {t('{bot}’s work · {ref} · {status}', { bot: workBot.title, ref: workItem.ref, status: statusText(workItem) })}
+                      {t('{bot}’s work · {ref}', { bot: workBot.title, ref: workItem.ref })}
                     </button>
                   ) : null}
                 </div>
                 <div className="chat-head-actions">
-                  {workHere && work.snapshot ? (
+                  {/* Call and its voice mode, one pill (option C, softer). */}
+                  <div className={`call-pill${calling ? ' on' : ''}`}>
                     <button
-                      className={`chat-head-work${showWork ? ' active' : ''}${(work.snapshot?.needsYou ?? 0) > 0 ? ' needs' : ''}`}
-                      aria-pressed={showWork}
-                      title={showWork ? t('Hide workstreams') : t('Show workstreams')}
-                      onClick={() => {
-                        if (!workOpen) {
-                          showFiles(false)
-                          setArtifactsOpen(false)
-                        }
-                        setWorkOpen(!workOpen)
-                      }}
+                      className="call-pill-call"
+                      aria-label={calling ? t('End call') : t('Voice call in {mode}', { mode: voiceModeTitle(nextMode) })}
+                      title={calling ? t('End call') : t('Voice call in {mode}', { mode: voiceModeTitle(nextMode) })}
+                      disabled={!connected && !calling}
+                      onClick={toggleCall}
                     >
-                      <Icon name="tasks" />
-                      <span>{t('Workstreams')}</span>
-                      {(work.snapshot?.needsYou ?? 0) > 0 ? (
-                        <span className="chat-head-count" aria-label={t('{count} needs you', { count: work.snapshot?.needsYou ?? 0 })}>
-                          {work.snapshot?.needsYou}
-                        </span>
-                      ) : (work.snapshot?.ready ?? 0) > 0 ? (
-                        <span className="chat-head-count ready" aria-label={t('{count} ready', { count: work.snapshot?.ready ?? 0 })}>
-                          {work.snapshot?.ready}
-                        </span>
-                      ) : (work.snapshot?.working ?? 0) > 0 ? (
-                        <span className="chat-head-count working" aria-label={t('{count} working', { count: work.snapshot?.working ?? 0 })}>
-                          {work.snapshot?.working}
-                        </span>
-                      ) : null}
+                      <Icon name={calling ? 'phoneDown' : 'phone'} />
+                      <span>{calling ? t('End call') : t('Call')}</span>
                     </button>
-                  ) : null}
-                  <select
-                    className="chat-head-mode"
-                    aria-label={t('Voice mode')}
-                    title={t('Voice mode')}
-                    value={calling ? callMode : nextMode}
-                    onChange={e => switchCallMode(e.target.value as VoiceMode)}
-                  >
-                    {VOICE_MODES.map(mode => (
-                      <option key={mode} value={mode}>
-                        {voiceModeTitle(mode)}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className={`chat-head-button${calling ? ' on' : ''}`}
-                    aria-label={calling ? t('End call') : t('Voice call in {mode}', { mode: voiceModeTitle(nextMode) })}
-                    title={calling ? t('End call') : t('Voice call in {mode}', { mode: voiceModeTitle(nextMode) })}
-                    disabled={!connected && !calling}
-                    onClick={toggleCall}
-                  >
-                    <Icon name={calling ? 'phoneDown' : 'phone'} />
-                  </button>
-                  {selected.id ? (
-                    <button
-                      className={`chat-head-button${artifactsOpen ? ' active' : ''}`}
-                      aria-label={t('In This Chat')}
-                      aria-pressed={artifactsOpen}
-                      title={t('In This Chat')}
-                      onClick={() => {
-                        if (!artifactsOpen) setWorkOpen(false)
-                        setArtifactsOpen(!artifactsOpen)
-                      }}
-                    >
-                      <Icon name="paperclip" />
-                    </button>
-                  ) : null}
-                  {chat.cwd && (!filesOpen || artifactsOpen) ? (
-                    <button
-                      className="chat-head-button"
-                      aria-label={t('Files')}
-                      title={t('Files')}
-                      onClick={() => {
-                        setArtifactsOpen(false)
-                        setWorkOpen(false)
-                        showFiles(true)
-                      }}
-                    >
-                      <Icon name="folder" />
-                    </button>
-                  ) : null}
+                    <span className="call-pill-line" aria-hidden="true" />
+                    <span className="call-pill-mode">
+                      <select
+                        aria-label={t('Voice mode')}
+                        title={t('Voice mode')}
+                        value={calling ? callMode : nextMode}
+                        onChange={e => switchCallMode(e.target.value as VoiceMode)}
+                      >
+                        {VOICE_MODES.map(mode => (
+                          <option key={mode} value={mode}>
+                            {voiceModeTitle(mode)}
+                          </option>
+                        ))}
+                      </select>
+                      <Icon name="chevronDown" />
+                    </span>
+                  </div>
                   {screenHosts[screenProfile] ? (
                     <button
-                      className={`chat-head-button${screenOpen ? ' active' : ''}`}
+                      className={`chat-head-toggle${screenOpen ? ' on' : ''}`}
                       aria-label={t("Bot's Screen")}
                       aria-pressed={screenOpen}
                       title={t("Bot's Screen")}
                       onClick={() => setScreenOpen(!screenOpen)}
                     >
                       <Icon name="screen" />
+                    </button>
+                  ) : null}
+                  {panelTabs.length ? (
+                    <button
+                      className={`chat-head-toggle${shownTab ? ' on' : ''}`}
+                      aria-label={shownTab ? t('Hide side panel') : t('Show side panel')}
+                      aria-pressed={!!shownTab}
+                      title={shownTab ? t('Hide side panel') : t('Show side panel')}
+                      onClick={() => openTab(shownTab ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0])}
+                    >
+                      <Icon name="sidePanel" />
+                      {workDot && shownTab !== 'work' ? <span className={`chat-head-dot ${workDot.tone}`} aria-label={workDot.label} /> : null}
                     </button>
                   ) : null}
                 </div>
@@ -2338,6 +2362,7 @@ function Shell({
                 }}
                 onOpenChat={item => setRevealRow({ sessionId: item.sessionId, messageId: item.messageId, until: Date.now() + 20_000 })}
                 onClose={() => setArtifactsOpen(false)}
+                tabs={panelTabBar}
               />
             ) : showWork ? (
               <WorkPanel
@@ -2349,6 +2374,7 @@ function Shell({
                 onReload={() => void work.reload()}
                 onOpenChat={item => setSelected({ id: item.sessionId, profile: selected.profile, title: shownTitle(item) })}
                 onClose={() => setWorkOpen(false)}
+                tabs={panelTabBar}
               />
             ) : filesOpen && chat.cwd ? (
               <FilesPanel
@@ -2358,6 +2384,7 @@ function Shell({
                 reveal={reveal}
                 onInsertPath={path => setQuote(quoteRequest({ insert: pathForDraft(path) }))}
                 onClose={() => showFiles(false)}
+                tabs={panelTabBar}
               />
             ) : beside && besideFits ? (
               <BesideChatPane

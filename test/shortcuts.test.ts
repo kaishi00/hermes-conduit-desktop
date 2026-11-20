@@ -29,6 +29,7 @@ describe('shortcutFor', () => {
     expect(shortcutFor(key('f', { ctrl: true }), false)).toBe('search')
     expect(shortcutFor(key(',', { ctrl: true }), false)).toBe('settings')
     expect(shortcutFor(key('/', { ctrl: true }), false)).toBe('shortcuts')
+    expect(shortcutFor(key('\\', { ctrl: true }), false)).toBe('toggle-sidebar')
   })
 
   it('leaves Alt chords and plain keys alone', () => {
@@ -44,6 +45,8 @@ describe('glyphs and groups', () => {
     expect(glyphs('new-chat', false)).toBe('Ctrl+N')
     expect(glyphs('text-smaller', true)).toBe('⌘−')
     expect(glyphs('text-bigger', false)).toBe('Ctrl+Plus')
+    expect(glyphs('toggle-sidebar', true)).toBe('⌘\\')
+    expect(glyphs('toggle-sidebar', false)).toBe('Ctrl+\\')
   })
 
   it('lists every section and Settings under Go to', () => {

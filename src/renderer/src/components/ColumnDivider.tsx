@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { clampWidth, storedAfterDrag, storedAfterStep, type ColumnBounds } from '../state/columnWidths'
+import { clampWidth, snapsShut, storedAfterDrag, storedAfterStep, type ColumnBounds } from '../state/columnWidths'
 
 /**
  * The line beside a column that drags its width, after the phone's
@@ -7,6 +7,7 @@ import { clampWidth, storedAfterDrag, storedAfterStep, type ColumnBounds } from 
  * list) or after it (sign -1, the panel). A drag lays the column out live
  * and stores once when it ends; a double-click resets it; the arrow keys
  * step it by 40 px, Home and End to its least and most, Enter resets it.
+ * With onCollapse, a drag well past the least width hides the column.
  */
 export function ColumnDivider({
   label,
@@ -14,7 +15,8 @@ export function ColumnDivider({
   sign,
   width,
   onLive,
-  onCommit
+  onCommit,
+  onCollapse
 }: {
   label: string
   bounds: ColumnBounds
@@ -23,8 +25,10 @@ export function ColumnDivider({
   width: number | null
   onLive: (width: number | null) => void
   onCommit: (width: number | null) => void
+  /** Hides the column, for a drag well past its least width. */
+  onCollapse?: () => void
 }) {
-  const drag = useRef<{ x: number; start: number; moved: number | null } | null>(null)
+  const drag = useRef<{ x: number; start: number; moved: number | null; shut: boolean } | null>(null)
 
   const columnWidth = (line: HTMLElement) => {
     if (width !== null) return width
@@ -46,7 +50,7 @@ export function ColumnDivider({
         if (e.button !== 0) return
         e.preventDefault()
         e.currentTarget.setPointerCapture(e.pointerId)
-        drag.current = { x: e.clientX, start: columnWidth(e.currentTarget), moved: null }
+        drag.current = { x: e.clientX, start: columnWidth(e.currentTarget), moved: null, shut: false }
         e.currentTarget.classList.add('dragging')
         document.body.classList.add('resizing-columns')
       }}
@@ -54,6 +58,8 @@ export function ColumnDivider({
         const state = drag.current
         if (!state) return
         state.moved = storedAfterDrag(state.start, e.clientX - state.x, sign, bounds)
+        state.shut = !!onCollapse && snapsShut(state.start, e.clientX - state.x, sign, bounds)
+        e.currentTarget.classList.toggle('closing', state.shut)
         if (state.moved !== null) onLive(state.moved)
       }}
       onPointerUp={e => end(e.currentTarget, e.pointerId)}
@@ -79,11 +85,14 @@ export function ColumnDivider({
   function end(line: HTMLElement | null, pointerId?: number) {
     const state = drag.current
     drag.current = null
-    document.querySelector('.column-divider.dragging')?.classList.remove('dragging')
+    document.querySelector('.column-divider.dragging')?.classList.remove('dragging', 'closing')
     document.body.classList.remove('resizing-columns')
     if (line && pointerId !== undefined && line.hasPointerCapture(pointerId)) line.releasePointerCapture(pointerId)
-    // A press that didn't move keeps what was stored.
-    if (state?.moved != null) onCommit(state.moved)
+    // A press that didn't move keeps what was stored; a drag past the least width hides the column at the width it had.
+    if (state?.shut && onCollapse) {
+      onLive(null)
+      onCollapse()
+    } else if (state?.moved != null) onCommit(state.moved)
     else onLive(null)
   }
 }

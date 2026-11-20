@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import {
@@ -31,6 +31,8 @@ interface Props {
   onReload: () => void
   onOpenChat: (item: WorkItem) => void
   onClose: () => void
+  /** The side panel's tabs, atop it. */
+  tabs?: ReactNode
 }
 
 function WorkCard({
@@ -201,7 +203,7 @@ function WorkCard({
  * Resolved list. Each card shows where its workstream is, and takes the
  * user's own actions, which skip the Bot Chat's model.
  */
-export function WorkPanel({ profile, botName, snapshot, error, onReload, onOpenChat, onClose }: Props) {
+export function WorkPanel({ profile, botName, snapshot, error, onReload, onOpenChat, onClose, tabs }: Props) {
   const [allRecent, setAllRecent] = useState(false)
   const [resolved, setResolved] = useState<WorkItem[] | null>(null)
   const [resolvedError, setResolvedError] = useState<string | null>(null)
@@ -227,6 +229,7 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onOpenC
 
   return (
     <aside className="ws-panel work-panel" aria-label={t('{bot}’s work', { bot: botName })}>
+      {tabs}
       <div className="ws-head">
         {resolved ? (
           <button className="staged-remove" aria-label={t('Back')} title={t('Back')} onClick={() => setResolved(null)}>

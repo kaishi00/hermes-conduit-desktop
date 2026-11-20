@@ -1,7 +1,7 @@
 /**
  * Conduit's keyboard shortcuts, after the phone's catalog: ⌘N New Chat, ⌘F
  * Search, ⌘. Stop, ⌘, Settings, ⌘1 to ⌘5 the sections, ⌘+ ⌘− ⌘0 the chat's
- * text size and ⌘/ this list. The Mac's menu bar holds them there; Windows
+ * text size, ⌘\ the chat list and ⌘/ this list. The Mac's menu bar holds them there; Windows
  * has no menu bar, so the window reads Ctrl and the same key.
  */
 import { t } from '../../../shared/i18n'
@@ -21,6 +21,7 @@ const KEYS: Partial<Record<MenuAction, string[]>> = {
   'text-smaller': ['-', '_'],
   'text-normal': ['0'],
   shortcuts: ['/', '?'],
+  'toggle-sidebar': ['\\'],
   'go-1': ['1'],
   'go-2': ['2'],
   'go-3': ['3'],
@@ -76,7 +77,8 @@ export function shortcutGroups(mac: boolean): { title: string; rows: ShortcutRow
         row(t('New Chat'), 'new-chat'),
         row(t('Search'), 'search'),
         { title: t('Send'), keys: [mac ? '↩' : 'Enter'] },
-        { title: t('Stop'), keys: [glyphs('stop', mac), 'Esc'] }
+        { title: t('Stop'), keys: [glyphs('stop', mac), 'Esc'] },
+        row(t('Show or Hide Sidebar'), 'toggle-sidebar')
       ]
     },
     {

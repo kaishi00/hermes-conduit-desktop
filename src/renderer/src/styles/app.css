@@ -428,19 +428,19 @@ a:hover {
 }
 
 /* With buttons on the right, the title stays centered while there's room and gives way to them when there isn't. */
-.chat-head:has(> .chat-head-actions) {
+.chat-head:not(.soft):has(> .chat-head-actions) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, max-content) minmax(max-content, 1fr);
   gap: 8px;
 }
 
-.chat-head:has(> .chat-head-actions) > .chat-titles {
+.chat-head:not(.soft):has(> .chat-head-actions) > .chat-titles {
   grid-column: 2;
   max-width: 100%;
   justify-self: center;
 }
 
-.chat-head:has(> .chat-head-actions) > .chat-head-actions {
+.chat-head:not(.soft):has(> .chat-head-actions) > .chat-head-actions {
   grid-column: 3;
   justify-self: end;
   position: static;
@@ -4222,24 +4222,6 @@ html[data-window='quick'] body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.chat-head-mode {
-  height: 32px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text-2);
-  font: inherit;
-  font-size: 12px;
-  padding: 0 6px;
-  max-width: 120px;
-  cursor: pointer;
-}
-
-.chat-head-mode:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 .chat-head-button:hover {
@@ -10555,60 +10537,6 @@ button.secondary.danger {
   flex: none;
 }
 
-/* The Bot Chat's Workstreams button opens the right panel (option A). */
-.chat-head-work {
-  height: 32px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text-2);
-  font: inherit;
-  font-size: 12px;
-  padding: 0 10px 0 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.chat-head-work svg {
-  width: 16px;
-  height: 16px;
-}
-
-.chat-head-work:hover,
-.chat-head-work.active {
-  color: var(--text);
-}
-
-.chat-head-work.active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-}
-
-.chat-head-count {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: var(--warning);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* The count's colour is its status's: needs you orange, ready green, working blue. */
-.chat-head-count.ready {
-  background: var(--success);
-}
-
-.chat-head-count.working {
-  background: var(--working);
-}
-
 /*
  * Status, the same on every card (Eric, 2026-11-20, option D): a round mark
  * beside the title and a chip at the top right. Needs you orange, working
@@ -10736,4 +10664,363 @@ button.ghost:hover:not(:disabled) {
 button.ghost:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/*
+ * The chat's header, option C softer (Eric, 2026-11-20): no bar or line, the
+ * chat fades out under it; the title and its status on one line with the
+ * crumb under them; Call and its voice mode one pill; Bot's Screen and the
+ * side panel's button beside it. The panel floats as one rounded surface,
+ * its tabs atop it.
+ */
+.chat-head.soft {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 14px 0 24px;
+}
+
+.chat-head.soft > .chat-titles {
+  flex: 1;
+  max-width: none;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.chat-head.soft > .chat-head-actions {
+  position: static;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-title-line {
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-head.soft .chat-title {
+  max-width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  display: block;
+  font-size: 17px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-head.soft .status-chip {
+  margin-left: 0;
+  flex: none;
+  max-width: 40%;
+  padding: 2px 9px;
+}
+
+.chat-head.soft .chat-subtitle {
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 16px;
+  text-align: left;
+}
+
+/* The transcript fades out as it reaches the header, over any backdrop. */
+.chat-head.soft ~ .transcript {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+}
+
+.call-pill {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.call-pill-call {
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px 0 14px;
+  border-radius: 999px 0 0 999px;
+  cursor: pointer;
+}
+
+.call-pill-call svg {
+  width: 16px;
+  height: 16px;
+}
+
+.call-pill-call:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.call-pill-call:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.call-pill.on {
+  background: var(--danger);
+  color: #fff;
+}
+
+.call-pill-line {
+  width: 1px;
+  height: 18px;
+  background: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.call-pill-mode {
+  position: relative;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-2);
+}
+
+.call-pill.on .call-pill-mode {
+  color: #fff;
+}
+
+.call-pill-mode select {
+  appearance: none;
+  height: 38px;
+  max-width: 150px;
+  border: 0;
+  border-radius: 0 999px 999px 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 30px 0 10px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.call-pill-mode select:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.call-pill-mode option {
+  background: var(--menu);
+  color: var(--text);
+}
+
+.call-pill-mode svg {
+  position: absolute;
+  right: 11px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+.chat-head-toggle {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.chat-head-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-head-toggle:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.chat-head-toggle.on {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* The bot's work, while its tab isn't showing: needs you orange, ready green, working blue. */
+.chat-head-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.chat-head-dot.ready {
+  background: var(--success);
+}
+
+.chat-head-dot.working {
+  background: var(--working);
+}
+
+/* The side panel floats: one rounded surface with a gap around it, no line. */
+.ws-panel:not(.chat-window) {
+  margin: 12px 12px 12px 0;
+  border-left: 0;
+  border-radius: 20px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.panel-tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 10px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.panel-tab {
+  flex: none;
+  height: 32px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.panel-tab:hover {
+  color: var(--text);
+}
+
+.panel-tab.on {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.panel-tab-count {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--warning);
+  color: #1a1100;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel-tab-count.ready {
+  background: var(--success);
+  color: #04210d;
+}
+
+.panel-tab-count.working {
+  background: var(--working);
+  color: #0b0d12;
+}
+
+/* Under the tabs, the panel's own line is quieter: its tab already names it. */
+.panel-tabs + .ws-head {
+  height: 44px;
+}
+
+.panel-tabs + .ws-head .ws-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* The chat list's « and the rail's » (Eric, 2026-11-20: hiding the list is the list's own button). */
+.chatlist-head .hide-list {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.chatlist-head .hide-list:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.column-divider.closing::after {
+  background: var(--accent);
+}
+
+/*
+ * A narrow chat (a small window with the side panel open) keeps the header's
+ * buttons from running over the title or the panel: the title shrinks first,
+ * then Call drops its word, then the voice mode and the status chip go (the
+ * crumb and the panel's Work tab still say where the work is).
+ */
+.chat-head.soft > .chat-titles {
+  overflow: hidden;
+}
+
+.chat-head.soft .chat-title {
+  flex: 0 1 auto;
+  min-width: 3em;
+}
+
+@container chat (max-width: 640px) {
+  .call-pill-call > span {
+    display: none;
+  }
+
+  .call-pill-call {
+    padding: 0 10px 0 12px;
+  }
+
+  .call-pill-mode select {
+    max-width: 104px;
+  }
+}
+
+@container chat (max-width: 500px) {
+  .call-pill-line,
+  .call-pill-mode,
+  .chat-head.soft .status-chip {
+    display: none;
+  }
+
+  .call-pill-call {
+    border-radius: 999px;
+    padding: 0 12px;
+  }
+
+  .chat-head.soft {
+    padding-left: 16px;
+  }
 }

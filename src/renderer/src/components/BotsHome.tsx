@@ -13,6 +13,7 @@ import {
 import { starterFace } from "../state/starterFaces";
 import { useAvatar, useFace } from "../state/useBots";
 import { canDelete } from "../state/botActions";
+import { HideListButton } from "./HideListButton";
 import { Icon } from "./icons";
 import { inviteRowLine, type RoomInvite } from "../state/roomInvites";
 import { copyLine, copyRoom, isOver, type RoomCopy } from "../state/roomCopies";
@@ -204,6 +205,8 @@ interface Props {
    * New Bot and New Group Chat on their headings. Names what's open.
    */
   side: { openProfile?: string; openRoomId?: string };
+  /** Hides the list beside the chat: the « at its top. */
+  onHide?: () => void;
 }
 
 /** A bot's pill: what needs you first, then what's working, else nothing. */
@@ -278,6 +281,7 @@ export function BotsHome({
   farFor,
   onCreateFarDraft,
   side,
+  onHide,
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -731,6 +735,7 @@ export function BotsHome({
             <Icon name="plus" />
           </button>
         ) : null}
+        {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
       {notice || actionError ? (
         <p className="error-text bots-notice bot-side-notice">

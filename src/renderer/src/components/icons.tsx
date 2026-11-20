@@ -73,6 +73,14 @@ const paths = {
     </>
   ),
   chevron: <path d="M9 5l7 7-7 7" />,
+  chevronsLeft: <path d="M12 7l-5 5 5 5M18 7l-5 5 5 5" />,
+  chevronsRight: <path d="M6 7l5 5-5 5M12 7l5 5-5 5" />,
+  sidePanel: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
+      <path d="M15 4.5v15" />
+    </>
+  ),
   chevronDown: <path d="M5 9l7 7 7-7" />,
   send: <path d="M12 19V5M6 11l6-6 6 6" />,
   down: <path d="M12 5v14M6 13l6 6 6-6" />,

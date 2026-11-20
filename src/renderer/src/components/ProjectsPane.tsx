@@ -3,6 +3,7 @@ import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { timeLabel } from '../state/chats'
 import { createParams, parseProjectChats, parseProjects, type Project, type ProjectChat, type ProjectDetail } from '../state/projects'
+import { HideListButton } from './HideListButton'
 import { Icon } from './icons'
 import { ask, tell } from '../state/dialogs'
 
@@ -19,12 +20,14 @@ interface Props {
   isUnread?: (chat: ProjectChat) => boolean
   /** Chats with a turn running. */
   runningIds?: Set<string>
+  /** Hides the list: the « at its top. */
+  onHide?: () => void
 }
 
 const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /** The phone's Chats › Projects: Hermes' projects, then one project's chats by folder. */
-export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewChat, onClose, isUnread, runningIds }: Props) {
+export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewChat, onClose, isUnread, runningIds, onHide }: Props) {
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<Project | null>(null)
@@ -65,6 +68,7 @@ export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewCh
         onSelect={onSelect}
         onNewChat={() => onNewChat(open.path, open)}
         onBack={() => setOpen(null)}
+        onHide={onHide}
         onChanged={project => {
           setOpen(project)
           setReload(n => n + 1)
@@ -82,6 +86,7 @@ export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewCh
         <button className="round" aria-label={t('New Project')} title={t('New Project')} onClick={() => setCreating(true)}>
           <Icon name="plus" />
         </button>
+        {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
       {creating ? (
         <ProjectForm
@@ -188,7 +193,8 @@ function ProjectPage({
   onSelect,
   onNewChat,
   onBack,
-  onChanged
+  onChanged,
+  onHide
 }: {
   project: Project
   connected: boolean
@@ -200,6 +206,7 @@ function ProjectPage({
   onNewChat: () => void
   onBack: () => void
   onChanged: (project: Project | null) => void
+  onHide?: () => void
 }) {
   const [detail, setDetail] = useState<ProjectDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -284,6 +291,7 @@ function ProjectPage({
         >
           <Icon name="plus" />
         </button>
+        {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
       <div className="project-meta">
         {project.path ? <span className="meta project-path">{project.path}</span> : null}

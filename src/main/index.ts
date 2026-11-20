@@ -684,6 +684,8 @@ function macMenu(): Menu {
         { label: t('Make Text Smaller'), accelerator: 'Cmd+-', click: command('text-smaller') },
         { label: t('Make Text Normal Size'), accelerator: 'Cmd+0', click: command('text-normal') },
         { type: 'separator' },
+        { label: t('Show or Hide Sidebar'), accelerator: 'Cmd+\\', click: command('toggle-sidebar') },
+        { type: 'separator' },
         ...go,
         { type: 'separator' },
         { role: 'togglefullscreen' }

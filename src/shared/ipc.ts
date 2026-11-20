@@ -358,6 +358,7 @@ export type MenuAction =
   | 'text-smaller'
   | 'text-normal'
   | 'shortcuts'
+  | 'toggle-sidebar'
   | 'go-1'
   | 'go-2'
   | 'go-3'

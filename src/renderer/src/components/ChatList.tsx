@@ -5,6 +5,7 @@ import { sectionRows, startOfDay, timeLabel, type ChatRow } from '../state/chats
 import type { Bot } from '../state/bots'
 import { BotAvatar } from './BotsHome'
 import { t } from '@shared/i18n'
+import { HideListButton } from './HideListButton'
 import { Icon } from './icons'
 import { UpdatingCapsule } from './UpdatingCapsule'
 import { filterRows, isStarred, isUnread, type ChatFilter, type ChatMarks } from '../state/chatMarks'
@@ -57,6 +58,8 @@ interface ListSection {
 
 interface Props {
   rows: ChatRow[] | null
+  /** Hides the list: the « at its top. */
+  onHide?: () => void
   error: string | null
   /** Rows that may be out of date are being read again: the Updating… capsule. */
   updating?: boolean
@@ -163,7 +166,8 @@ export function ChatList({
   canOpenBeside,
   otherRows = NO_ROWS,
   badgeFor,
-  onOpenOther
+  onOpenOther,
+  onHide
 }: Props) {
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState<{ row: ChatRow; x: number; y: number } | null>(null)
@@ -429,6 +433,7 @@ export function ChatList({
         >
           <Icon name="plus" />
         </button>
+        {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
       <label className="chatlist-search">
         <Icon name="search" />

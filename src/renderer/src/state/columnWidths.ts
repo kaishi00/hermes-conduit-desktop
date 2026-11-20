@@ -30,6 +30,32 @@ export const DRAG_SLOP = 4
 
 export const clampWidth = (width: number, bounds: ColumnBounds) => Math.round(Math.min(bounds.max, Math.max(bounds.min, width)))
 
+/** A drag of the list's line this far past its least width hides the list, as the Mac's sidebars snap shut. */
+export const SNAP_SHUT = 80
+
+/** Whether a drag that started at this width hides the column: dragged well past its least width. */
+export const snapsShut = (start: number, dx: number, sign: 1 | -1, bounds: ColumnBounds) => start + sign * dx < bounds.min - SNAP_SHUT
+
+const LIST_HIDDEN_KEY = 'conduit.listHidden'
+
+/** Whether the person hid the chat list (the « at its top, ⌘\ or Ctrl+\, or a drag past its least width), kept on this device. */
+export function readListHidden(): boolean {
+  try {
+    return localStorage.getItem(LIST_HIDDEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function writeListHidden(hidden: boolean) {
+  try {
+    if (hidden) localStorage.setItem(LIST_HIDDEN_KEY, '1')
+    else localStorage.removeItem(LIST_HIDDEN_KEY)
+  } catch {
+    // Kept for this window only.
+  }
+}
+
 /** What a drag stores: the width it started from moved by the pointer, or null (nothing new) for a press that didn't move. */
 export function storedAfterDrag(start: number, dx: number, sign: 1 | -1, bounds: ColumnBounds): number | null {
   if (Math.abs(dx) < DRAG_SLOP) return null
