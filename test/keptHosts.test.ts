@@ -19,6 +19,7 @@ import {
   combinedRooms,
   openRoomAfterSwitch,
   takeRoomAfterSwitch,
+  ROOM_AFTER_SWITCH_MS,
   KEPT_CHATS_PER_PROFILE,
   otherHostsWaiting,
   profileNames,
@@ -411,9 +412,16 @@ describe('group chats in a combined group', () => {
     expect(takeRoomAfterSwitch(mac, null, null)).toBeNull()
     expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null)).toEqual({ room: room('trip', ['raiden']) })
     expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null)).toBeNull()
-    openRoomAfterSwitch({ host: mac, kind: 'copy', copy: copy('zoo', ['sam']) })
-    expect(takeRoomAfterSwitch(mac, [], null)).toBeNull()
-    expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])])).toEqual({ copy: copy('zoo', ['sam']) })
+    // A copy waits through an early empty list (its plugin's routes not read yet) for one that holds it.
+    openRoomAfterSwitch({ host: mac, kind: 'copy', copy: copy('zoo', ['sam']) }, 1_000)
+    expect(takeRoomAfterSwitch(mac, [], null, 1_100)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [], [], 1_200)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])], 1_300)).toEqual({ copy: copy('zoo', ['sam']) })
+    expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])], 1_400)).toBeNull()
+    // ...but not forever: one its host no longer lists is dropped.
+    openRoomAfterSwitch({ host: mac, kind: 'copy', copy: copy('zoo', ['sam']) }, 1_000)
+    expect(takeRoomAfterSwitch(mac, [], [], 1_000 + ROOM_AFTER_SWITCH_MS + 1)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])], 1_000 + ROOM_AFTER_SWITCH_MS + 2)).toBeNull()
   })
 })
 

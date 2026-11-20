@@ -412,27 +412,44 @@ export function combinedRooms(
   return { copies, others }
 }
 
-/** A group chat opened on another host: the new host's window opens it once its rooms or copies are read. */
-let pendingRoom: { host: string; kind: 'room' | 'copy'; id: string } | null = null
+/** How long a copy opened on another host waits for the new host's copies to list it. */
+export const ROOM_AFTER_SWITCH_MS = 30_000
 
-export function openRoomAfterSwitch(other: OtherRoom): void {
-  pendingRoom = { host: other.host, kind: other.kind, id: other.kind === 'room' ? other.room.roomId : other.copy.id }
+/** A group chat opened on another host: the new host's window opens it once its rooms or copies are read. */
+let pendingRoom: { host: string; kind: 'room' | 'copy'; id: string; at: number } | null = null
+
+export function openRoomAfterSwitch(other: OtherRoom, now = Date.now()): void {
+  pendingRoom = { host: other.host, kind: other.kind, id: other.kind === 'room' ? other.room.roomId : other.copy.id, at: now }
 }
 
-/** The room or copy to open here, once this host's list holds it; it waits while the list isn't read. */
-export function takeRoomAfterSwitch(host: string, rooms: readonly Room[] | null, copies: readonly RoomCopy[] | null): { room: Room } | { copy: RoomCopy } | null {
+/**
+ * The room or copy to open here, once this host's list holds it; it waits
+ * while the list isn't read. A copy waits for a list that holds it (its
+ * plugin's routes are read before its copies, so an early list is empty), up
+ * to `ROOM_AFTER_SWITCH_MS`.
+ */
+export function takeRoomAfterSwitch(
+  host: string,
+  rooms: readonly Room[] | null,
+  copies: readonly RoomCopy[] | null,
+  now = Date.now()
+): { room: Room } | { copy: RoomCopy } | null {
   if (!pendingRoom || pendingRoom.host !== host) return null
-  const { kind, id } = pendingRoom
+  const { kind, id, at } = pendingRoom
   if (kind === 'room') {
     if (!rooms) return null
     pendingRoom = null
     const room = rooms.find(r => r.roomId === id)
     return room ? { room } : null
   }
-  if (!copies) return null
+  if (now - at > ROOM_AFTER_SWITCH_MS) {
+    pendingRoom = null
+    return null
+  }
+  const copy = copies?.find(c => c.id === id)
+  if (!copy) return null
   pendingRoom = null
-  const copy = copies.find(c => c.id === id)
-  return copy ? { copy } : null
+  return { copy }
 }
 
 /** A bot on another combined host: its starter face (its picture is that host's), opening through a switch. */
