@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { gateway } from './gateway'
 import { draftAgents, type OwnHermesBot } from './state/roomDrafts'
 import { arrange, farBotFor, orderedBots, useBotOrder, useMixedBotOrder, useSyncedOrder } from './state/botOrder'
-import { STATUS_PATH as PLUGIN_STATUS_PATH, askPluginStatus, pluginStatus } from './state/plugin'
+import { STATUS_PATH as PLUGIN_STATUS_PATH, pluginStatus } from './state/plugin'
 import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '@shared/ipc'
 import { BotsHome, type BotAction } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
@@ -26,7 +26,7 @@ import { GlowContext, useGlowColors } from './components/GlowColors'
 import { archiveClassicChat, tagVoiceSession, useVoiceList, withVoice } from './state/voiceList'
 import { setCatalogHost } from './state/modelCatalog'
 import { setTurnSurfaceHost } from './state/turnSurface'
-import { setDashboardProfilesHost, watchDashboardProfiles } from './state/dashboardProfile'
+import { useDashboardProfiles } from './state/useDashboardProfiles'
 import { setDesktopCardsHost } from './state/desktopCards'
 import { setKanbanHost } from './state/useKanban'
 import { LIST_COLUMN, PANEL_COLUMN, besideChatFits, readWidth, shownListWidth, shownPanelWidth, writeWidth } from './state/columnWidths'
@@ -221,7 +221,6 @@ export function App() {
   setCatalogHost(url ?? '')
   setKeptAnswersHost(url ?? '')
   setTurnSurfaceHost(url ?? '')
-  setDashboardProfilesHost(url ?? '')
   setDesktopCardsHost(url ?? '')
   setKanbanHost(url ?? '')
   const phase = status?.phase
@@ -231,10 +230,7 @@ export function App() {
     else if (phase === 'failed' && url) setRepairing(current => (current?.url === url ? current : savedHost(status?.hosts, url)))
   }, [phase, url]) // eslint-disable-line react-hooks/exhaustive-deps
   // Whether this dashboard's plugin reads ?conduit_profile= for another profile's routes, or an older one keeps ?profile=.
-  useEffect(() => {
-    if (phase !== 'open' || !url) return
-    return watchDashboardProfiles(url, () => askPluginStatus(() => gateway.http('GET', PLUGIN_STATUS_PATH, undefined, 8_000)))
-  }, [phase, url])
+  useDashboardProfiles(phase, url)
   // A host signed out or removed takes the summaries of its runs of steps, and its saved chat list, with it.
   const hostList = status?.hosts?.map(h => h.url).join('\n')
   useEffect(() => {

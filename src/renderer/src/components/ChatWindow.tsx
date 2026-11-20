@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ChatWindowRequest, ConnectionStatus } from '@shared/ipc'
 import { useChatDisplay } from '../state/display'
+import { useDashboardProfiles } from '../state/useDashboardProfiles'
 import { BesideChatPane } from './BesideChat'
 
 /**
@@ -16,6 +17,7 @@ export function ChatWindow({ chat }: { chat: ChatWindowRequest }) {
     return off
   }, [])
   const connected = status?.phase === 'open'
+  useDashboardProfiles(status?.phase, status?.url)
   const display = useChatDisplay(chat.profile, connected, true)
   useEffect(() => {
     document.title = chat.title || 'Conduit'
