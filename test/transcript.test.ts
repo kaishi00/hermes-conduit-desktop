@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  coalesceDeltas,
   addPendingUser,
   applyEvent,
   applyingReaction,
@@ -153,5 +154,34 @@ describe('reactions', () => {
     )
     expect(live.items[live.items.length - 1]).toMatchObject({ rowId: 9, reactions: [{ emoji: '😂', author: 'agent' }] })
     expect(setReactions(live, 'nope', [])).toBe(live)
+  })
+})
+
+describe('a frame of streaming deltas', () => {
+  const delta = (type: string, text: string | null, session_id = 's') => ({ type, session_id, payload: { text } })
+  it('joins each run of the same delta, keeping order and everything else', () => {
+    const events = [
+      delta('reasoning.delta', 'think '),
+      delta('reasoning.delta', 'hard'),
+      delta('message.delta', 'Hel'),
+      delta('message.delta', 'lo'),
+      delta('message.delta', null),
+      delta('message.delta', ' again'),
+      delta('message.delta', '!', 'other')
+    ]
+    expect(coalesceDeltas(events)).toEqual([
+      delta('reasoning.delta', 'think hard'),
+      delta('message.delta', 'Hello'),
+      delta('message.delta', null),
+      delta('message.delta', ' again'),
+      delta('message.delta', '!', 'other')
+    ])
+  })
+
+  it('draws the same transcript as one event at a time', () => {
+    const events = [delta('message.start', null), delta('message.delta', 'a'), delta('message.delta', 'b'), delta('message.complete', null)]
+    const fold = (list: typeof events) => list.reduce((state, event) => applyEvent(state, event), emptyTranscript)
+    const strip = (state: ReturnType<typeof fold>) => state.items.map(i => ({ kind: i.kind, text: 'text' in i ? i.text : '' }))
+    expect(strip(fold(coalesceDeltas(events)))).toEqual(strip(fold(events)))
   })
 })

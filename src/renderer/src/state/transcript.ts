@@ -423,6 +423,34 @@ function seal(items: TranscriptItem[]): TranscriptItem[] {
   return changed ? next : items
 }
 
+/** Events whose text a reply or its reasoning grows by, which a frame's worth of can go as one. */
+export const STREAMING_DELTAS: ReadonlySet<string> = new Set(['message.delta', 'reasoning.delta'])
+
+/**
+ * A frame's worth of a chat's events, with each run of the same delta in a
+ * row joined into one, so the transcript changes once per run instead of per
+ * chunk. Order holds, and anything else (a seal, a tool, the end) stays
+ * where it was.
+ */
+export function coalesceDeltas<E extends { type: string; session_id?: string; payload?: unknown }>(events: readonly E[]): E[] {
+  const out: E[] = []
+  const textOf = (e: E) => {
+    const text = (e.payload as { text?: unknown } | undefined)?.text
+    return STREAMING_DELTAS.has(e.type) && typeof text === 'string' && text ? text : null
+  }
+  for (const event of events) {
+    const last = out[out.length - 1]
+    const text = textOf(event)
+    const lastText = last ? textOf(last) : null
+    if (last && text !== null && lastText !== null && last.type === event.type && last.session_id === event.session_id) {
+      out[out.length - 1] = { ...last, payload: { ...(last.payload as object), text: lastText + text } }
+      continue
+    }
+    out.push(event)
+  }
+  return out
+}
+
 function appendStreaming(items: TranscriptItem[], kind: 'assistant' | 'thinking', text: string): TranscriptItem[] {
   const last = items[items.length - 1]
   if (last && last.kind === 'assistant' && kind === 'assistant' && last.streaming) {

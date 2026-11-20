@@ -4,6 +4,7 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import { looksLikePath } from '../state/workspace'
 import { remarkDesktopCards } from '../state/desktopCards'
+import { markdownBlocks } from '../state/markdownBlocks'
 import { DesktopCard } from './DesktopCard'
 
 // A single newline is a line break, as replies are written for chat, not for a page.
@@ -61,3 +62,15 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
     </ReactMarkdown>
   )
 })
+
+/** A streaming reply's markdown: each settled block drawn once and kept, the open last one parsed per change (markdownBlocks). */
+export function StreamingMarkdown({ text }: { text: string }) {
+  const blocks = markdownBlocks(text)
+  return (
+    <>
+      {blocks.map((block, i) => (
+        <Markdown key={i} text={block} />
+      ))}
+    </>
+  )
+}

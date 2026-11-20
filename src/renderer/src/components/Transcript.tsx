@@ -11,7 +11,7 @@ import type { ExpiredQuestion } from '../state/expiredQuestions'
 import { Icon, type IconName } from './icons'
 import { JumpToLatest } from './JumpToLatest'
 import { atEnd } from '../state/scrollEnd'
-import { Markdown } from './Markdown'
+import { Markdown, StreamingMarkdown } from './Markdown'
 import { GatewayPicture, PictureImage, PictureProfile } from './Picture'
 import { gateway } from '../gateway'
 import { readDataUrlPath } from '../state/gatewayPictures'
@@ -453,13 +453,15 @@ function AttachmentChips({ attachments }: { attachments: Attachment[] }) {
 }
 
 /** A reply's Markdown, with each `MEDIA:` file as a card where the tag stood. */
-export const Reply = memo(function Reply({ text }: { text: string }) {
+export const Reply = memo(function Reply({ text, streaming = false }: { text: string; streaming?: boolean }) {
   const blocks = useMemo(() => splitReply(text), [text])
+  // While it streams, its markdown parses in blocks, only the open last one again per delta (desktop#198).
+  const Text = streaming ? StreamingMarkdown : Markdown
   return (
     <>
       {blocks.map((block, i) =>
         block.kind === 'markdown' ? (
-          <Markdown key={i} text={block.text} />
+          <Text key={i} text={block.text} />
         ) : block.kind === 'preview' ? (
           <PagePreview key={i} path={block.path} name={baseName(block.path)} fallback={<FileCard path={block.path} />} />
         ) : mediaKind(block.path) === 'image' ? (
@@ -659,7 +661,37 @@ function ReplyActions({ messageKey, text, menu, react }: { messageKey: string; t
   )
 }
 
-function Item({
+/**
+ * Items redraw only when what they show changes (desktop#197): a streaming
+ * delta changes the last item, and every other one is skipped. The
+ * Transcript hands them callbacks that keep one identity and read its
+ * latest state, so only whether each is offered, and the labels, count.
+ */
+const offered = (a: unknown, b: unknown) => !a === !b
+function sameItemProps(a: ItemProps, b: ItemProps): boolean {
+  return (
+    a.item === b.item &&
+    a.author === b.author &&
+    a.followedUp === b.followedUp &&
+    a.expandTools === b.expandTools &&
+    a.repliedTo === b.repliedTo &&
+    a.jump === b.jump &&
+    sameTeammates(a.teammates, b.teammates) &&
+    a.thinkingToggle?.label === b.thinkingToggle?.label &&
+    a.pinToggle?.label === b.pinToggle?.label &&
+    offered(a.onQuote, b.onQuote) &&
+    offered(a.onRetry, b.onRetry) &&
+    offered(a.onEdit, b.onEdit) &&
+    offered(a.onFollowUp, b.onFollowUp) &&
+    offered(a.onOpenCall, b.onOpenCall) &&
+    offered(a.onReact, b.onReact) &&
+    offered(a.onBranch, b.onBranch)
+  )
+}
+const sameTeammates = (a: ItemProps['teammates'], b: ItemProps['teammates']) =>
+  a === b || (!!a && !!b && a.length === b.length && a.every((x, i) => x.name === b[i]!.name && x.title === b[i]!.title))
+
+const Item = memo(function Item({
   item,
   author,
   onQuote,
@@ -734,7 +766,7 @@ function Item({
               {t('Hermes followed up')}
             </span>
           ) : null}
-          <Reply text={item.text} />
+          <Reply text={item.text} streaming={item.streaming} />
           <ReactionChips reactions={item.reactions ?? []} author={author} onPick={onReact} />
           {!item.streaming && item.text.trim() ? (
             <ReplyActions
@@ -860,7 +892,7 @@ function Item({
         </div>
       )
   }
-}
+}, sameItemProps)
 
 /**
  * A turn's run of steps as one card, after the phone's ChatStepGroupHeader:
@@ -1102,10 +1134,45 @@ export function Transcript({
     onCommand?.(turns > 1 ? `/undo ${turns}` : '/undo')
   }
 
-  const jump = (quote: string) => {
-    const target = state.items.find(i => i.kind === 'assistant' && sameQuotedText(i.text, quote))
-    return target ? () => revealMessage(scroller.current, target.key) : undefined
+  // What the items' callbacks read, so each keeps one identity (sameItemProps).
+  const latest = useRef({ state, actions, onQuote, onCommand, onOpenCall, onReact, onBranch, retry, edit, togglePin: (_: { key: string; text: string }) => {} })
+  latest.current = { ...latest.current, state, actions, onQuote, onCommand, onOpenCall, onReact, onBranch, retry, edit }
+  const stable = useMemo(
+    () => ({
+      jump: (quote: string) => {
+        const target = latest.current.state.items.find(i => i.kind === 'assistant' && sameQuotedText(i.text, quote))
+        return target ? () => revealMessage(scroller.current, target.key) : undefined
+      },
+      quote: (request: QuoteRequest) => latest.current.onQuote?.(request),
+      command: (text: string) => latest.current.onCommand?.(text),
+      openCall: (callId: string) => latest.current.onOpenCall?.(callId),
+      retry: () => void latest.current.retry()
+    }),
+    []
+  )
+  const perItem = useRef(new Map<string, { edit: () => void; react: (emoji: string | null) => void; branch: () => void; pin: () => void }>())
+  // Each chat opened adds its items' keys; identities don't matter to sameItemProps, so a long session just starts over.
+  if (perItem.current.size > 4_000) perItem.current.clear()
+  const forItem = (key: string) => {
+    let callbacks = perItem.current.get(key)
+    if (!callbacks) {
+      callbacks = {
+        edit: () => {
+          const turns = latest.current.actions.editTurns.get(key)
+          if (turns) void latest.current.edit(turns)
+        },
+        react: emoji => latest.current.onReact?.(key, emoji),
+        branch: () => latest.current.onBranch?.(key),
+        pin: () => {
+          const item = latest.current.state.items.find(i => i.key === key)
+          if (item?.kind === 'assistant') latest.current.togglePin(item)
+        }
+      }
+      perItem.current.set(key, callbacks)
+    }
+    return callbacks
   }
+  const jump = stable.jump
 
   useLayoutEffect(() => {
     const el = scroller.current
@@ -1150,22 +1217,22 @@ export function Transcript({
       key={item.key}
       item={item}
       author={author}
-      onQuote={onQuote}
+      onQuote={onQuote ? stable.quote : undefined}
       jump={jump}
-      onRetry={actions.retryKey.has(item.key) ? retry : undefined}
-      onEdit={actions.editTurns.has(item.key) ? () => edit(actions.editTurns.get(item.key)!) : undefined}
-      onFollowUp={actions.followUpKey === item.key ? onCommand : undefined}
+      onRetry={actions.retryKey.has(item.key) ? stable.retry : undefined}
+      onEdit={actions.editTurns.has(item.key) ? forItem(item.key).edit : undefined}
+      onFollowUp={actions.followUpKey === item.key && onCommand ? stable.command : undefined}
       thinkingToggle={item.kind === 'assistant' ? thinkingToggle : undefined}
       expandTools={display.expandTools}
-      onOpenCall={onOpenCall}
+      onOpenCall={onOpenCall ? stable.openCall : undefined}
       teammates={teammates}
       followedUp={followedUpKeySet.has(item.key)}
       repliedTo={repliesToTeammates.get(item.key)}
-      onReact={onReact && reactable(item) ? emoji => onReact(item.key, emoji) : undefined}
-      onBranch={onBranch && item.kind === 'assistant' && !item.streaming ? () => onBranch(item.key) : undefined}
+      onReact={onReact && reactable(item) ? forItem(item.key).react : undefined}
+      onBranch={onBranch && item.kind === 'assistant' && !item.streaming ? forItem(item.key).branch : undefined}
       pinToggle={
         pins && item.kind === 'assistant' && !item.streaming
-          ? { label: pinnedKeys.has(item.key) ? t('Unpin reply') : t('Pin reply'), onSelect: () => togglePin(item) }
+          ? { label: pinnedKeys.has(item.key) ? t('Unpin reply') : t('Pin reply'), onSelect: forItem(item.key).pin }
           : undefined
       }
     />
@@ -1176,6 +1243,7 @@ export function Transcript({
     if (existing) pins.unpin(existing)
     else pins.pin(item)
   }
+  latest.current.togglePin = togglePin
 
   // Right-click on text selected in a finished reply: Copy, Quote, and Pin or Unpin for the passage.
   const [selectionMenu, setSelectionMenu] = useState<{ x: number; y: number; key: string; text: string } | null>(null)

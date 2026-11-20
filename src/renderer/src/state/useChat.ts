@@ -20,6 +20,8 @@ import {
   addOutput,
   addPendingUser,
   applyEvent,
+  coalesceDeltas,
+  STREAMING_DELTAS,
   dropHeld,
   holdSent,
   releaseHeld,
@@ -42,6 +44,7 @@ import {
   type HistoryRow,
   type TranscriptState
 } from './transcript'
+import type { GatewayEventMessage } from '../../../shared/ipc'
 import { promptText, releaseHeldImages, titlePreview, uploadAttachments, type StagedAttachment } from './attachments'
 import type { Attachment } from './text'
 import { helpText, parseSlashCommand, parseSlashResult, wantsDispatch, type SlashCommand, type SlashResult } from './slash'
@@ -212,7 +215,33 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 class ChatMovedOn extends Error {}
 
 export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string) {
-  const [transcript, dispatch] = useReducer(reducer, emptyTranscript)
+  const [transcript, dispatchNow] = useReducer(reducer, emptyTranscript)
+  /**
+   * A reply's deltas wait for the next frame and go as one (coalesceDeltas),
+   * so a fast stream changes the transcript once a frame rather than per
+   * chunk (desktop#197). Anything else this hook does goes after them.
+   */
+  const deltas = useRef<GatewayEventMessage[]>([])
+  const frame = useRef<number | null>(null)
+  const flushDeltas = useCallback(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current)
+    frame.current = null
+    const events = deltas.current
+    if (!events.length) return
+    deltas.current = []
+    // A chat switched since: its deltas aren't this transcript's.
+    for (const event of coalesceDeltas(events)) if (event.session_id === liveId.current) dispatchNow({ type: 'event', event })
+  }, [])
+  const dispatch = useCallback(
+    (action: Action) => {
+      flushDeltas()
+      dispatchNow(action)
+    },
+    [flushDeltas]
+  )
+  useEffect(() => () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current)
+  }, [])
   const [chat, setChat] = useState<OpenChat>({ storedId, liveId: null })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -317,9 +346,14 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           if (typeof title === 'string') setChat(c => ({ ...c, title }))
           return
         }
+        if (STREAMING_DELTAS.has(event.type)) {
+          deltas.current.push(event)
+          if (frame.current === null) frame.current = requestAnimationFrame(flushDeltas)
+          return
+        }
         dispatch({ type: 'event', event })
       }),
-    []
+    [dispatch, flushDeltas]
   )
 
   /** A new chat's session, made on its first send or command. */
