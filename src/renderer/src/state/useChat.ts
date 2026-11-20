@@ -12,6 +12,7 @@ import {
 import { connectionFrom, connectionOwner, type ConnectionCard } from './connections'
 import { isRuntimeGone } from './runtimeGone'
 import { gateway, GatewayError } from '../gateway'
+import { forgetTranscripts, keepTranscript, keptTranscript } from './transcriptCache'
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { contextFromUsage, parseBreakdown, type ContextWindow } from './context'
 import { parsePlan } from './plan'
@@ -280,8 +281,14 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       dispatch({ type: 'reset', state: emptyTranscript })
       return
     }
-    if (!connected) return
+    if (!connected) {
+      forgetTranscripts()
+      return
+    }
     setLoading(true)
+    // A chat left a moment ago draws as it was while its resume runs, which replaces it (desktop#201).
+    const cached = keptTranscript(storedId, profile)
+    dispatch({ type: 'reset', state: cached ?? emptyTranscript })
     const params: Record<string, unknown> = { session_id: storedId, cols: 96, source: 'desktop' }
     if (profile) params.profile = profile
     // The transcript without every stored picture's bytes; the session authority refuses the flag.
@@ -328,6 +335,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       .finally(() => {
         if (ticket === request.current) setLoading(false)
       })
+    // Leaving the chat keeps its transcript for coming back.
+    return () => keepTranscript(storedId, profile, transcriptRef.current)
   }, [storedId, profile, sessionAuthority, connected, folder])
 
   // Live events for this chat.

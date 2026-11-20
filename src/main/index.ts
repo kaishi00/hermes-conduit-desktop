@@ -13,6 +13,7 @@ import {
   type MenuItemConstructorOptions
 } from 'electron'
 import { registerWake } from './wake'
+import { EventRouter } from './eventRouting'
 import { join, resolve } from 'node:path'
 import WebSocket from 'ws'
 import { LINK_SCHEME, linkUrl, linkUrlFromArgs } from '../shared/linkUrls'
@@ -118,6 +119,23 @@ function send(channel: string, payload: unknown): void {
   }
 }
 
+const eventRouter = new EventRouter()
+/** The wake-phrase listener's window, which runs no app and reads no gateway events. */
+let isWakeListener: (window: BrowserWindow) => boolean = () => false
+
+/** A gateway event (or the pending requests) to the windows that read it, each cloned once per window it goes to (desktop#200). */
+function sendGatewayEvent(channel: string, payload: unknown, sessionId?: string): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed() || isWakeListener(window)) continue
+    if (channel === IPC.event && window !== mainWindow && !eventRouter.wants(window.webContents.id, sessionId)) continue
+    window.webContents.send(channel, payload)
+  }
+}
+app.on('browser-window-created', (_event, window) => {
+  const id = window.webContents.id
+  window.on('closed', () => eventRouter.forget(id))
+})
+
 const chatWindows = new ChatWindowSet(createChatWindow, ids => send(IPC.chatWindowsChanged, ids))
 /** The dashboard the chat windows belong to: another one closes them. */
 let chatWindowsHost: string | null = null
@@ -145,10 +163,11 @@ const connection = new Connection({
     if (host !== chatWindowsHost) {
       chatWindowsHost = host
       chatWindows.close()
+      eventRouter.clear()
     }
   },
-  onEvent: (event: GatewayEventMessage) => send(IPC.event, event),
-  onRequests: requests => send(IPC.requestsChanged, requests)
+  onEvent: (event: GatewayEventMessage) => sendGatewayEvent(IPC.event, event, event.session_id),
+  onRequests: requests => sendGatewayEvent(IPC.requestsChanged, requests)
 })
 
 const pairing = new Pairing({
@@ -286,7 +305,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.appLock, async () => ({ kind: await lockKind(), on: lockOnLaunch() }))
   const ids = (value: unknown) => (Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [])
-  registerWake(() => mainWindow)
+  isWakeListener = registerWake(() => mainWindow).isListener
   ipcMain.handle(IPC.deviceReports, () => deviceReports())
   ipcMain.handle(IPC.sendDeviceReports, (_event, value: unknown) => sendDeviceReports(ids(value)))
   ipcMain.handle(IPC.declineDeviceReports, (_event, value: unknown) => declineDeviceReports(ids(value)))
@@ -429,9 +448,11 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle(IPC.reconnect, () => connection.reconnectNow())
-  ipcMain.handle(IPC.rpc, async (_event, method: string, params?: Record<string, unknown>): Promise<RpcOutcome> => {
+  ipcMain.handle(IPC.rpc, async (event, method: string, params?: Record<string, unknown>): Promise<RpcOutcome> => {
     try {
-      return { ok: true, result: await connection.rpc(method, params ?? {}) }
+      const result = await connection.rpc(method, params ?? {})
+      eventRouter.noteOpened(event.sender.id, method, params, result)
+      return { ok: true, result }
     } catch (error) {
       const code = (error as { code?: unknown }).code
       const reason = jsonRpcErrorReason(error)

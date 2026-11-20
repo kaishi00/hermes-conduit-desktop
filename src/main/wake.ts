@@ -12,7 +12,7 @@ import { WakeModels } from './wakeModels'
 
 type Report = { kind: 'heard'; index: number } | { kind: 'listening' } | { kind: 'failed'; error: string }
 
-export function registerWake(mainWindow: () => BrowserWindow | null): void {
+export function registerWake(mainWindow: () => BrowserWindow | null): { isListener: (window: BrowserWindow) => boolean } {
   const models = new WakeModels(join(app.getPath('userData'), 'wake-model'), url => net.fetch(url, { cache: 'no-store' }))
   let choices: WakeModelChoice[] | null = null
   let downloading: WakeModelsState['downloading'] = null
@@ -151,4 +151,5 @@ export function registerWake(mainWindow: () => BrowserWindow | null): void {
   }
 
   app.on('before-quit', () => stopListener(false))
+  return { isListener: window => window === listener }
 }
