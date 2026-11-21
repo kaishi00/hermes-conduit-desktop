@@ -13,7 +13,7 @@ import { BotsHome, useReplyFace, type BotAction } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
 import { ChatList, type MoveTarget } from './components/ChatList'
 import { PROFILE_COLUMN_WIDTH } from './components/ProfileColumn'
-import { SettingsProfileCard } from './components/SettingsProfile'
+import { SettingsProfileCard, settingsProfileTile } from './components/SettingsProfile'
 import { Composer } from './components/Composer'
 import { ModelPicker } from './components/ModelPicker'
 import { ContextPanel } from './components/ContextPanel'
@@ -2804,14 +2804,11 @@ function Shell({
             profileTiles={profileTiles ?? []}
             tileBadge={tileBadge}
             onPickProfile={pickSettingsProfile}
-            onEditProfile={
-              connected
-                ? () => {
-                    const bot = roster.bots?.find(each => each.name === (selected.profile ?? 'default')) ?? roster.bots?.find(each => each.isDefault)
-                    if (bot) editProfile(bot)
-                  }
-                : undefined
-            }
+            onEditProfile={(() => {
+              // The profile the card shows, matched as it matches it.
+              const bot = settingsProfileTile(profileTiles ?? [], selected.profile ?? 'default')?.bot
+              return connected && bot ? () => editProfile(bot) : undefined
+            })()}
             chatScale={chatScale}
             setChatScale={setChatScale}
             onShortcuts={() => setShortcutsOpen(true)}

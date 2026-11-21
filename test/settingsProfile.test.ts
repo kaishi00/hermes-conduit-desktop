@@ -12,6 +12,7 @@ beforeAll(() => {
 
 // A path the node typecheck doesn't follow: the component is the renderer's, checked by tsconfig.web.json.
 const path = '../src/renderer/src/components/SettingsProfile.tsx'
+const selectPath = '../src/renderer/src/components/Select.tsx'
 type Tile = { key: string; host: string; own: boolean; bot: { name: string; title: string; hasAvatar: boolean; isDefault?: boolean } }
 const tile = (host: string, name: string, own: boolean, isDefault = false): Tile => ({
   key: `${host}\u001f${name}`,
@@ -39,5 +40,19 @@ describe("Settings' profile card", () => {
     const one = renderToStaticMarkup(createElement(SettingsProfileCard as never, { ...props, tiles: [tiles[1]] }))
     expect(one).not.toContain('conduit-select')
     expect(one).toContain('settings-profile-name')
+  })
+
+  it("names no profile by its id before the profiles are read", async () => {
+    const { SettingsProfileCard } = (await import(/* @vite-ignore */ path)) as { SettingsProfileCard: unknown }
+    const html = renderToStaticMarkup(createElement(SettingsProfileCard as never, { profile: 'default', tiles: [], badgeFor: () => null, onPick: () => {} }))
+    expect(html).toContain('<h2>Profile</h2>')
+    expect(html).not.toContain('default')
+  })
+
+  it("reads a face-and-name label's text, as typeahead matches it", async () => {
+    const { selectOptions } = (await import(/* @vite-ignore */ selectPath)) as { selectOptions: (children: unknown) => { value: string }[] }
+    // An option without a value takes its label's text, through the same textOf typeahead reads.
+    const label = createElement('span', null, createElement('img'), createElement('span', null, 'Nahida'))
+    expect(selectOptions(createElement('option', null, label))[0]?.value).toBe('Nahida')
   })
 })

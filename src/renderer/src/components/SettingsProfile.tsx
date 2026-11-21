@@ -27,7 +27,7 @@ export function SettingsProfileCard({
   onEditProfile
 }: {
   tiles: readonly MixedTile[]
-  /** The profile Settings edits (the open chat's). */
+  /** The profile Settings edits (the open chat's); named once the profiles are read, never by its id. */
   profile: string
   badgeFor: (tile: MixedTile) => HostBadge | null
   /** Another profile picked: this dashboard's switches here, another dashboard's switches there. */
@@ -47,7 +47,7 @@ export function SettingsProfileCard({
   }
   return (
     <section className="settings-group">
-      <h2>{current?.bot.title ?? profile}</h2>
+      <h2>{current?.bot.title ?? t('Profile')}</h2>
       <dl className="settings-card">
         <dt>{t('Profile')}</dt>
         <dd>
@@ -70,9 +70,7 @@ export function SettingsProfileCard({
               </Select>
             ) : current ? (
               label(current)
-            ) : (
-              <span>{profile}</span>
-            )}
+            ) : null}
             <button className="link" disabled={!onEditProfile} onClick={onEditProfile}>
               {t('Edit profile')}
             </button>
