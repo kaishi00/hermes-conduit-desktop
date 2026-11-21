@@ -388,6 +388,9 @@ function Shell({
   if (section === 'chats' && !chatsSeen) setChatsSeen(true)
   const chatsShown = chatsSeen || section === 'chats'
   // `folder`: a new chat started in a project works there.
+  /** The dashboard on screen, for a chat coming back from a window of its own. */
+  const statusUrlRef = useRef(status.url)
+  statusUrlRef.current = status.url
   const [selected, setSelected] = useState<{ id: string | null; profile?: string; title?: string; botChat?: boolean; folder?: string }>({ id: null })
   const [projectsOpen, setProjectsOpen] = useState(false)
   const list = useChatList(connected, status.url ?? '')
@@ -495,6 +498,11 @@ function Shell({
   useEffect(() => {
     const offMenu = window.conduit.onMenu(action => runShortcut.current(action))
     const offOpen = window.conduit.onOpenChat(ref => {
+      // Another combined dashboard's chat, back from its window: a switch to it opens it.
+      if (ref.host && ref.host !== statusUrlRef.current) {
+        void openOtherChatRef.current({ id: ref.storedId, profile: ref.profile, title: ref.title ?? '', pinned: false, host: ref.host })
+        return
+      }
       setSelected({ id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
       setSection('chats')
     })
@@ -969,9 +977,10 @@ function Shell({
    * Open in New Window moves its chat the same way, and the pane closes.
    */
   const popOut = useCallback(
-    async (target: { id: string; profile?: string; title?: string; botChat?: boolean }) => {
-      const bot = roster.bots?.find(b => sameProfileAs(b.name, target.profile))
-      const onScreen = target.id === selected.id || target.id === chat.storedId
+    async (target: { id: string; profile?: string; title?: string; botChat?: boolean; host?: string }) => {
+      const far = !!target.host && target.host !== status.url
+      const bot = far ? undefined : roster.bots?.find(b => sameProfileAs(b.name, target.profile))
+      const onScreen = !far && (target.id === selected.id || target.id === chat.storedId)
       // Away first, so the main window isn't still showing it when its window opens (which would close it).
       if (onScreen) setSelected({ id: null, profile: selected.profile })
       const opened = await window.conduit.openChatWindow({
@@ -979,6 +988,7 @@ function Shell({
         profile: target.profile,
         title: target.title,
         author: bot?.title ?? 'Hermes',
+        host: target.host ?? status.url,
         ...(target.botChat ? { botChat: true } : {})
       })
       if (!opened) {
@@ -988,7 +998,7 @@ function Shell({
       }
       setBeside(current => (current?.id === target.id ? null : current))
     },
-    [roster.bots, selected.id, selected.profile, chat.storedId]
+    [roster.bots, selected.id, selected.profile, chat.storedId, status.url]
   )
   /** A row whose chat has a window of its own brings that window to the front; any other opens here. */
   const selectRow = useCallback(
@@ -1598,6 +1608,16 @@ function Shell({
     openChatAfterSwitch(row)
     void window.conduit.switchHost(row.host)
   }, [])
+  const openOtherChatRef = useRef(openOtherChat)
+  openOtherChatRef.current = openOtherChat
+  /** Another dashboard's row whose chat has a window of its own brings the window to the front, with no switch. */
+  const selectOtherRow = useCallback(
+    (row: OtherChatRow) => {
+      if (chatWindowIds.includes(row.id)) void window.conduit.openChatWindow({ id: row.id, profile: row.profile, title: row.title, host: row.host })
+      else void openOtherChat(row)
+    },
+    [chatWindowIds, openOtherChat]
+  )
   useEffect(() => {
     if (!connected) return
     const row = takeChatAfterSwitch(statusUrl)
@@ -2095,7 +2115,7 @@ function Shell({
                   runningStatus={transcript.status}
                   onSelect={selectRow}
                   onOpenBeside={besideFits ? openBeside : undefined}
-                  onOpenInWindow={row => void popOut({ id: row.id, profile: row.profile, title: row.title })}
+                  onOpenInWindow={row => void popOut({ id: row.id, profile: row.profile, title: row.title, host: (row as Partial<OtherChatRow>).host })}
                   windowIds={chatWindowIds}
                   canOpenBeside={row => row.id !== selected.id && row.id !== beside?.id && sameProfileAs(row.profile, selected.profile)}
                   onNewChat={newChat}
@@ -2121,7 +2141,7 @@ function Shell({
                   onMove={(row, target) => void moveToProject(row, target)}
                   otherRows={otherChats}
                   badgeFor={badgeFor}
-                  onOpenOther={openOtherChat}
+                  onOpenOther={selectOtherRow}
                   onHide={() => hideList(true)}
                 />
               )}

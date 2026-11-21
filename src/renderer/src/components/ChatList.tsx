@@ -563,7 +563,18 @@ export function ChatList({
               if (isOther(row)) {
                 const badge = badgeFor?.(row.host) ?? null
                 return (
-                  <div key={`${row.host}\n${row.id}`} className="row-wrap">
+                  <div
+                    key={`${row.host}\n${row.id}`}
+                    className="row-wrap"
+                    onContextMenu={
+                      onOpenInWindow
+                        ? e => {
+                            e.preventDefault()
+                            setMenu({ row, x: e.clientX, y: e.clientY })
+                          }
+                        : undefined
+                    }
+                  >
                     <button className="row" onClick={() => onOpenOther?.(row)}>
                       <span className="row-top">
                         <span className="row-title">
@@ -666,7 +677,12 @@ export function ChatList({
             top: Math.max(8, Math.min(menu.y, window.innerHeight - (moving ? 52 + 34 * Math.max(1, moving.length) : 220)))
           }}
         >
-          {moving !== false ? (
+          {isOther(menu.row) ? (
+            // Another dashboard's chat: its window, with no switch; everything else opens through a switch.
+            <button role="menuitem" onClick={() => onOpenInWindow?.(menu.row)}>
+              {windowIds?.includes(menu.row.id) ? t('Show Window') : t('Open in New Window')}
+            </button>
+          ) : moving !== false ? (
             <>
               <button
                 role="menuitem"

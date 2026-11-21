@@ -17,6 +17,8 @@ export interface ChatWindowHandle {
 
 export class ChatWindowSet<W extends ChatWindowHandle = ChatWindowHandle> {
   private readonly open = new Map<string, W>()
+  /** Each open window's chat, with the dashboard it's on. */
+  private readonly chats = new Map<string, ChatWindowRequest>()
 
   constructor(
     private readonly create: (chat: ChatWindowRequest, onClosed: () => void) => W,
@@ -38,19 +40,28 @@ export class ChatWindowSet<W extends ChatWindowHandle = ChatWindowHandle> {
     const window = this.create(chat, () => {
       if (this.open.get(chat.id) !== window) return
       this.open.delete(chat.id)
+      this.chats.delete(chat.id)
       this.changed(this.ids())
     })
     this.open.set(chat.id, window)
+    this.chats.set(chat.id, chat)
     this.changed(this.ids())
     return true
   }
 
-  /** Closes these chats' windows, or every one (a dashboard or profile switch). */
+  /** Closes these chats' windows, or every one (a sign-out). */
   close(ids?: readonly string[]): void {
+    this.closeWhere(chat => !ids || ids.includes(chat.id))
+  }
+
+  /** Closes the windows whose chat this picks: those of a dashboard no longer connected. */
+  closeWhere(picks: (chat: ChatWindowRequest) => boolean): void {
     let closed = false
     for (const [id, window] of [...this.open]) {
-      if (ids && !ids.includes(id)) continue
+      const chat = this.chats.get(id)
+      if (!chat || !picks(chat)) continue
       this.open.delete(id)
+      this.chats.delete(id)
       closed = true
       window.close()
     }

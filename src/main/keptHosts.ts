@@ -4,14 +4,15 @@
  * are one group. Once the host on screen has connected, the group's others
  * sign in quietly beside it with what was saved for them, up to three at
  * once (four with the one on screen), and stay connected while it's in use.
- * Their events are dropped here; the window reads what it shows of them
- * (Needs you) through `http`. One whose sign-in is refused waits until it's
+ * The main window reads what it shows of them (Needs you) through `http`;
+ * their events, requests and status go only to the chat windows open on
+ * them (`connection`), which use their sockets whole. One whose sign-in is refused waits until it's
  * opened, and one that can't connect is tried again after 30 s, doubling to
  * 5 minutes. Switching to one takes up its open socket.
  */
 import { Connection, type ConnectionStore, type HandedSocket, type SocketFactory } from './connection'
 import type { Fetch } from './auth'
-import type { ConnectionStatus, KeptHost, KeptHostState } from '../shared/ipc'
+import type { ConnectionStatus, GatewayEventMessage, KeptHost, KeptHostState, PendingRequest } from '../shared/ipc'
 
 /** Kept beside the one on screen (stage 0's cap of four live dashboards). */
 export const MAX_KEPT = 3
@@ -25,6 +26,10 @@ export interface KeptHostsDeps {
   createSocket: SocketFactory
   onChange: (hosts: KeptHost[]) => void
   onHermesName?: (url: string, name: string) => void
+  /** A kept host's status, events and requests, for the chat windows open on it. */
+  onStatus?: (url: string, status: ConnectionStatus) => void
+  onEvent?: (url: string, event: GatewayEventMessage) => void
+  onRequests?: (url: string, requests: PendingRequest[]) => void
   setTimeout?: (fn: () => void, ms: number) => unknown
   clearTimeout?: (handle: unknown) => void
 }
@@ -43,9 +48,9 @@ export class KeptHosts {
 
   /** Follows the host on screen: keeps the group's others while it's signed in, starting them once it has connected. */
   sync(active: ConnectionStatus): void {
-    const group = (this.deps.store.list?.() ?? []).filter(h => h.combined)
-    if (group.length < 2 || !active.url || active.phase === 'signed-out' || active.phase === 'locked') return this.stopAll()
-    const wanted = group.filter(h => h.url !== active.url).slice(0, MAX_KEPT).map(h => h.url)
+    if (!active.url || active.phase === 'signed-out' || active.phase === 'locked') return this.stopAll()
+    const wanted = this.wanted(active.url)
+    if (!wanted.length) return this.stopAll()
     let changed = false
     for (const url of [...this.kept.keys()]) {
       if (!wanted.includes(url)) changed = this.stop(url) || changed
@@ -54,6 +59,18 @@ export class KeptHosts {
       for (const url of wanted) if (!this.kept.has(url)) changed = this.start(url) || changed
     }
     if (changed) this.deps.onChange(this.list())
+  }
+
+  /** The combined hosts kept beside this one on screen, whether connected yet or not. */
+  wanted(active: string): string[] {
+    const group = (this.deps.store.list?.() ?? []).filter(h => h.combined)
+    if (group.length < 2) return []
+    return group.filter(h => h.url !== active).slice(0, MAX_KEPT).map(h => h.url)
+  }
+
+  /** A kept host's connection whole, for a chat window open on it; null when it isn't kept. */
+  connection(url: string): Connection | null {
+    return this.kept.get(url)?.connection ?? null
   }
 
   stopAll(): void {
@@ -108,13 +125,21 @@ export class KeptHosts {
       createSocket: this.deps.createSocket,
       onStatus: status => {
         const kept = this.kept.get(url)
+        // One handed over to a switch, or stopped, says nothing more.
+        if (kept?.connection !== connection) return
+        this.deps.onStatus?.(url, status)
         const state = stateOf(status)
-        if (kept?.connection !== connection || !state || state === kept.state) return
+        if (!state || state === kept.state) return
         kept.state = state
         this.deps.onChange(this.list())
       },
-      // Fenced while another host is on screen: opening it runs the usual sync.
-      onEvent: () => undefined,
+      // Only to the chat windows open on it: the main window opens it through the usual sync.
+      onEvent: event => {
+        if (this.kept.get(url)?.connection === connection) this.deps.onEvent?.(url, event)
+      },
+      onRequests: requests => {
+        if (this.kept.get(url)?.connection === connection) this.deps.onRequests?.(url, requests)
+      },
       onHermesName: this.deps.onHermesName,
       refusedWaits: true,
       backoff: KEPT_BACKOFF,

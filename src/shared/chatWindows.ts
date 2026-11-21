@@ -27,7 +27,8 @@ export function chatWindowRequest(hash: string): ChatWindowRequest | null {
       profile: typeof raw.profile === 'string' ? raw.profile : undefined,
       title: typeof raw.title === 'string' ? raw.title : undefined,
       author: typeof raw.author === 'string' ? raw.author : undefined,
-      ...(raw.botChat === true ? { botChat: true } : {})
+      ...(raw.botChat === true ? { botChat: true } : {}),
+      ...(typeof raw.host === 'string' && raw.host ? { host: raw.host } : {})
     }
   } catch {
     return null

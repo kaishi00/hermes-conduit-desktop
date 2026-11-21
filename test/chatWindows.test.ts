@@ -59,6 +59,21 @@ describe('chat windows of their own', () => {
     expect(made.every(w => w.closed)).toBe(true)
   })
 
+  it('closes only the windows of a dashboard that went, keeping the combined ones', () => {
+    const { set, made, changes } = harness()
+    set.show({ id: 'a', host: 'https://a.example' })
+    set.show({ id: 'b', host: 'https://b.example' })
+    set.show({ id: 'c', host: 'https://c.example' })
+    const open = ['https://a.example', 'https://b.example']
+    set.closeWhere(chat => !open.includes(chat.host ?? ''))
+    expect(made.map(w => w.closed)).toEqual([false, false, true])
+    expect(changes.at(-1)).toEqual(['a', 'b'])
+    // A closed window's chat isn't picked again.
+    const before = changes.length
+    set.closeWhere(chat => chat.id === 'c')
+    expect(changes).toHaveLength(before)
+  })
+
   it('reads its chat from the page’s hash', () => {
     const chat = { id: 's1', profile: 'ops', title: 'Plans & “ideas”', author: 'Nahida' }
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify(chat))}`)).toEqual(chat)
@@ -66,7 +81,7 @@ describe('chat windows of their own', () => {
     expect(chatWindowRequest('#chat=%7B%7D')).toBeNull()
     expect(chatWindowRequest('#chat=%zz')).toBeNull()
     // A Bot Chat says so; anything but true is left out.
-    const botChat = { id: 'b1', profile: 'ops', botChat: true }
+    const botChat = { id: 'b1', profile: 'ops', botChat: true, host: 'https://b.example' }
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify(botChat))}`)).toEqual(botChat)
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify({ id: 'b1', botChat: 'yes' }))}`)).toEqual({ id: 'b1' })
   })

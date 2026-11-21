@@ -96,6 +96,8 @@ function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: str
     return json({ detail: 'Not Found' }, 404)
   }
   const hermesNames: [string, string][] = []
+  const statuses: [string, string][] = []
+  const events: [string, string][] = []
   const kept = new KeptHosts({
     fetch: fetchImpl,
     store,
@@ -106,11 +108,13 @@ function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: str
     },
     onChange: list => changes.push(list),
     onHermesName: (url, name) => hermesNames.push([url, name]),
+    onStatus: (url, status) => statuses.push([url, status.phase]),
+    onEvent: (url, event) => events.push([url, event.type]),
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
     clearTimeout: () => undefined
   })
   const state = (url: string) => kept.list().find(h => h.url === url)?.state
-  return { kept, store, sockets, changes, timers, written, state, hermesNames }
+  return { kept, store, sockets, changes, timers, written, state, hermesNames, statuses, events }
 }
 
 describe('combined dashboards in the main process', () => {
@@ -153,6 +157,29 @@ describe('combined dashboards in the main process', () => {
     const many = harness([host('https://z.example', { combined: undefined }), ...urls.map(u => host(u))])
     many.kept.sync(open('https://z.example'))
     expect(many.kept.list().map(k => k.url)).toEqual(urls.slice(0, MAX_KEPT))
+  })
+
+  it("hands a kept host's connection, status and events to the chat windows open on it, until it's let go", async () => {
+    const h = harness([host('https://a.example'), host('https://b.example'), host('https://c.example', { combined: undefined })])
+    // The hosts a chat window can stay on beside the one on screen, connected yet or not.
+    expect(h.kept.wanted('https://a.example')).toEqual(['https://b.example'])
+    expect(h.kept.connection('https://b.example')).toBeNull()
+    h.kept.sync(open('https://a.example'))
+    await until(() => h.state('https://b.example') === 'live')
+    expect(h.statuses).toContainEqual(['https://b.example', 'open'])
+    const kept = h.kept.connection('https://b.example')!
+    expect(kept.current()).toMatchObject({ phase: 'open', url: 'https://b.example' })
+    h.sockets[0]!.serverSends({ jsonrpc: '2.0', method: 'event', params: { type: 'message.delta', session_id: 's1', payload: { text: 'hi' } } })
+    await until(() => h.events.length > 0)
+    expect(h.events).toEqual([['https://b.example', 'message.delta']])
+    // Let go (here a sign-out): nothing more from it.
+    const before = h.statuses.length
+    h.kept.sync({ phase: 'signed-out' })
+    h.sockets[0]!.serverSends({ jsonrpc: '2.0', method: 'event', params: { type: 'message.delta', session_id: 's1', payload: { text: 'more' } } })
+    await tick()
+    expect(h.statuses).toHaveLength(before)
+    expect(h.events).toHaveLength(1)
+    expect(h.kept.connection('https://b.example')).toBeNull()
   })
 
   it('lets the switch target go and keeps the one left, once the new one has connected', async () => {

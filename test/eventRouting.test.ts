@@ -58,4 +58,14 @@ describe('which windows a gateway event goes to', () => {
     router.forget(1)
     expect(router.openers('live')).toEqual([2])
   })
+
+  it("keeps the claims of the windows still open on their dashboard across a switch", () => {
+    const router = new EventRouter()
+    router.noteOpened(1, 'session.resume', { session_id: 'a' }, {})
+    router.noteOpened(2, 'session.resume', { session_id: 'b' }, {})
+    router.clear([2])
+    expect(router.openers('a')).toEqual([])
+    expect(router.openers('b')).toEqual([2])
+    expect(router.wants(3, 'b')).toBe(false)
+  })
 })

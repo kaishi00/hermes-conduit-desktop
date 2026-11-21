@@ -38,7 +38,10 @@ import { useReplyFace } from './BotsHome'
  * queue, the agents and the plan. Calls stay in the main window, which owns
  * the microphone. Open in Main Window opens the chat there and closes this
  * window. The window's title follows the chat's and the bot's names as they
- * change. A sign-out, a lock or another dashboard closes it.
+ * change. Its chat can be on another combined dashboard, which its calls go
+ * to (the main process routes them), and a switch between combined
+ * dashboards keeps it open. A sign-out, a lock or a dashboard that's no
+ * longer combined closes it.
  */
 export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
   const [status, setStatus] = useState<ConnectionStatus | null>(null)
@@ -127,9 +130,9 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const outputs = useMemo(() => transcript.items.filter(item => item.kind === 'output').length, [transcript.items])
 
   const openInMain = useCallback(() => {
-    window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, ...(botChat ? { botChat: true } : {}) })
+    window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
-  }, [chat.storedId, request.id, title, profile, botChat])
+  }, [chat.storedId, request.id, title, profile, botChat, host])
 
   const onSend = useCallback(
     async (text: string, attachments: StagedAttachment[] = [], options: { takeOver?: boolean; spoken?: boolean } = {}) => {

@@ -390,6 +390,8 @@ export interface OpenChatRequest {
   title?: string
   /** A bot's Bot Chat, coming back from a window of its own. */
   botChat?: boolean
+  /** Another combined dashboard's chat, coming back from a window of its own: the main window switches to it. */
+  host?: string
 }
 
 /** A bot's screen for a window of its own; the viewer id it had before, if it did. */
@@ -408,6 +410,8 @@ export interface ChatWindowRequest {
   author?: string
   /** The bot's one Bot Chat, which never resets: `/new` compacts it. */
   botChat?: boolean
+  /** The dashboard the chat is on: the one on screen, or another combined one. */
+  host?: string
 }
 
 export const IPC = {

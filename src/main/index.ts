@@ -23,6 +23,7 @@ import {
   type LanguageChoice,
   type MenuAction,
   type ChatWindowRequest,
+  type ConnectionStatus,
   type OpenChatRequest,
   type RpcOutcome,
   type SignInRequest,
@@ -124,17 +125,49 @@ const eventRouter = new EventRouter()
 /** The wake-phrase listener's window, which runs no app and reads no gateway events. */
 let isWakeListener: (window: BrowserWindow) => boolean = () => false
 
+/**
+ * The dashboard each chat window's chat is on, by its webContents id. A chat
+ * window on another combined dashboard reads through that host's kept
+ * connection whole (its calls, events, requests and status); every other
+ * window reads through the one on screen.
+ */
+const chatWindowHosts = new Map<number, string>()
+/** The dashboard on screen. */
+let shownHost: string | null = null
+/** The other dashboard a window's chat is on; null for the one on screen. */
+function farHost(contentsId: number): string | null {
+  const host = chatWindowHosts.get(contentsId)
+  return host && host !== shownHost ? host : null
+}
+
 /** A gateway event (or the pending requests) to the windows that read it, each cloned once per window it goes to (desktop#200). */
 function sendGatewayEvent(channel: string, payload: unknown, sessionId?: string): void {
   for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed() || isWakeListener(window)) continue
+    if (window.isDestroyed() || isWakeListener(window) || farHost(window.webContents.id)) continue
     if (channel === IPC.event && window !== mainWindow && !eventRouter.wants(window.webContents.id, sessionId)) continue
+    window.webContents.send(channel, payload)
+  }
+}
+/** The status of the dashboard on screen, to every window but the chat windows on another one. */
+function sendStatus(status: ConnectionStatus): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed() && !farHost(window.webContents.id)) window.webContents.send(IPC.statusChanged, status)
+  }
+}
+/** What a kept host says, to the chat windows open on it. */
+function sendToFarWindows(url: string, channel: string, payload: unknown, sessionId?: string): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed() || farHost(window.webContents.id) !== url) continue
+    if (channel === IPC.event && !eventRouter.wants(window.webContents.id, sessionId)) continue
     window.webContents.send(channel, payload)
   }
 }
 app.on('browser-window-created', (_event, window) => {
   const id = window.webContents.id
-  window.on('closed', () => eventRouter.forget(id))
+  window.on('closed', () => {
+    eventRouter.forget(id)
+    chatWindowHosts.delete(id)
+  })
 })
 
 /** The chat windows' own BrowserWindows, so a notification can find the one that has its chat. */
@@ -144,6 +177,7 @@ const chatWindows = new ChatWindowSet(
   (chat, onClosed) => {
     const window = createChatWindow(chat, onClosed)
     chatBrowserWindows.add(window)
+    if (chat.host) chatWindowHosts.set(window.webContents.id, chat.host)
     return {
       focus: () => {
         if (window.isDestroyed()) return
@@ -163,8 +197,20 @@ const screenWindows = new ScreenWindowSet(
   profiles => send(IPC.screenWindowsChanged, profiles),
   (profile, viewerId, owed) => releaseScreen((method, params) => connection.rpc(method, params), profile, viewerId, owed)
 )
-/** The dashboard the chat windows belong to: another one closes them. */
-let chatWindowsHost: string | null = null
+/** The dashboards a chat window can be on: the one on screen and the combined ones kept beside it. */
+function chatWindowDashboards(): string[] {
+  return shownHost ? [shownHost, ...keptHosts.wanted(shownHost)] : []
+}
+/** Closes the chat windows on a dashboard no longer on screen or kept beside it. */
+function closeStrandedChatWindows(): void {
+  const open = chatWindowDashboards()
+  chatWindows.closeWhere(chat => !open.includes(chat.host ?? ''))
+}
+/** The connection a window's calls go through: a kept host's for a chat window on it, else the one on screen. */
+function connectionOf(contentsId: number): Connection | null {
+  const far = farHost(contentsId)
+  return far ? keptHosts.connection(far) : connection
+}
 
 const hostStore = createFileStore()
 // Browsers' WebSocket can't set headers; `ws` can, and has the same shape.
@@ -175,8 +221,14 @@ const keptHosts = new KeptHosts({
   fetch: globalThis.fetch.bind(globalThis),
   store: hostStore,
   createSocket,
-  onChange: hosts => send(IPC.keptHostsChanged, hosts),
-  onHermesName: (url, name) => noteHermesName(url, name)
+  onChange: hosts => {
+    send(IPC.keptHostsChanged, hosts)
+    closeStrandedChatWindows()
+  },
+  onHermesName: (url, name) => noteHermesName(url, name),
+  onStatus: (url, status) => sendToFarWindows(url, IPC.statusChanged, status),
+  onEvent: (url, event) => sendToFarWindows(url, IPC.event, event, event.session_id),
+  onRequests: (url, requests) => sendToFarWindows(url, IPC.requestsChanged, requests)
 })
 
 const connection = new Connection({
@@ -184,14 +236,17 @@ const connection = new Connection({
   store: hostStore,
   createSocket,
   onStatus: status => {
-    send(IPC.statusChanged, status)
+    const before = shownHost
+    shownHost = status.phase === 'signed-out' || status.phase === 'locked' ? null : (status.url ?? null)
+    sendStatus(status)
     keptHosts.sync(status)
-    const host = status.url ?? null
-    if (host !== chatWindowsHost) {
-      chatWindowsHost = host
-      chatWindows.close()
+    if (shownHost !== before) {
+      // A switch keeps the chat windows on the combined dashboards (the one left becomes a kept one); any other closes them.
+      closeStrandedChatWindows()
       screenWindows.close(true)
-      eventRouter.clear()
+      eventRouter.clear([...chatWindowHosts.keys()])
+      // The one left is dialed again beside the new one: its windows wait for it, and its kept connection tells them once it's open.
+      if (before) sendToFarWindows(before, IPC.statusChanged, { phase: 'connecting', url: before } satisfies ConnectionStatus)
     }
   },
   onEvent: (event: GatewayEventMessage) => sendGatewayEvent(IPC.event, event, event.session_id),
@@ -306,7 +361,7 @@ function saveFailure(error: unknown): string {
 function registerIpc(): void {
   // Elsewhere Electron's default menu would take Ctrl+0 and Ctrl+Plus for zoom: the window reads them for the chat's text size.
   Menu.setApplicationMenu(process.platform === 'darwin' ? macMenu() : null)
-  ipcMain.handle(IPC.requests, () => connection.requests())
+  ipcMain.handle(IPC.requests, event => connectionOf(event.sender.id)?.requests() ?? [])
   ipcMain.on(IPC.setWaiting, (_event, count: number) => tray.setWaiting(Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0))
   ipcMain.on(IPC.windowShow, () => showWindow())
   ipcMain.on(IPC.language, event => {
@@ -364,7 +419,11 @@ function registerIpc(): void {
   ipcMain.handle(IPC.openChatWindow, (_event, chat: unknown) => {
     const request = chat as ChatWindowRequest | null
     if (!request || typeof request.id !== 'string' || !request.id) return false
+    // The dashboard on screen, or a combined one kept beside it.
+    const host = typeof request.host === 'string' && request.host ? request.host : shownHost
+    if (!host || !chatWindowDashboards().includes(host)) return false
     return chatWindows.show({
+      host,
       id: request.id,
       profile: typeof request.profile === 'string' ? request.profile : undefined,
       title: typeof request.title === 'string' ? request.title : undefined,
@@ -407,8 +466,8 @@ function registerIpc(): void {
   })
   ipcMain.on(IPC.quickAskExpanded, (_event, expanded: unknown) => quickAsk.setExpanded(typeof expanded === 'number' ? expanded : expanded === true))
   ipcMain.handle(IPC.quickAskShortcut, () => ({ accelerator: QUICK_ASK_ACCELERATOR, registered: quickAsk.registered }))
-  ipcMain.handle(IPC.answerRequest, (_event, id: string, result: Record<string, unknown>) => connection.answerRequest(id, result))
-  ipcMain.handle(IPC.dismissRequest, (_event, id: string) => connection.dropRequest(id))
+  ipcMain.handle(IPC.answerRequest, (event, id: string, result: Record<string, unknown>) => connectionOf(event.sender.id)?.answerRequest(id, result) ?? false)
+  ipcMain.handle(IPC.dismissRequest, (event, id: string) => connectionOf(event.sender.id)?.dropRequest(id))
   ipcMain.handle(IPC.probe, (_event, url: string, headers?: Record<string, string>) => {
     const cleaned = cleanHeaders(headers)
     if (!cleaned.ok) return { ok: false, error: cleaned.error }
@@ -426,7 +485,11 @@ function registerIpc(): void {
   ipcMain.handle(IPC.removeHost, (_e, url: unknown) => {
     if (typeof url === 'string') connection.removeHost(url)
   })
-  ipcMain.handle(IPC.status, () => connection.current())
+  ipcMain.handle(IPC.status, event => {
+    const far = farHost(event.sender.id)
+    if (!far) return connection.current()
+    return keptHosts.connection(far)?.current() ?? ({ phase: 'connecting', url: far } satisfies ConnectionStatus)
+  })
   // Install this server's certificate: read its root, then save it where the person picks.
   const checkedCertificates = new Map<string, { pem: string; name: string }>()
   ipcMain.handle(IPC.checkCertificate, async (_e, url: unknown) => {
@@ -457,7 +520,9 @@ function registerIpc(): void {
     const shownProfile = typeof profile === 'string' ? profile : undefined
     try {
       const stop = new AbortController()
-      const response = await connection.download(hostFilePath('download', path, shownProfile), stop.signal)
+      const through = connectionOf(event.sender.id)
+      if (!through) throw new Error(t("Couldn't open this file"))
+      const response = await through.download(hostFilePath('download', path, shownProfile), stop.signal)
       // A dashboard that serves its page for a route it doesn't know has no download route.
       if (/text\/html/i.test(response.headers.get('content-type') ?? '')) throw Object.assign(new Error('no download route'), { code: 404 })
       if (!response.body) throw new Error(t("Couldn't open this file"))
@@ -468,7 +533,9 @@ function registerIpc(): void {
       if ((error as { code?: unknown }).code !== 404 && (error as { code?: unknown }).code !== 405) return saveFailure(error)
     }
     try {
-      const answer = await connection.http<{ dataUrl?: unknown; data_url?: unknown }>('GET', hostFilePath('read-data-url', path, shownProfile))
+      const through = connectionOf(event.sender.id)
+      if (!through) return t("Couldn't open this file")
+      const answer = await through.http<{ dataUrl?: unknown; data_url?: unknown }>('GET', hostFilePath('read-data-url', path, shownProfile))
       const bytes = dataUrlBytes(answer?.dataUrl ?? answer?.data_url)
       if (!bytes) return t("Couldn't open this file")
       await writeFile(picked.filePath, bytes)
@@ -515,10 +582,12 @@ function registerIpc(): void {
       return { ok: false, error: error instanceof Error ? error.message : String(error), ...(typeof code === 'number' ? { code } : {}) }
     }
   })
-  ipcMain.handle(IPC.reconnect, () => connection.reconnectNow())
+  ipcMain.handle(IPC.reconnect, event => connectionOf(event.sender.id)?.reconnectNow())
   ipcMain.handle(IPC.rpc, async (event, method: string, params?: Record<string, unknown>): Promise<RpcOutcome> => {
     try {
-      const result = await connection.rpc(method, params ?? {})
+      const through = connectionOf(event.sender.id)
+      if (!through) throw new Error('Not connected to that Hermes.')
+      const result = await through.rpc(method, params ?? {})
       eventRouter.noteOpened(event.sender.id, method, params, result)
       return { ok: true, result }
     } catch (error) {
@@ -532,11 +601,13 @@ function registerIpc(): void {
       }
     }
   })
-  ipcMain.handle(IPC.http, async (_event, method: string, path: string, body?: unknown, timeoutMs?: unknown): Promise<RpcOutcome> => {
+  ipcMain.handle(IPC.http, async (event, method: string, path: string, body?: unknown, timeoutMs?: unknown): Promise<RpcOutcome> => {
     try {
       // A longer wait only for what asks for it (a recording's transcription), never past ten minutes.
       const timeout = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) ? Math.min(600_000, Math.max(1_000, timeoutMs)) : undefined
-      return { ok: true, result: await connection.http(method, path, body, timeout) }
+      const through = connectionOf(event.sender.id)
+      if (!through) throw new Error('Not connected to that Hermes.')
+      return { ok: true, result: await through.http(method, path, body, timeout) }
     } catch (error) {
       const code = (error as { code?: unknown }).code
       return { ok: false, error: error instanceof Error ? error.message : String(error), code: typeof code === 'number' ? code : undefined }
