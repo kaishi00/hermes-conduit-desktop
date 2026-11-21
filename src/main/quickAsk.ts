@@ -4,10 +4,11 @@
  * when it loses focus; the chat it started opens in the main window on
  * request.
  */
-import { BrowserWindow, globalShortcut, screen, shell } from 'electron'
+import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import { t } from '../shared/i18n'
+import { confineNavigation } from './navigation'
 
 export const QUICK_ASK_ACCELERATOR = 'Alt+Space'
 
@@ -117,10 +118,8 @@ export class QuickAsk {
     window.on('blur', () => {
       if (!window.webContents.isDevToolsOpened()) window.hide()
     })
-    window.webContents.setWindowOpenHandler(({ url }) => {
-      if (/^https?:\/\//.test(url)) void shell.openExternal(url)
-      return { action: 'deny' }
-    })
+    // The same link rules as every window: a reply's mail and phone links open too.
+    confineNavigation(window.webContents)
     if (process.env.ELECTRON_RENDERER_URL) {
       void window.loadURL(`${process.env.ELECTRON_RENDERER_URL}#quick`)
     } else {

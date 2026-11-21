@@ -68,3 +68,26 @@ export class ChatWindowSet<W extends ChatWindowHandle = ChatWindowHandle> {
     if (closed) this.changed(this.ids())
   }
 }
+
+/**
+ * The chat window that has a session's chat, for a notification: a chat
+ * window that opened the session wins; else one found by its chat's stored
+ * id, which finds a window still opening its session (the main window
+ * passes the ids it knows the chat by, and an event may name the chat by
+ * its stored id). Undefined when no chat window has it.
+ */
+export function chatWindowFor<W extends { contentsId: number }>(
+  sessionId: string,
+  storedIds: readonly string[],
+  openers: readonly number[],
+  windows: readonly W[],
+  byStored: (storedId: string) => W | undefined
+): W | undefined {
+  const opened = windows.find(window => openers.includes(window.contentsId))
+  if (opened) return opened
+  for (const id of [...storedIds, sessionId]) {
+    const window = id ? byStored(id) : undefined
+    if (window) return window
+  }
+  return undefined
+}

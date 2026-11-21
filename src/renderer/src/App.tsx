@@ -63,7 +63,7 @@ import type { Room } from './state/groups'
 import { useRooms } from './state/useGroups'
 import { useChat } from './state/useChat'
 import { useChatList } from './state/useChatList'
-import { unmatchedWaiting, type WaitingRow } from './state/needsYou'
+import { chatIdsOf, unmatchedWaiting, type WaitingRow } from './state/needsYou'
 import { useRequests, useWaiting } from './state/useNeedsYou'
 import { clearExpired, useExpiredQuestions } from './state/expiredQuestions'
 import {
@@ -1548,17 +1548,20 @@ function Shell({
   useEffect(() => window.conduit.setWaiting(needsCount), [needsCount])
 
   // Notifications for what happens in a chat the user isn't looking at.
+  const waitingRowsRef = useRef(waiting.rows)
+  waitingRowsRef.current = waiting.rows
   const watching = useRef({ liveId: chat.liveId, onChats: section === 'chats' })
   watching.current = { liveId: chat.liveId, onChats: section === 'chats' }
   const notify = useCallback(async (spec: NotificationSpec, sessionId: string) => {
     if (!notificationsEnabled() || typeof Notification === 'undefined') return
-    // A chat in a window of its own notifies from that window, one still opening its session included.
-    const storedId = chats.current.get(sessionId)?.storedId ?? undefined
-    if (await window.conduit.chatWindowOf(sessionId, false, storedId)) return
+    // A chat in a window of its own notifies from that window, one still opening its session included:
+    // found by the ids this window knows the chat by, a chat it never opened (popped out from a row) by a waiting row's.
+    const storedIds = chatIdsOf(sessionId, chats.current.get(sessionId)?.storedId, waitingRowsRef.current)
+    if (await window.conduit.chatWindowOf(sessionId, false, storedIds)) return
     const n = new Notification(spec.title, { body: spec.body, tag: spec.tag, silent: false })
     n.onclick = async () => {
       // A chat in a window of its own opens there.
-      if (await window.conduit.chatWindowOf(sessionId, true, storedId)) return
+      if (await window.conduit.chatWindowOf(sessionId, true, storedIds)) return
       window.conduit.window.show()
       const ref = chats.current.get(sessionId)
       if (ref?.storedId) {

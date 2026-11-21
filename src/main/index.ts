@@ -33,6 +33,7 @@ import {
 import { probeHost } from './auth'
 import { pageUrl, registerPageScheme, servePages } from './pages'
 import { confineNavigation } from './navigation'
+import { LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
 import { pluginRelease } from './pluginRelease'
 import { cleanHeaders } from './proxyHeaders'
 import { KeptHosts } from './keptHosts'
@@ -43,7 +44,7 @@ import { Connection, DISPLAY_SOCKET_PATH } from './connection'
 import { Pairing } from './pairing'
 import { createFileStore } from './store'
 import { QUICK_ASK_ACCELERATOR, QuickAsk } from './quickAsk'
-import { ChatWindowSet } from './chatWindowSet'
+import { ChatWindowSet, chatWindowFor } from './chatWindowSet'
 import { createChatWindow } from './chatWindows'
 import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
@@ -424,14 +425,23 @@ function registerIpc(): void {
   })
   ipcMain.on(IPC.closeChatWindows, (_event, ids: unknown) => chatWindows.close(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : undefined))
   ipcMain.handle(IPC.chatWindows, () => chatWindows.ids())
-  ipcMain.handle(IPC.chatWindowOf, (_event, sessionId: unknown, show: unknown, storedId: unknown) => {
+  ipcMain.handle(IPC.chatWindowOf, (_event, sessionId: unknown, show: unknown, storedIds: unknown) => {
     if (typeof sessionId !== 'string' || !sessionId) return null
-    const openers = new Set(eventRouter.openers(sessionId))
-    // A window that hasn't opened its session yet is found by its chat's stored id.
-    const byStored = typeof storedId === 'string' && storedId ? chatBrowserById.get(storedId) : undefined
-    const window =
-      BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w !== mainWindow && openers.has(w.webContents.id) && chatBrowserWindows.has(w)) ??
-      (byStored && !byStored.isDestroyed() ? byStored : undefined)
+    const live = (window: BrowserWindow | undefined) => (window && !window.isDestroyed() ? window : undefined)
+    const windows = BrowserWindow.getAllWindows()
+      .filter(w => !w.isDestroyed() && w !== mainWindow && chatBrowserWindows.has(w))
+      .map(w => ({ contentsId: w.webContents.id, window: w }))
+    const found = chatWindowFor(
+      sessionId,
+      Array.isArray(storedIds) ? storedIds.filter((id): id is string => typeof id === 'string' && !!id) : [],
+      eventRouter.openers(sessionId),
+      windows,
+      id => {
+        const window = live(chatBrowserById.get(id))
+        return window ? { contentsId: window.webContents.id, window } : undefined
+      }
+    )
+    const window = found?.window
     if (!window) return null
     const watching = window.isVisible() && !window.isMinimized() && window.isFocused()
     if (show === true) {
@@ -622,9 +632,49 @@ function registerIpc(): void {
         ? new Uint8Array(data)
         : new Uint8Array((data as Buffer).buffer, (data as Buffer).byteOffset, (data as Buffer).byteLength)
   let liveCount = 0
+  /** Each live socket's page, so a page that goes (a closed window, a reload) ends the sockets it opened (desktop#254). */
+  const liveOwners = new LiveOwners()
+  const watchedPages = new Set<number>()
+  const forgetLive = (id: string) => {
+    liveSockets.delete(id)
+    liveStalls.delete(id)
+    liveOwners.remove(id)
+  }
+  /** Ends a socket whose page went: nothing more reaches that window from it. */
+  const endLive = (id: string, close: LiveClose) => {
+    const socket = liveSockets.get(id)
+    forgetLive(id)
+    if (!socket) return
+    socket.onopen = null
+    socket.onmessage = null
+    socket.onerror = null
+    socket.onclose = null
+    try {
+      socket.close(close.code, close.reason)
+    } catch {
+      socket.close()
+    }
+  }
+  /** Watches a page once for its webContents' life, however many sockets it opens, so listeners don't stack up. */
+  const watchPage = (sender: Electron.WebContents) => {
+    const owner = sender.id
+    if (watchedPages.has(owner)) return
+    watchedPages.add(owner)
+    // A reload keeps the webContents, so `destroyed` doesn't fire: the old page's sockets end as the new page starts loading.
+    sender.on('did-start-navigation', navigation => {
+      if (replacesPage(navigation)) for (const id of liveOwners.take(owner)) endLive(id, PAGE_RELOADED)
+    })
+    // A window that goes away takes its call with it.
+    sender.once('destroyed', () => {
+      watchedPages.delete(owner)
+      for (const id of liveOwners.take(owner)) endLive(id, PAGE_CLOSED)
+    })
+  }
   const keepLive = (sender: Electron.WebContents, socket: WebSocketLike, binary = false): string => {
     const id = `live-${++liveCount}`
     liveSockets.set(id, socket)
+    liveOwners.add(sender.id, id)
+    watchPage(sender)
     const report = (payload: LiveSocketEvent) => {
       if (!sender.isDestroyed()) sender.send(IPC.liveEvent, payload)
     }
@@ -637,20 +687,16 @@ function registerIpc(): void {
       )
     socket.onerror = error => report({ id, type: 'error', message: (error as { message?: string }).message ?? 'Socket error' })
     socket.onclose = close => {
-      liveSockets.delete(id)
-      liveStalls.delete(id)
+      forgetLive(id)
       report({ id, type: 'close', code: close.code, reason: close.reason })
     }
     // A socket that stopped taking frames: the call hears it closed now, not when a closing handshake gives up.
     liveStalls.set(id, () => {
       socket.onclose = null
-      liveSockets.delete(id)
-      liveStalls.delete(id)
+      forgetLive(id)
       socket.close(STALLED_CLOSE_CODE, STALLED_REASON)
       report({ id, type: 'close', code: STALLED_CLOSE_CODE, reason: STALLED_REASON })
     })
-    // A window that goes away takes its call with it.
-    sender.once('destroyed', () => liveSockets.get(id)?.close())
     return id
   }
   ipcMain.handle(IPC.liveOpen, async (event, path: unknown, query: unknown) => {
@@ -704,7 +750,7 @@ function registerIpc(): void {
   ipcMain.on(IPC.liveClose, (_event, id: unknown, code: unknown) => {
     const socket = typeof id === 'string' ? liveSockets.get(id) : undefined
     if (!socket) return
-    liveSockets.delete(id as string)
+    forgetLive(id as string)
     try {
       socket.close(typeof code === 'number' ? code : 1000)
     } catch {
