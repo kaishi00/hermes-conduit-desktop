@@ -214,6 +214,40 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
     expect(tool?.result).toBe('ok')
   })
 
+  it('keeps each stored row once when the chat wrote more while its pages were read', async () => {
+    // The newest page shifted by two rows between the reads: page 2 serves page 1's oldest two again.
+    serve([steps(1000, 500), [...steps(1000, 2), { id: 999, role: 'user', content: 'New mail arrived' }]])
+    const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })
+    await settle()
+    const keys = hook.result().transcript.items.map(i => i.key)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('reads a running chat again after its pages, and its newest rows when its turn ended meanwhile', async () => {
+    serve([[{ id: 1, role: 'user', content: 'check my mail' }]])
+    let compacts = 0
+    const conduit = (window as unknown as { conduit: Record<string, unknown> }).conduit
+    conduit.rpcOutcome = (method: string, params: Record<string, unknown>) => {
+      if (method !== 'session.resume') return Promise.resolve({ ok: true, result: {} })
+      resumeParams.push(params)
+      if (!params.omit_messages) return Promise.resolve({ ok: false, error: TOO_LONG, code: 4130 })
+      compacts++
+      const result = { session_id: 'live-long', stored_session_id: 'long', messages: [], running: compacts === 1 }
+      if (compacts === 2) {
+        conduit.httpOutcome = async () => ({
+          ok: true,
+          result: { messages: [{ id: 1, role: 'user', content: 'check my mail' }, { id: 2, role: 'assistant', content: 'All sorted.' }] }
+        })
+      }
+      return Promise.resolve({ ok: true, result })
+    }
+    const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })
+    await settle()
+    expect(compacts).toBe(2)
+    expect(hook.result().transcript.running).toBe(false)
+    expect(words(hook.result().transcript).slice(1)).toEqual(['check my mail', 'All sorted.'])
+  })
+
   it('shows the refusal when the compact resume is refused too', async () => {
     serve([], true)
     const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })

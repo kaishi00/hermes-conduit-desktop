@@ -55,7 +55,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, longChatItems, newestRows } from './longChat'
+import { isResumeTooLong, joinRows, longChatItems, newestRows } from './longChat'
 
 type Action =
   | { type: 'reset'; state: TranscriptState }
@@ -101,10 +101,20 @@ async function resumeChat(
     return { result: await gateway.rpc<ResumeResult>('session.resume', params), rows: null }
   } catch (e) {
     if (!isResumeTooLong(e)) throw e
-    const result = await gateway.rpc<ResumeResult>('session.resume', { ...params, omit_messages: true })
-    const rows = await newestRows((method, path) => gateway.http(method, path), result.stored_session_id ?? storedId, profile).catch(() => {
+    const compact = { ...params, omit_messages: true }
+    const http = (method: 'GET', path: string) => gateway.http(method, path)
+    let result = await gateway.rpc<ResumeResult>('session.resume', compact)
+    const stored = result.stored_session_id ?? storedId
+    let rows = await newestRows(http, stored, profile).catch(() => {
       throw e
     })
+    if (result.running) {
+      // The chat's events reach it only once the open settles: its turn as
+      // it is after the page reads, and its newest rows again if it ended
+      // meanwhile, so it doesn't sit there still streaming.
+      result = await gateway.rpc<ResumeResult>('session.resume', compact)
+      if (!result.running) rows = joinRows(rows, await newestRows(http, stored, profile, 1).catch(() => []))
+    }
     return { result, rows }
   }
 }

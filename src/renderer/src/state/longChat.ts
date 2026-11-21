@@ -47,15 +47,26 @@ function hasWords(rows: HistoryRow[]): boolean {
  * them. A page of only tool steps (a bot working through its inbox) reads
  * the page before it, up to LONG_CHAT_PAGES, so the chat opens on words.
  */
-export async function newestRows(http: Http, storedId: string, profile?: string): Promise<HistoryRow[]> {
+export async function newestRows(http: Http, storedId: string, profile?: string, pages = LONG_CHAT_PAGES): Promise<HistoryRow[]> {
   let rows: HistoryRow[] = []
-  for (let page = 0; page < LONG_CHAT_PAGES; page++) {
+  for (let page = 0; page < pages; page++) {
     const answer = (await http('GET', pagePath(storedId, profile, page * LONG_CHAT_PAGE))) as { messages?: unknown } | null
     const got = Array.isArray(answer?.messages) ? (answer.messages as HistoryRow[]).map(storedRow) : []
-    rows = [...got, ...rows]
+    rows = joinRows(got, rows)
     if (got.length < LONG_CHAT_PAGE || hasWords(rows)) break
   }
   return rows
+}
+
+/**
+ * Older rows, then newer ones, each stored row once. The chat keeps
+ * writing while its pages are read (a bot working through mail), so a
+ * page by offset from the newest row can serve again rows the page after
+ * it already did.
+ */
+export function joinRows(older: HistoryRow[], newer: HistoryRow[]): HistoryRow[] {
+  const seen = new Set(newer.flatMap(row => (row.row_id == null ? [] : [row.row_id])))
+  return [...older.filter(row => row.row_id == null || !seen.has(row.row_id)), ...newer]
 }
 
 /** What a too-long chat draws: the note saying why only its newest messages show, then them. */
