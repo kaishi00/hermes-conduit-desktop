@@ -48,6 +48,7 @@ import { createScreenWindow } from './screenWindows'
 import { releaseScreen } from '../shared/screenWindows'
 import { ConduitTray } from './tray'
 import { applyAppIcon, watchNewWindows } from './appIcon'
+import { watchEditMenu } from './editMenu'
 import {
   appIconChoice,
   askHostAtLaunch,
@@ -653,6 +654,8 @@ if (!app.requestSingleInstanceLock()) {
     setLanguage(resolvedLanguage())
     chooseTheme(themeChoice(), false)
     watchNewWindows()
+    // Every window's text gets the right-click menu: the main window, chat windows, Quick Ask, Bot's Screen.
+    app.on('web-contents-created', (_event, contents) => watchEditMenu(contents))
     registerIpc()
     watchDeviceReports(() => send(IPC.deviceReportsChanged, null))
     createWindow()
