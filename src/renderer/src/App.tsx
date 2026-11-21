@@ -998,12 +998,14 @@ function Shell({
       })
       if (!opened) {
         if (onScreen) setSelected(current => (current.id === null ? { id: target.id, profile: target.profile, title: target.title, botChat: target.botChat } : current))
-        void tell(t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT }))
+        // At the limit, say so; otherwise its dashboard went (a sign-out, a switch) as it opened.
+        if (chatWindowIds.length >= CHAT_WINDOW_LIMIT) void tell(t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT }))
+        else void tell(t('The chat didn’t open. Try again.'))
         return
       }
       setBeside(current => (current?.id === target.id ? null : current))
     },
-    [roster.bots, selected.id, selected.profile, chat.storedId, status.url, calling]
+    [roster.bots, selected.id, selected.profile, chat.storedId, status.url, calling, chatWindowIds]
   )
   /** A row whose chat has a window of its own brings that window to the front; any other opens here. */
   const selectRow = useCallback(
