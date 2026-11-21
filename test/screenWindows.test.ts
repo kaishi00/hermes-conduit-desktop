@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { ScreenWindowSet } from '../src/main/screenWindowSet'
-import { releaseScreen, screenWindowRequest } from '../src/shared/screenWindows'
+import { releaseScreen, screenWindowHash, screenWindowRequest } from '../src/shared/screenWindows'
 import type { ScreenWindowRequest } from '../src/shared/ipc'
 
 function harness() {
   const made: { screen: ScreenWindowRequest; focused: number; closed: boolean; onClosed: () => void; focus: () => void; close: () => void }[] = []
   const changes: string[][] = []
   const released: [string, string][] = []
+  const owed: (() => boolean)[] = []
   const set = new ScreenWindowSet(
     (screen, onClosed) => {
       const window = {
@@ -24,9 +25,12 @@ function harness() {
       return window
     },
     profiles => changes.push(profiles),
-    (profile, viewer) => released.push([profile, viewer])
+    (profile, viewer, stillOwed) => {
+      released.push([profile, viewer])
+      owed.push(stillOwed)
+    }
   )
-  return { set, made, changes, released }
+  return { set, made, changes, released, owed }
 }
 
 describe("bots' screens in windows of their own", () => {
@@ -58,6 +62,21 @@ describe("bots' screens in windows of their own", () => {
     expect(released).toHaveLength(1)
   })
 
+  it('cancels a hand back still being tried once the window reopens or takes over again', () => {
+    const { set, made, owed } = harness()
+    set.show({ profile: 'mira', botName: 'Mira' })
+    set.note('mira', 'v1', true)
+    made[0]!.close()
+    expect(owed[0]!()).toBe(true)
+    set.show({ profile: 'mira', botName: 'Mira' })
+    expect(owed[0]!()).toBe(false)
+    set.note('mira', 'v1', true)
+    made[1]!.close()
+    expect(owed[1]!()).toBe(true)
+    set.note('mira', 'v1', true)
+    expect(owed[1]!()).toBe(false)
+  })
+
   it('another dashboard closes every window and forgets its viewers', () => {
     const { set, made, released } = harness()
     set.show({ profile: 'mira', botName: 'Mira' })
@@ -74,6 +93,7 @@ describe("bots' screens in windows of their own", () => {
     expect(screenWindowRequest(hash)).toEqual({ profile: 'mira', botName: 'Mira', viewerId: 'v1' })
     expect(screenWindowRequest('#screen=%7B%7D')).toBeNull()
     expect(screenWindowRequest('#chat=x')).toBeNull()
+    expect(screenWindowRequest(screenWindowHash({ profile: 'mira', botName: 'Mira', viewerId: 'v2' }))?.viewerId).toBe('v2')
   })
 
   it('tries a hand back again only when Hermes did not refuse it', async () => {
@@ -83,14 +103,24 @@ describe("bots' screens in windows of their own", () => {
     const flaky = async () => {
       if (++calls < 3) throw Object.assign(new Error('busy'), { code: -32603 })
     }
-    expect(await releaseScreen(flaky, 'mira', 'v1', sleep)).toBe(true)
+    expect(await releaseScreen(flaky, 'mira', 'v1', () => true, sleep)).toBe(true)
     expect(waits).toEqual([1000, 3000])
     calls = 0
     const refused = async () => {
       calls++
       throw Object.assign(new Error('not yours'), { code: -32000 })
     }
-    expect(await releaseScreen(refused, 'mira', 'v1', sleep)).toBe(false)
+    expect(await releaseScreen(refused, 'mira', 'v1', () => true, sleep)).toBe(false)
+    expect(calls).toBe(1)
+    // Overtaken by a new takeover: the next try isn't sent.
+    calls = 0
+    let stillOwed = true
+    const down = async () => {
+      calls++
+      stillOwed = false
+      throw new Error('Not connected')
+    }
+    expect(await releaseScreen(down, 'mira', 'v1', () => stillOwed, sleep)).toBe(false)
     expect(calls).toBe(1)
   })
 })

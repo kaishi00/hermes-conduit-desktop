@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { t } from '@shared/i18n'
 import type { ConnectionStatus, ScreenWindowRequest } from '@shared/ipc'
 import { BotScreen } from './BotScreen'
+import { screenWindowHash } from '@shared/screenWindows'
 
 /**
  * A bot's screen in a window of its own (Eric, 2026-11-21): the main
@@ -25,7 +26,18 @@ export function ScreenWindow({ screen }: { screen: ScreenWindowRequest }) {
   return (
     <div className="screen-window-page">
       {/* Kept through a reconnect, as in the main window, so a takeover isn't handed back by a dropped socket. */}
-      {status?.url ? <BotScreen profile={screen.profile} botName={screen.botName} viewerId={screen.viewerId} onClose={() => window.close()} /> : null}
+      {status?.url ? (
+        <BotScreen
+          profile={screen.profile}
+          botName={screen.botName}
+          viewerId={screen.viewerId}
+          onViewer={viewerId => {
+            if (!window.location.hash.includes(encodeURIComponent(viewerId)))
+              window.history.replaceState(null, '', screenWindowHash({ ...screen, viewerId }))
+          }}
+          onClose={() => window.close()}
+        />
+      ) : null}
     </div>
   )
 }

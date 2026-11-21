@@ -6,6 +6,7 @@
 import { BrowserWindow, nativeTheme, shell } from 'electron'
 import { join } from 'node:path'
 import type { ScreenWindowRequest } from '../shared/ipc'
+import { screenWindowHash } from '../shared/screenWindows'
 
 export function createScreenWindow(screen: ScreenWindowRequest, onClosed: () => void): BrowserWindow {
   const window = new BrowserWindow({
@@ -36,7 +37,7 @@ export function createScreenWindow(screen: ScreenWindowRequest, onClosed: () => 
       if (/^https?:\/\//.test(url)) void shell.openExternal(url)
     }
   })
-  const hash = `screen=${encodeURIComponent(JSON.stringify(screen))}`
+  const hash = screenWindowHash(screen).slice(1)
   if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`)
   else void window.loadFile(join(__dirname, '../renderer/index.html'), { hash })
   return window

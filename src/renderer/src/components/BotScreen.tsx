@@ -21,7 +21,6 @@ import {
 } from '../state/botScreen'
 import { Icon } from './icons'
 import { ask } from '../state/dialogs'
-import { releaseScreen } from '@shared/screenWindows'
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 type Stream = 'idle' | 'connecting' | 'live' | { lost: string }
@@ -81,11 +80,14 @@ export function BotScreen({
   profile,
   botName,
   viewerId,
+  onViewer,
   onClose
 }: {
   profile: string
   botName: string
   viewerId?: string
+  /** The viewer id Hermes gave this page, so a reload watches as the same viewer. */
+  onViewer?: (viewerId: string) => void
   onClose: () => void
 }) {
   const [status, setStatus] = useState<ScreenStatus | null>(null)
@@ -294,22 +296,15 @@ export function BotScreen({
   }, [iHold])
 
   // The main process hands back a hold this window has when the window closes, which no page code outlives.
+  // A reload (a language change) keeps the same viewer id, so its hold stays this window's.
+  const onViewerRef = useRef(onViewer)
+  onViewerRef.current = onViewer
   useEffect(() => {
-    if (hash && viewer.current) window.conduit.noteScreenViewer(profile, viewer.current, iHold)
+    if (!hash || !viewer.current) return
+    window.conduit.noteScreenViewer(profile, viewer.current, iHold)
+    onViewerRef.current?.(viewer.current)
   }, [profile, hash, iHold])
-  // Leaving without the window closing (a reload) hands back too, then the stream goes.
-  const holdRef = useRef(false)
-  holdRef.current = iHold
-  useEffect(
-    () => () => {
-      if (holdRef.current && viewer.current) {
-        window.conduit.noteScreenViewer(profile, viewer.current, false)
-        void releaseScreen((method, params) => gateway.rpc(method, params), profile, viewer.current)
-      }
-      detach()
-    },
-    [profile, detach]
-  )
+  useEffect(() => () => detach(), [detach])
 
   async function perform(work: () => Promise<void>) {
     setBusy(true)

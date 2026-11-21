@@ -1,5 +1,10 @@
 import type { ScreenWindowRequest } from './ipc'
 
+/** The page hash a bot's screen window opens on. */
+export function screenWindowHash(screen: ScreenWindowRequest): string {
+  return `#screen=${encodeURIComponent(JSON.stringify(screen))}`
+}
+
 /** The bot's screen a window of its own was opened on, from its page's hash; null for any other page. */
 export function screenWindowRequest(hash: string): ScreenWindowRequest | null {
   const match = /^#screen=(.+)$/.exec(hash)
@@ -23,16 +28,20 @@ const INTERNAL_ERROR = -32603
 /**
  * A closed screen's hand back, tried again after 1, 3 and 9 seconds when it
  * fails for a reason other than Hermes refusing it, as the phone's owed
- * hand back is.
+ * hand back is. `owed` is asked before each try, so one the user's next
+ * takeover overtook is never sent.
  */
 export async function releaseScreen(
   rpc: (method: string, params: Record<string, unknown>) => Promise<unknown>,
   profile: string,
   viewerId: string,
+  owed: () => boolean = () => true,
   sleep: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms))
 ): Promise<boolean> {
   for (const wait of [0, 1_000, 3_000, 9_000]) {
     if (wait) await sleep(wait)
+    // Reopened or taken over again since: a late hand back would drop the new takeover.
+    if (!owed()) return false
     try {
       await rpc('display.lease.release', { profile, viewer_id: viewerId })
       return true

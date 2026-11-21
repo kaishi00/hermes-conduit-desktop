@@ -140,7 +140,7 @@ const chatWindows = new ChatWindowSet(createChatWindow, ids => send(IPC.chatWind
 const screenWindows = new ScreenWindowSet(
   createScreenWindow,
   profiles => send(IPC.screenWindowsChanged, profiles),
-  (profile, viewerId) => void releaseScreen((method, params) => connection.rpc(method, params), profile, viewerId)
+  (profile, viewerId, owed) => void releaseScreen((method, params) => connection.rpc(method, params), profile, viewerId, owed)
 )
 /** The dashboard the chat windows belong to: another one closes them. */
 let chatWindowsHost: string | null = null
