@@ -248,6 +248,13 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
     expect(words(hook.result().transcript).slice(1)).toEqual(['check my mail', 'All sorted.'])
   })
 
+  it('shows the refusal when the stored pages bring no rows', async () => {
+    serve([[]])
+    const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })
+    await settle()
+    expect(hook.result().error).toBe(TOO_LONG)
+  })
+
   it('shows the refusal when the compact resume is refused too', async () => {
     serve([], true)
     const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })

@@ -105,9 +105,9 @@ async function resumeChat(
     const http = (method: 'GET', path: string) => gateway.http(method, path)
     let result = await gateway.rpc<ResumeResult>('session.resume', compact)
     const stored = result.stored_session_id ?? storedId
-    let rows = await newestRows(http, stored, profile).catch(() => {
-      throw e
-    })
+    let rows = await newestRows(http, stored, profile).catch(() => [] as HistoryRow[])
+    // No rows to draw: the refusal, which says what to do, beats a note over nothing.
+    if (!rows.length) throw e
     if (result.running) {
       // The chat's events reach it only once the open settles: its turn as
       // it is after the page reads, and its newest rows again if it ended
