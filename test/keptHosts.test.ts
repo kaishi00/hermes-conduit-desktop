@@ -31,7 +31,8 @@ import {
   keptWorkKey,
   keptWorkPath,
   type KeptWaitingRow,
-  type OtherChatRow
+  type OtherChatRow,
+  type OtherRoom
 } from '../src/renderer/src/state/keptHosts'
 import type { WaitingRow } from '../src/renderer/src/state/needsYou'
 import type { Room } from '../src/renderer/src/state/groups'
@@ -413,23 +414,42 @@ describe('group chats in a combined group', () => {
     // Mac hosts "trip" (one of VPS' bots in it over the own Link) and
     // "plans", and has a copy of Sam's "zoo"; VPS, on screen, has copies of
     // "trip", "zoo" and "solo".
-    const kept = new Map([[mac, { rooms: [room('trip', ['raiden', 'furina'], 2), room('plans', ['raiden'], 3)], copies: [copy('zoo', ['sam', 'nahida'])] }]])
+    const kept = new Map([[mac, { rooms: [room('plans', ['raiden'], 3), room('trip', ['raiden', 'furina'], 2)], copies: [copy('zoo', ['sam', 'nahida'])] }]])
     const here = [copy('trip', ['raiden', 'furina']), copy('zoo', ['sam', 'nahida']), copy('solo', ['sam'])]
     const shown = combinedRooms(vps, [mac, vps], [room('standup', ['furina'])], here, kept)
     expect(shown.copies.map(c => c.roomId)).toEqual(['solo'])
-    expect(shown.others.map(o => `${o.kind}:${o.kind === 'room' ? o.room.roomId : o.copy.roomId}@${o.host}`)).toEqual([
+    // Mac is saved before VPS, so its group chats show before VPS' own, as Mac shows them on screen: its copies, then its rooms.
+    expect(shown.after).toEqual([])
+    expect(shown.before.map(o => `${o.kind}:${o.kind === 'room' ? o.room.roomId : o.copy.roomId}@${o.host}`)).toEqual([
+      `copy:zoo@${mac}`,
       `room:plans@${mac}`,
-      `room:trip@${mac}`,
-      `copy:zoo@${mac}`
+      `room:trip@${mac}`
     ])
     // A room id another Hermes uses for another room (no member shared) isn't the same room.
     expect(combinedRooms(vps, [mac, vps], [], [copy('plans', ['sam'])], kept).copies.map(c => c.roomId)).toEqual(['plans'])
     // One Hermes saved at two addresses: a room both list shows once, as this host's.
-    expect(combinedRooms(vps, [mac, vps], [room('plans', ['raiden'])], [], kept).others.some(o => o.kind === 'room' && o.room.roomId === 'plans')).toBe(false)
+    expect(combinedRooms(vps, [mac, vps], [room('plans', ['raiden'])], [], kept).before.some(o => o.kind === 'room' && o.room.roomId === 'plans')).toBe(false)
     // A copy an agent of yours waits in for your approval stays, since only its row answers it.
     expect(combinedRooms(vps, [mac, vps], [], here, kept, new Set([here[0].id])).copies.map(c => c.roomId)).toEqual(['trip', 'solo'])
     // Nothing kept: this host's copies as they are.
     expect(combinedRooms(vps, [mac, vps], [], here, new Map()).copies).toHaveLength(3)
+  })
+
+  it('keeps the group chats in place when a tap switches dashboards (Eric, 2026-11-21)', () => {
+    const order = (host: string) => (host === mac ? ['trip', 'plans'] : ['standup', 'retro'])
+    const macRooms = [room('plans', ['raiden'], 3), room('trip', ['raiden', 'nahida'], 2)]
+    const vpsRooms = [room('retro', ['furina'], 5), room('standup', ['furina'], 4)]
+    const names = (r: { before: OtherRoom[]; after: OtherRoom[] }, here: string[]) => [
+      ...r.before.map(o => (o.kind === 'room' ? o.room.roomId : o.copy.roomId)),
+      ...here,
+      ...r.after.map(o => (o.kind === 'room' ? o.room.roomId : o.copy.roomId))
+    ]
+    // On Mac: VPS' rooms after Mac's, in VPS' own order.
+    const onMac = combinedRooms(mac, [mac, vps], macRooms, [], new Map([[vps, { rooms: vpsRooms, copies: [] }]]), new Set(), order)
+    // On VPS, after a tap on one of its rooms: Mac's before VPS', in Mac's own order.
+    const onVps = combinedRooms(vps, [mac, vps], vpsRooms, [], new Map([[mac, { rooms: macRooms, copies: [] }]]), new Set(), order)
+    expect(names(onMac, ['trip', 'plans'])).toEqual(['trip', 'plans', 'standup', 'retro'])
+    expect(names(onVps, ['standup', 'retro'])).toEqual(['trip', 'plans', 'standup', 'retro'])
   })
 
   it('opens another host\'s group chat once the new host has read it', () => {

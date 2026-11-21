@@ -199,6 +199,9 @@ interface Props {
   badgeFor?: (url: string) => HostBadge | null;
   onOpenOther?: (other: OtherBot) => void;
   /** Combined dashboards: the other hosts' group chats, badged, each room once under the host you talk in it from, opening through a switch. */
+  /** The other combined hosts' group chats Saved Dashboards puts before this host's, as each shows them. */
+  otherRoomsBefore?: OtherRoom[];
+  /** ...and after it, so a tap on one, which switches there, moves nothing. */
   otherRooms?: OtherRoom[];
   /** The other hosts' bots' work, by keptWorkKey, for their pills. */
   otherWork?: ReadonlyMap<string, BotWork>;
@@ -274,7 +277,8 @@ export function BotsHome({
   onNewGroup,
   roomLooks,
   otherBots = [],
-  otherRooms = [],
+  otherRoomsBefore = [],
+  otherRooms: otherRoomsAfter = [],
   otherWork,
   onOpenOtherRoom,
   badgeFor,
@@ -730,6 +734,23 @@ export function BotsHome({
       <Icon name={name} />
     </span>
   );
+  /** Another combined host's group chat: badged, a tap switches there and opens it. */
+  const otherRoomRow = (other: OtherRoom) => {
+    const room = other.kind === "room" ? other.room : copyRoom(other.copy);
+    const badge = badgeFor?.(other.host) ?? null;
+    return roomRow(
+      `${other.host}\u0000${other.kind === "room" ? other.room.roomId : other.copy.id}`,
+      <>
+        <RoomFaces room={room} bots={otherBots.filter((o) => o.host === other.host).map((o) => o.bot)} size={22} host={other.host} />
+        {badge ? <span className="bot-tile-badge">{<HostBadgeMark badge={badge} />}</span> : null}
+      </>,
+      room.name,
+      other.kind === "copy" ? copyLine(other.copy) : room.updatedAt ? timeLabel(room.updatedAt) : null,
+      () => onOpenOtherRoom?.(other),
+      { className: other.kind === "copy" && isOver(other.copy) ? "over" : undefined },
+    );
+  };
+  const otherRooms = [...otherRoomsBefore, ...otherRoomsAfter];
   // Other hosts' group chats, and this host's copies (one may wait for your
   // approval), show though this host's rooms aren't read (or can't be).
   const showRooms =
@@ -823,6 +844,7 @@ export function BotsHome({
               ) : null}
             </div>
             {rooms?.length === 0 && otherRooms.length === 0 && !draft && canDrag ? <p className="meta hint bot-side-hint">{t("Drag one bot onto another to start a group chat.")}</p> : null}
+            {otherRoomsBefore.map(otherRoomRow)}
             {(drafts ?? []).map((d) => roomRow(d.id, glyph(d.status === "ended" ? "bell" : "clock"), d.name, draftLine(d), () => onOpenDraft?.(d), { className: `draft-tile ${d.status}` }))}
             {(copies ?? []).map((copy) =>
               roomRow(
@@ -856,21 +878,7 @@ export function BotsHome({
                 { className: roomTarget === room.roomId ? "move-target" : undefined, current: side.openRoomId === room.roomId, drag: roomDrag(room.roomId) },
               ),
             )}
-            {otherRooms.map((other) => {
-              const room = other.kind === "room" ? other.room : copyRoom(other.copy);
-              const badge = badgeFor?.(other.host) ?? null;
-              return roomRow(
-                `${other.host}\u0000${other.kind === "room" ? other.room.roomId : other.copy.id}`,
-                <>
-                  <RoomFaces room={room} bots={otherBots.filter((o) => o.host === other.host).map((o) => o.bot)} size={22} host={other.host} />
-                  {badge ? <span className="bot-tile-badge">{<HostBadgeMark badge={badge} />}</span> : null}
-                </>,
-                room.name,
-                other.kind === "copy" ? copyLine(other.copy) : room.updatedAt ? timeLabel(room.updatedAt) : null,
-                () => onOpenOtherRoom?.(other),
-                { className: other.kind === "copy" && isOver(other.copy) ? "over" : undefined },
-              );
-            })}
+            {otherRoomsAfter.map(otherRoomRow)}
             {draft ? (
               <div className="row bot-side-bot bot-side-room starting" aria-label={t("Group chat being started")}>
                 <span className="bot-side-face">
