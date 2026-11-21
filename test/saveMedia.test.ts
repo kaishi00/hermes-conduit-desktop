@@ -67,6 +67,13 @@ describe('saving pictures, files and audio to this computer', () => {
       expect(isPartOf(name, '/d/foo.txt')).toBe(false)
   })
 
+  it('takes a leftover named in another case where folders ignore case (desktop#276)', () => {
+    expect(isPartOf('report.png.abc123.conduit-part', '/d/Report.png', true)).toBe(true)
+    expect(isPartOf('report.png.abc123.conduit-part', '/d/Report.png', false)).toBe(false)
+    // The part's own name stays strict.
+    expect(isPartOf('report.png.ABC123.conduit-part', '/d/Report.png', true)).toBe(false)
+  })
+
   it('gives up on a download that stops sending, and stops its request', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'conduit-save-'))
     const target = join(dir, 'stalled.bin')

@@ -47,7 +47,9 @@ export const botSideScroll = new KeptScroll()
  * Calls `onShown` as a pane kept mounted comes back from away, during that
  * render, so the children drawing it again see what it set (the Bots
  * sidebar's kept scroll restores in its own layout effect, which runs
- * before a parent's).
+ * before a parent's). A side effect in render, so `onShown` must be safe to
+ * run twice (StrictMode) or for a render that's thrown away: arming a
+ * restore that the next draw settles, as `botSideScroll.opened()` does.
  */
 export function useShownAgain(away: boolean, onShown?: () => void): void {
   const wasAway = useRef(away)

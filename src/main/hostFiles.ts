@@ -92,10 +92,15 @@ export const STALE_PART_MS = 24 * 60 * 60 * 1000
  */
 const PART_SUFFIX = /^(?:[0-9a-f]{6}\.|\d+-[0-9a-f]{8}\.)?conduit-part$/
 
-/** Whether `name` is one of `destination`'s part files. */
-export function isPartOf(name: string, destination: string): boolean {
+/**
+ * Whether `name` is one of `destination`'s part files. On Windows and the
+ * Mac, whose folders ignore case, `Report.png`'s save takes `report.png`'s
+ * leftovers too.
+ */
+export function isPartOf(name: string, destination: string, caseless = process.platform === 'win32' || process.platform === 'darwin'): boolean {
   const prefix = `${basename(destination)}.`
-  return name.startsWith(prefix) && PART_SUFFIX.test(name.slice(prefix.length))
+  const head = name.slice(0, prefix.length)
+  return (caseless ? head.toLowerCase() === prefix.toLowerCase() : head === prefix) && PART_SUFFIX.test(name.slice(prefix.length))
 }
 
 /** Removes `destination`'s part files older than STALE_PART_MS, left by a save a crash cut off. */

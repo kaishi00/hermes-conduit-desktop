@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { act, createElement, useLayoutEffect } from 'react'
+import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, settle } from './hookHarness'
 import { keptWorkKey, useKeptRooms, useKeptWork, type OtherBot } from '../src/renderer/src/state/keptHosts'
@@ -88,5 +90,23 @@ describe('a kept pane shown again (desktop#256)', () => {
     hook.rerender({ away: false })
     expect(shown).toHaveBeenCalledTimes(1)
     hook.unmount()
+  })
+
+  it("runs before the children's layout effects, where the Bots list restores its scroll", () => {
+    const log: string[] = []
+    const Child = () => {
+      useLayoutEffect(() => void log.push('child drew'))
+      return null
+    }
+    const Pane = ({ away }: { away: boolean }) => {
+      useShownAgain(away, () => log.push('shown'))
+      return createElement(Child)
+    }
+    const root = createRoot(document.createElement('div'))
+    act(() => root.render(createElement(Pane, { away: true })))
+    log.length = 0
+    act(() => root.render(createElement(Pane, { away: false })))
+    expect(log).toEqual(['shown', 'child drew'])
+    act(() => root.unmount())
   })
 })

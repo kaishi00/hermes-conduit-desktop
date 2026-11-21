@@ -333,8 +333,9 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
       if (method !== 'session.resume') return Promise.resolve({ ok: true, result: {} })
       if (!params.omit_messages) return Promise.resolve({ ok: false, error: TOO_LONG, code: 4130 })
       compacts++
-      // Still running on the read after the pages; the turn ends while its rows are read.
-      if (compacts === 2) {
+      // Still running on the read after the pages; the turn ends after its rows are read, so its last row
+      // only comes from the rows read again once the third read says it ended.
+      if (compacts === 3) {
         conduit.httpOutcome = async () => ({
           ok: true,
           result: { messages: [{ id: 1, role: 'user', content: 'check my mail' }, { id: 2, role: 'assistant', content: 'All sorted.' }] }

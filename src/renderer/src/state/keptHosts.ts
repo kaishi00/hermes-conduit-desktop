@@ -408,7 +408,8 @@ export function useKeptRooms(kept: readonly KeptHost[], on: boolean): Map<string
           if (stopped) return
           // Its synced room order, so its rows show here as its own window will draw them (combinedRooms reads it).
           const order = prefs.ok ? hostOrder(prefs.result, ROOMS_SYNC_KEY, 'rooms') : null
-          if (order) saveOrder(url, order, 'rooms')
+          // Saved only when it changed, so a read that brings the same order writes nothing.
+          if (order && JSON.stringify(order) !== JSON.stringify(loadOrder(url, 'rooms'))) saveOrder(url, order, 'rooms')
           const last = keptRoomsByHost.get(url)
           const rooms = listed ?? last?.rooms ?? []
           const copies = (copied.ok ? parseCopies(copied.result) : null) ?? last?.copies ?? []
