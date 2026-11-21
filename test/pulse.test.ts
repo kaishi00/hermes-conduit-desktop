@@ -45,6 +45,24 @@ describe('the Pulse feed', () => {
     expect(sections.cleared.map(c => c.id)).toEqual([1, 4])
   })
 
+  it('keeps only the newest morning brief up, as the phone does', () => {
+    const feed = parseFeed({
+      cards: [
+        { id: 12, kind: 'noticed', topic: 'date', news: 'From Tuesday’s brief, still open', created_at: 1795000100 },
+        { id: 11, kind: 'brief', news: 'Tuesday', created_at: 1795000000 },
+        { id: 20, kind: 'brief', news: 'Wednesday', created_at: 1795086400 },
+        { id: 5, kind: 'brief', news: 'Monday', created_at: 1794913600, seen_at: 1794913700 }
+      ]
+    })
+    const sections = layout(feed.cards, new Set([11, 20]))
+    expect(sections.fresh.map(c => c.id)).toEqual([20])
+    // An older brief's open card stays a card of its own.
+    expect(sections.earlier.map(c => c.id)).toEqual([12])
+    expect(sections.cleared.map(c => c.id)).toEqual([11, 5])
+    // One just acted on stays where it was.
+    expect(layout(feed.cards, new Set(), new Set([11])).earlier.map(c => c.id)).toEqual([12, 11, 20])
+  })
+
   it('words Do it by what the card is about', () => {
     const [found, deadline, followup] = parseFeed(raw).cards as [any, any, any]
     expect(actionMessage(followup)).toBe('Pulse reminded me: Send Dana the numbers\n\nGo ahead with it now.')

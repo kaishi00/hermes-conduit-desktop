@@ -335,8 +335,12 @@ function reopenSettings(): void {
   }
 }
 
-/** Settings after a language change reloads the window, else the first tab the phone's layout shows (Bots until it's reordered). */
+/**
+ * Settings after a language change reloads the window; Pulse when its chip switched here (from the first
+ * render, or Bots' open-a-bot would take the window first); else the first tab the phone's layout shows.
+ */
 function reopenedSection(host: string): Section {
+  if (takePageAfterSwitch(host) === 'pulse') return 'pulse'
   try {
     const saved = sessionStorage.getItem(REOPEN_SECTION)
     sessionStorage.removeItem(REOPEN_SECTION)
@@ -1566,9 +1570,6 @@ function Shell({
     setSelected({ id: row.id, profile: row.profile, title: row.title })
     setSection('chats')
   }, [connected, statusUrl])
-  useEffect(() => {
-    if (takePageAfterSwitch(statusUrl) === 'pulse') setSection('pulse')
-  }, [statusUrl])
   // New Bot picked another dashboard: its sheet opens here with the words, once the roster is read.
   useEffect(() => {
     if (!connected || roster.bots === undefined) return
@@ -1887,7 +1888,7 @@ function Shell({
                 : undefined,
     copies: groupChats.copies,
     otherRoomsBefore: groupChats.before,
-    otherRooms: groupChats.after,
+    otherRoomsAfter: groupChats.after,
     onOpenOtherRoom: openOtherRoom,
     copiesWaiting: copiesWaiting,
     onOpenCopy: copy => {

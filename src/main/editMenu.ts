@@ -48,8 +48,8 @@ export function editMenuTemplate(params: Params, actions: EditMenuActions): Menu
     items.push({ label: t('Copy'), role: 'copy' })
   }
   if (params.linkURL && copyableLink(params.linkURL)) {
-    // A mail or phone link copies the address or number, as the phone's Copy does.
-    const text = params.linkURL.replace(/^(mailto|tel|sms):/i, '')
+    // A mail or phone link copies the address or number alone, without its ?subject= or ?body=.
+    const text = params.linkURL.replace(/^(mailto|tel|sms):([^?#]*).*$/i, '$2')
     if (items.length) items.push({ type: 'separator' })
     items.push({ label: t('Copy Link'), click: () => actions.copyText(text) })
   }

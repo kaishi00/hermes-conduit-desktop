@@ -15,7 +15,8 @@ import { keptRosters, rosterFromProfiles, type Bot } from './bots'
 import { PULSE, parseFeed } from './pulse'
 import { listPath, parsePage, type ArtifactFilter, type ArtifactItem } from './artifacts'
 import { roomsFromList, type Room } from './groups'
-import { arrange, loadOrder } from './botOrder'
+import { arrange, hostOrder, loadOrder, ROOMS_SYNC_KEY, saveOrder } from './botOrder'
+import { PREFS_PATH } from './pinnedOrder'
 import { COPIES_PATH, parseCopies, type RoomCopy } from './roomCopies'
 import { keptCopies } from './useRoomCopies'
 import { keptOwnRooms } from './useGroups'
@@ -394,11 +395,15 @@ export function useKeptRooms(kept: readonly KeptHost[], on: boolean): Map<string
       if (document.hidden) return
       await Promise.all(
         urls.map(async url => {
-          const [listed, copied] = await Promise.all([
+          const [listed, copied, prefs] = await Promise.all([
             window.conduit.keptRpc(url, 'groups.list', { include_disbanded: false }),
-            window.conduit.keptHttp(url, COPIES_PATH)
+            window.conduit.keptHttp(url, COPIES_PATH),
+            window.conduit.keptHttp(url, PREFS_PATH)
           ])
           if (stopped) return
+          // Its synced room order, so its rows show here as its own window will draw them (combinedRooms reads it).
+          const order = prefs.ok ? hostOrder(prefs.result, ROOMS_SYNC_KEY, 'rooms') : null
+          if (order) saveOrder(url, order, 'rooms')
           const last = keptRoomsByHost.get(url)
           const rooms = listed.ok ? roomsFromList(listed.result).filter(r => !r.disbanded) : (last?.rooms ?? [])
           const copies = (copied.ok ? parseCopies(copied.result) : null) ?? last?.copies ?? []

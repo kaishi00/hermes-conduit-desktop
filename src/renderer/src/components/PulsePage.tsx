@@ -93,6 +93,8 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
   }, [menu])
 
   const sections = useMemo(() => (feed ? layout(feed.cards, fresh ?? new Set()) : null), [feed, fresh])
+  // Done and cleared draws its cards as cleared, an older morning brief a newer one replaced among them.
+  const clearedIds = useMemo(() => new Set(sections?.cleared.map(card => card.id)), [sections])
 
   /** Runs a tap on a card; a refusal says why. */
   const act = async (card: PulseCard, action: () => Promise<unknown>) => {
@@ -121,7 +123,9 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
   }
 
   const cardView = (card: PulseCard) => {
-    const cleared = isCleared(card)
+    // An older morning brief a newer one replaced: under Done and cleared, though not done or swiped away.
+    const replaced = !isCleared(card) && clearedIds.has(card.id)
+    const cleared = isCleared(card) || replaced
     const isBusy = busy.has(card.id)
     const reason = backReason(card, Date.now(), language) ?? card.why
     const looked = lookedText(card, language)
@@ -222,7 +226,7 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
           <div className="pulse-actions">
             <span className={`pulse-cleared${isResting(card) ? '' : ' done'}`}>
               <Icon name={isResting(card) ? 'clock' : 'check'} />
-              {clearedTitle(card, Date.now(), language)}
+              {replaced ? t('Replaced by a newer brief') : clearedTitle(card, Date.now(), language)}
             </span>
             <span className="spacer" />
             {isResting(card) ? (

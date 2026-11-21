@@ -42673,5 +42673,20 @@
     "tr": "Öneri Yok",
     "zh-Hans": "无建议",
     "zh-Hant": "沒有建議"
+  },
+  "Replaced by a newer brief": {
+    "de": "Durch ein neueres Briefing ersetzt",
+    "es": "Sustituido por un resumen más reciente",
+    "fr": "Remplacé par un briefing plus récent",
+    "id": "Diganti ringkasan yang lebih baru",
+    "it": "Sostituito da un riepilogo più recente",
+    "ja": "新しいブリーフに置き換えられました",
+    "ko": "새 브리핑으로 대체됨",
+    "pl": "Zastąpione nowszym podsumowaniem",
+    "pt-BR": "Substituído por um resumo mais recente",
+    "ru": "Заменено более новой сводкой",
+    "tr": "Daha yeni bir özetle değiştirildi",
+    "zh-Hans": "已被更新的简报取代",
+    "zh-Hant": "已被更新的簡報取代"
   }
 }

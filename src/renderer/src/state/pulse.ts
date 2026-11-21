@@ -439,14 +439,31 @@ export interface PulseLayout {
  * The screen's sections: what's new since the last look (the cards unseen
  * when the screen opened), earlier ones, and Done and cleared. `keep`: cards
  * just acted on, kept where they were until the screen is left.
+ *
+ * Only the newest morning brief stays up, as on the phone (PulseLayout):
+ * each morning's replaces the one before, and older ones go to Done and
+ * cleared. The cards a brief brought are cards of their own, so what's
+ * still open from an older one stays on the screen.
  */
 export function layout(cards: PulseCard[], fresh: ReadonlySet<number>, keep: ReadonlySet<number> = new Set()): PulseLayout {
-  const open = cards.filter(card => !isCleared(card) || keep.has(card.id))
+  const newest = newestBrief(cards)
+  const away = (card: PulseCard) => (isCleared(card) || (card.kind === 'brief' && card.id !== newest)) && !keep.has(card.id)
+  const open = cards.filter(card => !away(card))
   return {
     fresh: open.filter(card => fresh.has(card.id)),
     earlier: open.filter(card => !fresh.has(card.id)),
-    cleared: cards.filter(card => isCleared(card) && !keep.has(card.id))
+    cleared: cards.filter(away)
   }
+}
+
+/** The newest morning brief's id, by when it came (then id); undefined with none. */
+function newestBrief(cards: readonly PulseCard[]): number | undefined {
+  let newest: PulseCard | undefined
+  for (const card of cards) {
+    if (card.kind !== 'brief') continue
+    if (!newest || (card.createdAt ?? 0) > (newest.createdAt ?? 0) || ((card.createdAt ?? 0) === (newest.createdAt ?? 0) && card.id > newest.id)) newest = card
+  }
+  return newest?.id
 }
 
 /** Pulse refuses with {"code": …}: its words for the codes a tap meets. */

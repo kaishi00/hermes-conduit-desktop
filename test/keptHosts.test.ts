@@ -14,6 +14,8 @@ import {
   openAfterSwitch,
   openBotAfterSwitch,
   openChatAfterSwitch,
+  openPageAfterSwitch,
+  takePageAfterSwitch,
   otherHostsChats,
   keptChatsPath,
   mergeKeptChats,
@@ -450,6 +452,22 @@ describe('group chats in a combined group', () => {
     const onVps = combinedRooms(vps, [mac, vps], vpsRooms, [], new Map([[mac, { rooms: macRooms, copies: [] }]]), new Set(), order)
     expect(names(onMac, ['trip', 'plans'])).toEqual(['trip', 'plans', 'standup', 'retro'])
     expect(names(onVps, ['standup', 'retro'])).toEqual(['trip', 'plans', 'standup', 'retro'])
+    // Three hosts, this one in the middle: the first's before it, the last's after it.
+    const nas = 'https://nas.example'
+    const onMacMiddle = combinedRooms(
+      mac,
+      [nas, mac, vps],
+      macRooms,
+      [],
+      new Map([
+        [nas, { rooms: [room('garden', ['zhongli'])], copies: [] }],
+        [vps, { rooms: vpsRooms, copies: [] }]
+      ]),
+      new Set(),
+      order
+    )
+    expect(names(onMacMiddle, ['trip', 'plans'])).toEqual(['garden', 'trip', 'plans', 'standup', 'retro'])
+    expect(onMacMiddle.before.map(o => o.host)).toEqual([nas])
   })
 
   it('opens another host\'s group chat once the new host has read it', () => {
@@ -494,5 +512,14 @@ describe("another host's bots' pills", () => {
     expect(keptWorkPath('mira', false)).toBe('/api/plugins/conduit_push/workstreams?profile=mira')
     expect(keptWorkKey('https://a.example', 'Mira')).toBe(keptWorkKey('https://a.example', 'mira'))
     expect(keptWorkKey('https://a.example', 'mira')).not.toBe(keptWorkKey('https://b.example', 'mira'))
+  })
+})
+
+describe('a page picked on another host', () => {
+  it('opens there once, and only on that host', () => {
+    openPageAfterSwitch('https://b.example', 'pulse')
+    expect(takePageAfterSwitch('https://a.example')).toBeNull()
+    expect(takePageAfterSwitch('https://b.example')).toBe('pulse')
+    expect(takePageAfterSwitch('https://b.example')).toBeNull()
   })
 })

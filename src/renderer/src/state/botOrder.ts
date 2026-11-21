@@ -132,7 +132,7 @@ export function loadOrder(host: string, kind: OrderKind = 'bots'): string[] {
 
 export const loadBotOrder = (host: string) => loadOrder(host)
 
-function saveOrder(host: string, order: string[], kind: OrderKind): void {
+export function saveOrder(host: string, order: string[], kind: OrderKind): void {
   try {
     if (order.length) localStorage.setItem(`${STORAGE[kind]}.${host}`, JSON.stringify(order))
     else localStorage.removeItem(`${STORAGE[kind]}.${host}`)
