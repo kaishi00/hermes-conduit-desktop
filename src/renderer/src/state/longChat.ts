@@ -64,9 +64,10 @@ export async function newestRows(
 }
 
 /**
- * The rows written since `held` was read, joined after it: pages back from
- * the newest row until one reaches a row `held` has (or the page limit),
- * so a turn that wrote more than a page meanwhile leaves no hole.
+ * The rows written since `held` was read, joined after it: it reads up to
+ * LONG_CHAT_PAGES (4) pages back from the newest row, stopping at the
+ * first that reaches a row `held` has, so a turn that wrote up to that
+ * many pages meanwhile leaves no hole.
  */
 export async function rowsSince(http: Http, held: HistoryRow[], storedId: string, profile?: string): Promise<HistoryRow[]> {
   const known = new Set(held.flatMap(row => (row.row_id == null ? [] : [row.row_id])))
@@ -88,4 +89,46 @@ export function joinRows(older: HistoryRow[], newer: HistoryRow[]): HistoryRow[]
 /** What a too-long chat draws: the note saying why only its newest messages show, then them. */
 export function longChatItems(rows: HistoryRow[]): TranscriptItem[] {
   return [{ kind: 'notice', key: 'long-chat', text: t('This chat is too long to open whole, so Conduit shows its newest messages.'), tone: 'info' }, ...fromHistory(rows)]
+}
+
+/** What a running long chat's open reads again: a resume's turn, its queue and a card waiting on the user. */
+export interface RunningResume {
+  running?: boolean | null
+  inflight?: unknown
+  pending?: unknown
+  pending_connection?: unknown
+}
+
+/**
+ * A running long chat's open, settled. Its events reach it only once the
+ * open settles, so after its pages it is read again: its turn as it is now
+ * and the rows it wrote meanwhile. A turn can end while those rows are
+ * read, so a chat still running is read once more, and when that read says
+ * the turn ended, its newest rows are read again: the open never shows a
+ * turn running that ended meanwhile. A read that fails keeps the open with
+ * what the first one said, without the parts that go stale as the turn
+ * runs: its reply text and its queue. A connection card stays, since the
+ * turn waits on the user while it's open.
+ */
+export async function settleRunning<R extends RunningResume>(
+  resume: () => Promise<R>,
+  since: (held: HistoryRow[]) => Promise<HistoryRow[]>,
+  first: R,
+  held: HistoryRow[]
+): Promise<{ result: R; rows: HistoryRow[] }> {
+  let result = first
+  let rows = held
+  const readTurn = async () => {
+    result = await resume().catch(() => ({ ...result, inflight: null, pending: undefined }))
+  }
+  const readRows = async () => {
+    rows = await since(rows).catch(() => rows)
+  }
+  await readTurn()
+  await readRows()
+  if (result.running) {
+    await readTurn()
+    if (!result.running) await readRows()
+  }
+  return { result, rows }
 }

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
 import { forgetTranscripts } from '../src/renderer/src/state/transcriptCache'
+import { settleRunning } from '../src/renderer/src/state/longChat'
 
 type Event = { type: string; session_id?: string; payload?: unknown }
 let listeners: ((event: Event) => void)[] = []
@@ -257,7 +258,9 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
       if (!params.omit_messages) return Promise.resolve({ ok: false, error: TOO_LONG, code: 4130 })
       reads++
       if (reads === 2) return Promise.resolve({ ok: false, error: 'busy', code: 5000 })
-      return Promise.resolve({ ok: true, result: { session_id: 'live-long', stored_session_id: 'long', messages: [], running: true, inflight: { assistant: 'stale' } } })
+      // The first read's reply text is stale by the time the pages are read; the read after them is the turn as it is now.
+      const assistant = reads === 1 ? 'stale' : 'Sorting the mail'
+      return Promise.resolve({ ok: true, result: { session_id: 'live-long', stored_session_id: 'long', messages: [], running: true, inflight: { assistant } } })
     }
     // First read: the prompt. Then 700 tool rows were written: the newest page is ids 202-701, the one before 2-201 plus the prompt.
     let first = true
@@ -276,6 +279,48 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
     const items = hook.result().transcript.items
     expect(items.filter(i => i.kind === 'tool')).toHaveLength(350)
     expect(words(hook.result().transcript)).not.toContain('stale')
+  })
+
+  it('a turn that ends while the rows are read opens ended, with its last rows (desktop#264)', async () => {
+    serve([[{ id: 1, role: 'user', content: 'check my mail' }]])
+    let compacts = 0
+    const conduit = (window as unknown as { conduit: Record<string, unknown> }).conduit
+    conduit.rpcOutcome = (method: string, params: Record<string, unknown>) => {
+      if (method !== 'session.resume') return Promise.resolve({ ok: true, result: {} })
+      if (!params.omit_messages) return Promise.resolve({ ok: false, error: TOO_LONG, code: 4130 })
+      compacts++
+      // Still running on the read after the pages; the turn ends while its rows are read.
+      if (compacts === 2) {
+        conduit.httpOutcome = async () => ({
+          ok: true,
+          result: { messages: [{ id: 1, role: 'user', content: 'check my mail' }, { id: 2, role: 'assistant', content: 'All sorted.' }] }
+        })
+      }
+      const running = compacts < 3
+      return Promise.resolve({
+        ok: true,
+        result: { session_id: 'live-long', stored_session_id: 'long', messages: [], running, inflight: running ? { assistant: 'Sorting' } : null }
+      })
+    }
+    const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })
+    await settle()
+    expect(compacts).toBe(3)
+    expect(hook.result().transcript.running).toBe(false)
+    expect(words(hook.result().transcript).slice(1)).toEqual(['check my mail', 'All sorted.'])
+  })
+
+  it('a failed read again keeps the card waiting on the user, not the stale reply or queue', async () => {
+    const first = { running: true, inflight: { assistant: 'stale' }, pending: [{ text: 'queued' }], pending_connection: { id: 'card' } }
+    const { result, rows } = await settleRunning(
+      () => Promise.reject(new Error('busy')),
+      async held => held,
+      first,
+      [{ role: 'user', content: 'hi' }]
+    )
+    expect(result.inflight).toBeNull()
+    expect(result.pending).toBeUndefined()
+    expect(result.pending_connection).toEqual({ id: 'card' })
+    expect(rows).toHaveLength(1)
   })
 
   it('shows the refusal when the stored pages bring no rows', async () => {

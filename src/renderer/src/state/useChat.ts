@@ -55,7 +55,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, longChatItems, newestRows, rowsSince } from './longChat'
+import { isResumeTooLong, longChatItems, newestRows, rowsSince, settleRunning } from './longChat'
 
 type Action =
   | { type: 'reset'; state: TranscriptState }
@@ -103,19 +103,19 @@ async function resumeChat(
     if (!isResumeTooLong(e)) throw e
     const compact = { ...params, omit_messages: true }
     const http = (method: 'GET', path: string) => gateway.http(method, path)
-    let result = await gateway.rpc<ResumeResult>('session.resume', compact)
+    const result = await gateway.rpc<ResumeResult>('session.resume', compact)
     const stored = result.stored_session_id ?? storedId
-    let rows = await newestRows(http, stored, profile).catch(() => [] as HistoryRow[])
+    const rows = await newestRows(http, stored, profile).catch(() => [] as HistoryRow[])
     // No rows to draw: the refusal, which says what to do, beats a note over nothing.
     if (!rows.length) throw e
-    if (result.running) {
-      // The chat's events reach it only once the open settles, so it is
-      // read again after its pages: its turn as it is now (a re-read that
-      // fails keeps the open, without the first read's stale reply text),
-      // and the rows it wrote meanwhile, its steps or its ended turn.
-      result = await gateway.rpc<ResumeResult>('session.resume', compact).catch(() => ({ ...result, inflight: null }))
-      rows = await rowsSince(http, rows, stored, profile).catch(() => rows)
-    }
+    // Read again after its pages, so its turn and its rows are as they are now (longChat.ts).
+    if (result.running)
+      return settleRunning(
+        () => gateway.rpc<ResumeResult>('session.resume', compact),
+        held => rowsSince(http, held, stored, profile),
+        result,
+        rows
+      )
     return { result, rows }
   }
 }
