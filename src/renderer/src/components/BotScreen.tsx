@@ -6,7 +6,6 @@ import { gateway, GatewayError } from '../gateway'
 import { useRequests } from '../state/useNeedsYou'
 import {
   CONTROL_TAKEN,
-  INTERNAL_ERROR,
   MAX_RAPID_EVICTIONS,
   aspect,
   holds,
@@ -22,6 +21,7 @@ import {
 } from '../state/botScreen'
 import { Icon } from './icons'
 import { ask } from '../state/dialogs'
+import { releaseScreen } from '@shared/screenWindows'
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 type Stream = 'idle' | 'connecting' | 'live' | { lost: string }
@@ -69,16 +69,25 @@ class Channel {
 // Viewers whose stream already ended.
 const ended = new WeakSet<RFB>()
 
-// The viewer id each bot's screen gave this window, so a reopened sheet keeps the hold it had.
-const viewerIds = new Map<string, string>()
-
 /**
  * A bot's screen, after the phone's Bot's Screen sheet: what it's doing,
  * live; Take Over for a sign-in or a CAPTCHA, then Hand Back; Start and
  * Stop; and its install on the host, with the log and the sudo password
- * Hermes asks for. Closing it hands back a hold this window had.
+ * Hermes asks for. It fills a window of its own (ScreenWindow), so the chat
+ * stays in view. Its viewer id and hold go to the main process, which hands
+ * back a hold when the window closes and gives a reopened window the same id.
  */
-export function BotScreen({ profile, botName, onClose }: { profile: string; botName: string; onClose: () => void }) {
+export function BotScreen({
+  profile,
+  botName,
+  viewerId,
+  onClose
+}: {
+  profile: string
+  botName: string
+  viewerId?: string
+  onClose: () => void
+}) {
   const [status, setStatus] = useState<ScreenStatus | null>(null)
   const [state, setState] = useState<'loading' | 'unsupported' | 'ready' | { failed: string }>('loading')
   const [stream, setStream] = useState<Stream>('idle')
@@ -96,7 +105,7 @@ export function BotScreen({ profile, botName, onClose }: { profile: string; botN
   const generation = useRef(0)
   const statusRef = useRef(status)
   statusRef.current = status
-  const viewer = useRef<string | null>(viewerIds.get(profile) ?? null)
+  const viewer = useRef<string | null>(viewerId ?? null)
   const evictions = useRef({ count: 0, dialedAt: 0 })
   const early = useRef<LiveSocketEvent[]>([])
   const iHold = !!status && holds(status.lease, hash)
@@ -147,7 +156,6 @@ export function BotScreen({ profile, botName, onClose }: { profile: string; botN
       const id = observed.viewer_id
       if (typeof ticket !== 'string' || typeof id !== 'string') throw new Error(t("Couldn't read the screen"))
       viewer.current = id
-      viewerIds.set(profile, id)
       const ownHash = await viewerHash(id)
       setHash(ownHash)
       const next = parseStatus(observed)
@@ -185,7 +193,7 @@ export function BotScreen({ profile, botName, onClose }: { profile: string; botN
       setStream({ lost: message(e) })
     }
     // `route` reads refs only.
-  }, [display, detach, apply, profile])
+  }, [display, detach, apply])
 
   const load = useCallback(async () => {
     try {
@@ -285,12 +293,19 @@ export function BotScreen({ profile, botName, onClose }: { profile: string; botN
     }
   }, [iHold])
 
-  // Closing hands back a hold this window had, then the stream goes.
+  // The main process hands back a hold this window has when the window closes, which no page code outlives.
+  useEffect(() => {
+    if (hash && viewer.current) window.conduit.noteScreenViewer(profile, viewer.current, iHold)
+  }, [profile, hash, iHold])
+  // Leaving without the window closing (a reload) hands back too, then the stream goes.
   const holdRef = useRef(false)
   holdRef.current = iHold
   useEffect(
     () => () => {
-      if (holdRef.current && viewer.current) void releaseOwed(profile, viewer.current)
+      if (holdRef.current && viewer.current) {
+        window.conduit.noteScreenViewer(profile, viewer.current, false)
+        void releaseScreen((method, params) => gateway.rpc(method, params), profile, viewer.current)
+      }
       detach()
     },
     [profile, detach]
@@ -579,17 +594,4 @@ export function BotScreen({ profile, botName, onClose }: { profile: string; botN
       ) : null}
     </div>
   )
-}
-
-/** A closed sheet's hand back, tried again a few times if it fails for a reason other than Hermes refusing it. */
-async function releaseOwed(profile: string, viewerId: string) {
-  for (const wait of [0, 1_000, 3_000, 9_000]) {
-    if (wait) await new Promise(resolve => setTimeout(resolve, wait))
-    try {
-      await gateway.rpc('display.lease.release', { profile, viewer_id: viewerId })
-      return
-    } catch (e) {
-      if (!(e instanceof GatewayError) || (e.code !== undefined && e.code !== INTERNAL_ERROR)) return
-    }
-  }
 }

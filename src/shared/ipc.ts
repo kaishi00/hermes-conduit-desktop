@@ -326,6 +326,13 @@ export interface ConduitApi {
   /** The chats that have a window of their own, now and whenever that changes. */
   chatWindows(): Promise<string[]>
   onChatWindows(listener: (ids: string[]) => void): () => void
+  /** Opens a bot's screen in a window of its own, or focuses the one it has. */
+  openScreenWindow(screen: { profile: string; botName: string }): void
+  /** The bots whose screen has a window open, now and whenever that changes. */
+  screenWindows(): Promise<string[]>
+  onScreenWindows(listener: (profiles: string[]) => void): () => void
+  /** A screen window's viewer id and whether it holds the screen, so closing the window hands back for it. */
+  noteScreenViewer(profile: string, viewerId: string, holds: boolean): void
   /** The quick ask window was just shown: focus its field. */
   onQuickAskShown(listener: () => void): () => void
   /** Sizes the quick ask window: true for a reply, false for the field alone, or the px the field and its staged files need. */
@@ -377,6 +384,13 @@ export interface OpenChatRequest {
   title?: string
 }
 
+/** A bot's screen for a window of its own; the viewer id it had before, if it did. */
+export interface ScreenWindowRequest {
+  profile: string
+  botName: string
+  viewerId?: string
+}
+
 /** A chat for a window of its own. */
 export interface ChatWindowRequest {
   id: string
@@ -400,6 +414,10 @@ export const IPC = {
   closeChatWindows: 'conduit:close-chat-windows',
   chatWindows: 'conduit:chat-windows',
   chatWindowsChanged: 'conduit:chat-windows-changed',
+  openScreenWindow: 'conduit:open-screen-window',
+  screenWindows: 'conduit:screen-windows',
+  screenWindowsChanged: 'conduit:screen-windows-changed',
+  noteScreenViewer: 'conduit:note-screen-viewer',
   hideQuickAsk: 'conduit:hide-quick-ask',
   copyText: 'conduit:copy-text',
   quickAskShown: 'conduit:quick-ask-shown',

@@ -9093,27 +9093,26 @@ button.secondary.danger {
  * passes about 1180 px, then the column and everything in it (text, cards,
  * the composer, their buttons) steps up one text size at a time, 17 to 19,
  * 21 and 23 pt at the default size, while each size's lines still hold as
- * many words as the 780 px column. The chat's header keeps its size, and a
- * bot's Screen keeps its pixels for the remote pointer.
+ * many words as the 780 px column. The chat's header keeps its size.
  */
 .chat {
   container: chat / inline-size;
 }
 
 @container chat (min-width: 1180px) {
-  .chat > :not(.chat-head, .screen-sheet) {
+  .chat > :not(.chat-head) {
     zoom: 1.1176;
   }
 }
 
 @container chat (min-width: 1304px) {
-  .chat > :not(.chat-head, .screen-sheet) {
+  .chat > :not(.chat-head) {
     zoom: 1.2353;
   }
 }
 
 @container chat (min-width: 1428px) {
-  .chat > :not(.chat-head, .screen-sheet) {
+  .chat > :not(.chat-head) {
     zoom: 1.3529;
   }
 }
@@ -9594,6 +9593,16 @@ button.secondary.danger {
   width: auto;
   flex: 1;
   border-left: none;
+  background: var(--canvas);
+}
+
+/* A bot's screen in a window of its own: the screen filling the window. */
+.screen-window-page {
+  position: fixed;
+  inset: 0;
+  background: var(--canvas);
+}
+.screen-window-page .screen-sheet {
   background: var(--canvas);
 }
 

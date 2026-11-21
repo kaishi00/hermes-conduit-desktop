@@ -81,8 +81,6 @@ export const newerLease = (current: ScreenLease, next: ScreenLease) => next.epoc
 export const CONTROL_TAKEN = 4000
 export const MAX_RAPID_EVICTIONS = 3
 export const MAX_LOG_LINES = 400
-/** Hermes' internal error, the only refusal of a hand back worth trying again. */
-export const INTERNAL_ERROR = -32603
 
 /** An install's end: what to say, if anything (code 0 is done, -2 is a host with no sudo). */
 export function installEnding(code: number): 'done' | 'noSudo' | 'failed' {

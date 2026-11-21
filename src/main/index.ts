@@ -43,6 +43,9 @@ import { createFileStore } from './store'
 import { QUICK_ASK_ACCELERATOR, QuickAsk } from './quickAsk'
 import { ChatWindowSet } from './chatWindowSet'
 import { createChatWindow } from './chatWindows'
+import { ScreenWindowSet } from './screenWindowSet'
+import { createScreenWindow } from './screenWindows'
+import { releaseScreen } from '../shared/screenWindows'
 import { ConduitTray } from './tray'
 import { applyAppIcon, watchNewWindows } from './appIcon'
 import {
@@ -134,6 +137,11 @@ app.on('browser-window-created', (_event, window) => {
 })
 
 const chatWindows = new ChatWindowSet(createChatWindow, ids => send(IPC.chatWindowsChanged, ids))
+const screenWindows = new ScreenWindowSet(
+  createScreenWindow,
+  profiles => send(IPC.screenWindowsChanged, profiles),
+  (profile, viewerId) => void releaseScreen((method, params) => connection.rpc(method, params), profile, viewerId)
+)
 /** The dashboard the chat windows belong to: another one closes them. */
 let chatWindowsHost: string | null = null
 
@@ -161,6 +169,7 @@ const connection = new Connection({
     if (host !== chatWindowsHost) {
       chatWindowsHost = host
       chatWindows.close()
+      screenWindows.close(true)
       eventRouter.clear()
     }
   },
@@ -343,6 +352,15 @@ function registerIpc(): void {
   })
   ipcMain.on(IPC.closeChatWindows, (_event, ids: unknown) => chatWindows.close(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : undefined))
   ipcMain.handle(IPC.chatWindows, () => chatWindows.ids())
+  ipcMain.on(IPC.openScreenWindow, (_event, screen: unknown) => {
+    const request = screen as { profile?: unknown; botName?: unknown } | null
+    if (!request || typeof request.profile !== 'string' || !request.profile) return
+    screenWindows.show({ profile: request.profile, botName: typeof request.botName === 'string' && request.botName ? request.botName : request.profile })
+  })
+  ipcMain.handle(IPC.screenWindows, () => screenWindows.profiles())
+  ipcMain.on(IPC.noteScreenViewer, (_event, profile: unknown, viewerId: unknown, holds: unknown) => {
+    if (typeof profile === 'string' && profile && typeof viewerId === 'string' && viewerId) screenWindows.note(profile, viewerId, holds === true)
+  })
   ipcMain.handle(IPC.takeLinkUrl, () => {
     const url = pendingLinkUrl
     pendingLinkUrl = null

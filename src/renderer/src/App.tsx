@@ -11,7 +11,6 @@ import { HOST_NAME_MAX } from '@shared/hostNames'
 import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '@shared/ipc'
 import { BotsHome, useReplyFace, type BotAction } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
-import { BotScreen } from './components/BotScreen'
 import { ChatList, type MoveTarget } from './components/ChatList'
 import { Composer } from './components/Composer'
 import { ModelPicker } from './components/ModelPicker'
@@ -878,7 +877,14 @@ function Shell({
   }, [workSnapshot, workResolved, readResolvedWork, listRows, inBotChat, selected.profile])
   // The bot's screen (Hermes' Bot Screen), offered only where the host can have one, as the phone checks.
   const screenProfile = selected.profile ?? 'default'
-  const [screenOpen, setScreenOpen] = useState(false)
+  // It opens in a window of its own, so the chat's text and tool output stay in view (Eric, 2026-11-21).
+  const [screenWindows, setScreenWindows] = useState<string[]>([])
+  useEffect(() => {
+    const off = window.conduit.onScreenWindows(setScreenWindows)
+    void window.conduit.screenWindows().then(setScreenWindows)
+    return off
+  }, [])
+  const screenOpen = screenWindows.includes(screenProfile)
   const [screenHosts, setScreenHosts] = useState<Record<string, boolean>>({})
   useEffect(() => setScreenHosts({}), [status.url])
   useEffect(() => {
@@ -892,7 +898,6 @@ function Shell({
       live = false
     }
   }, [connected, screenProfile, screenHosts])
-  useEffect(() => setScreenOpen(false), [screenProfile])
   // The chat's artifacts beside it, after the phone's In This Chat sheet.
   const [artifactsOpen, setArtifactsOpen] = useState(false)
   // The side panel's tabs (Eric, 2026-11-20, option C, softer): the bot's Work, In This Chat and the chat's Files, where the chat has them, one open at a time.
@@ -2151,7 +2156,7 @@ function Shell({
                       aria-label={t("Bot's Screen")}
                       aria-pressed={screenOpen}
                       title={t("Bot's Screen")}
-                      onClick={() => setScreenOpen(!screenOpen)}
+                      onClick={() => window.conduit.openScreenWindow({ profile: screenProfile, botName: botTitle })}
                     >
                       <Icon name="screen" />
                     </button>
@@ -2170,7 +2175,6 @@ function Shell({
                   ) : null}
                 </div>
               </div>
-              {screenOpen ? <BotScreen profile={screenProfile} botName={botTitle} onClose={() => setScreenOpen(false)} /> : null}
               <FileLinks.Provider value={openPath}>
                 <WorkLinks.Provider value={workLinkActions}>
                   <ConnectionActionsContext.Provider value={connectionActions}>
