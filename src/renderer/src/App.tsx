@@ -950,7 +950,8 @@ function Shell({
   // Combined dashboards: the other hosts kept connected beside this one...
   const keptHosts = useKeptHosts(status.url ?? '')
   // ...their bots, on Bots Home and in the chat list's profile column (Eric, 2026-11-21: Chats held only this dashboard's).
-  const otherBots = useKeptBots(keptHosts, botsListShown || section === 'chats')
+  // Settings too: its profile dropdown lists every combined dashboard's profiles.
+  const otherBots = useKeptBots(keptHosts, botsListShown || section === 'chats' || section === 'settings')
   // ...with their pills, from their work read there (Eric, 2026-11-21: another host's "needs you" didn't show).
   const otherWork = useKeptWork(otherBots, botsListShown || section === 'chats')
   // The chat list's profile column, beside the list's own width: the list gives way to it before the chat does.
@@ -1476,6 +1477,10 @@ function Shell({
     [otherBots, status.url, orderedRoster, savedHostUrls, mixedBotOrder.order]
   )
   const tileBadge = useCallback((tile: MixedTile) => badgeFor(tile.own ? (status.url ?? '') : tile.host), [badgeFor, status.url])
+  // The profile Settings edits, resolved once so its card, Edit profile and every page below name the same one:
+  // the open chat's, matched case-insensitively, else the main profile when it's gone or hidden.
+  const settingsBot = settingsProfileTile(profileTiles ?? [], selected.profile ?? 'default')?.bot ?? null
+  const settingsProfile = settingsBot?.name ?? selected.profile ?? 'default'
   const otherWaits = useCallback((tile: MixedTile) => otherWork.get(keptWorkKey(tile.host, tile.bot.name))?.needsYou ?? 0, [otherWork])
   // A room started by dragging across dashboards brings the other's bots over your own Link to it.
   const farFor = useCallback(
@@ -2800,15 +2805,11 @@ function Shell({
               onEditHost(host)
             }}
             bots={(roster.bots ?? []).map(bot => ({ name: bot.name, title: bot.title }))}
-            profile={selected.profile ?? 'default'}
+            profile={settingsProfile}
             profileTiles={profileTiles ?? []}
             tileBadge={tileBadge}
             onPickProfile={pickSettingsProfile}
-            onEditProfile={(() => {
-              // The profile the card shows, matched as it matches it.
-              const bot = settingsProfileTile(profileTiles ?? [], selected.profile ?? 'default')?.bot
-              return connected && bot ? () => editProfile(bot) : undefined
-            })()}
+            onEditProfile={connected && settingsBot ? () => editProfile(settingsBot) : undefined}
             chatScale={chatScale}
             setChatScale={setChatScale}
             onShortcuts={() => setShortcutsOpen(true)}
