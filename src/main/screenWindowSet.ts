@@ -23,11 +23,13 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
   private readonly holding = new Set<string>()
   /** Each bot's hand back count: reopening its window or taking over again cancels one still being tried. */
   private readonly handBacks = new Map<string, number>()
+  /** Bots whose hand back is still being tried. */
+  private readonly pending = new Set<string>()
 
   constructor(
     private readonly create: (screen: ScreenWindowRequest, onClosed: () => void) => W,
     private readonly changed: (profiles: string[]) => void,
-    private readonly release: (profile: string, viewerId: string, owed: () => boolean) => void
+    private readonly release: (profile: string, viewerId: string, owed: () => boolean) => Promise<unknown> | void
   ) {}
 
   profiles(): string[] {
@@ -38,7 +40,11 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
   show(screen: Omit<ScreenWindowRequest, 'viewerId'>): void {
     const had = this.open.get(screen.profile)
     if (had) return had.focus()
-    this.cancelHandBack(screen.profile)
+    // A hand back still being tried stops, and stays owed: the new window's page settles it, or its close sends it again.
+    if (this.pending.delete(screen.profile)) {
+      this.cancelHandBack(screen.profile)
+      this.holding.add(screen.profile)
+    }
     const window = this.create({ ...screen, viewerId: this.viewers.get(screen.profile) }, () => {
       if (this.open.get(screen.profile) !== window) return
       this.open.delete(screen.profile)
@@ -54,6 +60,7 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
     this.viewers.set(profile, viewerId)
     if (holds) {
       this.cancelHandBack(profile)
+      this.pending.delete(profile)
       this.holding.add(profile)
     } else this.holding.delete(profile)
   }
@@ -64,6 +71,7 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
       this.viewers.clear()
       this.holding.clear()
       this.handBacks.clear()
+      this.pending.clear()
     }
     const windows = [...this.open]
     this.open.clear()
@@ -78,7 +86,12 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
     const viewer = this.viewers.get(profile)
     if (!this.holding.delete(profile) || !viewer) return
     const mine = this.cancelHandBack(profile)
-    this.release(profile, viewer, () => this.handBacks.get(profile) === mine)
+    const owed = () => this.handBacks.get(profile) === mine
+    this.pending.add(profile)
+    const settled = () => {
+      if (owed()) this.pending.delete(profile)
+    }
+    void Promise.resolve(this.release(profile, viewer, owed)).then(settled, settled)
   }
 
   private cancelHandBack(profile: string): number {

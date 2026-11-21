@@ -77,6 +77,33 @@ describe("bots' screens in windows of their own", () => {
     expect(owed[1]!()).toBe(false)
   })
 
+  it('a hand back cut short by a reopen is sent again when the window closes before its page attaches', () => {
+    const { set, made, released, owed } = harness()
+    set.show({ profile: 'mira', botName: 'Mira' })
+    set.note('mira', 'v1', true)
+    made[0]!.close()
+    set.show({ profile: 'mira', botName: 'Mira' })
+    expect(owed[0]!()).toBe(false)
+    made[1]!.close()
+    expect(released).toEqual([
+      ['mira', 'v1'],
+      ['mira', 'v1']
+    ])
+    expect(owed[1]!()).toBe(true)
+  })
+
+  it('a finished hand back leaves nothing owed for the next window', async () => {
+    const { set, made, released } = harness()
+    set.show({ profile: 'mira', botName: 'Mira' })
+    set.note('mira', 'v1', true)
+    made[0]!.close()
+    await Promise.resolve()
+    await Promise.resolve()
+    set.show({ profile: 'mira', botName: 'Mira' })
+    made[1]!.close()
+    expect(released).toHaveLength(1)
+  })
+
   it('another dashboard closes every window and forgets its viewers', () => {
     const { set, made, released } = harness()
     set.show({ profile: 'mira', botName: 'Mira' })

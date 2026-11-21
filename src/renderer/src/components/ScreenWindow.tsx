@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { t } from '@shared/i18n'
 import type { ConnectionStatus, ScreenWindowRequest } from '@shared/ipc'
 import { BotScreen } from './BotScreen'
-import { screenWindowHash } from '@shared/screenWindows'
+import { screenWindowHash, screenWindowRequest } from '@shared/screenWindows'
 
 /**
  * A bot's screen in a window of its own (Eric, 2026-11-21): the main
@@ -32,7 +32,7 @@ export function ScreenWindow({ screen }: { screen: ScreenWindowRequest }) {
           botName={screen.botName}
           viewerId={screen.viewerId}
           onViewer={viewerId => {
-            if (!window.location.hash.includes(encodeURIComponent(viewerId)))
+            if (screenWindowRequest(window.location.hash)?.viewerId !== viewerId)
               window.history.replaceState(null, '', screenWindowHash({ ...screen, viewerId }))
           }}
           onClose={() => window.close()}
