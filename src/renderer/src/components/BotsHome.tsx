@@ -198,11 +198,13 @@ interface Props {
   onMoveRoom?: (moved: string, target: string | null, shown: string[]) => void;
   badgeFor?: (url: string) => HostBadge | null;
   onOpenOther?: (other: OtherBot) => void;
-  /** Combined dashboards: the other hosts' group chats, badged, each room once under the host you talk in it from, opening through a switch. */
-  /** The other combined hosts' group chats Saved Dashboards puts before this host's, as each shows them. */
+  /**
+   * Combined dashboards: the other hosts' group chats, badged, each room once under the host you talk in it from,
+   * opening through a switch; the ones Saved Dashboards puts before this host and after it, as each host shows
+   * them, so a tap on one, which switches there, moves nothing.
+   */
   otherRoomsBefore?: OtherRoom[];
-  /** ...and after it, so a tap on one, which switches there, moves nothing. */
-  otherRooms?: OtherRoom[];
+  otherRoomsAfter?: OtherRoom[];
   /** The other hosts' bots' work, by keptWorkKey, for their pills. */
   otherWork?: ReadonlyMap<string, BotWork>;
   onOpenOtherRoom?: (other: OtherRoom) => void;
@@ -278,7 +280,7 @@ export function BotsHome({
   roomLooks,
   otherBots = [],
   otherRoomsBefore = [],
-  otherRooms: otherRoomsAfter = [],
+  otherRoomsAfter = [],
   otherWork,
   onOpenOtherRoom,
   badgeFor,

@@ -450,6 +450,22 @@ describe('group chats in a combined group', () => {
     const onVps = combinedRooms(vps, [mac, vps], vpsRooms, [], new Map([[mac, { rooms: macRooms, copies: [] }]]), new Set(), order)
     expect(names(onMac, ['trip', 'plans'])).toEqual(['trip', 'plans', 'standup', 'retro'])
     expect(names(onVps, ['standup', 'retro'])).toEqual(['trip', 'plans', 'standup', 'retro'])
+    // Three hosts, this one in the middle: the first's before it, the last's after it.
+    const nas = 'https://nas.example'
+    const onMacMiddle = combinedRooms(
+      mac,
+      [nas, mac, vps],
+      macRooms,
+      [],
+      new Map([
+        [nas, { rooms: [room('garden', ['zhongli'])], copies: [] }],
+        [vps, { rooms: vpsRooms, copies: [] }]
+      ]),
+      new Set(),
+      order
+    )
+    expect(names(onMacMiddle, ['trip', 'plans'])).toEqual(['garden', 'trip', 'plans', 'standup', 'retro'])
+    expect(onMacMiddle.before.map(o => o.host)).toEqual([nas])
   })
 
   it('opens another host\'s group chat once the new host has read it', () => {
