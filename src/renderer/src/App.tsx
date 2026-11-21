@@ -30,6 +30,7 @@ import { setTurnSurfaceHost } from './state/turnSurface'
 import { useDashboardProfiles } from './state/useDashboardProfiles'
 import { setDesktopCardsHost } from './state/desktopCards'
 import { setKanbanHost } from './state/useKanban'
+import { setPictureHost } from './state/gatewayPictures'
 import { LIST_COLUMN, PANEL_COLUMN, besideChatFits, readListHidden, readWidth, shownListWidth, shownPanelWidth, writeListHidden, writeWidth } from './state/columnWidths'
 import { BesideChatPane, type BesideChat } from './components/BesideChat'
 import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
@@ -242,6 +243,7 @@ export function App() {
   setTurnSurfaceHost(url ?? '')
   setDesktopCardsHost(url ?? '')
   setKanbanHost(url ?? '')
+  setPictureHost(url ?? '')
   const phase = status?.phase
   // A host Hermes signed out opens on Repair; one that opens needs none.
   useEffect(() => {

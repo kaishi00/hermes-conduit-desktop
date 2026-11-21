@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { keptPicture, readGatewayPicture } from '../state/gatewayPictures'
+import { keptPicture, pictureHost, readGatewayPicture } from '../state/gatewayPictures'
 import { t } from '@shared/i18n'
 import { pictureFileName, saveFromUrl } from '../state/saveMedia'
 
@@ -60,6 +60,7 @@ export function PictureImage({ src, name, className = 'sent-picture' }: { src: s
 /** A picture on the Hermes host, read through the dashboard; `fallback` while it loads or if it won't. */
 export function GatewayPicture({ path, name, fallback, className }: { path: string; name: string; fallback: ReactNode; className?: string }) {
   const profile = useContext(PictureProfile)
+  const host = pictureHost()
   const [src, setSrc] = useState<string | null | undefined>(() => keptPicture(path, profile))
   useEffect(() => {
     let live = true
@@ -75,6 +76,6 @@ export function GatewayPicture({ path, name, fallback, className }: { path: stri
     return () => {
       live = false
     }
-  }, [path, profile])
+  }, [path, profile, host])
   return src ? <PictureImage src={src} name={name} className={className} /> : <>{fallback}</>
 }
