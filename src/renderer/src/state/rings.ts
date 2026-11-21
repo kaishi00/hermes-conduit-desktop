@@ -183,19 +183,23 @@ export function useRings(connected: boolean, profiles: readonly string[]) {
   const after = useRef(new Map<string, number>())
   const served = useRef(new Map<string, boolean>())
   const seen = useRef(new Set<string>())
+  // Moves on at each start over, so a poll asked before it can't write the old host's state back (desktop#216).
+  const generation = useRef(0)
   const profileKey = profiles.join('\n')
 
   const dismiss = useCallback((id: string) => setRinging(current => current.filter(ring => ring.id !== id)), [])
 
   const read = useCallback(async () => {
     const names = profileKey ? profileKey.split('\n') : ['']
+    const asked = generation.current
+    const current = () => asked === generation.current
     await Promise.all(
       names.map(async name => {
         const profile = name || undefined
         if (!served.current.has(name)) {
           const status = await askPluginStatus(() => gateway.http('GET', withProfile(STATUS_PATH, profile), undefined, 12_000))
           // Only an answer is kept: a route that isn't there yet (a plugin installed or reloading) is asked again next poll.
-          if (status?.state !== 'reported') return
+          if (!current() || status?.state !== 'reported') return
           served.current.set(name, serves(status, [RINGS_CAPABILITY]))
         }
         if (!served.current.get(name)) return
@@ -209,6 +213,7 @@ export function useRings(connected: boolean, profiles: readonly string[]) {
         } catch {
           return
         }
+        if (!current()) return
         if (answer.now !== null) after.current.set(name, answer.now)
         const fresh = since === undefined ? freshRings(answer.rings, answer.now) : answer.rings
         const { added, settled } = ringChanges(fresh, seen.current)
@@ -230,6 +235,7 @@ export function useRings(connected: boolean, profiles: readonly string[]) {
   // A host change or a dropped connection starts over: the next host's clock and calls are its own.
   useEffect(() => {
     if (connected) return
+    generation.current += 1
     startOver({ after: after.current, served: served.current, seen: seen.current })
     setRinging([])
   }, [connected])

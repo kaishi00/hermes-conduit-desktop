@@ -4,7 +4,8 @@
  * without /api/fs/download, and the download written into place whole.
  */
 import { createWriteStream } from 'node:fs'
-import { rename, rm } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { open, rename, rm } from 'node:fs/promises'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream } from 'node:stream/web'
@@ -37,10 +38,13 @@ export function dataUrlBytes(value: unknown): Buffer | null {
  * it, renamed into place only once every byte is in. A transfer cut short, or
  * one that sends nothing for `idleMs`, removes the part and throws, so the
  * chosen path never holds a truncated file and a file already there is left
- * as it was (desktop#206). `abort` stops the request that feeds `body`.
+ * as it was (desktop#206). Each save has its own part file, so two saves to
+ * the same path never write into one, and it's flushed to disk before the
+ * rename, so a crash can't leave an empty file in its place (desktop#216).
+ * `abort` stops the request that feeds `body`.
  */
 export async function streamToFile(body: ReadableStream, destination: string, abort?: () => void, idleMs = DOWNLOAD_IDLE_MS): Promise<void> {
-  const part = `${destination}.conduit-part`
+  const part = `${destination}.${process.pid}-${randomBytes(4).toString('hex')}.conduit-part`
   let timer: ReturnType<typeof setTimeout> | undefined
   const stalled = new Transform({
     transform(chunk, _encoding, done) {
@@ -58,6 +62,12 @@ export async function streamToFile(body: ReadableStream, destination: string, ab
   arm()
   try {
     await pipeline(Readable.fromWeb(body), stalled, createWriteStream(part))
+    const written = await open(part, 'r+')
+    try {
+      await written.sync()
+    } finally {
+      await written.close()
+    }
     await rename(part, destination)
   } catch (error) {
     await rm(part, { force: true }).catch(() => undefined)

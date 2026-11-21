@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EventRouter } from '../src/main/eventRouting'
+import { CLAIMS_PER_WINDOW, EventRouter } from '../src/main/eventRouting'
 
 describe('which windows a gateway event goes to', () => {
   it('a window gets the sessions it opened, the ones nobody opened, and those with no session', () => {
@@ -33,5 +33,18 @@ describe('which windows a gateway event goes to', () => {
     router.noteOpened(1, 'session.create', {}, { session_id: 'z' })
     router.clear()
     expect(router.wants(2, 'z')).toBe(true)
+  })
+
+  it("keeps only a window's last few sessions (desktop#218)", () => {
+    const router = new EventRouter()
+    router.noteOpened(1, 'session.resume', { session_id: 'first' }, {})
+    for (let i = 0; i < CLAIMS_PER_WINDOW - 1; i++) router.noteOpened(1, 'session.resume', { session_id: `s${i}` }, {})
+    // Opened again: it's one of the newest now.
+    router.noteOpened(1, 'session.resume', { session_id: 'first' }, {})
+    router.noteOpened(1, 'session.resume', { session_id: 'newest' }, {})
+    expect(router.wants(2, 'first')).toBe(false)
+    expect(router.wants(2, 'newest')).toBe(false)
+    expect(router.wants(2, 's0')).toBe(true)
+    expect(router.wants(2, 's1')).toBe(false)
   })
 })

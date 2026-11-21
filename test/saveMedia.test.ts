@@ -35,6 +35,17 @@ describe('saving pictures, files and audio to this computer', () => {
     expect(await readFile(whole, 'utf8')).toBe('abcd')
   })
 
+  it('gives two saves to the same path a part file each (desktop#216)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'conduit-save-'))
+    const target = join(dir, 'same.txt')
+    const big = (letter: string) => Array.from({ length: 64 }, () => letter.repeat(4096))
+    await Promise.all([streamToFile(bytesThen(big('a')), target), streamToFile(bytesThen(big('b')), target)])
+    const text = await readFile(target, 'utf8')
+    expect(text.length).toBe(64 * 4096)
+    expect(new Set(text).size).toBe(1)
+    expect(await readdir(dir)).toEqual(['same.txt'])
+  })
+
   it('gives up on a download that stops sending, and stops its request', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'conduit-save-'))
     const target = join(dir, 'stalled.bin')

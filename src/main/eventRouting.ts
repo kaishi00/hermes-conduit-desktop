@@ -7,8 +7,14 @@
  * session that only an event names (a compaction's new one) still reaches
  * everyone. A window opens a session through its own `session.resume` or
  * `session.create`, which main notes before the answer goes back, so no
- * event of it can slip past between the two.
+ * event of it can slip past between the two. A window keeps only its last
+ * few sessions' claims (CLAIMS_PER_WINDOW ids), so the main window of a tray
+ * app left open for days doesn't hold every chat it ever opened: a session it
+ * moved off long ago goes to every window again, as one nobody opened does
+ * (desktop#218).
  */
+export const CLAIMS_PER_WINDOW = 24
+
 export const SESSION_OPENING_METHODS: ReadonlySet<string> = new Set(['session.resume', 'session.create'])
 
 export class EventRouter {
@@ -24,8 +30,11 @@ export class EventRouter {
     for (const id of ids) {
       if (typeof id !== 'string' || !id) continue
       if (!set) this.opened.set(windowId, (set = new Set()))
+      // Newest last: an id opened again moves to the end, and the oldest go first.
+      set.delete(id)
       set.add(id)
     }
+    while (set && set.size > CLAIMS_PER_WINDOW) set.delete(set.values().next().value!)
   }
 
   /** Whether a window that isn't the main one gets an event of this session. */
