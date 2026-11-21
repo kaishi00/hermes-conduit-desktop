@@ -7,7 +7,7 @@
  *
  * Each kind may carry the user's own instructions (hermes-conduit#2970), kept
  * on this computer too, sent only with that kind's questions and only to a
- * plugin that reports `predict-custom-instructions` (0.189+).
+ * plugin that reports `predict-custom-instructions` (0.190+).
  */
 import type { TranscriptItem } from './transcript'
 
@@ -61,7 +61,7 @@ export const PREDICTIVE_EVENT = 'conduit:predictive'
 // The user's instructions for each kind of guess (hermes-conduit#2970).
 export type PredictKind = 'replies' | 'draft' | 'turn'
 export const INSTRUCTIONS_CAPABILITY = 'predict-custom-instructions'
-export const INSTRUCTIONS_MINIMUM_PLUGIN = '0.189'
+export const INSTRUCTIONS_MINIMUM_PLUGIN = '0.190'
 /** The plugin's limit, in code points as Python counts them. */
 export const MAX_INSTRUCTIONS_CHARS = 1000
 const INSTRUCTIONS_KEYS: Record<PredictKind, string> = {
