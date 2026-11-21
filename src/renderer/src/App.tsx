@@ -13,6 +13,7 @@ import { BotsHome, useReplyFace, type BotAction } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
 import { ChatList, type MoveTarget } from './components/ChatList'
 import { PROFILE_COLUMN_WIDTH } from './components/ProfileColumn'
+import { SettingsProfileCard } from './components/SettingsProfile'
 import { Composer } from './components/Composer'
 import { ModelPicker } from './components/ModelPicker'
 import { ContextPanel } from './components/ContextPanel'
@@ -136,6 +137,7 @@ import {
   openAfterSwitch,
   openBotAfterSwitch,
   showProfileAfterSwitch,
+  type HostBadge,
   openRoomAfterSwitch,
   openChatAfterSwitch,
   openPageAfterSwitch,
@@ -1696,14 +1698,32 @@ function Shell({
     showProfileAfterSwitch({ host: tile.host, bot: tile.bot })
     void window.conduit.switchHost(tile.host)
   }, [])
+  // Settings' profile dropdown: this dashboard's profile is picked as the Chats list's faces pick it, staying
+  // in Settings; another dashboard's switches there and comes back to Settings on that profile.
+  const pickSettingsProfile = useCallback(
+    async (tile: MixedTile) => {
+      if (tile.own) {
+        chooseProfile(tile.bot.name)
+        setSection('settings')
+        return
+      }
+      if (!(await switchEndingCall(hostName(tile.host)))) return
+      reopenSettings()
+      showProfileAfterSwitch({ host: tile.host, bot: tile.bot })
+      void window.conduit.switchHost(tile.host)
+    },
+    [chooseProfile]
+  )
   const listReady = !!listedRows
   useEffect(() => {
     if (!connected || !listReady) return
     const bot = takeProfileAfterSwitch(statusUrl, roster.bots)
     if (!bot) return
-    setSection('chats')
+    // Picked in Settings' dropdown: Settings stays open on it.
+    const stay = section === 'settings'
     chooseProfile(bot.name)
-  }, [connected, listReady, statusUrl, roster.bots, chooseProfile])
+    setSection(stay ? 'settings' : 'chats')
+  }, [connected, listReady, statusUrl, roster.bots, chooseProfile, section])
   const openOtherRoom = useCallback(async (other: OtherRoom) => {
     if (!(await switchEndingCall(hostName(other.host)))) return
     openRoomAfterSwitch(other)
@@ -2781,6 +2801,9 @@ function Shell({
             }}
             bots={(roster.bots ?? []).map(bot => ({ name: bot.name, title: bot.title }))}
             profile={selected.profile ?? 'default'}
+            profileTiles={profileTiles ?? []}
+            tileBadge={tileBadge}
+            onPickProfile={pickSettingsProfile}
             onEditProfile={
               connected
                 ? () => {
@@ -2889,6 +2912,9 @@ function Settings({
   onEditHost,
   bots,
   profile,
+  profileTiles,
+  tileBadge,
+  onPickProfile,
   onEditProfile,
   chatScale,
   setChatScale,
@@ -2907,6 +2933,10 @@ function Settings({
   onEditHost: (host: HostSummary) => void
   bots: { name: string; title: string }[]
   profile: string
+  /** Every profile Settings can switch to, every combined dashboard's included, in the Chats list's order. */
+  profileTiles: readonly MixedTile[]
+  tileBadge: (tile: MixedTile) => HostBadge | null
+  onPickProfile: (tile: MixedTile) => void
   /** Settings > Edit profile: the profile in use, in Edit Bot. */
   onEditProfile?: () => void
   chatScale: number
@@ -3132,6 +3162,7 @@ function Settings({
   return (
     <main className="settings">
       <h1>{t('Settings')}</h1>
+      <SettingsProfileCard tiles={profileTiles} profile={profile} badgeFor={tileBadge} onPick={onPickProfile} onEditProfile={onEditProfile} />
       <section className="settings-group">
         <h2>{t('Connection')}</h2>
         <dl className="settings-card">
@@ -3209,13 +3240,6 @@ function Settings({
             {status.username ? ` (${status.username})` : ''}
           </dd>
           {status.url ? <HostActions host={status.url} connected={status.phase === 'open'} /> : null}
-          <dt>{t('Profile')}</dt>
-          <dd>
-            <span>{bots.find(bot => bot.name === profile)?.title ?? profile}</span>{' '}
-            <button className="link" disabled={!onEditProfile} onClick={onEditProfile}>
-              {t('Edit profile')}
-            </button>
-          </dd>
         </dl>
       </section>
       <section className="settings-group">

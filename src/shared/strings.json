@@ -41654,6 +41654,21 @@
     "zh-Hans": "编辑配置文件",
     "zh-Hant": "編輯設定檔"
   },
+  "The Hermes and Voice settings below are this profile’s. Picking another profile switches to it.": {
+    "de": "Die Hermes- und Spracheinstellungen unten gehören zu diesem Profil. Wählst du ein anderes Profil, wechselst du dorthin.",
+    "es": "Los ajustes de Hermes y Voz de abajo son de este perfil. Al elegir otro perfil, cambias a él.",
+    "fr": "Les réglages Hermes et Voix ci-dessous sont ceux de ce profil. Choisir un autre profil bascule vers celui-ci.",
+    "id": "Pengaturan Hermes dan Suara di bawah milik profil ini. Memilih profil lain akan beralih ke profil itu.",
+    "it": "Le impostazioni di Hermes e Voce qui sotto sono di questo profilo. Scegliendo un altro profilo passi a quello.",
+    "ja": "下の Hermes と音声の設定はこのプロファイルのものです。別のプロファイルを選ぶとそちらに切り替わります。",
+    "ko": "아래 Hermes 및 음성 설정은 이 프로필의 설정입니다. 다른 프로필을 고르면 그 프로필로 전환됩니다.",
+    "pl": "Poniższe ustawienia Hermesa i głosu dotyczą tego profilu. Wybranie innego profilu przełącza na niego.",
+    "pt-BR": "Os ajustes de Hermes e Voz abaixo são deste perfil. Escolher outro perfil muda para ele.",
+    "ru": "Настройки Hermes и голоса ниже относятся к этому профилю. Выбор другого профиля переключает на него.",
+    "tr": "Aşağıdaki Hermes ve Ses ayarları bu profile ait. Başka bir profil seçmek ona geçer.",
+    "zh-Hans": "下面的 Hermes 和语音设置属于此档案。选择其他档案即会切换过去。",
+    "zh-Hant": "下方的 Hermes 與語音設定屬於此設定檔。選擇其他設定檔即會切換過去。"
+  },
   "Wake phrase": {
     "de": "Aktivierungsphrase",
     "es": "Frase de activación",
