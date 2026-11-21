@@ -27,6 +27,7 @@ import {
 } from '../state/plugin'
 import { Icon } from './icons'
 import { useMouseBack } from '../state/mouseBack'
+import { dashboardHost } from '../state/dashboardProfile'
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const httpCode = (e: unknown) => (e as { code?: unknown })?.code
@@ -34,6 +35,8 @@ const httpCode = (e: unknown) => (e as { code?: unknown })?.code
 /** The update outlives the page: leaving Settings and coming back shows where it stands. */
 let update: UpdateState = { phase: 'idle' }
 let startedAt = 0
+/** The dashboard the update ran on: a held scan's Update Anyway is only ever for it. */
+let updateHost = ''
 let running = false
 const listeners = new Set<() => void>()
 const setUpdate = (next: UpdateState) => {
@@ -60,6 +63,7 @@ async function runUpdate(onDone: () => void, acceptScan = false) {
   if (running) return
   running = true
   startedAt = Date.now()
+  updateHost = dashboardHost()
   setUpdate({ phase: 'updating', step: 'downloading' })
   try {
     let job: Record<string, unknown> | null = null
@@ -194,6 +198,8 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
     // Only the host's answer clears it; a read that fails leaves it as it was.
     const held = update
     if (held.phase !== 'scanHeld') return
+    // Another dashboard's held scan clears at once, whether or not this one answers.
+    if (updateHost !== dashboardHost()) return setUpdate({ phase: 'idle' })
     void gateway
       .http('GET', SELF_UPDATE_PATH)
       .then(r => {
