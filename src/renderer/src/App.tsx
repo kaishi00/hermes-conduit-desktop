@@ -2964,7 +2964,7 @@ function Settings({
                       className="link"
                       onClick={async () => {
                         const name = await askText(
-                          `${t('Rename Dashboard')}\n\n${t("Its badge shows the name's first letter. Leave it empty to go back to the name Conduit picked.")}`,
+                          `${t('Rename Dashboard')}\n\n${t("Its badge shows the name's first letter. Leave it empty to go back to the automatic name.")}`,
                           host.named ? hostName(host.url) : '',
                           { confirm: t('Save'), maxLength: HOST_NAME_MAX }
                         )

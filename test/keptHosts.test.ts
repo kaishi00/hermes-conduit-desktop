@@ -280,6 +280,8 @@ describe('combined dashboards in the window', () => {
     ]
     expect(lan.map(h => hostBadge(lan, h.url, name)?.letter)).toEqual(['1', '2', 'S'])
     expect(badgeLetters(['Furina', 'conduit'])).toEqual(['F', 'C'])
+    // A place number that would match another's letter: every badge its place.
+    expect(badgeLetters(['192.168.1.5', '192.168.1.6', '2nd home'])).toEqual(['1', '2', '3'])
   })
 
   it('gives a seventh member a hue of its own', () => {
