@@ -20,6 +20,9 @@ import type { RoomInvite } from './roomInvites'
 import { everyWhileVisible } from './visibility'
 
 const client = roomCopiesClient((method, path, body, timeoutMs) => gateway.http(method, path, body, timeoutMs))
+/** One empty list, so what's derived from an unserved host's copies keeps its identity between renders. */
+const NO_COPIES: RoomCopy[] = []
+const NO_APPROVALS: CopyApproval[] = []
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /**
@@ -139,12 +142,12 @@ export function useRoomCopies(connected: boolean, host: string, capabilities: re
     canPost,
     canLeave,
     leave,
-    copies: served && copies ? copies : [],
+    copies: served && copies ? copies : NO_COPIES,
     /** The list has been read here (or isn't served, so there's none to read). */
     loaded: !served || copies !== null,
     refresh,
     remove,
-    approvals: served && canAnswer ? shownApprovals : [],
+    approvals: served && canAnswer ? shownApprovals : NO_APPROVALS,
     answers,
     answer
   }

@@ -422,6 +422,10 @@ describe('group chats in a combined group', () => {
     openRoomAfterSwitch({ host: mac, kind: 'copy', copy: copy('zoo', ['sam']) }, 1_000)
     expect(takeRoomAfterSwitch(mac, [], [], 1_000 + ROOM_AFTER_SWITCH_MS + 1)).toBeNull()
     expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])], 1_000 + ROOM_AFTER_SWITCH_MS + 2)).toBeNull()
+    // A room from a switch that never settled doesn't open on a later visit.
+    openRoomAfterSwitch({ host: mac, kind: 'room', room: room('trip', ['raiden']) }, 1_000)
+    expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null, 1_000 + ROOM_AFTER_SWITCH_MS + 1)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null, 1_000 + ROOM_AFTER_SWITCH_MS + 2)).toBeNull()
   })
 })
 

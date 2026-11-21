@@ -111,11 +111,14 @@ export function RoomFaces({
   bots,
   size,
   looks,
+  host,
 }: {
   room: Pick<Room, "members">;
   bots: Bot[];
   size: number;
   looks?: RoomLooks;
+  /** Another combined host the bots are on, whose pictures they show. */
+  host?: string;
 }) {
   const shown = room.members
     .flatMap((m): ({ key: string; bot: Bot } | { key: string; look: RoomLook; name: string })[] => {
@@ -134,7 +137,7 @@ export function RoomFaces({
           key={face.key}
           style={{ marginLeft: i ? -size * 0.38 : 0, zIndex: shown.length - i }}
         >
-          {"bot" in face ? <BotAvatar bot={face.bot} size={size} /> : <LookFace look={face.look} name={face.name} size={size} />}
+          {"bot" in face ? <BotAvatar bot={face.bot} size={size} host={host} /> : <LookFace look={face.look} name={face.name} size={size} />}
         </span>
       ))}
     </span>
@@ -723,9 +726,11 @@ export function BotsHome({
       <Icon name={name} />
     </span>
   );
-  // Other hosts' group chats show though this host's rooms aren't read (or can't be).
+  // Other hosts' group chats, and this host's copies (one may wait for your
+  // approval), show though this host's rooms aren't read (or can't be).
   const showRooms =
     otherRooms.length > 0 ||
+    (copies?.length ?? 0) > 0 ||
     (!!rooms &&
       (rooms.length > 0 || canDrag || !!onNewGroup || (invites?.length ?? 0) > 0 || (copies?.length ?? 0) > 0 || (drafts?.length ?? 0) > 0));
   return (
@@ -853,7 +858,7 @@ export function BotsHome({
               return roomRow(
                 `${other.host}\u0000${other.kind === "room" ? other.room.roomId : other.copy.id}`,
                 <>
-                  <RoomFaces room={room} bots={otherBots.filter((o) => o.host === other.host).map((o) => o.bot)} size={22} />
+                  <RoomFaces room={room} bots={otherBots.filter((o) => o.host === other.host).map((o) => o.bot)} size={22} host={other.host} />
                   {badge ? <span className="bot-tile-badge">{<HostBadgeMark badge={badge} />}</span> : null}
                 </>,
                 room.name,

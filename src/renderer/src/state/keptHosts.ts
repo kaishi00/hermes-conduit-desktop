@@ -412,7 +412,7 @@ export function combinedRooms(
   return { copies, others }
 }
 
-/** How long a copy opened on another host waits for the new host's copies to list it. */
+/** How long a group chat opened on another host waits for the new host to list it. */
 export const ROOM_AFTER_SWITCH_MS = 30_000
 
 /** A group chat opened on another host: the new host's window opens it once its rooms or copies are read. */
@@ -424,9 +424,10 @@ export function openRoomAfterSwitch(other: OtherRoom, now = Date.now()): void {
 
 /**
  * The room or copy to open here, once this host's list holds it; it waits
- * while the list isn't read. A copy waits for a list that holds it (its
- * plugin's routes are read before its copies, so an early list is empty), up
- * to `ROOM_AFTER_SWITCH_MS`.
+ * while the list isn't read, and a copy for a list that holds it (its
+ * plugin's routes are read before its copies, so an early list is empty),
+ * both up to `ROOM_AFTER_SWITCH_MS`, so a switch that never settles doesn't
+ * open the room on a later visit.
  */
 export function takeRoomAfterSwitch(
   host: string,
@@ -436,15 +437,15 @@ export function takeRoomAfterSwitch(
 ): { room: Room } | { copy: RoomCopy } | null {
   if (!pendingRoom || pendingRoom.host !== host) return null
   const { kind, id, at } = pendingRoom
+  if (now - at > ROOM_AFTER_SWITCH_MS) {
+    pendingRoom = null
+    return null
+  }
   if (kind === 'room') {
     if (!rooms) return null
     pendingRoom = null
     const room = rooms.find(r => r.roomId === id)
     return room ? { room } : null
-  }
-  if (now - at > ROOM_AFTER_SWITCH_MS) {
-    pendingRoom = null
-    return null
   }
   const copy = copies?.find(c => c.id === id)
   if (!copy) return null
