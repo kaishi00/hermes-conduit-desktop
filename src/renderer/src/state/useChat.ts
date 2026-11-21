@@ -55,6 +55,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
+import { isResumeTooLong, longChatItems, newestRows } from './longChat'
 
 type Action =
   | { type: 'reset'; state: TranscriptState }
@@ -83,6 +84,39 @@ async function loadBoards(state: TranscriptState, storedId: string, profile: str
   } catch {
     // The rows stay as steps.
   }
+}
+
+/**
+ * A chat's resume. One Hermes refuses to resume whole (past
+ * `sessions.max_resume_messages`) resumes compact, which still takes
+ * messages, and brings its newest stored rows; without them the refusal
+ * stands, since it says what to do.
+ */
+async function resumeChat(
+  params: Record<string, unknown>,
+  storedId: string,
+  profile: string | undefined
+): Promise<{ result: ResumeResult; rows: HistoryRow[] | null }> {
+  try {
+    return { result: await gateway.rpc<ResumeResult>('session.resume', params), rows: null }
+  } catch (e) {
+    if (!isResumeTooLong(e)) throw e
+    const result = await gateway.rpc<ResumeResult>('session.resume', { ...params, omit_messages: true })
+    const rows = await newestRows((method, path) => gateway.http(method, path), result.stored_session_id ?? storedId, profile).catch(() => {
+      throw e
+    })
+    return { result, rows }
+  }
+}
+
+/** The transcript a resume draws: its rows, or a too-long chat's newest stored rows with their tool details. */
+function resumedTranscript(result: ResumeResult, rows: HistoryRow[] | null): TranscriptState {
+  const state: TranscriptState = {
+    items: rows ? longChatItems(rows) : fromHistory(result.messages ?? []),
+    running: result.running === true,
+    plan: parsePlan(result.todo_state)
+  }
+  return rows ? attachBoards(state, toolAnswers({ messages: rows }), toolArgs({ messages: rows })) : state
 }
 
 function reducer(state: TranscriptState, action: Action): TranscriptState {
@@ -296,9 +330,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (profile) params.profile = profile
     // The transcript without every stored picture's bytes; the session authority refuses the flag.
     if (!sessionAuthority) params.inline_images = false
-    gateway
-      .rpc<ResumeResult>('session.resume', params)
-      .then(result => {
+    resumeChat(params, storedId, profile)
+      .then(({ result, rows }) => {
         if (ticket !== request.current) return
         liveId.current = result.session_id
         setChat({
@@ -307,14 +340,14 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           title: result.info?.title,
           ...chatSettings(result.info)
         })
-        let state: TranscriptState = { items: fromHistory(result.messages ?? []), running: result.running === true, plan: parsePlan(result.todo_state) }
+        let state = resumedTranscript(result, rows)
         if (result.running && result.inflight?.assistant) {
           state = applyEvent(state, { type: 'message.delta', payload: { text: result.inflight.assistant } })
         }
         state = withPendingConnection(state, result)
         dispatch({ type: 'reset', state })
         setQueue(queueFrom(result.pending) ?? [])
-        void loadBoards(state, result.stored_session_id ?? storedId, profile, () => ticket === request.current, dispatch)
+        if (!rows) void loadBoards(state, result.stored_session_id ?? storedId, profile, () => ticket === request.current, dispatch)
         // How full the window is, before the first reply ticks it.
         gateway
           .rpc('session.usage', { session_id: result.session_id })
@@ -403,17 +436,14 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (profile) params.profile = profile
     if (!sessionAuthority) params.inline_images = false
     try {
-      const result = await gateway.rpc<ResumeResult>('session.resume', params)
+      const { result, rows } = await resumeChat(params, stored, profile)
       if (ticket !== request.current) return
       liveId.current = result.session_id
       setChat(c => ({ ...c, liveId: result.session_id, title: result.info?.title ?? c.title }))
-      const state = withPendingConnection(
-        { items: fromHistory(result.messages ?? []), running: result.running === true, plan: parsePlan(result.todo_state) },
-        result
-      )
+      const state = withPendingConnection(resumedTranscript(result, rows), result)
       dispatch({ type: 'reset', state })
       setQueue(queueFrom(result.pending) ?? [])
-      void loadBoards(state, result.stored_session_id ?? stored, profile, () => ticket === request.current, dispatch)
+      if (!rows) void loadBoards(state, result.stored_session_id ?? stored, profile, () => ticket === request.current, dispatch)
     } catch {
       // The chat as drawn stays; the next open reads it.
     }
