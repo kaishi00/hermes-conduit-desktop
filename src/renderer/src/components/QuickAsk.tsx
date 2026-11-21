@@ -2,6 +2,7 @@ import { useDashboardProfiles } from '../state/useDashboardProfiles'
 import { useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus } from '@shared/ipc'
 import { useChat } from '../state/useChat'
+import { useTranscript } from '../state/transcriptStore'
 import { setTurnSurfaceHost } from '../state/turnSurface'
 import { setPictureHost } from '../state/gatewayPictures'
 import { useRequests } from '../state/useNeedsYou'
@@ -57,7 +58,8 @@ function QuickChat({ status, onNew }: { status: ConnectionStatus; onNew: () => v
   // Pictures are kept per dashboard here too: this window outlives a switch (desktop#222).
   setPictureHost(status.url ?? '')
   useDashboardProfiles(status.phase, status.url)
-  const { transcript, chat, loading, error, send, stop, command } = useChat(null, undefined, status.sessionAuthority === true, connected)
+  const { transcriptStore, chat, loading, error, send, stop, command } = useChat(null, undefined, status.sessionAuthority === true, connected)
+  const transcript = useTranscript(transcriptStore)
   const requests = useRequests()
   const openRequests = requests.filter(r => r.sessionId && r.sessionId === chat.liveId)
   const [shown, setShown] = useState(0)

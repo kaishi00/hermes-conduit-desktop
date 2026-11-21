@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { useChat } from '../state/useChat'
+import { useTranscript } from '../state/transcriptStore'
 import type { ChatDisplay } from '../state/display'
 import { Transcript } from './Transcript'
 import { Icon } from './icons'
@@ -50,7 +51,8 @@ export function BesideChatPane({
   /** The pane's Open in New Window, where there's room for another window. */
   onOpenInWindow?: () => void
 }) {
-  const { transcript, chat: open, loading, error, send } = useChat(chat.id, chat.profile, sessionAuthority, connected, false, undefined, host)
+  const { transcriptStore, chat: open, loading, error, send } = useChat(chat.id, chat.profile, sessionAuthority, connected, false, undefined, host)
+  const transcript = useTranscript(transcriptStore)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const box = useRef<HTMLTextAreaElement>(null)

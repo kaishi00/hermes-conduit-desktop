@@ -22,7 +22,8 @@ import { chatWindowTitle } from '@shared/chatWindows'
 import { Composer } from './Composer'
 import { ModelPicker } from './ModelPicker'
 import { ContextPanel } from './ContextPanel'
-import { Transcript, prefillRequest } from './Transcript'
+import { LiveTranscript, prefillRequest } from './Transcript'
+import { useTranscriptValue } from '../state/transcriptStore'
 import type { QuoteRequest } from '../state/quote'
 import { PlanDock } from './PlanDock'
 import { AgentsDock } from './AgentsDock'
@@ -74,7 +75,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const face = useReplyFace(bot)
   const botTitle = bot?.title ?? request.author ?? 'Hermes'
   const {
-    transcript,
+    transcriptStore,
     chat,
     loading,
     error,
@@ -99,6 +100,9 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     resendLost,
     react
   } = useChat(request.id, profile, status.sessionAuthority === true, connected, botChat, undefined, host)
+  // The transcript is drawn by LiveTranscript, so a streaming reply runs that, not this window, once a frame (desktop#212).
+  const running = useTranscriptValue(transcriptStore, state => state.running)
+  const plan = useTranscriptValue(transcriptStore, state => state.plan)
 
   // A Bot Chat goes by its bot's name: Hermes titles every one "Bot Chat".
   const title = botChat ? botTitle : cleanTitle(chat.title || request.title || '') || t('Chat')
@@ -109,8 +113,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const requests = useRequests()
   const openRequests = useMemo(() => requests.filter(r => r.sessionId && r.sessionId === chat.liveId), [requests, chat.liveId])
   const commands = useCommands(profile, connected)
-  const delegates = useAgents(chat.liveId, connected, transcript.running)
-  const predictions = usePredictions(transcript, connected ? (chat.liveId ?? undefined) : undefined)
+  const delegates = useAgents(chat.liveId, connected, running)
+  const predictions = usePredictions(transcriptStore, connected ? (chat.liveId ?? undefined) : undefined)
   const mentionBots = useMemo(() => mentionCandidates(roster.bots ?? [], '', profile ?? 'default'), [roster.bots, profile])
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
@@ -125,10 +129,10 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const [turnsDone, setTurnsDone] = useState(0)
   const wasRunning = useRef(false)
   useEffect(() => {
-    if (wasRunning.current && !transcript.running) setTurnsDone(n => n + 1)
-    wasRunning.current = transcript.running
-  }, [transcript.running])
-  const outputs = useMemo(() => transcript.items.filter(item => item.kind === 'output').length, [transcript.items])
+    if (wasRunning.current && !running) setTurnsDone(n => n + 1)
+    wasRunning.current = running
+  }, [running])
+  const outputs = useTranscriptValue(transcriptStore, state => state.items.filter(item => item.kind === 'output').length)
 
   /**
    * This window's own notifications: a reply finished or a question waiting
@@ -205,7 +209,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           <div className="chat-titles">
             <div className="chat-title-line">
               <div className="chat-title">{title}</div>
-              {transcript.running ? <span className="beside-working">{t('Working…')}</span> : null}
+              {running ? <span className="beside-working">{t('Working…')}</span> : null}
             </div>
             {botChat ? null : <div className="chat-window-bot">{botTitle}</div>}
           </div>
@@ -216,8 +220,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           </div>
         </div>
         <ConnectionActionsContext.Provider value={connectionActions}>
-          <Transcript
-            state={transcript}
+          <LiveTranscript
+            store={transcriptStore}
             loading={loading}
             error={error}
             requests={openRequests}
@@ -235,7 +239,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           <ContextPanel
             chat={chat}
             profile={profile}
-            running={transcript.running}
+            running={running}
             onClose={() => setContextOpen(false)}
             onCompress={() => void onSend('/compress')}
           />
@@ -254,7 +258,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
         <ControlDock liveId={chat.liveId} profile={profile} connected={connected} pulse={turnsDone + outputs} />
         <AgentsDock
           agents={delegates.agents}
-          running={transcript.running}
+          running={running}
           chatKey={request.id}
           steer={delegates.steer}
           stop={delegates.stop}
@@ -262,7 +266,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           processes={delegates.processes}
           kill={delegates.kill}
         />
-        <PlanDock plan={transcript.plan} running={transcript.running} chatKey={request.id} />
+        <PlanDock plan={plan} running={running} chatKey={request.id} />
         {takeover ? (
           <div className="takeover-offer" role="status">
             <span>{openElsewhereMessage(owner(takeover.surface))}</span>
@@ -309,7 +313,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 }
               : undefined
           }
-          running={transcript.running}
+          running={running}
           disabled={!connected}
           model={chat.model}
           cwd={chat.cwd}

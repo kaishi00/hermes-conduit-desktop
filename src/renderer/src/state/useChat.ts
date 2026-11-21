@@ -13,7 +13,8 @@ import { connectionFrom, connectionOwner, type ConnectionCard } from './connecti
 import { isRuntimeGone } from './runtimeGone'
 import { gateway, GatewayError } from '../gateway'
 import { forgetTranscripts, keepTranscript, keptTranscript } from './transcriptCache'
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { TranscriptStore } from './transcriptStore'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { contextFromUsage, parseBreakdown, type ContextWindow } from './context'
 import { parsePlan } from './plan'
 import {
@@ -266,7 +267,11 @@ const DELTA_FLUSH_MS = 100
 /** `host`: the dashboard this window shows, which keeps its own transcripts. */
 export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string, host = '') {
   // A chat this window opens on, kept from before (a dashboard switch remounts it), draws on the first frame.
-  const [transcript, dispatchNow] = useReducer(reducer, null, () => (storedId && connected ? keptTranscript(storedId, profile, host) : null) ?? emptyTranscript)
+  // Held outside React state, so only what reads it runs as a reply streams (transcriptStore.ts).
+  const [transcriptStore] = useState(() => new TranscriptStore((storedId && connected ? keptTranscript(storedId, profile, host) : null) ?? emptyTranscript))
+  const dispatchNow = useCallback((action: Action) => transcriptStore.set(reducer(transcriptStore.get(), action)), [transcriptStore])
+  /** The transcript as it is now, for a callback or a cleanup. */
+  const [transcriptRef] = useState(() => ({ get current() { return transcriptStore.get() } }))
   /**
    * A reply's deltas wait for the next frame and go as one (coalesceDeltas),
    * so a fast stream changes the transcript once a frame rather than per
@@ -287,13 +292,13 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     deltas.current = []
     // A chat switched since: its deltas aren't this transcript's.
     for (const event of coalesceDeltas(events)) if (event.session_id === liveId.current) dispatchNow({ type: 'event', event })
-  }, [])
+  }, [dispatchNow])
   const dispatch = useCallback(
     (action: Action) => {
       flushDeltas()
       dispatchNow(action)
     },
-    [flushDeltas]
+    [flushDeltas, dispatchNow]
   )
   useEffect(() => () => cancelFrame(), [])
   const [chat, setChat] = useState<OpenChat>({ storedId, liveId: null })
@@ -305,8 +310,6 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const created = useRef<string | null>(null)
   const chatRef = useRef(chat)
   chatRef.current = chat
-  const runningRef = useRef(false)
-  runningRef.current = transcript.running
   /** Another app holds the chat and Take over automatically is off: the offer, naming who holds it. */
   const [takeover, setTakeover] = useState<{ surface?: string; busy: boolean } | null>(null)
   /** The open chat's queue on the Webapp; empty on `hermes dashboard`, which keeps none. */
@@ -489,8 +492,6 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     },
     [profile]
   )
-  const transcriptRef = useRef(transcript)
-  transcriptRef.current = transcript
 
   /** Asks the plugin to drop another app's claim on this chat, under every id it goes by. */
   const takeOverChat = useCallback(
@@ -537,7 +538,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       )
       const key = `u-${uuid()}`
       // Hermes' receipt says `queued` for every send; only one into a running turn, or behind a turn a restart cut off, waits.
-      const joinsRunningTurn = runningRef.current || lostRows(queueRef.current).length > 0
+      const joinsRunningTurn = transcriptRef.current.running || lostRows(queueRef.current).length > 0
       dispatch({ type: 'pending', text: trimmed, attachments: shown, key })
       let sid = liveId.current
       let held: string[] = []
@@ -691,7 +692,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
             return { kind: 'done', created: null }
           }
           const lines: string[] = []
-          if (runningRef.current) {
+          if (transcriptRef.current.running) {
             await stop()
             lines.push(t('Stopped the reply.'))
           }
@@ -1012,7 +1013,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   }, [])
 
   return {
-    transcript,
+    transcriptStore,
     chat,
     react,
     loading,

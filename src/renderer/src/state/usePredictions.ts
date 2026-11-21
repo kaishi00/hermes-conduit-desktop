@@ -38,7 +38,7 @@ import {
   type PredictKind
 } from './predictive'
 import { languageName } from './stepSummaries'
-import type { TranscriptState } from './transcript'
+import { useTranscriptValue, type TranscriptStore } from './transcriptStore'
 
 // Whether this dashboard's plugin reports a capability: a definite answer (it listed it, or a
 // plugin too old to say) kept ten minutes for that dashboard; one that couldn't tell (a timeout,
@@ -82,12 +82,13 @@ export interface Predictions {
   askDraft?: (draft: string) => Promise<DraftGuesses | null>
 }
 
-export function usePredictions(state: TranscriptState, sessionId: string | undefined): Predictions {
+export function usePredictions(store: TranscriptStore, sessionId: string | undefined): Predictions {
   const [enabled, setEnabled] = useState(repliesEnabled)
   const [pausing, setPausing] = useState(pauseEnabled)
   const [answer, setAnswer] = useState<{ key: string; replies: string[] } | null>(null)
   const asked = useRef(new Set<string>())
-  const reply = sessionId ? settledReply(state.items, state.running) : null
+  // Null while a turn runs, so a streaming reply doesn't run this hook's component once a frame.
+  const reply = useTranscriptValue(store, state => (sessionId ? settledReply(state.items, state.running) : null))
   const key = reply && sessionId ? `${sessionId}|${reply}` : null
 
   useEffect(() => {
@@ -185,15 +186,19 @@ function useOnScreen(): boolean {
  * The reply to a hidden turn is tagged "Hermes followed up": this returns
  * those replies by `followUpId`, which outlasts a reload of the history.
  */
-export function useFollowUps(state: TranscriptState, sessionId: string | undefined, profile: string | undefined, draftEmpty: boolean): Set<string> {
+export function useFollowUps(store: TranscriptStore, sessionId: string | undefined, profile: string | undefined, draftEmpty: boolean): Set<string> {
   const [enabled, setEnabled] = useState(followUpEnabled)
   const onScreen = useOnScreen()
   const [tick, setTick] = useState(0)
   const [tagged, setTagged] = useState<Set<string>>(() => new Set())
-  const reply = sessionId ? settledReply(state.items, state.running) : null
+  // Only what changes when a reply settles or a message is sent, so a streaming reply doesn't run this hook's component.
   // The reply's key too, so a follow-up worded like the answer still counts as new.
-  const anchor = reply && sessionId ? `${sessionId}|${state.items[state.items.length - 1].key}|${reply}` : null
-  const userKey = sessionId ? `${sessionId}|${state.items.filter(i => i.kind === 'user').length}` : null
+  const anchor = useTranscriptValue(store, state => {
+    const reply = sessionId ? settledReply(state.items, state.running) : null
+    return reply && sessionId ? `${sessionId}|${state.items[state.items.length - 1].key}|${reply}` : null
+  })
+  const users = useTranscriptValue(store, state => state.items.filter(i => i.kind === 'user').length)
+  const userKey = sessionId ? `${sessionId}|${users}` : null
   const clock = useRef({ anchor: null as string | null, checks: 0, nextAt: 0, stopped: false, idleSince: Date.now(), replyAt: Date.now(), idle: false })
   const spent = useRef(new Set<string>())
   const pendingTag = useRef<string | null>(null)
@@ -210,9 +215,10 @@ export function useFollowUps(state: TranscriptState, sessionId: string | undefin
   const c = clock.current
   if (anchor !== c.anchor) {
     if (anchor && pendingTag.current && anchor.startsWith(`${pendingTag.current}|`)) {
-      const text = state.items[state.items.length - 1]
+      const items = store.get().items
+      const text = items[items.length - 1]
       if (text?.kind === 'assistant') {
-        const id = followUpId(state.items.filter(i => i.kind === 'user').length, text.text)
+        const id = followUpId(users, text.text)
         pendingTag.current = null
         queueMicrotask(() => setTagged(current => new Set(current).add(id)))
       }

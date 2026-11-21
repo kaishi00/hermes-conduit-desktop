@@ -44,7 +44,10 @@ import { NeedsYou } from './components/NeedsYou'
 import { SignIn } from './components/SignIn'
 import { TitleBar } from './components/TitleBar'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
-import { Transcript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
+import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
+import { useTranscriptValue } from './state/transcriptStore'
+import { lastReplyOf, revealedKey } from './state/transcriptReads'
+import type { TranscriptItem } from './state/transcript'
 import { forgetSummaries } from './state/stepSummaries'
 import { WAKE_EVENT, wakeBindings, wakeChat, wakeProfiles, type WakeBinding } from './state/wakeSettings'
 import { forgetChatLists } from './state/savedChatList'
@@ -208,6 +211,9 @@ import { ask, askText, tell } from './state/dialogs'
 import { Select } from './components/Select'
 import { KeptPane } from './components/KeptPane'
 import { botSideScroll } from './state/keptScroll'
+
+/** A call's transcript while no call reads it. */
+const NO_ITEMS: TranscriptItem[] = []
 
 /** The host's synced preferences, for the bots' order. */
 const prefsHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gateway.http(method, path, body)
@@ -386,7 +392,7 @@ function Shell({
   const [projectsOpen, setProjectsOpen] = useState(false)
   const list = useChatList(connected, status.url ?? '')
   const {
-    transcript,
+    transcriptStore,
     chat,
     loading,
     error,
@@ -412,6 +418,11 @@ function Shell({
     resendLost,
     react: reactTo
   } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '')
+  // What this window shows of the transcript; the transcript itself is drawn by LiveTranscript, so a streaming
+  // reply runs that, not App, once a frame (desktop#212).
+  const running = useTranscriptValue(transcriptStore, state => state.running)
+  const runningStatus = useTranscriptValue(transcriptStore, state => state.status)
+  const transcriptPlan = useTranscriptValue(transcriptStore, state => state.plan)
 
   // The chat list's profile: a new chat starts in it.
   const [chatProfile, setChatProfile] = useState<string | null>(null)
@@ -469,7 +480,7 @@ function Shell({
     else if (action === 'text-smaller') setChatScale(s => nextScale(s, -1))
     else if (action === 'text-normal') setChatScale(1)
     else if (action === 'stop') {
-      if (section === 'chats' && transcript.running) void stop()
+      if (section === 'chats' && running) void stop()
     } else if (action === 'toggle-sidebar') {
       if (section === 'chats') hideList(!listHidden)
       else {
@@ -784,24 +795,17 @@ function Shell({
   useEffect(() => {
     if (readTurn.current === turnsDone) return
     readTurn.current = turnsDone
-    if (!calling && readsRepliesAloud() && lastReplyRef.current && document.hasFocus())
-      void readAloud(`turn-${turnsDone}`, lastReplyRef.current, selected.profile).catch(() => undefined)
+    const reply = lastReplyOf(transcriptStore.get().items)
+    if (!calling && readsRepliesAloud() && reply && document.hasFocus()) void readAloud(`turn-${turnsDone}`, reply, selected.profile).catch(() => undefined)
   }, [turnsDone])
-  const lastReplyRef = useRef<string | null>(null)
-  const lastReply = useMemo(() => {
-    for (let i = transcript.items.length - 1; i >= 0; i--) {
-      const item = transcript.items[i]!
-      if (item.kind === 'user') return null
-      if (item.kind === 'assistant' && item.text.trim()) return item.text
-    }
-    return null
-  }, [transcript.items])
-  lastReplyRef.current = lastReply
+  // A call's transcript and last reply: a call draws them as they stream, so only a call reads them every frame.
+  const callItems = useTranscriptValue(transcriptStore, state => (calling ? state.items : null)) ?? NO_ITEMS
+  const lastReply = useTranscriptValue(transcriptStore, state => (calling ? lastReplyOf(state.items) : null))
   const wasRunning = useRef(false)
   useEffect(() => {
-    if (wasRunning.current && !transcript.running) setTurnsDone(n => n + 1)
-    wasRunning.current = transcript.running
-  }, [transcript.running])
+    if (wasRunning.current && !running) setTurnsDone(n => n + 1)
+    wasRunning.current = running
+  }, [running])
   const pulseChat = pulse.feed?.homeChatId || null
   // Pulse's own chat stays behind its screen, as on the phone.
   // Workstreams' chats stay with their bots, as on the phone.
@@ -833,13 +837,13 @@ function Shell({
   }, [resolvedChatOpen, readResolvedForChat])
   // A workstream's checklist is its chat's plan, ahead of Hermes' own todo list there.
   const workChecklist = workItem?.checklist
-  const shownPlan = useMemo(() => (workChecklist?.length ? planFromChecklist(workChecklist) : transcript.plan), [workChecklist, transcript.plan])
-  const delegates = useAgents(chat.liveId, connected, transcript.running)
+  const shownPlan = useMemo(() => (workChecklist?.length ? planFromChecklist(workChecklist) : transcriptPlan), [workChecklist, transcriptPlan])
+  const delegates = useAgents(chat.liveId, connected, running)
   const [drafting, setDrafting] = useState(false)
-  const followedUp = useFollowUps(transcript, connected && !calling ? (chat.liveId ?? undefined) : undefined, selected.profile, !drafting)
-  const predictions = usePredictions(transcript, connected && !calling ? (chat.liveId ?? undefined) : undefined)
+  const followedUp = useFollowUps(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined, selected.profile, !drafting)
+  const predictions = usePredictions(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined)
   // Hermes may have changed the goal, loop or heartbeat: a turn ended or a command answered.
-  const outputs = useMemo(() => transcript.items.filter(item => item.kind === 'output').length, [transcript.items])
+  const outputs = useTranscriptValue(transcriptStore, state => state.items.filter(item => item.kind === 'output').length)
   const controlPulse = turnsDone + outputs
   const workBot = roster.bots?.find(bot => bot.name === (selected.profile ?? 'default'))
   // A bot's chat (its Bot Chat, one not resolved yet, or a workstream's) offers its work once the host answers with some.
@@ -1044,22 +1048,15 @@ function Shell({
   }
   // An artifact's Show in Chat: the message it came from, once its chat's transcript has it (after the phone's ArtifactReveal).
   const [revealRow, setRevealRow] = useState<{ sessionId: string; messageId: number; until: number } | null>(null)
+  const revealing = revealRow && selected.id === revealRow.sessionId ? revealRow.messageId : null
+  const revealKey = useTranscriptValue(transcriptStore, state => (revealing === null ? null : revealedKey(state.items, revealing)))
   useEffect(() => {
     if (!revealRow || selected.id !== revealRow.sessionId) return
     if (Date.now() > revealRow.until) return setRevealRow(null)
-    // The message itself, else the last one before it: a tool call keeps no row of its own.
-    let best: { key: string; row: number } | null = null
-    for (const item of transcript.items) {
-      const row = /^row-(\d+)$/.exec(item.key)?.[1]
-      if (row === undefined) continue
-      const n = Number(row)
-      if (n <= revealRow.messageId && (!best || n >= best.row)) best = { key: item.key, row: n }
-    }
-    if (!best) return
-    const key = best.key
+    if (!revealKey) return
     setRevealRow(null)
-    requestAnimationFrame(() => revealMessage(chatPane.current, key))
-  }, [revealRow, selected.id, transcript.items])
+    requestAnimationFrame(() => revealMessage(chatPane.current, revealKey))
+  }, [revealRow, selected.id, revealKey])
   const [modelOpen, setModelOpen] = useState(false)
   const closeModel = useCallback(() => setModelOpen(false), [])
   const [contextOpen, setContextOpen] = useState(false)
@@ -1212,7 +1209,7 @@ function Shell({
     async (key: string) => {
       const parent = chat.liveId
       if (!parent || branching.current) return
-      const plan = branchPlan(transcript.items, key)
+      const plan = branchPlan(transcriptStore.get().items, key)
       if (!plan) return notice(t('There is no message history to branch from.'), 'error')
       const profile = selected.profile
       const scoped = profile && profile !== 'default' ? { profile } : {}
@@ -1253,7 +1250,7 @@ function Shell({
         branching.current = false
       }
     },
-    [chat.liveId, chat.storedId, chat.cwd, transcript.items, selected.id, selected.profile, title, status.sessionAuthority, notice, list]
+    [chat.liveId, chat.storedId, chat.cwd, transcriptStore, selected.id, selected.profile, title, status.sessionAuthority, notice, list]
   )
   // Pinned replies in the open chat: ⋯'s Pin reply, the bar, and the list from the bar or the Chats list.
   const pinChat = chat.storedId ?? selected.id
@@ -1424,9 +1421,9 @@ function Shell({
   )
   const runningProfiles = useMemo(() => {
     const names = new Set<string>()
-    if (transcript.running && selected.profile) names.add(selected.profile)
+    if (running && selected.profile) names.add(selected.profile)
     return names
-  }, [transcript.running, selected.profile])
+  }, [running, selected.profile])
 
   // Needs you: the requests this window holds, and every profile's waiting list.
   const requests = useRequests()
@@ -1527,9 +1524,9 @@ function Shell({
   const runningIds = useMemo(() => {
     const ids = new Set<string>()
     for (const [id, state] of liveStatus) if (state === 'working') ids.add(id)
-    if (transcript.running && chat.storedId) ids.add(chat.storedId)
+    if (running && chat.storedId) ids.add(chat.storedId)
     return ids
-  }, [liveStatus, transcript.running, chat.storedId])
+  }, [liveStatus, running, chat.storedId])
   // A project's chats read as their chat rows do: the list's copy when it has one (Unread dot on projects).
   const projectChatUnread = useCallback(
     (chat: ProjectChat) => {
@@ -2151,7 +2148,7 @@ function Shell({
                   selectedId={chat.storedId ?? selected.id}
                   runningIds={runningIds}
                   waitingIds={waitingIds}
-                  runningStatus={transcript.status}
+                  runningStatus={runningStatus}
                   onSelect={selectRow}
                   onOpenBeside={besideFits ? openBeside : undefined}
                   onOpenInWindow={row => void popOut({ id: row.id, profile: row.profile, title: row.title, host: (row as Partial<OtherChatRow>).host })}
@@ -2299,8 +2296,8 @@ function Shell({
               <FileLinks.Provider value={openPath}>
                 <WorkLinks.Provider value={workLinkActions}>
                   <ConnectionActionsContext.Provider value={connectionActions}>
-                    <Transcript
-                      state={transcript}
+                    <LiveTranscript
+                      store={transcriptStore}
                       loading={loading}
                       error={error}
                       requests={openRequests}
@@ -2318,7 +2315,7 @@ function Shell({
                       followedUp={followedUp}
                       pins={pinControls}
                       onReact={chat.liveId ? reactTo : undefined}
-                      onBranch={chat.liveId && !transcript.running ? branchFrom : undefined}
+                      onBranch={chat.liveId && !running ? branchFrom : undefined}
                     />
                   </ConnectionActionsContext.Provider>
                 </WorkLinks.Provider>
@@ -2349,7 +2346,7 @@ function Shell({
                 <ContextPanel
                   chat={chat}
                   profile={selected.profile}
-                  running={transcript.running}
+                  running={running}
                   onClose={closeContext}
                   onCompress={() => void onSend('/compress')}
                 />
@@ -2375,9 +2372,9 @@ function Shell({
                   pictureNote={pictureNote}
                   profile={selected.profile}
                   chatId={selected.id}
-                  items={transcript.items}
+                  items={callItems}
                   onSay={callSay}
-                  running={transcript.running}
+                  running={running}
                   turnsDone={turnsDone}
                   lastReply={lastReply}
                   onEnd={() => setCalling(false)}
@@ -2394,9 +2391,9 @@ function Shell({
                   provider={callMode}
                   profile={selected.profile}
                   chatId={selected.id}
-                  items={transcript.items}
+                  items={callItems}
                   onSay={callSay}
-                  running={transcript.running}
+                  running={running}
                   turnsDone={turnsDone}
                   lastReply={lastReply}
                   onEnd={() => setCalling(false)}
@@ -2412,9 +2409,9 @@ function Shell({
                   pictureNote={pictureNote}
                   profile={selected.profile}
                   chatId={selected.id}
-                  items={transcript.items}
+                  items={callItems}
                   onSay={callSay}
-                  running={transcript.running}
+                  running={running}
                   turnsDone={turnsDone}
                   lastReply={lastReply}
                   onEnd={() => setCalling(false)}
@@ -2432,9 +2429,9 @@ function Shell({
                   chatId={selected.id}
                   liveId={chat.liveId}
                   onCorrected={noteCorrection}
-                  items={transcript.items}
+                  items={callItems}
                   onSay={callSay}
-                  running={transcript.running}
+                  running={running}
                   turnsDone={turnsDone}
                   lastReply={lastReply}
                   onEnd={() => setCalling(false)}
@@ -2449,7 +2446,7 @@ function Shell({
                   pictureControls={pictureControls}
                   profile={selected.profile}
                   onSay={callSay}
-                  running={transcript.running}
+                  running={running}
                   turnsDone={turnsDone}
                   lastReply={lastReply}
                   onStop={() => void stop()}
@@ -2459,7 +2456,7 @@ function Shell({
               <ControlDock liveId={chat.liveId} profile={selected.profile} connected={connected} pulse={controlPulse} />
               <AgentsDock
                 agents={delegates.agents}
-                running={transcript.running}
+                running={running}
                 chatKey={selected.id ?? 'new'}
                 steer={delegates.steer}
                 stop={delegates.stop}
@@ -2467,7 +2464,7 @@ function Shell({
                 processes={delegates.processes}
                 kill={delegates.kill}
               />
-              <PlanDock plan={shownPlan} running={transcript.running} chatKey={selected.id ?? 'new'} />
+              <PlanDock plan={shownPlan} running={running} chatKey={selected.id ?? 'new'} />
               {takeover ? (
                 <div className="takeover-offer" role="status">
                   <span>{openElsewhereMessage(owner(takeover.surface))}</span>
@@ -2514,7 +2511,7 @@ function Shell({
                       }
                     : undefined
                 }
-                running={transcript.running}
+                running={running}
                 disabled={!connected}
                 model={chat.model}
                 cwd={chat.cwd}

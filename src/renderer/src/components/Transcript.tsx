@@ -1,10 +1,11 @@
-import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { mediaKind, splitReply } from '../state/media'
 import { PagePreview } from './PagePreview'
 import { baseName, type Attachment } from '../state/text'
 import { displayName } from '../state/attachments'
 import type { PendingRequest } from '@shared/ipc'
 import { TAPBACKS, type Reaction, type ToolItem, type TranscriptItem, type TranscriptState } from '../state/transcript'
+import { useTranscript, type TranscriptStore } from '../state/transcriptStore'
 import type { DelegationEntry } from '../state/timeline'
 import { ExpiredClarifyCard, RequestCard } from './RequestCard'
 import type { ExpiredQuestion } from '../state/expiredQuestions'
@@ -1027,6 +1028,14 @@ function ReviewRun({ count, children }: { count: number; children: React.ReactNo
 
 /** Rows a long transcript draws on its first frame, the newest; the rest follow a frame later. */
 const FIRST_ROWS = 40
+
+/**
+ * The open chat's transcript, from its store: only this runs as a reply
+ * streams, not the window around it (desktop#212).
+ */
+export function LiveTranscript({ store, ...props }: Omit<ComponentProps<typeof Transcript>, 'state'> & { store: TranscriptStore }) {
+  return <Transcript state={useTranscript(store)} {...props} />
+}
 
 export function Transcript({
   state,

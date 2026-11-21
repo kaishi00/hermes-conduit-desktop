@@ -5,6 +5,7 @@ import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
 import { forgetTranscripts } from '../src/renderer/src/state/transcriptCache'
 import { settleRunning } from '../src/renderer/src/state/longChat'
+import { useTranscript, useTranscriptValue } from '../src/renderer/src/state/transcriptStore'
 
 type Event = { type: string; session_id?: string; payload?: unknown }
 let listeners: ((event: Event) => void)[] = []
@@ -53,7 +54,10 @@ afterEach(() => {
 const words = (state: { items: { kind: string; text?: string }[] }) => state.items.map(i => i.text ?? i.kind)
 type Props = { storedId: string | null; connected: boolean; url?: string }
 // As App calls it: each dashboard keeps its own transcripts (desktop#233).
-const chatInApp = ({ storedId, connected, url }: Props) => useChat(storedId, undefined, false, connected, false, undefined, url)
+const chatInApp = ({ storedId, connected, url }: Props) => {
+  const chat = useChat(storedId, undefined, false, connected, false, undefined, url)
+  return { ...chat, transcript: useTranscript(chat.transcriptStore) }
+}
 const mount: typeof renderHook = (hook, props) => {
   const rendered = renderHook(hook, props)
   mounted.push(rendered)
@@ -154,6 +158,46 @@ describe("a reply's delta queue (desktop#212)", () => {
         vi.advanceTimersByTime(200)
       })
       expect(words(hook.result().transcript).join(' ')).not.toContain('stale')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe("the window around a streaming reply (desktop#212)", () => {
+  it('runs only when what it reads changes, while the transcript runs once a frame', async () => {
+    vi.useFakeTimers()
+    try {
+      resumes.a = { messages: [] }
+      let transcriptRuns = 0
+      // As App reads the open chat: whether a turn runs, and the transcript drawn by a part of its own.
+      const window = mount(
+        ({ storedId }: { storedId: string }) => {
+          const chat = useChat(storedId, undefined, false, true, false, undefined, 'h1')
+          return { chat, running: useTranscriptValue(chat.transcriptStore, state => state.running) }
+        },
+        { storedId: 'a' }
+      )
+      await settle()
+      const drawn = mount(() => {
+        transcriptRuns++
+        return useTranscript(window.result().chat.transcriptStore)
+      }, {})
+      emit({ type: 'message.start', session_id: 'live-a' })
+      const windowRuns = window.renders()
+      const before = transcriptRuns
+      for (const text of ['Hel', 'lo', ' there', '!']) {
+        emit({ type: 'message.delta', session_id: 'live-a', payload: { text } })
+        await act(async () => {
+          vi.advanceTimersByTime(120)
+        })
+      }
+      expect(words(drawn.result())).toEqual(['Hello there!'])
+      expect(transcriptRuns - before).toBeGreaterThanOrEqual(4)
+      expect(window.renders()).toBe(windowRuns)
+      expect(window.result().running).toBe(true)
+      emit({ type: 'message.complete', session_id: 'live-a', payload: {} })
+      expect(window.result().running).toBe(false)
     } finally {
       vi.useRealTimers()
     }
