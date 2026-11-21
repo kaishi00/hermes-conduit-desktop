@@ -42809,6 +42809,21 @@
     "zh-Hans": "已被更新的简报取代",
     "zh-Hant": "已被更新的簡報取代"
   },
+  "This chat is too long to open whole, so Conduit shows its newest messages.": {
+    "de": "Dieser Chat ist zu lang, um ihn ganz zu öffnen, daher zeigt Conduit seine neuesten Nachrichten.",
+    "es": "Este chat es demasiado largo para abrirlo entero, así que Conduit muestra sus mensajes más recientes.",
+    "fr": "Cette conversation est trop longue pour s’ouvrir en entier, Conduit affiche donc ses messages les plus récents.",
+    "id": "Obrolan ini terlalu panjang untuk dibuka seluruhnya, jadi Conduit menampilkan pesan terbarunya.",
+    "it": "Questa chat è troppo lunga per aprirla per intero, quindi Conduit mostra i messaggi più recenti.",
+    "ja": "このチャットは長すぎて全体を開けないため、Conduit は最新のメッセージを表示しています。",
+    "ko": "이 채팅은 너무 길어 전체를 열 수 없어 Conduit가 최신 메시지를 보여 줍니다.",
+    "pl": "Ten czat jest zbyt długi, by otworzyć go w całości, więc Conduit pokazuje jego najnowsze wiadomości.",
+    "pt-BR": "Esta conversa é longa demais para abrir inteira, então o Conduit mostra as mensagens mais recentes.",
+    "ru": "Этот чат слишком длинный, чтобы открыть его целиком, поэтому Conduit показывает его последние сообщения.",
+    "tr": "Bu sohbet tamamen açılamayacak kadar uzun, bu yüzden Conduit en yeni mesajlarını gösteriyor.",
+    "zh-Hans": "此聊天太长，无法完整打开，因此 Conduit 显示其最新消息。",
+    "zh-Hant": "此聊天太長，無法完整開啟，因此 Conduit 顯示其最新訊息。"
+  },
   "Show Window": {
     "de": "Fenster zeigen",
     "es": "Mostrar ventana",
