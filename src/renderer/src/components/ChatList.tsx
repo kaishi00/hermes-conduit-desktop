@@ -429,6 +429,8 @@ export function ChatList({
     () => (profile ? (rows ?? []).filter(r => sameProfile(r, profile)) : (rows ?? []).filter(r => shownInAll(r.profile, botNames, allLeftOut))),
     [rows, profile, botNames, allLeftOut]
   )
+  // The Sources the menu offers: the ones the chats shown come from, so none lists nothing.
+  const shownSources = useMemo(() => sourcesIn(inShown), [inShown])
   const choice = (key: ChatFilterKey, label: string): FilterChoice => ({
     key,
     label,
@@ -566,7 +568,7 @@ export function ChatList({
             starred={choice('starred', FILTER_LABELS.starred())}
             statuses={STATUS_CHOICES.map(key => choice(key, FILTER_LABELS[key]()))}
             progress={isDone ? PROGRESS_CHOICES.map(key => choice(key, FILTER_LABELS[key]())) : []}
-            sources={sources.length > 1 ? sources.map(kind => choice(`source:${kind}`, sourceName(kind))) : []}
+            sources={shownSources.length > 1 ? shownSources.map(kind => choice(`source:${kind}`, sourceName(kind))) : []}
             waiting={waitingShown}
             onToggle={(key, on) => setSelection(settingFilter(selection, key, on))}
             onClear={() => setSelection([])}

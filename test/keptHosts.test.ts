@@ -13,6 +13,8 @@ import {
   launchRows,
   openAfterSwitch,
   openBotAfterSwitch,
+  showProfileAfterSwitch,
+  takeProfileAfterSwitch,
   openChatAfterSwitch,
   openPageAfterSwitch,
   takePageAfterSwitch,
@@ -388,6 +390,18 @@ describe('combined dashboards in the window', () => {
     expect(takeBotAfterSwitch('https://home.example', [bot])).toBeNull()
     expect(takeBotAfterSwitch('https://studio.example', [bot])).toBe(bot)
     expect(takeBotAfterSwitch('https://studio.example', [bot])).toBeNull()
+  })
+
+  it('shows another host’s profile in the chat list once that host’s bots are read, and forgets one it no longer lists', () => {
+    const bot = { name: 'Mira', title: 'Mira' } as never
+    showProfileAfterSwitch({ host: 'https://studio.example', bot: { name: 'mira', title: 'Mira' } as never })
+    expect(takeProfileAfterSwitch('https://studio.example', null)).toBeNull()
+    expect(takeProfileAfterSwitch('https://home.example', [bot])).toBeNull()
+    expect(takeProfileAfterSwitch('https://studio.example', [bot])).toBe(bot)
+    expect(takeProfileAfterSwitch('https://studio.example', [bot])).toBeNull()
+    showProfileAfterSwitch({ host: 'https://studio.example', bot: { name: 'gone', title: 'Gone' } as never })
+    expect(takeProfileAfterSwitch('https://studio.example', [bot])).toBeNull()
+    expect(takeProfileAfterSwitch('https://studio.example', [{ name: 'gone', title: 'Gone' } as never])).toBeNull()
   })
 
   it('gives Pulse a chip per combined host that answers, only when another has one', () => {

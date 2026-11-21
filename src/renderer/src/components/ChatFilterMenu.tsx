@@ -94,7 +94,7 @@ export function ChatFilterMenu({
         onClick={() => onOpen(!open)}
       >
         <Icon name="filter" />
-        {waiting > 0 ? <span className="filter-dot" aria-label={t('Needs approval')} /> : null}
+        {waiting > 0 ? <span className="filter-dot" role="img" aria-label={t('Needs approval')} /> : null}
       </button>
       {open ? (
         <div className="host-menu filter-menu" role="menu" aria-label={t('Filter')}>
