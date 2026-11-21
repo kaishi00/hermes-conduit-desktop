@@ -7255,6 +7255,10 @@ button.cap-row-text {
 .plugin-update progress {
   width: 100%;
 }
+/* A held scan's findings, one per line. */
+.plugin-scan-findings {
+  white-space: pre-line;
+}
 .plugin-update.ok strong {
   color: var(--success, #2e9d5b);
 }
@@ -11977,4 +11981,36 @@ button.ghost:disabled {
 
 .filter-active-clear:hover {
   background: var(--accent-soft);
+}
+
+/* Settings home's profile card: the profile the pages below edit, in a dropdown of every profile. */
+.settings-profile-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.settings-profile-select {
+  height: 36px;
+  min-width: 220px;
+  max-width: 100%;
+}
+
+.settings-profile-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-profile-option .bot-avatar {
+  flex: none;
+}
+
+.settings-profile-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

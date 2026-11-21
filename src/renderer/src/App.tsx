@@ -13,6 +13,7 @@ import { BotsHome, useReplyFace, type BotAction } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
 import { ChatList, type MoveTarget } from './components/ChatList'
 import { PROFILE_COLUMN_WIDTH } from './components/ProfileColumn'
+import { SettingsProfileCard, settingsProfileTile } from './components/SettingsProfile'
 import { Composer } from './components/Composer'
 import { ModelPicker } from './components/ModelPicker'
 import { ContextPanel } from './components/ContextPanel'
@@ -136,6 +137,7 @@ import {
   openAfterSwitch,
   openBotAfterSwitch,
   showProfileAfterSwitch,
+  type HostBadge,
   openRoomAfterSwitch,
   openChatAfterSwitch,
   openPageAfterSwitch,
@@ -948,7 +950,8 @@ function Shell({
   // Combined dashboards: the other hosts kept connected beside this one...
   const keptHosts = useKeptHosts(status.url ?? '')
   // ...their bots, on Bots Home and in the chat list's profile column (Eric, 2026-11-21: Chats held only this dashboard's).
-  const otherBots = useKeptBots(keptHosts, botsListShown || section === 'chats')
+  // Settings too: its profile dropdown lists every combined dashboard's profiles.
+  const otherBots = useKeptBots(keptHosts, botsListShown || section === 'chats' || section === 'settings')
   // ...with their pills, from their work read there (Eric, 2026-11-21: another host's "needs you" didn't show).
   const otherWork = useKeptWork(otherBots, botsListShown || section === 'chats')
   // The chat list's profile column, beside the list's own width: the list gives way to it before the chat does.
@@ -1474,6 +1477,10 @@ function Shell({
     [otherBots, status.url, orderedRoster, savedHostUrls, mixedBotOrder.order]
   )
   const tileBadge = useCallback((tile: MixedTile) => badgeFor(tile.own ? (status.url ?? '') : tile.host), [badgeFor, status.url])
+  // The profile Settings edits, resolved once so its card, Edit profile and every page below name the same one:
+  // the open chat's, matched case-insensitively, else the main profile when it's gone or hidden.
+  const settingsBot = settingsProfileTile(profileTiles ?? [], selected.profile ?? 'default')?.bot ?? null
+  const settingsProfile = settingsBot?.name ?? selected.profile ?? 'default'
   const otherWaits = useCallback((tile: MixedTile) => otherWork.get(keptWorkKey(tile.host, tile.bot.name))?.needsYou ?? 0, [otherWork])
   // A room started by dragging across dashboards brings the other's bots over your own Link to it.
   const farFor = useCallback(
@@ -1696,14 +1703,32 @@ function Shell({
     showProfileAfterSwitch({ host: tile.host, bot: tile.bot })
     void window.conduit.switchHost(tile.host)
   }, [])
+  // Settings' profile dropdown: this dashboard's profile is picked as the Chats list's faces pick it, staying
+  // in Settings; another dashboard's switches there and comes back to Settings on that profile.
+  const pickSettingsProfile = useCallback(
+    async (tile: MixedTile) => {
+      if (tile.own) {
+        chooseProfile(tile.bot.name)
+        setSection('settings')
+        return
+      }
+      if (!(await switchEndingCall(hostName(tile.host)))) return
+      reopenSettings()
+      showProfileAfterSwitch({ host: tile.host, bot: tile.bot })
+      void window.conduit.switchHost(tile.host)
+    },
+    [chooseProfile]
+  )
   const listReady = !!listedRows
   useEffect(() => {
     if (!connected || !listReady) return
     const bot = takeProfileAfterSwitch(statusUrl, roster.bots)
     if (!bot) return
-    setSection('chats')
+    // Picked in Settings' dropdown: Settings stays open on it.
+    const stay = section === 'settings'
     chooseProfile(bot.name)
-  }, [connected, listReady, statusUrl, roster.bots, chooseProfile])
+    setSection(stay ? 'settings' : 'chats')
+  }, [connected, listReady, statusUrl, roster.bots, chooseProfile, section])
   const openOtherRoom = useCallback(async (other: OtherRoom) => {
     if (!(await switchEndingCall(hostName(other.host)))) return
     openRoomAfterSwitch(other)
@@ -2780,15 +2805,11 @@ function Shell({
               onEditHost(host)
             }}
             bots={(roster.bots ?? []).map(bot => ({ name: bot.name, title: bot.title }))}
-            profile={selected.profile ?? 'default'}
-            onEditProfile={
-              connected
-                ? () => {
-                    const bot = roster.bots?.find(each => each.name === (selected.profile ?? 'default')) ?? roster.bots?.find(each => each.isDefault)
-                    if (bot) editProfile(bot)
-                  }
-                : undefined
-            }
+            profile={settingsProfile}
+            profileTiles={profileTiles ?? []}
+            tileBadge={tileBadge}
+            onPickProfile={pickSettingsProfile}
+            onEditProfile={connected && settingsBot ? () => editProfile(settingsBot) : undefined}
             chatScale={chatScale}
             setChatScale={setChatScale}
             onShortcuts={() => setShortcutsOpen(true)}
@@ -2889,6 +2910,9 @@ function Settings({
   onEditHost,
   bots,
   profile,
+  profileTiles,
+  tileBadge,
+  onPickProfile,
   onEditProfile,
   chatScale,
   setChatScale,
@@ -2907,6 +2931,10 @@ function Settings({
   onEditHost: (host: HostSummary) => void
   bots: { name: string; title: string }[]
   profile: string
+  /** Every profile Settings can switch to, every combined dashboard's included, in the Chats list's order. */
+  profileTiles: readonly MixedTile[]
+  tileBadge: (tile: MixedTile) => HostBadge | null
+  onPickProfile: (tile: MixedTile) => void
   /** Settings > Edit profile: the profile in use, in Edit Bot. */
   onEditProfile?: () => void
   chatScale: number
@@ -3132,6 +3160,7 @@ function Settings({
   return (
     <main className="settings">
       <h1>{t('Settings')}</h1>
+      <SettingsProfileCard tiles={profileTiles} profile={profile} badgeFor={tileBadge} onPick={onPickProfile} onEditProfile={onEditProfile} />
       <section className="settings-group">
         <h2>{t('Connection')}</h2>
         <dl className="settings-card">
@@ -3206,16 +3235,19 @@ function Settings({
           <dt>{t('Signed in with')}</dt>
           <dd>
             {status.method ? methods[status.method] : '—'}
-            {status.username ? ` (${status.username})` : ''}
-          </dd>
-          {status.url ? <HostActions host={status.url} connected={status.phase === 'open'} /> : null}
-          <dt>{t('Profile')}</dt>
-          <dd>
-            <span>{bots.find(bot => bot.name === profile)?.title ?? profile}</span>{' '}
-            <button className="link" disabled={!onEditProfile} onClick={onEditProfile}>
-              {t('Edit profile')}
+            {status.username ? ` (${status.username})` : ''}{' '}
+            {/* Sign out sits with how you signed in, where Eric looked for it (2026-11-21). */}
+            <button
+              className="link danger"
+              onClick={() => {
+                composerDrafts.dropHost(status.url ?? '')
+                void window.conduit.signOut()
+              }}
+            >
+              {(status.hosts?.length ?? 0) > 1 ? t('Sign out of {host}', { host: status.hostLabel ?? '' }) : t('Sign out')}
             </button>
           </dd>
+          {status.url ? <HostActions host={status.url} connected={status.phase === 'open'} /> : null}
         </dl>
       </section>
       <section className="settings-group">
@@ -3328,15 +3360,6 @@ function Settings({
           </dd>
         </dl>
       </section>
-      <button
-        className="secondary"
-        onClick={() => {
-          composerDrafts.dropHost(status.url ?? '')
-          void window.conduit.signOut()
-        }}
-      >
-        {(status.hosts?.length ?? 0) > 1 ? t('Sign out of {host}', { host: status.hostLabel ?? '' }) : t('Sign out')}
-      </button>
     </main>
   )
 }

@@ -48,6 +48,8 @@ function textOf(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === 'boolean') return ''
   if (typeof node === 'string' || typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(textOf).join('')
+  // A label drawn with elements (a face beside a name) types ahead by its text.
+  if (isValidElement(node)) return textOf((node as ReactElement<{ children?: ReactNode }>).props.children)
   return ''
 }
 

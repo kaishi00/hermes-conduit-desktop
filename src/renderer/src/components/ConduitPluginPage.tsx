@@ -8,6 +8,7 @@ import {
   REPOSITORY,
   SELF_UPDATE_PATH,
   STATUS_PATH,
+  selfUpdatePath,
   STEP_COUNT,
   canUpdateHere,
   jobState,
@@ -26,6 +27,7 @@ import {
 } from '../state/plugin'
 import { Icon } from './icons'
 import { useMouseBack } from '../state/mouseBack'
+import { dashboardHost } from '../state/dashboardProfile'
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const httpCode = (e: unknown) => (e as { code?: unknown })?.code
@@ -33,6 +35,8 @@ const httpCode = (e: unknown) => (e as { code?: unknown })?.code
 /** The update outlives the page: leaving Settings and coming back shows where it stands. */
 let update: UpdateState = { phase: 'idle' }
 let startedAt = 0
+/** The dashboard the update ran on: a held scan's Update Anyway is only ever for it. */
+let updateHost = ''
 let running = false
 const listeners = new Set<() => void>()
 const setUpdate = (next: UpdateState) => {
@@ -55,15 +59,16 @@ async function readStatus(): Promise<PluginStatus> {
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 /** Hands the update to the host and follows its job, as the phone's runOnHost does. */
-async function runUpdate(onDone: () => void) {
+async function runUpdate(onDone: () => void, acceptScan = false) {
   if (running) return
   running = true
   startedAt = Date.now()
+  updateHost = dashboardHost()
   setUpdate({ phase: 'updating', step: 'downloading' })
   try {
     let job: Record<string, unknown> | null = null
     try {
-      const started = (await gateway.http('POST', SELF_UPDATE_PATH)) as { job?: Record<string, unknown> }
+      const started = (await gateway.http('POST', selfUpdatePath(acceptScan))) as { job?: Record<string, unknown> }
       job = started?.job ?? null
     } catch (e) {
       // No answer may still have started it: follow one that runs.
@@ -186,6 +191,22 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
     setChecking(true)
     setStatus(await readStatus())
     setChecking(false)
+  }, [])
+  useEffect(() => {
+    // A held scan's Update Anyway belongs to the host that held it: after a switch to another
+    // dashboard (or a job that has since moved on) the row would force an update there unseen.
+    // Only the host's answer clears it; a read that fails leaves it as it was.
+    const held = update
+    if (held.phase !== 'scanHeld') return
+    // Another dashboard's held scan clears at once, whether or not this one answers.
+    if (updateHost !== dashboardHost()) return setUpdate({ phase: 'idle' })
+    void gateway
+      .http('GET', SELF_UPDATE_PATH)
+      .then(r => {
+        const id = (r as { job?: { id?: unknown } })?.job?.id
+        if (update === held && (!held.id || id !== held.id)) setUpdate({ phase: 'idle' })
+      })
+      .catch(() => undefined)
   }, [])
   useEffect(() => {
     void refresh()
@@ -320,7 +341,11 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
             {!canUpdate ? <p className="meta">{t('Update Hermes, or run the commands under Do it manually.')}</p> : null}
           </>
         ) : null}
-        <UpdateRow state={current} onDismiss={() => setUpdate({ phase: 'idle' })} />
+        <UpdateRow
+          state={current}
+          onDismiss={() => setUpdate({ phase: 'idle' })}
+          onAcceptScan={canUpdate ? () => void runUpdate(() => void refresh(), true) : null}
+        />
       </section>
 
       {status.state === 'reported' ? (
@@ -364,7 +389,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   )
 }
 
-function UpdateRow({ state, onDismiss }: { state: UpdateState; onDismiss: () => void }) {
+function UpdateRow({ state, onDismiss, onAcceptScan }: { state: UpdateState; onDismiss: () => void; onAcceptScan: (() => void) | null }) {
   if (state.phase === 'idle') return null
   let title: string
   let detail: string | null = null
@@ -389,6 +414,22 @@ function UpdateRow({ state, onDismiss }: { state: UpdateState; onDismiss: () => 
       detail = state.detail
       tone = 'bad'
       break
+    case 'scanHeld': {
+      title = t('Hermes held the update for your OK')
+      const notShown = state.count - state.findings.length
+      detail = [
+        state.count
+          ? t("Hermes' install scan on the host asks you to confirm this update. Findings: {count}", { count: String(state.count) })
+          : t("Hermes' install scan on the host asks you to confirm this update."),
+        ...state.findings.map(line => `• ${line}`),
+        notShown > 0 ? t('Not shown here: {count}', { count: String(notShown) }) : null,
+        t("An older Hermes' scan often flags the plugin's own tests. Update Anyway accepts the scan for this update only; updating Hermes clears it for good.")
+      ]
+        .filter(Boolean)
+        .join('\n')
+      tone = 'warn'
+      break
+    }
     default:
       title = t('Still updating on the host')
       detail = t("The update is still running on the host. You'll get a notification when it's done.")
@@ -409,8 +450,13 @@ function UpdateRow({ state, onDismiss }: { state: UpdateState; onDismiss: () => 
             </span>
           </>
         ) : null}
-        {detail ? <span className="meta">{detail}</span> : null}
+        {detail ? <span className={state.phase === 'scanHeld' ? 'meta plugin-scan-findings' : 'meta'}>{detail}</span> : null}
       </div>
+      {state.phase === 'scanHeld' && onAcceptScan ? (
+        <button className="primary" onClick={onAcceptScan}>
+          {t('Update Anyway')}
+        </button>
+      ) : null}
       {state.phase !== 'updating' ? (
         <button className="staged-remove" aria-label={t('Dismiss')} title={t('Dismiss')} onClick={onDismiss}>
           ×

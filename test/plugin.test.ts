@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isOlder, jobState, parseChangelog, pluginStatus, releaseNotes, runningVersion, serves, updateAvailable } from '../src/renderer/src/state/plugin'
+import { isOlder, jobState, parseChangelog, selfUpdatePath, pluginStatus, releaseNotes, runningVersion, serves, updateAvailable } from '../src/renderer/src/state/plugin'
 import { versionFromManifest } from '../src/main/pluginRelease'
 
 const CHANGELOG = `# Conduit plugin changelog
@@ -102,6 +102,21 @@ describe('host update job', () => {
     expect(jobState({ step: 'waiting_for_chats', running_chats: 3 })).toEqual({ phase: 'updating', step: 'waitingForChats', chats: 3 })
     expect(jobState({ step: 'done', loaded_version: '0.2' })).toEqual({ phase: 'updated', version: '0.2' })
     expect(jobState({ step: 'failed', code: 'restart_needed', detail: 'x' })).toEqual({ phase: 'needsDashboardRestart', detail: 'x' })
+    // A caution scan can be accepted (Update Anyway); a dangerous one stays a failure.
+    const held = {
+      step: 'failed',
+      code: 'scan_blocked',
+      scan_verdict: 'caution',
+      scan_finding_count: 9,
+      detail: 'BLOCKED',
+      scan_findings: [{ severity: 'high', category: 'exec', file: 'tests/x.py', line: 7, description: 'subprocess' }, { severity: 'low' }]
+    }
+    expect(jobState(held)).toEqual({ phase: 'scanHeld', id: null, findings: ['high · exec · tests/x.py:7: subprocess', 'low'], count: 9 })
+    expect(jobState({ ...held, id: 'j7' })).toMatchObject({ phase: 'scanHeld', id: 'j7' })
+    expect(jobState({ ...held, id: 7 })).toMatchObject({ phase: 'scanHeld', id: null })
+    expect(jobState({ ...held, scan_verdict: 'dangerous' })).toEqual({ phase: 'failed', detail: 'BLOCKED' })
+    expect(selfUpdatePath(true)).toBe('/api/plugins/conduit_push/self/update?force=true')
+    expect(selfUpdatePath()).toBe('/api/plugins/conduit_push/self/update')
     expect(jobState({ step: 'failed', detail: '' })).toEqual({ phase: 'failed', detail: null })
     expect(jobState({ step: 'something_new' })).toEqual({ phase: 'updating', step: 'downloading' })
     expect(jobState(null)).toBeNull()
