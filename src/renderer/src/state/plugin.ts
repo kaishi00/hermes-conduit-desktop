@@ -161,7 +161,7 @@ export type UpdateState =
   | { phase: 'needsDashboardRestart'; detail: string | null }
   | { phase: 'failed'; detail: string | null }
   /** Hermes' install scan held the update for confirmation (a caution verdict, plugin 0.192.0+): Update Anyway runs it again accepting it. */
-  | { phase: 'scanHeld'; id: string | null; findings: string[]; count: number; detail: string | null }
+  | { phase: 'scanHeld'; id: string | null; findings: string[]; count: number }
   | { phase: 'runningOnHost' }
 
 /** "Step 2 of 4", as the phone counts them. */
@@ -205,7 +205,7 @@ export function jobState(job: unknown): UpdateState | null {
       if (j.code === 'scan_blocked' && j.scan_verdict === 'caution') {
         const findings = (Array.isArray(j.scan_findings) ? j.scan_findings : []).map(scanFindingLine).filter(Boolean)
         const count = typeof j.scan_finding_count === 'number' ? Math.max(j.scan_finding_count, findings.length) : findings.length
-        return { phase: 'scanHeld', id: typeof j.id === 'string' ? j.id : null, findings, count, detail }
+        return { phase: 'scanHeld', id: typeof j.id === 'string' ? j.id : null, findings, count }
       }
       return { phase: 'failed', detail }
     default:
