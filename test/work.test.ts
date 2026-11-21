@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { noteDashboardProfiles, setDashboardProfilesHost } from '../src/renderer/src/state/dashboardProfile'
-import { doing, parseItem, parseWork, sections, sideWorkstreams, statusText, workPath, needsYou, sameWork, workTone } from '../src/renderer/src/state/work'
+import { doing, parseItem, parseWork, sections, sideWorkstreams, statusText, workPath, needsYou, sameWork, workTone, manageTitle, handOverCaption } from '../src/renderer/src/state/work'
 
 const answer = {
   policy: 'on',
@@ -107,5 +107,14 @@ describe('workTone', () => {
     expect(workTone(parseItem({ ref: 'A1', kind: 'ask_out', status: 'waiting', bot: 'Nahida' })!)).toBe('working')
     expect(workTone(parseItem({ ref: 'A2', kind: 'ask_in', status: 'needs_you', bot: 'Nahida' })!)).toBe('needs')
     expect(workTone(parseItem({ ref: 'A3', kind: 'ask_out', status: 'answered' })!)).toBe('done')
+  })
+})
+
+describe('the hand-off', () => {
+  it('says who is kept out and what that means', () => {
+    expect(manageTitle('leave_alone', 'Furina')).toBe('Keep Furina out of this')
+    expect(manageTitle('coordinate', 'Furina')).toBe('Let Furina coordinate this')
+    expect(handOverCaption('leave_alone', 'Furina')).toBe('Furina won’t message or stop it. You still can.')
+    expect(handOverCaption('coordinate', 'Furina')).toBe('Only you message or stop it now.')
   })
 })

@@ -87,7 +87,7 @@ function WorkCard({
         <button
           className="work-card-head"
           aria-expanded={opensChat ? undefined : expanded}
-          aria-label={opensChat ? t('Open {ref}’s chat', { ref: item.ref }) : undefined}
+          title={opensChat ? t('Open {ref}’s chat', { ref: item.ref }) : undefined}
           onClick={() => (opensChat ? onOpenChat(item) : setExpanded(!expanded))}
         >
           <span className="work-card-line">

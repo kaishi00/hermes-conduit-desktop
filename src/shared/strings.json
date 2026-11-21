@@ -8774,6 +8774,21 @@
     "zh-Hans": "描述",
     "zh-Hant": "描述"
   },
+  "Details": {
+    "de": "Details",
+    "es": "Detalles",
+    "fr": "Détails",
+    "id": "Detail",
+    "it": "Dettagli",
+    "ja": "詳細",
+    "ko": "세부 정보",
+    "pl": "Szczegóły",
+    "pt-BR": "Detalhes",
+    "ru": "Подробности",
+    "tr": "Ayrıntılar",
+    "zh-Hans": "详细信息",
+    "zh-Hant": "詳細資訊"
+  },
   "Detected but turned off for Hermes.": {
     "de": "Erkannt, aber für Hermes ausgeschaltet.",
     "es": "Detectado, pero desactivado para Hermes.",
@@ -42793,20 +42808,5 @@
     "tr": "Artık ona yalnızca sen mesaj gönderir veya durdurursun.",
     "zh-Hans": "现在只有你会给它发消息或停止它。",
     "zh-Hant": "現在只有你會給它傳訊息或停止它。"
-  },
-  "Details": {
-    "de": "Details",
-    "es": "Detalles",
-    "fr": "Détails",
-    "id": "Detail",
-    "it": "Dettagli",
-    "ja": "詳細",
-    "ko": "세부 정보",
-    "pl": "Szczegóły",
-    "pt-BR": "Detalhes",
-    "ru": "Подробности",
-    "tr": "Ayrıntılar",
-    "zh-Hans": "详细信息",
-    "zh-Hant": "詳細資訊"
   }
 }
