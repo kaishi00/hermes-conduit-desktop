@@ -325,9 +325,10 @@ export interface ConduitApi {
    * The chat window that opened this session: 'watching' when it's in front
    * (a notification would only repeat it), 'open' when it's behind; with
    * `show`, it comes to the front. null when no chat window has it.
-   * `storedIds` (the ids the chat goes by) find a window that hasn't opened its session yet.
+   * `storedIds` (the ids the chat goes by) find a window that hasn't opened its session yet: 'opening', which
+   * doesn't notify for it yet, so the asking window does.
    */
-  chatWindowOf(sessionId: string, show?: boolean, storedIds?: readonly string[]): Promise<'watching' | 'open' | null>
+  chatWindowOf(sessionId: string, show?: boolean, storedIds?: readonly string[]): Promise<'watching' | 'open' | 'opening' | null>
   /** Closes these chats' windows, or every chat window. */
   closeChatWindows(ids?: string[]): void
   /** The chats that have a window of their own, now and whenever that changes. */

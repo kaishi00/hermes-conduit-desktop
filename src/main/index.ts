@@ -441,14 +441,16 @@ function registerIpc(): void {
         return window ? { contentsId: window.webContents.id, window } : undefined
       }
     )
-    const window = found?.window
-    if (!window) return null
+    const window = found?.window.window
+    if (!found || !window) return null
     const watching = window.isVisible() && !window.isMinimized() && window.isFocused()
     if (show === true) {
       if (window.isMinimized()) window.restore()
       window.show()
       window.focus()
     }
+    // A window still opening its session doesn't notify for it yet: the main window does.
+    if (!found.opened) return 'opening'
     return watching ? 'watching' : 'open'
   })
   ipcMain.on(IPC.openScreenWindow, (_event, screen: unknown) => {

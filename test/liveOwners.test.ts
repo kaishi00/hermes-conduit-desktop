@@ -9,7 +9,7 @@ describe("a page's live sockets (desktop#254)", () => {
     owners.add(2, 'live-3')
     expect(owners.take(1)).toEqual(['live-1', 'live-2'])
     expect(owners.take(1)).toEqual([])
-    expect(owners.sockets(2)).toEqual(['live-3'])
+    expect(owners.take(2)).toEqual(['live-3'])
   })
 
   it('a socket that ended on its own is not ended again', () => {
@@ -26,7 +26,7 @@ describe("a page's live sockets (desktop#254)", () => {
     owners.add(1, 'live-1')
     expect(owners.take(1)).toEqual(['live-1'])
     owners.add(1, 'live-2')
-    expect(owners.sockets(1)).toEqual(['live-2'])
+    expect(owners.take(1)).toEqual(['live-2'])
   })
 
   it('only a navigation that replaces the main frame’s page counts', () => {

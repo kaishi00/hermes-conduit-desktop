@@ -57,8 +57,4 @@ export class LiveOwners {
     for (const id of ids) this.ownerOf.delete(id)
     return ids
   }
-
-  sockets(owner: number): string[] {
-    return [...(this.byOwner.get(owner) ?? [])]
-  }
 }

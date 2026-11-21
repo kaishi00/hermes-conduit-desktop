@@ -1554,10 +1554,12 @@ function Shell({
   watching.current = { liveId: chat.liveId, onChats: section === 'chats' }
   const notify = useCallback(async (spec: NotificationSpec, sessionId: string) => {
     if (!notificationsEnabled() || typeof Notification === 'undefined') return
-    // A chat in a window of its own notifies from that window, one still opening its session included:
-    // found by the ids this window knows the chat by, a chat it never opened (popped out from a row) by a waiting row's.
+    // A chat in a window of its own notifies from that window. One still opening its session can't yet, so this
+    // window does, and a click brings that window up: found by the ids this window knows the chat by, a chat it
+    // never opened (popped out from a row) by a waiting row's.
     const storedIds = chatIdsOf(sessionId, chats.current.get(sessionId)?.storedId, waitingRowsRef.current)
-    if (await window.conduit.chatWindowOf(sessionId, false, storedIds)) return
+    const where = await window.conduit.chatWindowOf(sessionId, false, storedIds)
+    if (where === 'watching' || where === 'open') return
     const n = new Notification(spec.title, { body: spec.body, tag: spec.tag, silent: false })
     n.onclick = async () => {
       // A chat in a window of its own opens there.

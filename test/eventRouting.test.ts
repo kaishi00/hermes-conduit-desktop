@@ -78,15 +78,15 @@ describe('which chat window a notification belongs to (desktop#268)', () => {
   const byStored = (map: Record<string, { contentsId: number }>) => (id: string) => map[id]
 
   it('a window that opened the session wins over one found by stored id', () => {
-    expect(chatWindowFor('live', ['stored'], [6], windows, byStored({ stored: windows[0] }))).toBe(windows[1])
+    expect(chatWindowFor('live', ['stored'], [6], windows, byStored({ stored: windows[0] }))).toEqual({ window: windows[1], opened: true })
   })
 
-  it('a window still opening its session is found by the ids the chat goes by', () => {
-    expect(chatWindowFor('live', ['other', 'stored'], [], windows, byStored({ stored: windows[0] }))).toBe(windows[0])
+  it('a window still opening its session is found by the ids the chat goes by, and the asking window notifies', () => {
+    expect(chatWindowFor('live', ['other', 'stored'], [], windows, byStored({ stored: windows[0] }))).toEqual({ window: windows[0], opened: false })
   })
 
   it('an event that names the chat by its stored id finds its window', () => {
-    expect(chatWindowFor('stored', [], [], windows, byStored({ stored: windows[1] }))).toBe(windows[1])
+    expect(chatWindowFor('stored', [], [], windows, byStored({ stored: windows[1] }))?.window).toBe(windows[1])
   })
 
   it('no window, or only the main window opened it', () => {
