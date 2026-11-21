@@ -42553,5 +42553,35 @@
     "tr": "Yan paneli gizle",
     "zh-Hans": "隐藏侧面板",
     "zh-Hant": "隱藏側面板"
+  },
+  "Rename Dashboard": {
+    "de": "Dashboard umbenennen",
+    "es": "Cambiar nombre del panel",
+    "fr": "Renommer le tableau de bord",
+    "id": "Ganti Nama Dasbor",
+    "it": "Rinomina dashboard",
+    "ja": "ダッシュボード名を変更",
+    "ko": "대시보드 이름 변경",
+    "pl": "Zmień nazwę panelu",
+    "pt-BR": "Renomear Painel",
+    "ru": "Переименовать дашборд",
+    "tr": "Paneli Yeniden Adlandır",
+    "zh-Hans": "重命名仪表板",
+    "zh-Hant": "重新命名儀表板"
+  },
+  "Its badge shows the name's first letter. Leave it empty to go back to the name Conduit picked.": {
+    "de": "Sein Abzeichen zeigt den ersten Buchstaben des Namens. Lass das Feld leer, um zum Namen zurückzukehren, den Conduit gewählt hat.",
+    "es": "Su insignia muestra la primera letra del nombre. Déjalo vacío para volver al nombre que eligió Conduit.",
+    "fr": "Son badge affiche la première lettre du nom. Laissez le champ vide pour revenir au nom choisi par Conduit.",
+    "id": "Lencananya menampilkan huruf pertama nama. Kosongkan untuk kembali ke nama yang dipilih Conduit.",
+    "it": "Il suo badge mostra la prima lettera del nome. Lascia vuoto per tornare al nome scelto da Conduit.",
+    "ja": "バッジには名前の最初の文字が表示されます。空欄にすると Conduit が付けた名前に戻ります。",
+    "ko": "배지에는 이름의 첫 글자가 표시됩니다. 비워 두면 Conduit이 정한 이름으로 돌아갑니다.",
+    "pl": "Jego plakietka pokazuje pierwszą literę nazwy. Zostaw puste, aby wrócić do nazwy wybranej przez Conduit.",
+    "pt-BR": "O selo mostra a primeira letra do nome. Deixe em branco para voltar ao nome que o Conduit escolheu.",
+    "ru": "На значке — первая буква названия. Оставьте поле пустым, чтобы вернуть название, выбранное Conduit.",
+    "tr": "Rozeti adın ilk harfini gösterir. Conduit’in seçtiği ada dönmek için boş bırakın.",
+    "zh-Hans": "徽章显示名称的首字母。留空即可恢复 Conduit 选的名称。",
+    "zh-Hant": "徽章顯示名稱的首字母。留空即可恢復 Conduit 選的名稱。"
   }
 }

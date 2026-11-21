@@ -47,21 +47,25 @@ describe('Pairing', () => {
     const box = fakeMailbox()
     const events: { phase: string; words?: string[] }[] = []
     const signedIn: string[] = []
+    const named: [string, string][] = []
     const pairing = new Pairing({
       fetch: box.fetch as never,
       mailbox: 'https://mail.test',
       onEvent: e => events.push(e),
       signIn: async r => (signedIn.push(r.url), { ok: true }),
-      switchHost: () => true
+      switchHost: () => true,
+      nameHost: (url, name) => named.push([url, name])
     })
     const started = await pairing.start()
     if (!started.ok) throw new Error(started.error)
     const link = parsePairLink(started.link)!
-    box.leave(sealForComputer(Buffer.from(JSON.stringify({ v: 1, hosts: [{ url: 'https://hermes.test', method: 'open' }] })), fromB64u(link.key), link.inbox))
+    box.leave(sealForComputer(Buffer.from(JSON.stringify({ v: 1, hosts: [{ url: 'https://hermes.test', method: 'open', name: 'Studio' }, { url: 'http://192.168.1.5:9119', method: 'open', name: '192.168.1.5' }] })), fromB64u(link.key), link.inbox))
     for (let i = 0; i < 100 && !events.some(e => e.phase === 'received'); i++) await new Promise(r => setTimeout(r, 10))
     expect(events.find(e => e.phase === 'received')?.words).toHaveLength(4)
     await pairing.confirm()
-    expect(signedIn).toEqual(['https://hermes.test'])
+    expect(signedIn).toEqual(['https://hermes.test', 'http://192.168.1.5:9119'])
+    // What the phone calls each, unless that's only its address.
+    expect(named).toEqual([['https://hermes.test', 'Studio']])
     expect(events.at(-1)?.phase).toBe('done')
     expect(box.calls).toContain(`DELETE /v1/inboxes/${link.inbox}`)
   })

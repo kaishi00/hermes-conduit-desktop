@@ -52,6 +52,10 @@ export interface SavedConnection {
   headers?: ProxyHeaders
   /** In the combined group: kept connected while another host is open. */
   combined?: boolean
+  /** The name the person gave it in Settings. */
+  name?: string
+  /** What its plugin calls its Hermes, the name of a host whose address names nothing (shared/hostNames.ts). */
+  hermesName?: string
 }
 
 export interface ConnectionStore {
@@ -70,9 +74,16 @@ export interface ConnectionStore {
   /** Saves a host's new cookies without making it the open one. */
   update?(connection: SavedConnection): void
   setCombined?(url: string, on: boolean): void
+  /** Settings' Rename: '' goes back to the automatic name. */
+  rename?(url: string, name: string): void
+  /** What the host's plugin calls its Hermes; true when that changed anything. */
+  setHermesName?(url: string, name: string): boolean
   /** Edit Connection: puts `connection` where `from` was, keeping its place and its group, and makes it the open one. */
   replace?(from: string, connection: SavedConnection): void
 }
+
+/** The Conduit plugin's capabilities route (renderer state/plugin.ts STATUS_PATH). */
+export const PLUGIN_CAPABILITIES_PATH = '/api/plugins/conduit_push/capabilities'
 
 /** Hermes' Bot Screen stream (RFB), admitted by a `display.observe` ticket. */
 export const DISPLAY_SOCKET_PATH = '/api/display/ws'
@@ -87,6 +98,8 @@ export interface ConnectionDeps {
   onEvent: (event: GatewayEventMessage) => void
   /** The questions Hermes is waiting on, whenever they change. */
   onRequests?: (requests: PendingRequest[]) => void
+  /** What the host's plugin calls its Hermes, read once each time it connects ('' for nothing). */
+  onHermesName?: (url: string, name: string) => void
   /** Timers, replaceable in tests. */
   setTimeout?: (fn: () => void, ms: number) => unknown
   clearTimeout?: (handle: unknown) => void
@@ -586,12 +599,26 @@ export class Connection {
       if (state === 'open') {
         this.openedAt = Date.now()
         this.setStatus({ ...this.identity(), phase: 'open', sessionAuthority: this.status.sessionAuthority })
+        void this.readHermesName()
       } else if ((state === 'closed' || state === 'error') && this.status.phase === 'open') {
         if (isStableOpen(this.openedAt)) this.attempt = 0
         this.openedAt = null
         this.scheduleRetry(generation, t('The connection to Hermes dropped.'))
       }
     }))
+  }
+
+  /** The plugin's name for this Hermes (capabilities' `name`), for a host whose address names nothing. Quiet on failure. */
+  private async readHermesName(): Promise<void> {
+    const url = this.saved?.url
+    if (!url || !this.deps.onHermesName) return
+    try {
+      const body = await this.http<Record<string, unknown> | null>('GET', PLUGIN_CAPABILITIES_PATH, undefined, 8_000)
+      if (this.saved?.url !== url || body?.ok !== true) return
+      this.deps.onHermesName(url, typeof body.name === 'string' ? body.name : '')
+    } catch {
+      // No plugin, or it didn't answer: the name stays as it was.
+    }
   }
 
   private unbindClient(): void {

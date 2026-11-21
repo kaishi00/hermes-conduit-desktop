@@ -5,6 +5,7 @@ import { KEPT_BACKOFF, KEPT_RPC_METHODS, KeptHosts, MAX_KEPT } from '../src/main
 import { Connection, type SavedConnection } from '../src/main/connection'
 import type { ConnectionStatus, KeptHost } from '../src/shared/ipc'
 import type { WebSocketLike } from '../src/vendor/hermes-shared/json-rpc-gateway'
+import { badgeLetters } from '../src/shared/hostNames'
 import {
   badgeColor,
   BADGE_PALETTE,
@@ -79,8 +80,10 @@ function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: str
     }
     if (url.pathname === '/api/auth/ws-ticket') return opts.refuse?.includes(origin) ? json({ detail: 'Not authenticated' }, 401) : json({ ticket: 'T' })
     if (url.pathname === '/api/profiles') return json({ profiles: [{ name: 'default' }, { name: 'mira' }] })
+    if (url.pathname === '/api/plugins/conduit_push/capabilities') return json({ ok: true, name: `Hermes at ${url.hostname}` })
     return json({ detail: 'Not Found' }, 404)
   }
+  const hermesNames: [string, string][] = []
   const kept = new KeptHosts({
     fetch: fetchImpl,
     store,
@@ -90,14 +93,22 @@ function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: str
       return socket as unknown as WebSocketLike
     },
     onChange: list => changes.push(list),
+    onHermesName: (url, name) => hermesNames.push([url, name]),
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
     clearTimeout: () => undefined
   })
   const state = (url: string) => kept.list().find(h => h.url === url)?.state
-  return { kept, store, sockets, changes, timers, written, state }
+  return { kept, store, sockets, changes, timers, written, state, hermesNames }
 }
 
 describe('combined dashboards in the main process', () => {
+  it("reads each kept host's Hermes name once it connects", async () => {
+    const h = harness([host('https://a.example'), host('https://b.example')])
+    h.kept.sync(open('https://a.example'))
+    await until(() => h.hermesNames.length > 0)
+    expect(h.hermesNames).toEqual([['https://b.example', 'Hermes at b.example']])
+  })
+
   it("connects the group's others once the one on screen has, and drops their events", async () => {
     const h = harness([host('https://a.example'), host('https://b.example'), host('https://c.example')])
     h.kept.sync({ phase: 'connecting', url: 'https://a.example' })
@@ -258,6 +269,16 @@ describe('combined dashboards in the window', () => {
     expect(hostBadge(hosts, 'https://studio.example', name)).toMatchObject({ letter: 'S', color: BADGE_PALETTE[1] })
     expect(hostBadge(hosts, 'https://alone.example', name)).toBeNull()
     expect(hostBadge([hosts[0]!], 'https://home.example', name)).toBeNull()
+  })
+
+  it('numbers the group where two names start alike, so no two badges read the same', () => {
+    const lan = [
+      { url: 'http://192.168.1.5:9119', method: 'open' as const, combined: true },
+      { url: 'http://192.168.1.6:9119', method: 'open' as const, combined: true },
+      { url: 'https://studio.example', method: 'open' as const, combined: true }
+    ]
+    expect(lan.map(h => hostBadge(lan, h.url, name)?.letter)).toEqual(['1', '2', 'S'])
+    expect(badgeLetters(['Furina', 'conduit'])).toEqual(['F', 'C'])
   })
 
   it('gives a seventh member a hue of its own', () => {

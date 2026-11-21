@@ -16,6 +16,8 @@ interface StoredHost {
   method: SavedConnection['method']
   username?: string
   combined?: boolean
+  name?: string
+  hermesName?: string
   /** base64 of safeStorage-encrypted JSON `{ password?, token?, cookies? }`. */
   secrets?: string
 }
@@ -30,12 +32,18 @@ interface StoredFile {
   hosts: StoredHost[]
 }
 
+/** A host's own name and its Hermes' name (shared/hostNames.ts), where it has them. */
+const names = (host: { name?: unknown; hermesName?: unknown }): { name?: string; hermesName?: string } => ({
+  ...(typeof host.name === 'string' && host.name ? { name: host.name } : {}),
+  ...(typeof host.hermesName === 'string' && host.hermesName ? { hermesName: host.hermesName } : {})
+})
+
 export function createFileStore(): ConnectionStore {
   const path = join(app.getPath('userData'), 'connection.json')
 
   const decode = (stored: StoredHost): SavedConnection | null => {
     if (typeof stored.url !== 'string') return null
-    const saved: SavedConnection = { url: stored.url, method: stored.method, username: stored.username, ...(stored.combined ? { combined: true } : {}) }
+    const saved: SavedConnection = { url: stored.url, method: stored.method, username: stored.username, ...(stored.combined ? { combined: true } : {}), ...names(stored) }
     if (stored.secrets && safeStorage.isEncryptionAvailable()) {
       try {
         const secrets = JSON.parse(safeStorage.decryptString(Buffer.from(stored.secrets, 'base64'))) as Partial<SavedConnection>
@@ -54,7 +62,7 @@ export function createFileStore(): ConnectionStore {
   }
 
   const encode = (connection: SavedConnection): StoredHost | null => {
-    const stored: StoredHost = { url: connection.url, method: connection.method, username: connection.username, ...(connection.combined ? { combined: true } : {}) }
+    const stored: StoredHost = { url: connection.url, method: connection.method, username: connection.username, ...(connection.combined ? { combined: true } : {}), ...names(connection) }
     if (connection.method !== 'open' || connection.headers) {
       // Without the keychain the secrets stay in memory for this launch only.
       if (!safeStorage.isEncryptionAvailable()) return null
@@ -104,6 +112,8 @@ export function createFileStore(): ConnectionStore {
     get: url => hosts().get!(url),
     update: connection => hosts().update!(connection),
     setCombined: (url, on) => hosts().setCombined!(url, on),
+    rename: (url, name) => hosts().rename!(url, name),
+    setHermesName: (url, name) => hosts().setHermesName!(url, name),
     replace: (from, connection) => hosts().replace!(from, connection)
   }
 }

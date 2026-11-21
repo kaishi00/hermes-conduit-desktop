@@ -24,6 +24,8 @@ export interface PairingDeps {
   onEvent: (event: PairEvent) => void
   signIn: (request: SignInRequest) => Promise<{ ok: true } | { ok: false; error: string }>
   switchHost: (url: string) => boolean
+  /** Names a host just signed in to as the phone calls it, unless it was named here. */
+  nameHost?: (url: string, name: string) => void
   now?: () => number
 }
 
@@ -127,7 +129,11 @@ export class Pairing {
     let first: string | null = null
     for (const host of received.hosts) {
       const result = await this.deps.signIn({ url: host.url, method: host.method, username: host.username, password: host.password, token: host.token, headers: host.headers })
-      if (result.ok) first ??= host.url
+      if (result.ok) {
+        first ??= host.url
+        // What the phone calls it, unless that's only its address.
+        if (host.name && !/^(localhost|[\d.:\[\]]+)$/i.test(host.name.trim())) this.deps.nameHost?.(host.url, host.name)
+      }
       else failed.push(`${host.name ?? host.url}: ${result.error}`)
     }
     // The phone's own host first, as it listed them.

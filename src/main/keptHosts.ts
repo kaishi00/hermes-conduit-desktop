@@ -24,6 +24,7 @@ export interface KeptHostsDeps {
   store: ConnectionStore
   createSocket: SocketFactory
   onChange: (hosts: KeptHost[]) => void
+  onHermesName?: (url: string, name: string) => void
   setTimeout?: (fn: () => void, ms: number) => unknown
   clearTimeout?: (handle: unknown) => void
 }
@@ -114,6 +115,7 @@ export class KeptHosts {
       },
       // Fenced while another host is on screen: opening it runs the usual sync.
       onEvent: () => undefined,
+      onHermesName: this.deps.onHermesName,
       refusedWaits: true,
       backoff: KEPT_BACKOFF,
       setTimeout: this.deps.setTimeout,

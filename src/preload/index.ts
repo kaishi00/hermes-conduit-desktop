@@ -99,6 +99,7 @@ const api: ConduitApi = {
   keptHosts: () => ipcRenderer.invoke(IPC.keptHosts),
   onKeptHosts: listener => listen<KeptHost[]>(IPC.keptHostsChanged, listener),
   setCombined: (url, on) => ipcRenderer.invoke(IPC.setCombined, url, on),
+  renameHost: (url, name) => ipcRenderer.invoke(IPC.renameHost, url, name),
   keptHttp: (url, path) => ipcRenderer.invoke(IPC.keptHttp, url, path),
   keptRpc: (url, method, params) => ipcRenderer.invoke(IPC.keptRpc, url, method, params),
   reconnect: () => ipcRenderer.invoke(IPC.reconnect),

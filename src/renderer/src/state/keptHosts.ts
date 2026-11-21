@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { HostSummary, KeptHost, KeptHostState } from '../../../shared/ipc'
 import { t } from '../../../shared/i18n'
+import { badgeLetters } from '../../../shared/hostNames'
 import { WAITING_POLL_MS, waitingFromResponse, waitingPath, type WaitingRow } from './needsYou'
 import { CHAT_LIST_PAGE, CHAT_LIST_PATH, rowsFromResponse, type ChatRow } from './chats'
 import { rosterFromProfiles, type Bot } from './bots'
@@ -61,8 +62,9 @@ export function hostBadge(hosts: readonly HostSummary[], url: string, name: (url
   const group = hosts.filter(h => h.combined)
   const index = group.findIndex(h => h.url === url)
   if (group.length < 2 || index < 0) return null
-  const label = name(url).trim()
-  return { letter: (Array.from(label)[0] ?? '?').toUpperCase(), color: badgeColor(index), name: label }
+  const labels = group.map(h => name(h.url).trim())
+  // Its name's first letter, or its place where two names start alike.
+  return { letter: badgeLetters(labels)[index]!, color: badgeColor(index), name: labels[index]! }
 }
 
 /** The hosts kept beside the open one, as the main process says. */

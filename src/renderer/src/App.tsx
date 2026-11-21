@@ -6,6 +6,7 @@ import { gateway } from './gateway'
 import { draftAgents, type OwnHermesBot } from './state/roomDrafts'
 import { arrange, farBotFor, orderedBots, useBotOrder, useMixedBotOrder, useSyncedOrder } from './state/botOrder'
 import { STATUS_PATH as PLUGIN_STATUS_PATH, pluginStatus } from './state/plugin'
+import { rememberHostNames } from './state/hostNames'
 import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '@shared/ipc'
 import { BotsHome, useReplyFace, type BotAction } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
@@ -121,7 +122,7 @@ import { ROOM_LINKS_CAPABILITY } from './state/roomLinks'
 import { ChatQueueDock } from './components/ChatQueueDock'
 import { AppLockSetting, LockedScreen } from './components/AppLock'
 import { AskDashboardSetting, DashboardChoice } from './components/AskDashboard'
-import { CombineDashboardsSetting } from './components/CombinedDashboards'
+import { CombineDashboardsSetting, HostBadgeMark } from './components/CombinedDashboards'
 import {
   hostBadge,
   keptStateLabel,
@@ -191,7 +192,7 @@ import { consented, isLive } from './state/consent'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
 import type { CallResume } from './state/voiceSave'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
-import { ask, tell } from './state/dialogs'
+import { ask, askText, tell } from './state/dialogs'
 import { forgetTranscripts } from './state/transcriptCache'
 
 /** The host's synced preferences, for the bots' order. */
@@ -201,8 +202,14 @@ export function App() {
   const [status, setStatus] = useState<ConnectionStatus | null>(null)
 
   useEffect(() => {
-    const off = window.conduit.onStatus(setStatus)
-    void window.conduit.status().then(s => setStatus(current => current ?? s))
+    const off = window.conduit.onStatus(s => {
+      rememberHostNames(s.hosts)
+      setStatus(s)
+    })
+    void window.conduit.status().then(s => {
+      rememberHostNames(s.hosts)
+      setStatus(current => current ?? s)
+    })
     return off
   }, [])
 
@@ -2928,6 +2935,7 @@ function Settings({
       </main>
     )
   const methods = { password: t('User name and password'), token: t('Session token'), open: t('No sign-in') }
+  const settingsBadge = (url: string) => hostBadge(status.hosts ?? [], url, hostName)
   return (
     <main className="settings">
       <h1>{t('Settings')}</h1>
@@ -2945,11 +2953,25 @@ function Settings({
               {(status.hosts?.length ? status.hosts : status.url ? [{ url: status.url, method: status.method ?? 'open', username: status.username }] : []).map(
                 host => (
                   <li key={host.url} className={host.url === status.url ? 'current' : undefined}>
+                    {settingsBadge(host.url) ? <HostBadgeMark badge={settingsBadge(host.url)!} /> : null}
                     <span className="host-label" title={host.url}>
                       {hostName(host.url)}
                     </span>
                     {host.username ? <span className="meta">{host.username}</span> : null}
                     <span className="spacer" />
+                    <button
+                      className="link"
+                      onClick={async () => {
+                        const name = await askText(
+                          `${t('Rename Dashboard')}\n\n${t("Its badge shows the name's first letter. Leave it empty to go back to the name Conduit picked.")}`,
+                          host.named ? hostName(host.url) : '',
+                          { confirm: t('Save') }
+                        )
+                        if (name !== null) void window.conduit.renameHost(host.url, name)
+                      }}
+                    >
+                      {t('Rename')}
+                    </button>
                     {host.url === status.url ? (
                       <>
                         <span className="meta">{t('In use')}</span>

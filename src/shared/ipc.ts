@@ -127,6 +127,10 @@ export interface HostSummary {
   username?: string
   /** In the combined group (Combine Dashboards). */
   combined?: boolean
+  /** What it's called everywhere (shared/hostNames.ts). */
+  name?: string
+  /** The person named it, so Rename starts from that name. */
+  named?: boolean
 }
 
 /** How a combined host beside the open one is doing, in the phone's words. */
@@ -261,6 +265,8 @@ export interface ConduitApi {
   keptHosts(): Promise<KeptHost[]>
   onKeptHosts(listener: (hosts: KeptHost[]) => void): () => void
   setCombined(url: string, on: boolean): Promise<void>
+  /** Settings' Rename for a saved host: '' goes back to the automatic name. */
+  renameHost(url: string, name: string): Promise<void>
   /** A GET through a kept host's connection. */
   keptHttp<T = unknown>(url: string, path: string): Promise<RpcOutcome<T>>
   /** A read over a kept host's socket (its bots: `profiles.list`). */
@@ -414,6 +420,7 @@ export const IPC = {
   keptHosts: 'conduit:kept-hosts',
   keptHostsChanged: 'conduit:kept-hosts-changed',
   setCombined: 'conduit:set-combined',
+  renameHost: 'conduit:rename-host',
   keptHttp: 'conduit:kept-http',
   checkCertificate: 'conduit:check-certificate',
   saveCertificate: 'conduit:save-certificate',

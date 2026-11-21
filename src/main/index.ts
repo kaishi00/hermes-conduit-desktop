@@ -146,7 +146,8 @@ const keptHosts = new KeptHosts({
   fetch: globalThis.fetch.bind(globalThis),
   store: hostStore,
   createSocket,
-  onChange: hosts => send(IPC.keptHostsChanged, hosts)
+  onChange: hosts => send(IPC.keptHostsChanged, hosts),
+  onHermesName: (url, name) => noteHermesName(url, name)
 })
 
 const connection = new Connection({
@@ -164,15 +165,26 @@ const connection = new Connection({
     }
   },
   onEvent: (event: GatewayEventMessage) => sendGatewayEvent(IPC.event, event, event.session_id),
-  onRequests: requests => sendGatewayEvent(IPC.requestsChanged, requests)
+  onRequests: requests => sendGatewayEvent(IPC.requestsChanged, requests),
+  onHermesName: (url, name) => noteHermesName(url, name)
 })
+
+/** A host's plugin named its Hermes: the window hears the new names when that changed one. */
+function noteHermesName(url: string, name: string): void {
+  if (hostStore.setHermesName?.(url, name)) connection.hostsChanged()
+}
 
 const pairing = new Pairing({
   fetch: globalThis.fetch.bind(globalThis),
   mailbox: process.env.CONDUIT_PAIR_MAILBOX || undefined,
   onEvent: event => send(IPC.pairEvent, event),
   signIn: request => connection.signIn(request),
-  switchHost: url => connection.switchHost(url, taken => keptHosts.take(taken))
+  switchHost: url => connection.switchHost(url, taken => keptHosts.take(taken)),
+  nameHost: (url, name) => {
+    if (hostStore.get?.(url)?.name) return
+    hostStore.rename?.(url, name)
+    connection.hostsChanged()
+  }
 })
 
 let unlocking: Promise<boolean> | null = null
@@ -422,6 +434,11 @@ function registerIpc(): void {
     return true
   })
   ipcMain.handle(IPC.keptHosts, () => keptHosts.list())
+  ipcMain.handle(IPC.renameHost, (_e, url: unknown, name: unknown) => {
+    if (typeof url !== 'string' || typeof name !== 'string') return
+    hostStore.rename?.(url, name)
+    connection.hostsChanged()
+  })
   ipcMain.handle(IPC.setCombined, (_e, url: unknown, on: unknown) => {
     if (typeof url !== 'string' || typeof on !== 'boolean') return
     hostStore.setCombined?.(url, on)
