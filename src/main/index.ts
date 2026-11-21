@@ -151,7 +151,7 @@ function sendGatewayEvent(channel: string, payload: unknown, sessionId?: string)
 /** The status of the dashboard on screen, to every window but the chat windows on another one. */
 function sendStatus(status: ConnectionStatus): void {
   for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed() && !farHost(window.webContents.id)) window.webContents.send(IPC.statusChanged, status)
+    if (!window.isDestroyed() && !isWakeListener(window) && !farHost(window.webContents.id)) window.webContents.send(IPC.statusChanged, status)
   }
 }
 /** What a kept host says, to the chat windows open on it. */

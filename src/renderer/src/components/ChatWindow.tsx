@@ -16,6 +16,7 @@ import { mentionCandidates, withMentionNote, withoutMentionNote } from '../state
 import { clearExpired } from '../state/expiredQuestions'
 import { isResetCommand, looksLikeSlashCommand } from '../state/slash'
 import { cleanTitle } from '../state/text'
+import { notificationsEnabled, requestNotification, turnNotification, type NotificationSpec } from '../state/notifications'
 import type { StagedAttachment } from '../state/attachments'
 import { chatWindowTitle } from '@shared/chatWindows'
 import { Composer } from './Composer'
@@ -128,6 +129,42 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     wasRunning.current = transcript.running
   }, [transcript.running])
   const outputs = useMemo(() => transcript.items.filter(item => item.kind === 'output').length, [transcript.items])
+
+  /**
+   * This window's own notifications: a reply finished or a question waiting
+   * while it isn't in front. The main window leaves a chat with a window to
+   * it, so a chat on another combined dashboard notifies too; a click brings
+   * this window back.
+   */
+  const chatRef = useRef({ liveId: chat.liveId, storedId: chat.storedId, profile, title })
+  chatRef.current = { liveId: chat.liveId, storedId: chat.storedId, profile, title }
+  const notify = useCallback((spec: NotificationSpec) => {
+    if (!notificationsEnabled() || typeof Notification === 'undefined' || (document.hasFocus() && !document.hidden)) return
+    const n = new Notification(spec.title, { body: spec.body, tag: spec.tag, silent: false })
+    n.onclick = () => {
+      const live = chatRef.current.liveId
+      if (live) void window.conduit.chatWindowOf(live, true)
+    }
+  }, [])
+  useEffect(
+    () =>
+      window.conduit.onEvent(event => {
+        const { liveId, ...ref } = chatRef.current
+        if (event.type !== 'message.complete' || !event.session_id || event.session_id !== liveId) return
+        const spec = turnNotification(event.session_id, event.payload, ref)
+        if (spec) notify(spec)
+      }),
+    [notify]
+  )
+  const notified = useRef(new Set<string>())
+  useEffect(() => {
+    for (const request of openRequests) {
+      if (notified.current.has(request.id)) continue
+      notified.current.add(request.id)
+      const { liveId: _live, ...ref } = chatRef.current
+      notify(requestNotification(request, ref))
+    }
+  }, [openRequests, notify])
 
   const openInMain = useCallback(() => {
     window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
