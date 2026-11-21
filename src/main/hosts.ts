@@ -6,14 +6,19 @@ export function createHostList(persist: (hosts: SavedConnection[], active: strin
   let hosts = initial.hosts
   let active = initial.active && hosts.some(h => h.url === initial.active) ? initial.active : (hosts[0]?.url ?? null)
   const write = () => persist(hosts, active)
-  /** What a host keeps through a sign-in again or a new address: its group, its name and its Hermes' name. */
+  /**
+   * What a host keeps through a sign-in again, a cookie refresh or a new
+   * address: its group, and its names as the list has them, since only
+   * Rename and the plugin's answer change those, and a connection's copy of
+   * the host can be older than a rename.
+   */
   const keep = (connection: SavedConnection, before: SavedConnection | undefined): SavedConnection =>
     before
       ? {
           ...connection,
           combined: connection.combined ?? before.combined,
-          name: connection.name ?? before.name,
-          hermesName: connection.hermesName ?? before.hermesName
+          name: before.name,
+          hermesName: before.hermesName
         }
       : connection
   const store: ConnectionStore = {

@@ -69,6 +69,11 @@ describe('the saved hosts file', () => {
     again.rename!('https://furina.milim.dev', '')
     expect(again.list!()[1]).toMatchObject({ name: 'furina.milim.dev' })
     expect(again.list!()[1]!.named).toBeUndefined()
+    // A connection's older copy of the host, written back with new cookies, keeps the rename.
+    const loaded = again.get!('http://192.168.1.5:9119')!
+    again.rename!('http://192.168.1.5:9119', 'Bench')
+    again.update!({ ...loaded, token: 'c' })
+    expect(again.list!()[0]).toMatchObject({ name: 'Bench', named: true })
     // Edit Connection moves a host to a new address with its name.
     again.rename!('http://192.168.1.5:9119', 'Lab')
     again.replace!('http://192.168.1.5:9119', { url: 'http://192.168.1.9:9119', method: 'open' })
