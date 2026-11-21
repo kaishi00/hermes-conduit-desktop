@@ -74,16 +74,24 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
   useEffect(() => {
     if (!menu) return
     const close = () => setMenu(null)
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    // Escape closes the menu only, not the task panel open beside it: this runs first and keeps it.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      close()
+    }
     window.addEventListener('click', close)
-    window.addEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
     window.addEventListener('blur', close)
     return () => {
       window.removeEventListener('click', close)
-      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('blur', close)
     }
   }, [menu])
+
+  // A menu opened on one board never acts on another.
+  useEffect(() => setMenu(null), [kanban.slug])
 
   function copy(text: string, done: string) {
     navigator.clipboard.writeText(text).then(
@@ -162,7 +170,15 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
         </div>
       ) : (
         <>
-        <div className="board-jump" role="toolbar" aria-label={t('Board')}>
+        <div
+          className="board-jump"
+          role="toolbar"
+          aria-label={t('Board')}
+          onWheel={e => {
+            // A narrow window clips the chips: the wheel moves them along.
+            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY
+          }}
+        >
           {columns.map((column, index) => (
             <button
               key={column.name}

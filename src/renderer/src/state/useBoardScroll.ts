@@ -82,6 +82,8 @@ export function useBoardScroll(lanes: RefObject<HTMLDivElement | null>, laneKey:
     }
     const onMove = (e: PointerEvent) => {
       if (!start || e.pointerId !== start.id) return
+      // A release outside the window that never reached us ends the pan here.
+      if (!(e.buttons & 1)) return end()
       const dx = e.clientX - start.x
       if (!panning) {
         if (Math.abs(dx) < PAN_SLOP) return
