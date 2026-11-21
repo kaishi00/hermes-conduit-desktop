@@ -1048,14 +1048,23 @@ function Shell({
   }
   // An artifact's Show in Chat: the message it came from, once its chat's transcript has it (after the phone's ArtifactReveal).
   const [revealRow, setRevealRow] = useState<{ sessionId: string; messageId: number; until: number } | null>(null)
-  const revealing = revealRow && selected.id === revealRow.sessionId ? revealRow.messageId : null
+  // chat.storedId, not selected.id: it changes in useChat's effect with the
+  // store's reset, so the render between the two never reads the previous
+  // chat's rows for the row being revealed.
+  const revealing = revealRow && selected.id === revealRow.sessionId && chat.storedId === revealRow.sessionId ? revealRow.messageId : null
   const revealKey = useTranscriptValue(transcriptStore, state => (revealing === null ? null : revealedKey(state.items, revealing)))
   useEffect(() => {
     if (!revealRow || selected.id !== revealRow.sessionId) return
-    if (Date.now() > revealRow.until) return setRevealRow(null)
-    if (!revealKey) return
-    setRevealRow(null)
-    requestAnimationFrame(() => revealMessage(chatPane.current, revealKey))
+    const left = revealRow.until - Date.now()
+    if (left <= 0) return setRevealRow(null)
+    if (revealKey) {
+      setRevealRow(null)
+      requestAnimationFrame(() => revealMessage(chatPane.current, revealKey))
+      return
+    }
+    // The row may never come: the wait ends on time, not on the next change to the transcript.
+    const timer = window.setTimeout(() => setRevealRow(current => (current === revealRow ? null : current)), left)
+    return () => window.clearTimeout(timer)
   }, [revealRow, selected.id, revealKey])
   const [modelOpen, setModelOpen] = useState(false)
   const closeModel = useCallback(() => setModelOpen(false), [])

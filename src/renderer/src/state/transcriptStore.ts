@@ -42,5 +42,10 @@ export function useTranscript(store: TranscriptStore): TranscriptState {
  * (its items, its plan), never a new object or list made on each call.
  */
 export function useTranscriptValue<T>(store: TranscriptStore, read: (state: TranscriptState) => T): T {
-  return useSyncExternalStore(store.subscribe, () => read(store.get()))
+  return useSyncExternalStore(store.subscribe, () => {
+    const value = read(store.get())
+    // A read that makes a new object each time would draw over and over: say so while developing.
+    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV && !Object.is(value, read(store.get()))) console.error('useTranscriptValue: the read must answer a primitive or a part of the state, not a new object.')
+    return value
+  })
 }
