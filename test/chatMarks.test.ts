@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterRows, isStarred, isUnread, markRead, markUnread, toggleStar, type ChatMarks } from '../src/renderer/src/state/chatMarks'
+import { facetOf, filterRows, isStarred, isUnread, markRead, markUnread, parseSelection, selectRows, settingFilter, toggleStar, type ChatFilterKey, type ChatMarks } from '../src/renderer/src/state/chatMarks'
 
 const marks = (): ChatMarks => ({ stars: [], seen: {}, baseline: 1000, unread: [] })
 const row = (id: string, activeAt: number, profile?: string) => ({ id, title: id, activeAt, profile, pinned: false })
@@ -41,5 +41,48 @@ describe('stars and read state', () => {
     expect(filterRows(rows, 'running', m, new Set(['c'])).map(r => r.id)).toEqual(['c'])
     m = toggleStar(m, row('a', 900, 'work'))
     expect(m.stars).toEqual([])
+  })
+})
+
+describe('the Filter menu', () => {
+  const m = (): ChatMarks => ({ stars: ['default\tb', 'default\tc'], seen: {}, baseline: 1000, unread: [] })
+  const rows = [
+    { ...row('a', 2000), sourceKind: 'telegram' as const },
+    { ...row('b', 2000) },
+    { ...row('c', 900) },
+    { ...row('d', 900), sourceKind: 'telegram' as const }
+  ]
+  const ctx = {
+    marks: m(),
+    running: new Set(['c']),
+    waiting: new Set(['d']),
+    done: (r: { id: string }) => r.id === 'b',
+    underSource: (r: { sourceKind?: string }, s: string) => (r.sourceKind ?? 'chat') === s
+  }
+  const ids = (sel: ChatFilterKey[]) => selectRows(rows, sel, ctx).map(r => r.id)
+
+  it('lists everything with nothing chosen', () => {
+    expect(ids([])).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('lists a chat with any chosen status, and narrows by Starred and by source', () => {
+    expect(ids(['unread', 'running'])).toEqual(['a', 'b', 'c'])
+    expect(ids(['unread', 'running', 'starred'])).toEqual(['b', 'c'])
+    expect(ids(['source:telegram'])).toEqual(['a', 'd'])
+    expect(ids(['source:telegram', 'waiting'])).toEqual(['d'])
+    expect(ids(['source:telegram', 'source:chat', 'inprogress'])).toEqual(['a', 'c', 'd'])
+  })
+
+  it('counts each choice beside the other groups, alone in its own', () => {
+    expect(facetOf(['unread', 'source:telegram'], 'running')).toEqual(['source:telegram', 'running'])
+    expect(facetOf(['unread'], 'source:chat')).toEqual(['unread', 'source:chat'])
+    expect(facetOf(['unread'], 'starred')).toEqual(['unread', 'starred'])
+  })
+
+  it('reads back only what the menu holds', () => {
+    expect(parseSelection(['unread', 'bogus', 'source:telegram', 'unread', 3])).toEqual(['unread', 'source:telegram'])
+    expect(parseSelection('x')).toEqual([])
+    expect(settingFilter(['unread'], 'running', true)).toEqual(['unread', 'running'])
+    expect(settingFilter(['unread', 'running'], 'unread', false)).toEqual(['running'])
   })
 })

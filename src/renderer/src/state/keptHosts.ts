@@ -707,6 +707,24 @@ export function takeBotAfterSwitch(host: string, bots: readonly Bot[] | null): B
 }
 
 /**
+ * Another dashboard's face in the chat list's column: once its switch lands, the list shows that profile's
+ * chats, as the phone's strip picks the profile on the dashboard it switched to.
+ */
+let pendingProfile: { host: string; name: string } | null = null
+
+export function showProfileAfterSwitch(other: OtherBot): void {
+  pendingProfile = { host: other.host, name: other.bot.name }
+}
+
+/** The profile to show on `host`, once its roster is read: one it no longer lists is forgotten. */
+export function takeProfileAfterSwitch(host: string, bots: readonly Bot[] | null | undefined): Bot | null {
+  if (!pendingProfile || pendingProfile.host !== host || !bots) return null
+  const name = pendingProfile.name.toLowerCase()
+  pendingProfile = null
+  return bots.find(b => b.name.toLowerCase() === name) ?? null
+}
+
+/**
  * How many Pulse cards are new on each live kept host, read with the page's
  * minute read while Pulse is on screen. A host whose Pulse doesn't answer has
  * no count (and no chip).

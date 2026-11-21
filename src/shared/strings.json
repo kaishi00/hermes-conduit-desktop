@@ -43003,5 +43003,20 @@
     "tr": "Bu sohbeti ana pencerede açar ve bu pencereyi kapatır.",
     "zh-Hans": "在主窗口中打开此聊天并关闭此窗口。",
     "zh-Hant": "在主視窗中開啟此聊天並關閉此視窗。"
+  },
+  "Sources": {
+    "de": "Quellen",
+    "es": "Fuentes",
+    "fr": "Sources",
+    "id": "Sumber",
+    "it": "Fonti",
+    "ja": "ソース",
+    "ko": "소스",
+    "pl": "Źródła",
+    "pt-BR": "Fontes",
+    "ru": "Источники",
+    "tr": "Kaynaklar",
+    "zh-Hans": "来源",
+    "zh-Hant": "來源"
   }
 }

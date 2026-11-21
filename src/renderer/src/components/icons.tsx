@@ -18,6 +18,7 @@ const paths = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  filter: <path d="M4 7h16M7 12h10M10 17h4" />,
   search: (
     <>
       <circle cx="11" cy="11" r="7" />

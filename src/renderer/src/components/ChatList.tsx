@@ -8,7 +8,7 @@ import { t } from '@shared/i18n'
 import { HideListButton } from './HideListButton'
 import { Icon } from './icons'
 import { UpdatingCapsule } from './UpdatingCapsule'
-import { filterRows, isStarred, isUnread, type ChatFilter, type ChatMarks } from '../state/chatMarks'
+import { facetOf, isSourceKey, isStarred, isUnread, parseSelection, selectRows, settingFilter, type ChatFilterKey, type ChatMarks } from '../state/chatMarks'
 import { sourceName, sourcesIn, type ChatSource } from '../state/chatSources'
 import { contentRows, useContentSearch } from '../state/contentSearch'
 import { arrangePinned, moved, usePinnedOrder } from '../state/pinnedOrder'
@@ -16,7 +16,9 @@ import { gateway } from '../gateway'
 import type { HostBadge, OtherChatRow } from '../state/keptHosts'
 import { HostBadgeMark } from './CombinedDashboards'
 import { EMPTY_NESTING, ancestorsOf, descendants, nestRows, nestSummary } from '../state/chatNesting'
-import { Select } from './Select'
+import { ChatFilterMenu, type FilterChoice } from './ChatFilterMenu'
+import { ProfileColumn } from './ProfileColumn'
+import type { MixedTile } from '../state/botOrder'
 
 const EXPANDED_NESTS = 'conduit.expanded-nests'
 function readExpandedNests(): Set<string> {
@@ -35,18 +37,35 @@ function writeExpandedNests(ids: Set<string>): void {
   }
 }
 
-const FILTERS: { value: ChatFilter; label: () => string }[] = [
-  { value: 'all', label: () => t('All') },
-  { value: 'starred', label: () => t('Starred') },
-  { value: 'unread', label: () => t('Unread') },
-  { value: 'running', label: () => t('Running') },
-  { value: 'waiting', label: () => t('Needs approval') }
-]
-/** Done chats' chips, offered once the plugin keeps the marks. */
-const DONE_FILTERS: { value: ChatFilter; label: () => string }[] = [
-  { value: 'inprogress', label: () => t('In progress') },
-  { value: 'done', label: () => t('Done') }
-]
+/** The Filter menu's words for each choice. */
+const FILTER_LABELS: Record<Exclude<ChatFilterKey, `source:${string}`>, () => string> = {
+  starred: () => t('Starred'),
+  unread: () => t('Unread'),
+  running: () => t('Running'),
+  waiting: () => t('Needs approval'),
+  inprogress: () => t('In progress'),
+  done: () => t('Done')
+}
+const STATUS_CHOICES = ['unread', 'running', 'waiting'] as const
+const PROGRESS_CHOICES = ['inprogress', 'done'] as const
+
+/** The Filter menu's choices, kept on this computer as the phone keeps its own. */
+const FILTERS_KEY = 'conduit.chatFilters'
+function readSelection(): ChatFilterKey[] {
+  try {
+    return parseSelection(JSON.parse(localStorage.getItem(FILTERS_KEY) ?? '[]'))
+  } catch {
+    return []
+  }
+}
+function writeSelection(selection: readonly ChatFilterKey[]): void {
+  try {
+    if (selection.length) localStorage.setItem(FILTERS_KEY, JSON.stringify(selection))
+    else localStorage.removeItem(FILTERS_KEY)
+  } catch {
+    // Kept for this window only.
+  }
+}
 
 /** A section of the list: a date's (or Pinned), or a profile's when grouped by profile. */
 interface ListSection {
@@ -71,13 +90,24 @@ interface Props {
   runningStatus?: string
   onSelect: (row: ChatRow) => void
   onNewChat: () => void
-  /** The bots, for the profile strip and the rows' bot names. */
+  /** The bots, for the profile column and the rows' bot names. */
   bots?: Bot[] | null
   /** The profile the list shows (null: every one). */
   profile?: string | null
   onProfile?: (profile: string | null) => void
-  /** Edit profile from a face's right-click in the strip. */
+  /** Edit profile from a face's right-click in the column. */
   onEditProfile?: (bot: Bot) => void
+  /**
+   * The column's faces: in a combined group every dashboard's profiles in the
+   * group's order (state/botOrder mixedTiles); else this dashboard's bots.
+   */
+  profileTiles?: MixedTile[]
+  /** A face's dashboard badge, in a combined group. */
+  tileBadge?: (tile: MixedTile) => HostBadge | null
+  /** What waits on the person in another dashboard's profile, read through its kept connection. */
+  otherWaits?: (tile: MixedTile) => number
+  /** Another dashboard's face: a switch there, landing on that profile. */
+  onOtherProfile?: (tile: MixedTile) => void
   /** A row's menu (right-click or ⋯): Pin or Unpin, Rename, Delete. */
   onPin?: (row: ChatRow) => void
   onRename?: (row: ChatRow, title: string) => void
@@ -154,6 +184,10 @@ export function ChatList({
   profile = null,
   onProfile,
   onEditProfile,
+  profileTiles,
+  tileBadge,
+  otherWaits,
+  onOtherProfile,
   onPin,
   onRename,
   onDelete,
@@ -189,9 +223,26 @@ export function ChatList({
     const targets = await moveTargets!(row).catch(() => [])
     setMoving(current => (current === null ? targets : current))
   }
-  const [filter, setFilter] = useState<ChatFilter>('all')
-  /** The Sources filter: one source's chats, or null for every source. */
-  const [source, setSource] = useState<ChatSource | null>(null)
+  /** The Filter menu's choices: none is All. */
+  const [selection, setSelectionState] = useState<ChatFilterKey[]>(readSelection)
+  const setSelection = (next: ChatFilterKey[]) => {
+    setSelectionState(next)
+    writeSelection(next)
+  }
+  const [filterOpen, setFilterOpen] = useState(false)
+  // The Sources choices show once chats come from more than one place.
+  const sources = useMemo(() => sourcesIn(rows ?? []), [rows])
+  // What applies: without stars and read state nothing filters; In progress and Done sit out on a plugin that keeps
+  // no Done marks, and a source no chat comes from any more sits out, rather than empty the list.
+  const active = useMemo(
+    () =>
+      marks
+        ? selection.filter(k => (isSourceKey(k) ? sources.length > 1 && sources.includes(k.slice(7) as ChatSource) : (k !== 'inprogress' && k !== 'done') || !!isDone))
+        : [],
+    [marks, selection, sources, isDone]
+  )
+  // A status, Starred, In progress or Done is a lookup, not a browse: every match, flat; a source alone is still a browse.
+  const looksUp = active.some(k => !isSourceKey(k))
 
   useEffect(() => {
     if (!menu) return
@@ -238,8 +289,12 @@ export function ChatList({
     setLeftOut(next)
     writeLeftOut(next)
   }
+  const filterContext = useMemo(
+    () => (marks ? { marks, running: runningIds, waiting: waitingIds, done: isDone ?? (() => false), underSource } : null),
+    [marks, runningIds, waitingIds, isDone]
+  )
   // Pinned rows move while the list shows every pinned chat: not during a search or under a filter, nor grouped by profile.
-  const canReorder = !query.trim() && filter === 'all' && !source
+  const canReorder = !query.trim() && !active.length
   // Only grouped by profile does the open chat change what's listed (its section keeps it past the cap), so a click elsewhere doesn't list again.
   const groupOpenId = grouped ? selectedId : null
   const { sections, listed, allowed, pinnedSection, nesting } = useMemo(() => {
@@ -249,12 +304,11 @@ export function ChatList({
       : allLeftOut.length
         ? (rows ?? []).filter(r => shownInAll(r.profile, botNames, allLeftOut))
         : (rows ?? [])
-    const marked = marks ? filterRows(inProfile, isDone || !DONE_FILTERS.some(f => f.value === filter) ? filter : 'all', marks, runningIds, waitingIds, isDone) : inProfile
-    const sourced = source ? marked.filter(r => underSource(r, source)) : marked
+    const sourced = marks && active.length ? selectRows(inProfile, active, filterContext!) : inProfile
     const filtered = q ? sourced.filter(r => searchText(r).includes(q)) : sourced
     // Another combined host's chats, only in All with no filter: found by title or by the host's name.
     const others =
-      !profile && filter === 'all' && !source
+      !profile && !active.length
         ? otherRows.filter(r => !q || `${r.title} ${r.preview ?? ''} ${badgeFor?.(r.host)?.name ?? ''}`.toLowerCase().includes(q))
         : []
     const sections = sectionRows(grouped ? filtered : [...filtered, ...others])
@@ -267,7 +321,7 @@ export function ChatList({
           includedInAll(botNames, allLeftOut),
           {
             // A search or a status or Starred filter lists every match; a source filter is still a browse.
-            capped: !q && filter === 'all',
+            capped: !q && !looksUp,
             showsAll: p => showingAll.has(p),
             openId: groupOpenId,
             pinnedOrder: list => arrangePinned(list, pinOrder.orders)
@@ -290,14 +344,14 @@ export function ChatList({
       }
     }
     // A job under the call or chat it came from, while the list is a browse: a search or a filter lists every row flat (the phone's nests).
-    const nesting = !q && filter === 'all' && !source ? nestRows(arranged.flatMap(section => section.rows.filter(r => !isOther(r)))) : EMPTY_NESTING
+    const nesting = !q && !active.length ? nestRows(arranged.flatMap(section => section.rows.filter(r => !isOther(r)))) : EMPTY_NESTING
     const nestedOut = nesting.nested.size
       ? arranged
           .map(section => ({ ...section, rows: section.rows.filter(r => isOther(r) || !nesting.nested.has(r.id)) }))
           .filter(section => section.profile !== undefined || section.rows.length)
       : arranged
-    return { sections: nestedOut, listed: filtered, allowed: filter !== 'all' || source ? sourced : undefined, pinnedSection: pinned, nesting }
-  }, [rows, query, profile, marks, filter, runningIds, waitingIds, isDone, source, pinOrder.orders, grouped, showingAll, groupOpenId, bots, botNames, allLeftOut, otherRows, badgeFor])
+    return { sections: nestedOut, listed: filtered, allowed: active.length ? sourced : undefined, pinnedSection: pinned, nesting }
+  }, [rows, query, profile, marks, active, looksUp, filterContext, pinOrder.orders, grouped, showingAll, groupOpenId, bots, botNames, allLeftOut, otherRows, badgeFor])
   /**
    * The pins a pinned row moves among: the Pinned section, or grouped by
    * profile its own section's, so a move there orders only that profile's
@@ -353,12 +407,40 @@ export function ChatList({
     () => (content.hits.length ? contentRows(content.hits, listed, rows ?? [], allowed).filter(m => !profile || sameProfile(m.row, profile)) : []),
     [content.hits, listed, rows, allowed, profile]
   )
-  // The Sources filter shows once chats come from more than one place.
-  const sources = useMemo(() => sourcesIn(rows ?? []), [rows])
-  useEffect(() => {
-    if (source && !sources.includes(source)) setSource(null)
-  }, [sources, source])
-  const showStrip = !!onProfile && (bots?.length ?? 0) > 1
+  // The column: shown with two or more profiles, every combined dashboard's counted, as the phone's strip is.
+  const tiles = useMemo<MixedTile[]>(
+    () => profileTiles ?? (bots ?? []).map(bot => ({ key: bot.name, host: '', bot, own: true })),
+    [profileTiles, bots]
+  )
+  const showColumn = !!onProfile && tiles.length > 1
+  // Each of this dashboard's profiles: whether it has unread chats, and how many wait on the person.
+  const profileMarks = useMemo(() => {
+    const unread = new Set<string>()
+    const waits = new Map<string, number>()
+    for (const row of rows ?? []) {
+      const p = (row.profile ?? 'default').toLowerCase()
+      if (waitingIds.has(row.id)) waits.set(p, (waits.get(p) ?? 0) + 1)
+      else if (marks && isUnread(marks, row)) unread.add(p)
+    }
+    return { unread, waits }
+  }, [rows, waitingIds, marks])
+  // The Filter menu's counts: each choice beside the other groups' choices, alone in its own (the phone's facet).
+  const inShown = useMemo(
+    () => (profile ? (rows ?? []).filter(r => sameProfile(r, profile)) : (rows ?? []).filter(r => shownInAll(r.profile, botNames, allLeftOut))),
+    [rows, profile, botNames, allLeftOut]
+  )
+  const choice = (key: ChatFilterKey, label: string): FilterChoice => ({
+    key,
+    label,
+    count: filterOpen && filterContext ? selectRows(inShown, facetOf(active, key), filterContext).length : 0
+  })
+  // The empty list's words: the phone's emptyStateFilter, Starred first, then In progress or Done, then a status.
+  const emptyFilter =
+    (active.includes('starred') ? 'starred' : null) ??
+    active.find(k => k === 'inprogress' || k === 'done') ??
+    active.find(k => k === 'unread' || k === 'running' || k === 'waiting') ??
+    null
+  const waitingShown = useMemo(() => inShown.filter(r => waitingIds.has(r.id)).length, [inShown, waitingIds])
   const botName = (row: ChatRow) => {
     if (!row.profile || row.profile === 'default' || profile) return null
     return bots?.find(b => b.name === row.profile)?.title ?? row.profile
@@ -419,7 +501,36 @@ export function ChatList({
   const today = startOfDay(Date.now())
 
   return (
-    <section className="chatlist" aria-label={t('Chats')}>
+    <section className={`chatlist${showColumn ? ' has-column' : ''}`} aria-label={t('Chats')}>
+      {showColumn ? (
+        <div className="profile-column-wrap">
+          <ProfileColumn
+            tiles={tiles}
+            profile={profile}
+            onProfile={onProfile!}
+            onOther={onOtherProfile}
+            badgeFor={tileBadge}
+            unread={tile => tile.own && profileMarks.unread.has(tile.bot.name.toLowerCase())}
+            waits={tile => (tile.own ? (profileMarks.waits.get(tile.bot.name.toLowerCase()) ?? 0) : (otherWaits?.(tile) ?? 0))}
+            onShowInAll={canGroup ? () => setShowInAll(true) : undefined}
+            onEditProfile={onEditProfile}
+          />
+          {showInAll && bots ? (
+            <ShowInAll
+              bots={bots}
+              leftOut={leftOut}
+              onInclude={includeInAll}
+              groupByProfile={groupByProfile}
+              onGroupByProfile={on => {
+                setGroupByProfile(on)
+                writeGroupByProfile(on)
+              }}
+              onClose={() => setShowInAll(false)}
+            />
+          ) : null}
+        </div>
+      ) : null}
+      <div className="chatlist-main">
       <div className="chatlist-head">
         <h1>{t('Chats')}</h1>
         {onPinnedReplies ? (
@@ -442,64 +553,45 @@ export function ChatList({
         </button>
         {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
-      <label className="chatlist-search">
-        <Icon name="search" />
-        <span className="sr-only">{t('Search chats')}</span>
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('Search chats')} />
-      </label>
-      {showStrip ? (
-        <div className="profile-strip-wrap">
-          <ProfileStrip bots={bots!} profile={profile} onProfile={onProfile!} onShowInAll={() => setShowInAll(true)} onEditProfile={onEditProfile} />
-          {showInAll ? (
-            <ShowInAll
-              bots={bots!}
-              leftOut={leftOut}
-              onInclude={includeInAll}
-              groupByProfile={groupByProfile}
-              onGroupByProfile={on => {
-                setGroupByProfile(on)
-                writeGroupByProfile(on)
-              }}
-              onClose={() => setShowInAll(false)}
-            />
-          ) : null}
-        </div>
-      ) : null}
-      {marks ? (
-        <div className="filter-chips" role="tablist" aria-label={t('Filter')}>
-          {(isDone ? [...FILTERS, ...DONE_FILTERS] : FILTERS).map(({ value, label }) => (
-            <button key={value} role="tab" aria-selected={filter === value} className={filter === value ? 'on' : undefined} onClick={() => setFilter(value)}>
-              {label()}
-            </button>
-          ))}
-          {canGroup ? (
-            <button
-              role="switch"
-              aria-checked={groupByProfile}
-              className={groupByProfile ? 'on' : undefined}
-              onClick={() => {
-                setGroupByProfile(!groupByProfile)
-                writeGroupByProfile(!groupByProfile)
-              }}
-            >
-              {t('Group by profile')}
-            </button>
-          ) : null}
-          {sources.length > 1 ? (
-            <Select
-              className={`source-filter${source ? ' on' : ''}`}
-              aria-label={t('Source')}
-              value={source ?? ''}
-              onChange={picked => setSource((picked || null) as ChatSource | null)}
-            >
-              <option value="">{t('All Sources')}</option>
-              {sources.map(kind => (
-                <option key={kind} value={kind}>
-                  {sourceName(kind)}
-                </option>
-              ))}
-            </Select>
-          ) : null}
+      <div className="chatlist-searchrow">
+        <label className="chatlist-search">
+          <Icon name="search" />
+          <span className="sr-only">{t('Search chats')}</span>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('Search chats')} />
+        </label>
+        {marks ? (
+          <ChatFilterMenu
+            selection={active}
+            allCount={inShown.length}
+            starred={choice('starred', FILTER_LABELS.starred())}
+            statuses={STATUS_CHOICES.map(key => choice(key, FILTER_LABELS[key]()))}
+            progress={isDone ? PROGRESS_CHOICES.map(key => choice(key, FILTER_LABELS[key]())) : []}
+            sources={sources.length > 1 ? sources.map(kind => choice(`source:${kind}`, sourceName(kind))) : []}
+            waiting={waitingShown}
+            onToggle={(key, on) => setSelection(settingFilter(selection, key, on))}
+            onClear={() => setSelection([])}
+            groupByProfile={groupByProfile}
+            onGroupByProfile={
+              canGroup
+                ? on => {
+                    setGroupByProfile(on)
+                    writeGroupByProfile(on)
+                  }
+                : undefined
+            }
+            open={filterOpen}
+            onOpen={setFilterOpen}
+          />
+        ) : null}
+      </div>
+      {active.length ? (
+        <div className="filter-active">
+          <button className="filter-active-chip" onClick={() => setFilterOpen(true)}>
+            {active.map(k => (isSourceKey(k) ? sourceName(k.slice(7) as ChatSource) : FILTER_LABELS[k]())).join(', ')}
+          </button>
+          <button className="filter-active-clear" aria-label={t('Clear')} title={t('Clear')} onClick={() => setSelection([])}>
+            <Icon name="close" />
+          </button>
         </div>
       ) : null}
       <div className="chatlist-scroll" ref={scroller}>
@@ -507,17 +599,17 @@ export function ChatList({
         {error ? <div className="empty">{t('Couldn’t load your chats: {error}', { error })}</div> : null}
         {rows && sections.length === 0 && !query.trim() ? (
           <div className="empty">
-            {filter === 'starred'
+            {emptyFilter === 'starred'
               ? t('No starred chats. Star one from its menu to keep it here.')
-              : filter === 'unread'
+              : emptyFilter === 'unread'
                 ? t('No unread chats.')
-                : filter === 'running'
+                : emptyFilter === 'running'
                   ? t('Nothing is running.')
-                  : filter === 'waiting'
+                  : emptyFilter === 'waiting'
                     ? t('No chat is waiting on your answer.')
-                    : filter === 'inprogress' && isDone
+                    : emptyFilter === 'inprogress'
                       ? t('Every chat here is marked done.')
-                      : filter === 'done' && isDone
+                      : emptyFilter === 'done'
                         ? t('No done chats. Mark one done from its menu.')
                         : t('No chats yet. Start one with the + button.')}
           </div>
@@ -785,6 +877,7 @@ export function ChatList({
           )}
         </div>
       ) : null}
+      </div>
     </section>
   )
 }

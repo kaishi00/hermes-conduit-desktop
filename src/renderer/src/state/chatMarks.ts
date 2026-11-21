@@ -103,3 +103,66 @@ export function filterRows(
       return rows
   }
 }
+
+/**
+ * The Filter menu's choices, after the phone's V2FilterSelection: filters
+ * combine. Starred narrows everything; the statuses (Unread, Running, Needs
+ * approval) list a chat with any of them, as In progress and Done do and as
+ * the sources do; the groups narrow each other. Empty is All.
+ */
+export type ChatFilterKey = Exclude<ChatFilter, 'all'> | `source:${string}`
+
+const STATUS_KEYS: readonly ChatFilterKey[] = ['unread', 'running', 'waiting']
+const PROGRESS_KEYS: readonly ChatFilterKey[] = ['inprogress', 'done']
+export const isSourceKey = (key: ChatFilterKey): key is `source:${string}` => key.startsWith('source:')
+const groupOf = (key: ChatFilterKey) => (key === 'starred' ? 'scope' : STATUS_KEYS.includes(key) ? 'status' : PROGRESS_KEYS.includes(key) ? 'progress' : 'source')
+
+/** Turns one filter on or off; the order stays the menu's. */
+export function settingFilter(selection: readonly ChatFilterKey[], key: ChatFilterKey, on: boolean): ChatFilterKey[] {
+  const rest = selection.filter(k => k !== key)
+  return on ? [...rest, key] : rest
+}
+
+/**
+ * What the menu counts beside `key`: the other groups' choices with `key`
+ * alone in its own, so with Unread on, a source counts its unread chats.
+ * Starred's count is the starred rows among what's chosen.
+ */
+export function facetOf(selection: readonly ChatFilterKey[], key: ChatFilterKey): ChatFilterKey[] {
+  if (key === 'starred') return [...selection.filter(k => k !== key), key]
+  const group = groupOf(key)
+  return [...selection.filter(k => groupOf(k) !== group), key]
+}
+
+export interface FilterContext {
+  marks: ChatMarks
+  running: ReadonlySet<string>
+  waiting: ReadonlySet<string>
+  done: (row: ChatRow) => boolean
+  /** Whether the row is under a source (state/voiceList underSource). */
+  underSource: (row: ChatRow, source: string) => boolean
+}
+
+/** The rows the selection lists, in their order. */
+export function selectRows<R extends ChatRow>(rows: R[], selection: readonly ChatFilterKey[], c: FilterContext): R[] {
+  if (!selection.length) return rows
+  const statuses = selection.filter(k => groupOf(k) === 'status')
+  const progress = selection.filter(k => groupOf(k) === 'progress')
+  const sources = selection.filter(isSourceKey).map(k => k.slice('source:'.length))
+  const starred = selection.includes('starred')
+  const one = (row: R, key: ChatFilterKey) => filterRows([row], key as ChatFilter, c.marks, c.running, c.waiting, c.done).length > 0
+  return rows.filter(
+    row =>
+      (!starred || isStarred(c.marks, row)) &&
+      (!statuses.length || statuses.some(k => one(row, k))) &&
+      (!progress.length || progress.some(k => one(row, k))) &&
+      (!sources.length || sources.some(s => c.underSource(row, s)))
+  )
+}
+
+/** A selection read back, keeping only what a menu could hold. */
+export function parseSelection(raw: unknown): ChatFilterKey[] {
+  if (!Array.isArray(raw)) return []
+  const known: readonly string[] = ['starred', ...STATUS_KEYS, ...PROGRESS_KEYS]
+  return [...new Set(raw.filter((k): k is ChatFilterKey => typeof k === 'string' && (known.includes(k) || /^source:[a-z0-9_-]+$/i.test(k))))]
+}
