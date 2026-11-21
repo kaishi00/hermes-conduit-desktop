@@ -33,7 +33,7 @@ import {
 import { probeHost } from './auth'
 import { pageUrl, registerPageScheme, servePages } from './pages'
 import { confineNavigation } from './navigation'
-import { LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
+import { endSocket, LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
 import { pluginRelease } from './pluginRelease'
 import { cleanHeaders } from './proxyHeaders'
 import { KeptHosts } from './keptHosts'
@@ -166,6 +166,11 @@ function sendToFarWindows(url: string, channel: string, payload: unknown, sessio
 }
 app.on('browser-window-created', (_event, window) => {
   const id = window.webContents.id
+  // A reloaded page (a language change) opens its sessions again: until it does, it hasn't, so a notification
+  // for one isn't left to a page that can't tell it's its own yet.
+  window.webContents.on('did-start-navigation', navigation => {
+    if (replacesPage(navigation)) eventRouter.forget(id)
+  })
   window.on('closed', () => {
     eventRouter.forget(id)
     chatWindowHosts.delete(id)
@@ -449,8 +454,8 @@ function registerIpc(): void {
       window.show()
       window.focus()
     }
-    // A window still opening its session doesn't notify for it yet: the main window does.
-    if (!found.opened) return 'opening'
+    // A window still opening its session doesn't notify for it yet: the main window does, unless it's in front.
+    if (!found.opened) return watching ? 'watching' : 'opening'
     return watching ? 'watching' : 'open'
   })
   ipcMain.on(IPC.openScreenWindow, (_event, screen: unknown) => {
@@ -646,16 +651,7 @@ function registerIpc(): void {
   const endLive = (id: string, close: LiveClose) => {
     const socket = liveSockets.get(id)
     forgetLive(id)
-    if (!socket) return
-    socket.onopen = null
-    socket.onmessage = null
-    socket.onerror = null
-    socket.onclose = null
-    try {
-      socket.close(close.code, close.reason)
-    } catch {
-      socket.close()
-    }
+    if (socket) endSocket(socket, close)
   }
   /** Watches a page once for its webContents' life, however many sockets it opens, so listeners don't stack up. */
   const watchPage = (sender: Electron.WebContents) => {

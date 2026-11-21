@@ -58,3 +58,34 @@ export class LiveOwners {
     return ids
   }
 }
+
+/** What ending a socket needs of it: its handlers and its close. */
+export interface ClosableSocket {
+  onopen: unknown
+  onmessage: unknown
+  onclose: unknown
+  onerror: unknown
+  close(code?: number, reason?: string): void
+}
+
+/**
+ * Ends a socket whose page went: nothing more reaches that window from it.
+ * It keeps an error sink, since closing one still connecting aborts its
+ * handshake with an error, and a socket with no error handler would take
+ * the main process down with it.
+ */
+export function endSocket(socket: ClosableSocket, close: LiveClose): void {
+  socket.onopen = null
+  socket.onmessage = null
+  socket.onclose = null
+  socket.onerror = () => {}
+  try {
+    socket.close(close.code, close.reason)
+  } catch {
+    try {
+      socket.close()
+    } catch {
+      // Already closed.
+    }
+  }
+}
