@@ -8,6 +8,7 @@ import {
   REPOSITORY,
   SELF_UPDATE_PATH,
   STATUS_PATH,
+  selfUpdatePath,
   STEP_COUNT,
   canUpdateHere,
   jobState,
@@ -55,7 +56,7 @@ async function readStatus(): Promise<PluginStatus> {
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 /** Hands the update to the host and follows its job, as the phone's runOnHost does. */
-async function runUpdate(onDone: () => void) {
+async function runUpdate(onDone: () => void, acceptScan = false) {
   if (running) return
   running = true
   startedAt = Date.now()
@@ -63,7 +64,7 @@ async function runUpdate(onDone: () => void) {
   try {
     let job: Record<string, unknown> | null = null
     try {
-      const started = (await gateway.http('POST', SELF_UPDATE_PATH)) as { job?: Record<string, unknown> }
+      const started = (await gateway.http('POST', selfUpdatePath(acceptScan))) as { job?: Record<string, unknown> }
       job = started?.job ?? null
     } catch (e) {
       // No answer may still have started it: follow one that runs.
@@ -320,7 +321,11 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
             {!canUpdate ? <p className="meta">{t('Update Hermes, or run the commands under Do it manually.')}</p> : null}
           </>
         ) : null}
-        <UpdateRow state={current} onDismiss={() => setUpdate({ phase: 'idle' })} />
+        <UpdateRow
+          state={current}
+          onDismiss={() => setUpdate({ phase: 'idle' })}
+          onAcceptScan={canUpdate ? () => void runUpdate(() => void refresh(), true) : null}
+        />
       </section>
 
       {status.state === 'reported' ? (
@@ -364,7 +369,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   )
 }
 
-function UpdateRow({ state, onDismiss }: { state: UpdateState; onDismiss: () => void }) {
+function UpdateRow({ state, onDismiss, onAcceptScan }: { state: UpdateState; onDismiss: () => void; onAcceptScan: (() => void) | null }) {
   if (state.phase === 'idle') return null
   let title: string
   let detail: string | null = null
@@ -389,6 +394,22 @@ function UpdateRow({ state, onDismiss }: { state: UpdateState; onDismiss: () => 
       detail = state.detail
       tone = 'bad'
       break
+    case 'scanHeld': {
+      title = t('Hermes held the update for your OK')
+      const notShown = state.count - state.findings.length
+      detail = [
+        state.count
+          ? t("Hermes' install scan on the host asks you to confirm this update. Findings: {count}", { count: String(state.count) })
+          : t("Hermes' install scan on the host asks you to confirm this update."),
+        ...state.findings.map(line => `• ${line}`),
+        notShown > 0 && state.findings.length ? t('Not shown here: {count}', { count: String(notShown) }) : null,
+        t("An older Hermes' scan often flags the plugin's own tests. Update Anyway accepts the scan for this update only; updating Hermes clears it for good.")
+      ]
+        .filter(Boolean)
+        .join('\n')
+      tone = 'warn'
+      break
+    }
     default:
       title = t('Still updating on the host')
       detail = t("The update is still running on the host. You'll get a notification when it's done.")
@@ -411,6 +432,11 @@ function UpdateRow({ state, onDismiss }: { state: UpdateState; onDismiss: () => 
         ) : null}
         {detail ? <span className="meta">{detail}</span> : null}
       </div>
+      {state.phase === 'scanHeld' && onAcceptScan ? (
+        <button className="primary" onClick={onAcceptScan}>
+          {t('Update Anyway')}
+        </button>
+      ) : null}
       {state.phase !== 'updating' ? (
         <button className="staged-remove" aria-label={t('Dismiss')} title={t('Dismiss')} onClick={onDismiss}>
           ×

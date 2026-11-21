@@ -160,11 +160,28 @@ export type UpdateState =
   | { phase: 'updated'; version: string | null }
   | { phase: 'needsDashboardRestart'; detail: string | null }
   | { phase: 'failed'; detail: string | null }
+  /** Hermes' install scan held the update for confirmation (a caution verdict, plugin 0.192.0+): Update Anyway runs it again accepting it. */
+  | { phase: 'scanHeld'; findings: string[]; count: number; detail: string | null }
   | { phase: 'runningOnHost' }
 
 /** "Step 2 of 4", as the phone counts them. */
 export const STEP_COUNT = 4
 export const stepNumber = (step: UpdateStep) => (step === 'downloading' ? 1 : step === 'restartingGateway' || step === 'draining' ? 2 : 3)
+
+/** The host's update route; accepting a held scan adds `force`, which only Hermes' pull reads. */
+export const selfUpdatePath = (acceptScan = false) => (acceptScan ? `${SELF_UPDATE_PATH}?force=true` : SELF_UPDATE_PATH)
+
+/** One scan finding as a line: "high · exec · tools/run.py:12: runs a subprocess", as the phone shows it. */
+function scanFindingLine(finding: unknown): string {
+  if (!finding || typeof finding !== 'object') return ''
+  const f = finding as Record<string, unknown>
+  const text = (v: unknown) => (typeof v === 'string' && v ? v : null)
+  const file = text(f.file)
+  const place = file ? (typeof f.line === 'number' ? `${file}:${f.line}` : file) : null
+  const head = [text(f.severity), text(f.category), place].filter(Boolean).join(' · ')
+  const description = text(f.description)
+  return description ? (head ? `${head}: ${description}` : description) : head
+}
 
 /** Where a host-run update job stands (its `job`), or null when it isn't one. */
 export function jobState(job: unknown): UpdateState | null {
@@ -183,7 +200,14 @@ export function jobState(job: unknown): UpdateState | null {
     case 'done':
       return { phase: 'updated', version: (j.loaded_version as string) ?? (j.version as string) ?? null }
     case 'failed':
-      return j.code === 'restart_needed' ? { phase: 'needsDashboardRestart', detail } : { phase: 'failed', detail }
+      if (j.code === 'restart_needed') return { phase: 'needsDashboardRestart', detail }
+      // Only a caution verdict can be accepted; Hermes refuses a dangerous one even so.
+      if (j.code === 'scan_blocked' && j.scan_verdict === 'caution') {
+        const findings = (Array.isArray(j.scan_findings) ? j.scan_findings : []).map(scanFindingLine).filter(Boolean)
+        const count = typeof j.scan_finding_count === 'number' ? Math.max(j.scan_finding_count, findings.length) : findings.length
+        return { phase: 'scanHeld', findings, count, detail }
+      }
+      return { phase: 'failed', detail }
     default:
       // A step a newer plugin added: still running.
       return typeof j.step === 'string' ? { phase: 'updating', step: 'downloading' } : null

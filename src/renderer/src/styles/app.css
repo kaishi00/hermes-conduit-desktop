@@ -7186,6 +7186,10 @@ button.cap-row-text {
 .plugin-update progress {
   width: 100%;
 }
+/* A held scan's findings, one per line. */
+.plugin-update-text .meta {
+  white-space: pre-line;
+}
 .plugin-update.ok strong {
   color: var(--success, #2e9d5b);
 }
