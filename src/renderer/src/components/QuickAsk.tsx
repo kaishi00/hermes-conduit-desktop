@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus } from '@shared/ipc'
 import { useChat } from '../state/useChat'
 import { setTurnSurfaceHost } from '../state/turnSurface'
+import { setPictureHost } from '../state/gatewayPictures'
 import { useRequests } from '../state/useNeedsYou'
 import { Composer } from './Composer'
 import { Transcript, prefillRequest } from './Transcript'
@@ -53,6 +54,8 @@ function QuickChat({ status, onNew }: { status: ConnectionStatus; onNew: () => v
   const connected = status.phase === 'open'
   // This window's sends report where they came from on the dashboard it shows.
   setTurnSurfaceHost(status.url ?? '')
+  // Pictures are kept per dashboard here too: this window outlives a switch (desktop#222).
+  setPictureHost(status.url ?? '')
   useDashboardProfiles(status.phase, status.url)
   const { transcript, chat, loading, error, send, stop, command } = useChat(null, undefined, status.sessionAuthority === true, connected)
   const requests = useRequests()
