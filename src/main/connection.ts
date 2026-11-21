@@ -32,6 +32,7 @@ import {
 } from './auth'
 import { cleanHeaders, httpsIssue, proxyFetch, withProxyHeaders, type ProxyHeaders } from './proxyHeaders'
 import { t } from '../shared/i18n'
+import { addressName, addressNamesNothing } from '../shared/hostNames'
 import { describeConnectionFailure } from './connectionFailure'
 
 /** What we keep between launches. Secrets are encrypted by the store. */
@@ -393,7 +394,9 @@ export class Connection {
 
   /** The saved hosts changed (one combined): the window hears the new list. */
   hostsChanged(): void {
-    this.setStatus({ ...this.status, hosts: this.hosts() })
+    // A rename or its Hermes' name changes the open host's label too.
+    const label = this.saved && this.status.url === this.saved.url ? { hostLabel: this.identityOf(this.saved).hostLabel } : {}
+    this.setStatus({ ...this.status, ...label, hosts: this.hosts() })
   }
 
   /** Dials now instead of waiting for the next retry. */
@@ -511,7 +514,10 @@ export class Connection {
     const here = new URL(saved.url)
     // The port too when another saved host shares the name.
     const shared = hosts.some(h => h.url !== saved.url && new URL(h.url).hostname === here.hostname)
-    return { url: saved.url, hostLabel: shared ? here.host : here.hostname, username: saved.username, method: saved.method, hosts }
+    // A name the person or its Hermes gave wins over the address (shared/hostNames.ts).
+    const named = hosts.find(h => h.url === saved.url)?.name
+    const hostLabel = named && named !== addressName(saved.url) ? named : shared ? here.host : here.hostname
+    return { url: saved.url, hostLabel, username: saved.username, method: saved.method, hosts }
   }
 
   /** Opens one socket. Returns an error message when it couldn't, after scheduling a retry. */
@@ -611,11 +617,13 @@ export class Connection {
   /** The plugin's name for this Hermes (capabilities' `name`), for a host whose address names nothing. Quiet on failure. */
   private async readHermesName(): Promise<void> {
     const url = this.saved?.url
-    if (!url || !this.deps.onHermesName) return
+    // A DNS name already says which Hermes it is: its Hermes' name is never shown.
+    if (!url || !this.deps.onHermesName || !addressNamesNothing(url)) return
     try {
       const body = await this.http<Record<string, unknown> | null>('GET', PLUGIN_CAPABILITIES_PATH, undefined, 8_000)
       if (this.saved?.url !== url || body?.ok !== true) return
-      this.deps.onHermesName(url, typeof body.name === 'string' ? body.name : '')
+      // No name (a plugin older than 0.188, or one with none to give): the name learned before stays.
+      if (typeof body.name === 'string') this.deps.onHermesName(url, body.name)
     } catch {
       // No plugin, or it didn't answer: the name stays as it was.
     }

@@ -1,7 +1,7 @@
 import type { HostSummary } from '@shared/ipc'
 import { t } from '@shared/i18n'
 import type { HostBadge } from '../state/keptHosts'
-import { hostName } from './TitleBar'
+import { hostName } from '../state/hostNames'
 
 /** A combined host's badge: the first letter of its name on its color. */
 export function HostBadgeMark({ badge }: { badge: HostBadge }) {

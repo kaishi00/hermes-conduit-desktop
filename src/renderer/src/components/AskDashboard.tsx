@@ -3,7 +3,7 @@ import type { HostSummary } from '@shared/ipc'
 import { t } from '@shared/i18n'
 import { hostBadge, launchRows, readLastHost } from '../state/keptHosts'
 import { HostBadgeMark } from './CombinedDashboards'
-import { hostName } from './TitleBar'
+import { hostName } from '../state/hostNames'
 
 /**
  * Ask Which Dashboard at Launch, after the phone's (issue 1908): Settings'

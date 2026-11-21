@@ -60,6 +60,7 @@ function DialogSheet({ dialog }: { dialog: Dialog }) {
             ref={field}
             className="conduit-dialog-field"
             value={text}
+            maxLength={dialog.options.maxLength}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {

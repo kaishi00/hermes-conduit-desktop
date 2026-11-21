@@ -103,10 +103,11 @@ function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: str
 
 describe('combined dashboards in the main process', () => {
   it("reads each kept host's Hermes name once it connects", async () => {
-    const h = harness([host('https://a.example'), host('https://b.example')])
+    const h = harness([host('https://a.example'), host('https://b.example'), host('http://10.0.0.2:9119')])
     h.kept.sync(open('https://a.example'))
-    await until(() => h.hermesNames.length > 0)
-    expect(h.hermesNames).toEqual([['https://b.example', 'Hermes at b.example']])
+    await until(() => h.state('https://b.example') === 'live' && h.hermesNames.length > 0)
+    // Only an address that names nothing asks: a DNS name is never replaced.
+    expect(h.hermesNames).toEqual([['http://10.0.0.2:9119', 'Hermes at 10.0.0.2']])
   })
 
   it("connects the group's others once the one on screen has, and drops their events", async () => {

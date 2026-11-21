@@ -7,8 +7,6 @@ import { HostBadgeMark } from './CombinedDashboards'
 import { appIconUrl, useAppIcon } from '../state/appIcon'
 import { hostName } from '../state/hostNames'
 
-export { hostName }
-
 interface Props {
   subtitle?: string
   /** With more than one, the subtitle opens a list to switch hosts. */

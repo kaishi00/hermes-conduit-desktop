@@ -6,7 +6,8 @@ import { gateway } from './gateway'
 import { draftAgents, type OwnHermesBot } from './state/roomDrafts'
 import { arrange, farBotFor, orderedBots, useBotOrder, useMixedBotOrder, useSyncedOrder } from './state/botOrder'
 import { STATUS_PATH as PLUGIN_STATUS_PATH, pluginStatus } from './state/plugin'
-import { rememberHostNames } from './state/hostNames'
+import { hostName, rememberHostNames } from './state/hostNames'
+import { HOST_NAME_MAX } from '@shared/hostNames'
 import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '@shared/ipc'
 import { BotsHome, useReplyFace, type BotAction } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
@@ -40,7 +41,7 @@ import { Icon } from './components/icons'
 import { useMouseBack } from './state/mouseBack'
 import { NeedsYou } from './components/NeedsYou'
 import { SignIn } from './components/SignIn'
-import { TitleBar, hostName } from './components/TitleBar'
+import { TitleBar } from './components/TitleBar'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { Transcript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { forgetSummaries } from './state/stepSummaries'
@@ -2965,7 +2966,7 @@ function Settings({
                         const name = await askText(
                           `${t('Rename Dashboard')}\n\n${t("Its badge shows the name's first letter. Leave it empty to go back to the name Conduit picked.")}`,
                           host.named ? hostName(host.url) : '',
-                          { confirm: t('Save') }
+                          { confirm: t('Save'), maxLength: HOST_NAME_MAX }
                         )
                         if (name !== null) void window.conduit.renameHost(host.url, name)
                       }}

@@ -7,7 +7,7 @@ import { Troubleshooting } from './Troubleshooting'
 import { composerDrafts } from '../state/composerDrafts'
 import { copyHostData, finishHostMove, undoHostCopy } from '../state/hostData'
 import { switchEndingCall } from '../state/callSwitch'
-import { hostName } from './TitleBar'
+import { hostName } from '../state/hostNames'
 import { useMouseBack } from '../state/mouseBack'
 import { Icon } from './icons'
 

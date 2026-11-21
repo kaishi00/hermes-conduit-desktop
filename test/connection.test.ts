@@ -275,6 +275,16 @@ describe('more than one Hermes', () => {
     expect(h.connection.current()).toEqual({ phase: 'signed-out', hosts: [] })
   })
 
+  it('labels the open host by the name it was given', async () => {
+    const h = harness({ hosts: true })
+    await h.connection.signIn({ url: 'https://one', method: 'token', token: 'a' })
+    await tick()
+    expect(h.connection.current()).toMatchObject({ hostLabel: 'one' })
+    h.hostList.rename!('https://one', 'Studio')
+    h.connection.hostsChanged()
+    expect(h.connection.current()).toMatchObject({ hostLabel: 'Studio' })
+  })
+
   it('a failed sign-in to another host goes back to the open one', async () => {
     const h = harness({ hosts: true })
     await h.connection.signIn({ url: 'https://one', method: 'token', token: 'a' })

@@ -15,6 +15,8 @@ export interface DialogOptions {
   confirm?: string
   /** The confirm button's label for a step that removes or ends something, in the warning color. */
   destructive?: boolean
+  /** askText's longest answer. */
+  maxLength?: number
 }
 
 export type Dialog =
