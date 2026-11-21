@@ -46,7 +46,8 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
     () => (kanban.board?.columns ?? []).map(column => ({ ...column, tasks: column.tasks.filter(task => matchesTask(task, query)) })),
     [kanban.board, query]
   )
-  const scroll = useBoardScroll(lanesRef, columns.map(column => column.name).join(' '))
+  // The lanes container goes away while the board is unavailable, so its key changes then too.
+  const scroll = useBoardScroll(lanesRef, kanban.unavailable ? '' : columns.map(column => column.name).join(' '))
   const openTask = kanban.board?.columns.flatMap(c => c.tasks).find(task => task.id === openId) ?? null
   const assignees = useMemo(() => {
     const names = new Set([...(kanban.board?.assignees ?? []), ...(bots ?? []).map(b => b.name)])
@@ -91,7 +92,7 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
   }, [menu])
 
   // A menu opened on one board never acts on another.
-  useEffect(() => setMenu(null), [kanban.slug])
+  useEffect(() => setMenu(null), [kanban.slug, kanban.unavailable])
 
   function copy(text: string, done: string) {
     navigator.clipboard.writeText(text).then(
