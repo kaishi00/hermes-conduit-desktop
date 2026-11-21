@@ -45,6 +45,11 @@ export class EventRouter {
     return true
   }
 
+  /** The windows that opened this session. */
+  openers(sessionId: string): number[] {
+    return [...this.opened].filter(([, sessions]) => sessions.has(sessionId)).map(([id]) => id)
+  }
+
   forget(windowId: number): void {
     this.opened.delete(windowId)
   }

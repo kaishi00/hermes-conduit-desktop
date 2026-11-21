@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_WINDOW_LIMIT, ChatWindowSet } from '../src/main/chatWindowSet'
-import { chatWindowRequest } from '../src/shared/chatWindows'
+import { chatWindowRequest, chatWindowTitle } from '../src/shared/chatWindows'
 
 function harness() {
   const made: { id: string; focused: number; closed: boolean; onClosed: () => void }[] = []
@@ -27,22 +27,21 @@ function harness() {
 }
 
 describe('chat windows of their own', () => {
-  it('opens one per chat, up to three, and focuses a chat’s own window again', () => {
+  it('opens one per chat, up to the limit, and focuses a chat’s own window again', () => {
     const { set, made, changes } = harness()
-    expect(CHAT_WINDOW_LIMIT).toBe(3)
+    expect(CHAT_WINDOW_LIMIT).toBe(6)
     expect(set.show({ id: 'a' })).toBe(true)
     expect(set.show({ id: 'a' })).toBe(true)
     expect(made).toHaveLength(1)
     expect(made[0]!.focused).toBe(1)
-    expect(set.show({ id: 'b' })).toBe(true)
-    expect(set.show({ id: 'c' })).toBe(true)
-    expect(set.show({ id: 'd' })).toBe(false)
-    expect(set.ids()).toEqual(['a', 'b', 'c'])
-    expect(changes.at(-1)).toEqual(['a', 'b', 'c'])
+    for (const id of ['b', 'c', 'd', 'e', 'f']) expect(set.show({ id })).toBe(true)
+    expect(set.show({ id: 'g' })).toBe(false)
+    expect(set.ids()).toEqual(['a', 'b', 'c', 'd', 'e', 'f'])
+    expect(changes.at(-1)).toEqual(['a', 'b', 'c', 'd', 'e', 'f'])
     // The user closing one makes room.
     made[1]!.onClosed()
-    expect(set.ids()).toEqual(['a', 'c'])
-    expect(set.show({ id: 'd' })).toBe(true)
+    expect(set.ids()).toEqual(['a', 'c', 'd', 'e', 'f'])
+    expect(set.show({ id: 'g' })).toBe(true)
   })
 
   it('closes named chats’ windows, or every one on a switch', () => {
@@ -66,5 +65,18 @@ describe('chat windows of their own', () => {
     expect(chatWindowRequest('#quick')).toBeNull()
     expect(chatWindowRequest('#chat=%7B%7D')).toBeNull()
     expect(chatWindowRequest('#chat=%zz')).toBeNull()
+    // A Bot Chat says so; anything but true is left out.
+    const botChat = { id: 'b1', profile: 'ops', botChat: true }
+    expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify(botChat))}`)).toEqual(botChat)
+    expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify({ id: 'b1', botChat: 'yes' }))}`)).toEqual({ id: 'b1' })
+  })
+
+  it('titles a window by its chat, then its bot', () => {
+    expect(chatWindowTitle('Trip plans', 'Nahida')).toBe('Trip plans — Nahida')
+    // A Bot Chat goes by its bot's name alone.
+    expect(chatWindowTitle('Nahida', 'Nahida')).toBe('Nahida')
+    expect(chatWindowTitle('Trip plans')).toBe('Trip plans')
+    expect(chatWindowTitle('  ', 'Nahida')).toBe('Nahida')
+    expect(chatWindowTitle('')).toBe('Conduit')
   })
 })

@@ -10076,17 +10076,20 @@ button.secondary.danger {
   padding-top: 10px;
 }
 
-/* A chat in a window of its own: the pane, filling the window. */
+/* A chat in a window of its own: the whole chat, filling the window, its bot named under its title. */
 .chat-window-page {
   height: 100vh;
   display: flex;
   background: var(--canvas);
 }
-.beside-chat.chat-window {
-  width: auto;
-  flex: 1;
-  border-left: none;
-  background: var(--canvas);
+.chat-window-bot {
+  padding: 0 6px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* A bot's screen in a window of its own: the screen filling the window. */
@@ -11345,7 +11348,7 @@ button.ghost:disabled {
 }
 
 /* The side panel floats: one rounded surface with a gap around it, no line. */
-.ws-panel:not(.chat-window) {
+.ws-panel {
   margin: 12px 12px 12px 0;
   border-left: 0;
   border-radius: 20px;

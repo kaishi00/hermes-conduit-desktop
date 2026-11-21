@@ -319,8 +319,14 @@ export interface ConduitApi {
   /** Shows a chat in the main window (quick ask's Open in Conduit). */
   openChat(chat: OpenChatRequest): void
   onOpenChat(listener: (chat: OpenChatRequest) => void): () => void
-  /** Moves a chat to a window of its own (the pane's Open in New Window); false when three are open. */
+  /** Moves a chat to a window of its own, or brings its window to the front; false when the limit is open. */
   openChatWindow(chat: ChatWindowRequest): Promise<boolean>
+  /**
+   * The chat window that opened this session: 'watching' when it's in front
+   * (a notification would only repeat it), 'open' when it's behind; with
+   * `show`, it comes to the front. null when no chat window has it.
+   */
+  chatWindowOf(sessionId: string, show?: boolean): Promise<'watching' | 'open' | null>
   /** Closes these chats' windows, or every chat window. */
   closeChatWindows(ids?: string[]): void
   /** The chats that have a window of their own, now and whenever that changes. */
@@ -382,6 +388,8 @@ export interface OpenChatRequest {
   storedId: string
   profile?: string
   title?: string
+  /** A bot's Bot Chat, coming back from a window of its own. */
+  botChat?: boolean
 }
 
 /** A bot's screen for a window of its own; the viewer id it had before, if it did. */
@@ -396,8 +404,10 @@ export interface ChatWindowRequest {
   id: string
   profile?: string
   title?: string
-  /** The bot's name for the message box. */
+  /** The bot's name for the message box, until the window reads the roster. */
   author?: string
+  /** The bot's one Bot Chat, which never resets: `/new` compacts it. */
+  botChat?: boolean
 }
 
 export const IPC = {
@@ -413,6 +423,7 @@ export const IPC = {
   openChatWindow: 'conduit:open-chat-window',
   closeChatWindows: 'conduit:close-chat-windows',
   chatWindows: 'conduit:chat-windows',
+  chatWindowOf: 'conduit:chat-window-of',
   chatWindowsChanged: 'conduit:chat-windows-changed',
   openScreenWindow: 'conduit:open-screen-window',
   screenWindows: 'conduit:screen-windows',

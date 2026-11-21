@@ -47,4 +47,15 @@ describe('which windows a gateway event goes to', () => {
     expect(router.wants(2, 's0')).toBe(true)
     expect(router.wants(2, 's1')).toBe(false)
   })
+
+  it('names the windows that opened a session, so a notification finds its chat window', () => {
+    const router = new EventRouter()
+    router.noteOpened(1, 'session.resume', { session_id: 'stored' }, { session_id: 'live' })
+    router.noteOpened(2, 'session.resume', { session_id: 'stored' }, { session_id: 'live' })
+    expect(router.openers('live')).toEqual([1, 2])
+    expect(router.openers('stored')).toEqual([1, 2])
+    expect(router.openers('other')).toEqual([])
+    router.forget(1)
+    expect(router.openers('live')).toEqual([2])
+  })
 })

@@ -1,7 +1,8 @@
 /**
- * The chat windows, after the phone's AppState+ChatWindows: the pane's chat
- * moves to a window of its own, up to three at once, one per chat. Kept free
- * of Electron so the rules are tested on their own.
+ * The chat windows, after the phone's AppState+ChatWindows: a chat moves to a
+ * window of its own, up to CHAT_WINDOW_LIMIT at once, one per chat, and
+ * asking again for one already open brings it to the front. Kept free of
+ * Electron so the rules are tested on their own.
  */
 import type { ChatWindowRequest } from '../shared/ipc'
 import { CHAT_WINDOW_LIMIT } from '../shared/chatWindows'
@@ -26,7 +27,7 @@ export class ChatWindowSet<W extends ChatWindowHandle = ChatWindowHandle> {
     return [...this.open.keys()]
   }
 
-  /** A window for the chat: its own if it has one, a new one while there's room; false when three are open. */
+  /** A window for the chat: its own if it has one (brought to the front), a new one while there's room; false when the limit is open. */
   show(chat: ChatWindowRequest): boolean {
     const had = this.open.get(chat.id)
     if (had) {

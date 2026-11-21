@@ -137,7 +137,27 @@ app.on('browser-window-created', (_event, window) => {
   window.on('closed', () => eventRouter.forget(id))
 })
 
-const chatWindows = new ChatWindowSet(createChatWindow, ids => send(IPC.chatWindowsChanged, ids))
+/** The chat windows' own BrowserWindows, so a notification can find the one that has its chat. */
+const chatBrowserWindows = new WeakSet<BrowserWindow>()
+// Asking again for a chat's window brings it back, out of the dock or the taskbar too.
+const chatWindows = new ChatWindowSet(
+  (chat, onClosed) => {
+    const window = createChatWindow(chat, onClosed)
+    chatBrowserWindows.add(window)
+    return {
+      focus: () => {
+        if (window.isDestroyed()) return
+        if (window.isMinimized()) window.restore()
+        window.show()
+        window.focus()
+      },
+      close: () => {
+        if (!window.isDestroyed()) window.close()
+      }
+    }
+  },
+  ids => send(IPC.chatWindowsChanged, ids)
+)
 const screenWindows = new ScreenWindowSet(
   createScreenWindow,
   profiles => send(IPC.screenWindowsChanged, profiles),
@@ -348,11 +368,25 @@ function registerIpc(): void {
       id: request.id,
       profile: typeof request.profile === 'string' ? request.profile : undefined,
       title: typeof request.title === 'string' ? request.title : undefined,
-      author: typeof request.author === 'string' ? request.author : undefined
+      author: typeof request.author === 'string' ? request.author : undefined,
+      ...(request.botChat === true ? { botChat: true } : {})
     })
   })
   ipcMain.on(IPC.closeChatWindows, (_event, ids: unknown) => chatWindows.close(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : undefined))
   ipcMain.handle(IPC.chatWindows, () => chatWindows.ids())
+  ipcMain.handle(IPC.chatWindowOf, (_event, sessionId: unknown, show: unknown) => {
+    if (typeof sessionId !== 'string' || !sessionId) return null
+    const openers = new Set(eventRouter.openers(sessionId))
+    const window = BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w !== mainWindow && openers.has(w.webContents.id) && chatBrowserWindows.has(w))
+    if (!window) return null
+    const watching = window.isVisible() && !window.isMinimized() && window.isFocused()
+    if (show === true) {
+      if (window.isMinimized()) window.restore()
+      window.show()
+      window.focus()
+    }
+    return watching ? 'watching' : 'open'
+  })
   ipcMain.on(IPC.openScreenWindow, (_event, screen: unknown) => {
     const request = screen as { profile?: unknown; botName?: unknown } | null
     if (!request || typeof request.profile !== 'string' || !request.profile) return
