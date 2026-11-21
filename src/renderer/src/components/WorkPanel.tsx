@@ -108,7 +108,8 @@ function WorkCard({
           <button
             className="work-card-more"
             aria-expanded={expanded}
-            aria-label={t('Details')}
+            aria-label={`${item.ref}: ${t('Details')}`}
+            aria-controls={`work-details-${item.ref}`}
             title={t('Details')}
             onClick={() => setExpanded(!expanded)}
           >
@@ -143,7 +144,7 @@ function WorkCard({
         </div>
       ) : null}
       {expanded ? (
-        <>
+        <div id={`work-details-${item.ref}`} className="work-details">
           {item.checklist.length ? (
             <ul className="work-checklist">
               {item.checklist.map((step, index) => (
@@ -220,7 +221,7 @@ function WorkCard({
               <span className="meta">{handOverCaption(handOver, botName)}</span>
             </div>
           ) : null}
-        </>
+        </div>
       ) : null}
       {problem ? <div className="error-text">{problem}</div> : null}
     </div>

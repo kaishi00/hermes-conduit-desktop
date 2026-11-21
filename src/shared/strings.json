@@ -15839,6 +15839,21 @@
     "zh-Hans": "在你于此处添加之前，不让插件和 Hermes 更新添加的工具进入群聊",
     "zh-Hant": "在你於此處加入之前，不讓外掛程式和 Hermes 更新加入的工具進入群組"
   },
+  "Keep {bot} out of this": {
+    "de": "{bot} heraushalten",
+    "es": "Mantener a {bot} al margen",
+    "fr": "Tenir {bot} à l’écart",
+    "id": "Jauhkan {bot} dari ini",
+    "it": "Tieni fuori {bot}",
+    "ja": "{bot}を関与させない",
+    "ko": "{bot} 관여하지 않게 하기",
+    "pl": "Nie angażuj {bot}",
+    "pt-BR": "Manter {bot} fora disso",
+    "ru": "Не подключать {bot}",
+    "tr": "{bot} Karışmasın",
+    "zh-Hans": "不让 {bot} 参与",
+    "zh-Hant": "不讓 {bot} 參與"
+  },
   "Kept copy": {
     "de": "Kopie aufbewahrt",
     "es": "Copia guardada",
@@ -16243,21 +16258,6 @@
     "tr": "Önce en az kullanılanlar",
     "zh-Hans": "最少使用优先",
     "zh-Hant": "最少使用優先"
-  },
-  "Keep {bot} out of this": {
-    "de": "{bot} heraushalten",
-    "es": "Mantener a {bot} al margen",
-    "fr": "Tenir {bot} à l’écart",
-    "id": "Jauhkan {bot} dari ini",
-    "it": "Tieni fuori {bot}",
-    "ja": "{bot}を関与させない",
-    "ko": "{bot} 관여하지 않게 하기",
-    "pl": "Nie angażuj {bot}",
-    "pt-BR": "Manter {bot} fora disso",
-    "ru": "Не подключать {bot}",
-    "tr": "{bot} Karışmasın",
-    "zh-Hans": "不让 {bot} 参与",
-    "zh-Hant": "不讓 {bot} 參與"
   },
   "Leave Room": {
     "de": "Raum verlassen",
@@ -20938,6 +20938,21 @@
     "tr": "Bildirimler",
     "zh-Hans": "通知",
     "zh-Hant": "通知"
+  },
+  "Only you message or stop it now.": {
+    "de": "Jetzt schreibst nur du ihm oder stoppst es.",
+    "es": "Ahora solo tú le escribes o lo detienes.",
+    "fr": "Désormais, vous seul lui écrivez ou l’arrêtez.",
+    "id": "Sekarang hanya Anda yang mengirim pesan atau menghentikannya.",
+    "it": "Ora solo tu gli scrivi o lo fermi.",
+    "ja": "今はあなただけがメッセージを送ったり停止したりできます。",
+    "ko": "이제 직접만 메시지를 보내거나 중지할 수 있습니다.",
+    "pl": "Teraz tylko ty do niego piszesz lub go zatrzymujesz.",
+    "pt-BR": "Agora só você envia mensagens ou o para.",
+    "ru": "Теперь писать ему или останавливать его можете только вы.",
+    "tr": "Artık ona yalnızca sen mesaj gönderir veya durdurursun.",
+    "zh-Hans": "现在只有你会给它发消息或停止它。",
+    "zh-Hant": "現在只有你會給它傳訊息或停止它。"
   },
   "Opens a new chat with “{prompt}” ready to send. Send it, and Conduit rings when Hermes replies.": {
     "de": "Öffnet einen neuen Chat mit „{prompt}“, bereit zum Senden. Sende es, und Conduit klingelt, wenn Hermes antwortet.",
@@ -39434,6 +39449,21 @@
     "zh-Hans": "{bot} 会为较长的任务单独开一个聊天，在后台处理，完成后在其 Bot Chat 中告诉你。",
     "zh-Hant": "{bot} 會為較長的任務另開一個聊天，在背景處理，完成後在機器人聊天中告訴你。"
   },
+  "{bot} won’t message or stop it. You still can.": {
+    "de": "{bot} schreibt ihm nicht und stoppt es nicht. Du kannst es weiterhin.",
+    "es": "{bot} no le escribirá ni lo detendrá. Tú todavía puedes.",
+    "fr": "{bot} ne lui écrira pas et ne l’arrêtera pas. Vous le pouvez toujours.",
+    "id": "{bot} tidak akan mengirim pesan atau menghentikannya. Anda masih bisa.",
+    "it": "{bot} non gli scriverà né lo fermerà. Tu puoi ancora farlo.",
+    "ja": "{bot}はメッセージを送ったり停止したりしません。あなたは引き続き操作できます。",
+    "ko": "{bot}은(는) 메시지를 보내거나 중지하지 않습니다. 직접은 계속 할 수 있습니다.",
+    "pl": "{bot} nie będzie do niego pisać ani go zatrzymywać. Ty nadal możesz.",
+    "pt-BR": "{bot} não vai enviar mensagens nem pará-lo. Você ainda pode.",
+    "ru": "{bot} не будет писать ему или останавливать его. Вы по-прежнему можете.",
+    "tr": "{bot} ona mesaj göndermez veya onu durdurmaz. Sen hâlâ yapabilirsin.",
+    "zh-Hans": "{bot} 不会给它发消息或停止它。你仍然可以。",
+    "zh-Hant": "{bot} 不會給它傳訊息或停止它。你仍然可以。"
+  },
   "{bot}’s work": {
     "de": "Arbeit von {bot}",
     "es": "Trabajo de {bot}",
@@ -42778,35 +42808,5 @@
     "tr": "Daha yeni bir özetle değiştirildi",
     "zh-Hans": "已被更新的简报取代",
     "zh-Hant": "已被更新的簡報取代"
-  },
-  "{bot} won’t message or stop it. You still can.": {
-    "de": "{bot} schreibt ihm nicht und stoppt es nicht. Du kannst es weiterhin.",
-    "es": "{bot} no le escribirá ni lo detendrá. Tú todavía puedes.",
-    "fr": "{bot} ne lui écrira pas et ne l’arrêtera pas. Vous le pouvez toujours.",
-    "id": "{bot} tidak akan mengirim pesan atau menghentikannya. Anda masih bisa.",
-    "it": "{bot} non gli scriverà né lo fermerà. Tu puoi ancora farlo.",
-    "ja": "{bot}はメッセージを送ったり停止したりしません。あなたは引き続き操作できます。",
-    "ko": "{bot}은(는) 메시지를 보내거나 중지하지 않습니다. 직접은 계속 할 수 있습니다.",
-    "pl": "{bot} nie będzie do niego pisać ani go zatrzymywać. Ty nadal możesz.",
-    "pt-BR": "{bot} não vai enviar mensagens nem pará-lo. Você ainda pode.",
-    "ru": "{bot} не будет писать ему или останавливать его. Вы по-прежнему можете.",
-    "tr": "{bot} ona mesaj göndermez veya onu durdurmaz. Sen hâlâ yapabilirsin.",
-    "zh-Hans": "{bot} 不会给它发消息或停止它。你仍然可以。",
-    "zh-Hant": "{bot} 不會給它傳訊息或停止它。你仍然可以。"
-  },
-  "Only you message or stop it now.": {
-    "de": "Jetzt schreibst nur du ihm oder stoppst es.",
-    "es": "Ahora solo tú le escribes o lo detienes.",
-    "fr": "Désormais, vous seul lui écrivez ou l’arrêtez.",
-    "id": "Sekarang hanya Anda yang mengirim pesan atau menghentikannya.",
-    "it": "Ora solo tu gli scrivi o lo fermi.",
-    "ja": "今はあなただけがメッセージを送ったり停止したりできます。",
-    "ko": "이제 직접만 메시지를 보내거나 중지할 수 있습니다.",
-    "pl": "Teraz tylko ty do niego piszesz lub go zatrzymujesz.",
-    "pt-BR": "Agora só você envia mensagens ou o para.",
-    "ru": "Теперь писать ему или останавливать его можете только вы.",
-    "tr": "Artık ona yalnızca sen mesaj gönderir veya durdurursun.",
-    "zh-Hans": "现在只有你会给它发消息或停止它。",
-    "zh-Hant": "現在只有你會給它傳訊息或停止它。"
   }
 }

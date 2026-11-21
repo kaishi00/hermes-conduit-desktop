@@ -11584,3 +11584,8 @@ button.ghost:disabled {
 .list-keeper[hidden] {
   display: none;
 }
+
+/* The opened card's details: a box for the chevron's aria-controls, laid out as the card's own rows. */
+.work-details {
+  display: contents;
+}
