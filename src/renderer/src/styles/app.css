@@ -6169,7 +6169,8 @@ code.file-link:hover {
   background: var(--working);
 }
 
-/* Open chat and Pin, Resolve, Leave Alone on one row (Eric 2026-11-20). */
+/* Open chat with Pin and Resolve on one row (Eric 2026-11-20); Keep {bot} out of
+   this on its own row under them (Eric 2026-11-21). */
 .work-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -6189,8 +6190,8 @@ code.file-link:hover {
   height: 15px;
 }
 
-/* Pin, Resolve and Leave Alone go together: on Open chat's row when they
-   fit, else all three on the next, never one left on a row of its own. */
+/* Pin and Resolve go together: on Open chat's row when they fit, else both
+   on the next, never one left on a row of its own. */
 .work-manage {
   margin-left: auto;
   display: flex;
@@ -6198,6 +6199,45 @@ code.file-link:hover {
   flex-wrap: wrap;
   max-width: 100%;
   gap: 2px;
+}
+
+/* Keep {bot} out of this, with what it means beside it. */
+.work-hand-over {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.work-hand-over > .meta {
+  flex: 1 1 180px;
+  min-width: 0;
+  white-space: normal;
+}
+
+/* The chevron beside a workstream's head: the head itself opens its chat. */
+.work-card-more {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.work-card-more:hover {
+  background: var(--surface-hover);
+}
+
+.work-card-more svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s ease;
 }
 
 .work-empty {
@@ -11081,7 +11121,7 @@ button.secondary.danger {
   color: var(--danger);
 }
 
-/* A quiet text button beside a card's main one (Pin, Resolve, Leave Alone). */
+/* A quiet text button beside a card's main one (Pin, Resolve). */
 button.ghost {
   height: 32px;
   padding: 0 7px;

@@ -16229,20 +16229,20 @@
     "zh-Hans": "最少使用优先",
     "zh-Hant": "最少使用優先"
   },
-  "Leave Alone": {
-    "de": "In Ruhe lassen",
-    "es": "Dejar en paz",
-    "fr": "Laisser tranquille",
-    "id": "Biarkan Saja",
-    "it": "Lascia stare",
-    "ja": "そのままにする",
-    "ko": "그대로 두기",
-    "pl": "Zostaw w spokoju",
-    "pt-BR": "Deixar em paz",
-    "ru": "Не трогать",
-    "tr": "Kendi Haline Bırak",
-    "zh-Hans": "不要干预",
-    "zh-Hant": "不要干預"
+  "Keep {bot} out of this": {
+    "de": "{bot} heraushalten",
+    "es": "Mantener a {bot} al margen",
+    "fr": "Tenir {bot} à l’écart",
+    "id": "Jauhkan {bot} dari ini",
+    "it": "Tieni fuori {bot}",
+    "ja": "{bot}を関与させない",
+    "ko": "{bot} 관여하지 않게 하기",
+    "pl": "Nie angażuj {bot}",
+    "pt-BR": "Manter {bot} fora disso",
+    "ru": "Не подключать {bot}",
+    "tr": "{bot} Karışmasın",
+    "zh-Hans": "不让 {bot} 参与",
+    "zh-Hant": "不讓 {bot} 參與"
   },
   "Leave Room": {
     "de": "Raum verlassen",
@@ -16424,20 +16424,20 @@
     "zh-Hans": "允许浏览器打开私有网络地址。",
     "zh-Hant": "允許瀏覽器開啟私人網路位址。"
   },
-  "Let {bot} Coordinate It": {
+  "Let {bot} coordinate this": {
     "de": "Von {bot} koordinieren lassen",
     "es": "Dejar que {bot} lo coordine",
-    "fr": "Laisser {bot} le coordonner",
-    "id": "Biarkan {bot} Mengoordinasikannya",
-    "it": "Lascia che {bot} lo coordini",
+    "fr": "Laisser {bot} coordonner",
+    "id": "Biarkan {bot} mengoordinasikan",
+    "it": "Lascia coordinare a {bot}",
     "ja": "{bot}に連携させる",
     "ko": "{bot}이(가) 조율하게 하기",
-    "pl": "Pozwól {bot} to koordynować",
+    "pl": "Pozwól {bot} koordynować",
     "pt-BR": "Deixar {bot} coordenar",
     "ru": "Разрешить {bot} координировать",
-    "tr": "{bot} Koordine Etsin",
-    "zh-Hans": "让 {bot} 协调它",
-    "zh-Hant": "讓 {bot} 協調它"
+    "tr": "{bot} koordine etsin",
+    "zh-Hans": "让 {bot} 协调",
+    "zh-Hant": "讓 {bot} 協調"
   },
   "Lets the messages waiting behind it go on.": {
     "de": "Lässt die Nachrichten, die dahinter warten, weiterlaufen.",
@@ -42763,5 +42763,50 @@
     "tr": "Daha yeni bir özetle değiştirildi",
     "zh-Hans": "已被更新的简报取代",
     "zh-Hant": "已被更新的簡報取代"
+  },
+  "{bot} won’t message or stop it. You still can.": {
+    "de": "{bot} schreibt ihm nicht und stoppt es nicht. Du kannst es weiterhin.",
+    "es": "{bot} no le escribirá ni lo detendrá. Tú todavía puedes.",
+    "fr": "{bot} ne lui écrira pas et ne l’arrêtera pas. Vous le pouvez toujours.",
+    "id": "{bot} tidak akan mengirim pesan atau menghentikannya. Anda masih bisa.",
+    "it": "{bot} non gli scriverà né lo fermerà. Tu puoi ancora farlo.",
+    "ja": "{bot}はメッセージを送ったり停止したりしません。あなたは引き続き操作できます。",
+    "ko": "{bot}은(는) 메시지를 보내거나 중지하지 않습니다. 직접은 계속 할 수 있습니다.",
+    "pl": "{bot} nie będzie do niego pisać ani go zatrzymywać. Ty nadal możesz.",
+    "pt-BR": "{bot} não vai enviar mensagens nem pará-lo. Você ainda pode.",
+    "ru": "{bot} не будет писать ему или останавливать его. Вы по-прежнему можете.",
+    "tr": "{bot} ona mesaj göndermez veya onu durdurmaz. Sen hâlâ yapabilirsin.",
+    "zh-Hans": "{bot} 不会给它发消息或停止它。你仍然可以。",
+    "zh-Hant": "{bot} 不會給它傳訊息或停止它。你仍然可以。"
+  },
+  "Only you message or stop it now.": {
+    "de": "Jetzt schreibst nur du ihm oder stoppst es.",
+    "es": "Ahora solo tú le escribes o lo detienes.",
+    "fr": "Désormais, vous seul lui écrivez ou l’arrêtez.",
+    "id": "Sekarang hanya Anda yang mengirim pesan atau menghentikannya.",
+    "it": "Ora solo tu gli scrivi o lo fermi.",
+    "ja": "今はあなただけがメッセージを送ったり停止したりできます。",
+    "ko": "이제 직접만 메시지를 보내거나 중지할 수 있습니다.",
+    "pl": "Teraz tylko ty do niego piszesz lub go zatrzymujesz.",
+    "pt-BR": "Agora só você envia mensagens ou o para.",
+    "ru": "Теперь писать ему или останавливать его можете только вы.",
+    "tr": "Artık ona yalnızca sen mesaj gönderir veya durdurursun.",
+    "zh-Hans": "现在只有你会给它发消息或停止它。",
+    "zh-Hant": "現在只有你會給它傳訊息或停止它。"
+  },
+  "Details": {
+    "de": "Details",
+    "es": "Detalles",
+    "fr": "Détails",
+    "id": "Detail",
+    "it": "Dettagli",
+    "ja": "詳細",
+    "ko": "세부 정보",
+    "pl": "Szczegóły",
+    "pt-BR": "Detalhes",
+    "ru": "Подробности",
+    "tr": "Ayrıntılar",
+    "zh-Hans": "详细信息",
+    "zh-Hant": "詳細資訊"
   }
 }

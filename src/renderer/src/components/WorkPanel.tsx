@@ -6,6 +6,7 @@ import {
   actionTitle,
   doing,
   doneCount,
+  handOverCaption,
   manageTitle,
   needsYou,
   workTone,
@@ -68,6 +69,10 @@ function WorkCard({
     }
   }
 
+  // A workstream with a chat opens it on one click (Eric 2026-11-21); the chevron opens the card in place.
+  const opensChat = item.kind === 'workstream' && !!item.sessionId
+  const handOver = item.manage.find(manage => manage === 'leave_alone' || manage === 'coordinate')
+  const rowManage = item.manage.filter(manage => manage !== handOver)
   const tone = workTone(item)
   // The mark follows the status, as the phone's BotWorkLook.symbol: a stopped card is grey with a stop mark, not a check.
   const mark =
@@ -79,7 +84,12 @@ function WorkCard({
         <span className={`status-mark tone-${tone}`} aria-hidden="true">
           <Icon name={mark} />
         </span>
-        <button className="work-card-head" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+        <button
+          className="work-card-head"
+          aria-expanded={opensChat ? undefined : expanded}
+          aria-label={opensChat ? t('Open {ref}’s chat', { ref: item.ref }) : undefined}
+          onClick={() => (opensChat ? onOpenChat(item) : setExpanded(!expanded))}
+        >
           <span className="work-card-line">
             <span className="work-ref">{item.ref}</span>
             {now ? <span className="meta">{now}</span> : null}
@@ -94,6 +104,17 @@ function WorkCard({
           </span>
           <span className="work-card-title">{shownTitle(item)}</span>
         </button>
+        {opensChat ? (
+          <button
+            className="work-card-more"
+            aria-expanded={expanded}
+            aria-label={t('Details')}
+            title={t('Details')}
+            onClick={() => setExpanded(!expanded)}
+          >
+            <Icon name="chevronDown" style={expanded ? { transform: 'rotate(180deg)' } : undefined} />
+          </button>
+        ) : null}
       </div>
       {item.model ? <div className="meta work-model">{t('Runs on {model}', { model: item.model })}</div> : null}
       {item.checklist.length ? (
@@ -180,9 +201,9 @@ function WorkCard({
                   {actionTitle(action)}
                 </button>
               ))}
-            {item.manage.length ? (
+            {rowManage.length ? (
               <span className="work-manage">
-                {item.manage.map(manage => (
+                {rowManage.map(manage => (
                   <button key={manage} className="ghost" disabled={busy} onClick={() => void act(manage)}>
                     {manageTitle(manage, botName)}
                   </button>
@@ -190,6 +211,15 @@ function WorkCard({
               </span>
             ) : null}
           </div>
+          {handOver ? (
+            // Its own row, saying who is kept out and what that means (Eric 2026-11-21: "Leave Alone" was vague).
+            <div className="work-hand-over">
+              <button className="secondary" disabled={busy} onClick={() => void act(handOver)}>
+                {manageTitle(handOver, botName)}
+              </button>
+              <span className="meta">{handOverCaption(handOver, botName)}</span>
+            </div>
+          ) : null}
         </>
       ) : null}
       {problem ? <div className="error-text">{problem}</div> : null}

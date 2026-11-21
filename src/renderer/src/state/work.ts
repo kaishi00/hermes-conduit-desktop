@@ -248,6 +248,11 @@ export function actionTitle(action: WorkAction): string {
   }
 }
 
+/** What Keep {bot} out of this means, under its button (the phone's handOverCaption). */
+export function handOverCaption(manage: 'leave_alone' | 'coordinate', botName: string): string {
+  return manage === 'leave_alone' ? t('{bot} won’t message or stop it. You still can.', { bot: botName }) : t('Only you message or stop it now.')
+}
+
 export function manageTitle(manage: WorkManage, botName: string): string {
   switch (manage) {
     case 'pin':
@@ -257,9 +262,9 @@ export function manageTitle(manage: WorkManage, botName: string): string {
     case 'resolve':
       return t('Resolve')
     case 'leave_alone':
-      return t('Leave Alone')
+      return t('Keep {bot} out of this', { bot: botName })
     case 'coordinate':
-      return t('Let {bot} Coordinate It', { bot: botName })
+      return t('Let {bot} coordinate this', { bot: botName })
     default:
       return t('Reopen')
   }
