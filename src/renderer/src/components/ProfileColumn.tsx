@@ -6,6 +6,9 @@ import type { HostBadge } from '../state/keptHosts'
 import { BotAvatar } from './BotsHome'
 import { HostBadgeMark } from './CombinedDashboards'
 
+/** The column's width, beside the list's own (styles: .profile-column-wrap). */
+export const PROFILE_COLUMN_WIDTH = 52
+
 /**
  * The chat list's profiles, in a column beside it (Eric, 2026-11-21: the
  * strip and three rows of chips took half the list): All, then every
@@ -115,11 +118,11 @@ export function ProfileColumn({
                 </span>
               ) : null}
               {waiting ? (
-                <span className="profile-column-waits" aria-label={t('Needs approval')}>
+                <span className="profile-column-waits" role="img" aria-label={t('Needs approval')}>
                   {waiting}
                 </span>
               ) : fresh ? (
-                <span className="profile-column-unread" aria-label={t('Unread')} />
+                <span className="profile-column-unread" role="img" aria-label={t('Unread')} />
               ) : null}
             </button>
           )

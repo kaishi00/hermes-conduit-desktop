@@ -35,6 +35,9 @@ export function ColumnDivider({
     let column = sign === 1 ? line.previousElementSibling : line.nextElementSibling
     // A wrapper that lays nothing out (the list's, display: contents) is measured by what it holds.
     if (column && !column.getBoundingClientRect().width && column.firstElementChild) column = column.firstElementChild
+    // The chat list with its profile column beside it: the list's own width, as --list-width holds it.
+    const main = column?.querySelector(':scope > .chatlist-main')
+    if (main) return main.getBoundingClientRect().width
     return column ? column.getBoundingClientRect().width : bounds.min
   }
 

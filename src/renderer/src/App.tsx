@@ -12,6 +12,7 @@ import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '
 import { BotsHome, useReplyFace, type BotAction } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
 import { ChatList, type MoveTarget } from './components/ChatList'
+import { PROFILE_COLUMN_WIDTH } from './components/ProfileColumn'
 import { Composer } from './components/Composer'
 import { ModelPicker } from './components/ModelPicker'
 import { ContextPanel } from './components/ContextPanel'
@@ -953,7 +954,9 @@ function Shell({
     writeListHidden(hidden)
   }, [])
   const listWidth = shownListWidth(listLive ?? listStored, windowWidth)
-  const listTaken = section === 'chats' && listHidden ? 0 : (listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28)))
+  // The chat list's profile column, beside the list's own width (set once the column's profiles are known, below).
+  const [listColumn, setListColumn] = useState(0)
+  const listTaken = section === 'chats' && listHidden ? 0 : (listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28))) + listColumn
   const panelWidth = shownPanelWidth(panelLive ?? panelStored, windowWidth, listTaken)
   // A chat beside the open one: only where both fit, else the pane hides until the window widens.
   const [beside, setBeside] = useState<BesideChat | null>(null)
@@ -1462,6 +1465,8 @@ function Shell({
           : orderedRoster.map(bot => ({ key: bot.name, host: status.url ?? '', bot, own: true })),
     [otherBots, status.url, orderedRoster, savedHostUrls, mixedBotOrder.order]
   )
+  const columnShown = section === 'chats' && !listHidden && !projectsOpen && !botsSideShown && (profileTiles?.length ?? 0) > 1
+  useEffect(() => setListColumn(columnShown ? PROFILE_COLUMN_WIDTH : 0), [columnShown])
   const tileBadge = useCallback((tile: MixedTile) => badgeFor(tile.own ? (status.url ?? '') : tile.host), [badgeFor, status.url])
   const otherWaits = useCallback((tile: MixedTile) => otherWork.get(keptWorkKey(tile.host, tile.bot.name))?.needsYou ?? 0, [otherWork])
   // A room started by dragging across dashboards brings the other's bots over your own Link to it.
