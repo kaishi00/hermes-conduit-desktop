@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+
 /** What a kept scroll position reads and sets on its list. */
 export interface Scroller {
   scrollTop: number
@@ -40,3 +42,15 @@ export class KeptScroll {
 
 /** The Bots sidebar's, for the whole window: its side pane and its group chat page share it. */
 export const botSideScroll = new KeptScroll()
+
+/**
+ * Calls `onShown` as a pane kept mounted comes back from away, during that
+ * render, so the children drawing it again see what it set (the Bots
+ * sidebar's kept scroll restores in its own layout effect, which runs
+ * before a parent's).
+ */
+export function useShownAgain(away: boolean, onShown?: () => void): void {
+  const wasAway = useRef(away)
+  if (wasAway.current && !away) onShown?.()
+  wasAway.current = away
+}

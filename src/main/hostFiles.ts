@@ -39,8 +39,9 @@ export function dataUrlBytes(value: unknown): Buffer | null {
  * it, renamed into place only once every byte is in. A transfer cut short, or
  * one that sends nothing for `idleMs`, removes the part and throws, so the
  * chosen path never holds a truncated file and a file already there is left
- * as it was (desktop#206). Each save has its own part file, so two saves to
- * the same path never write into one, and it's flushed to disk before the
+ * as it was (desktop#206). Each save has its own part file (24 random bits),
+ * so two saves to the same path practically never write into one (about one
+ * in 16.7 million for two at once), and it's flushed to disk before the
  * rename, so a crash can't leave an empty file in its place (desktop#216).
  * Its name stays short (a Windows path near MAX_PATH), and part files of the
  * same destination a crash left over a day ago are swept as a save starts.
@@ -83,13 +84,26 @@ export async function streamToFile(body: ReadableStream, destination: string, ab
 
 export const STALE_PART_MS = 24 * 60 * 60 * 1000
 
+/**
+ * A part file's name after its destination's, as each build named it:
+ * `.<6 hex>.conduit-part` now, `.<pid>-<8 hex>.conduit-part` and a bare
+ * `.conduit-part` before (desktop#238, desktop#213). So `foo.txt`'s sweep
+ * never takes `foo.txt.bak.<hex>.conduit-part`, another destination's.
+ */
+const PART_SUFFIX = /^(?:[0-9a-f]{6}\.|\d+-[0-9a-f]{8}\.)?conduit-part$/
+
+/** Whether `name` is one of `destination`'s part files. */
+export function isPartOf(name: string, destination: string): boolean {
+  const prefix = `${basename(destination)}.`
+  return name.startsWith(prefix) && PART_SUFFIX.test(name.slice(prefix.length))
+}
+
 /** Removes `destination`'s part files older than STALE_PART_MS, left by a save a crash cut off. */
 export async function sweepStaleParts(destination: string, now = Date.now()): Promise<void> {
   const dir = dirname(destination)
-  const prefix = `${basename(destination)}.`
   try {
     for (const name of await readdir(dir)) {
-      if (!name.startsWith(prefix) || !name.endsWith('.conduit-part')) continue
+      if (!isPartOf(name, destination)) continue
       const path = join(dir, name)
       const info = await stat(path).catch(() => null)
       if (info && now - info.mtimeMs > STALE_PART_MS) await rm(path, { force: true }).catch(() => undefined)

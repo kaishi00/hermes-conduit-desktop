@@ -206,6 +206,8 @@ import type { CallResume } from './state/voiceSave'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
 import { ask, askText, tell } from './state/dialogs'
 import { Select } from './components/Select'
+import { KeptPane } from './components/KeptPane'
+import { botSideScroll } from './state/keptScroll'
 
 /** The host's synced preferences, for the bots' order. */
 const prefsHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gateway.http(method, path, body)
@@ -308,21 +310,6 @@ export function App() {
           />
         </SummaryHost.Provider>
       )}
-    </div>
-  )
-}
-
-/**
- * A pane kept mounted while another section shows. Away, it renders what it
- * last showed, so the rest of the window's updates skip it (its own state
- * still updates), and the CSS keeps its layout without painting it.
- */
-function KeptPane({ away, children }: { away: boolean; children: ReactNode }) {
-  const shown = useRef(children)
-  if (!away) shown.current = children
-  return (
-    <div className={`chats-section${away ? ' away' : ''}`} inert={away}>
-      {shown.current}
     </div>
   )
 }
@@ -1482,6 +1469,8 @@ function Shell({
   const hasOtherBots = otherBots.length > 0
   // ...and their group chats: each room once, under the host you talk in it from (Eric, 2026-11-20).
   const keptRooms = useKeptRooms(keptHosts, botsListShown)
+  // combinedRooms reads each kept host's room order from storage, which useKeptRooms saves on each read and then
+  // answers a new Map: keptRooms changing is what draws a host's newly synced order (desktop#248).
   const groupChats = useMemo(
     () => combinedRooms(status.url ?? '', savedHostUrls, groupRooms.rooms ?? [], roomCopies.copies, keptRooms, copiesWaiting),
     [status.url, savedHostUrls, groupRooms.rooms, roomCopies.copies, keptRooms, copiesWaiting]
@@ -2135,7 +2124,8 @@ function Shell({
         </nav>
         {/* Chats stays mounted once shown, hidden while another section is open, so coming back doesn't rebuild every row and the open transcript. */}
         {chatsShown ? (
-          <KeptPane away={section !== 'chats'}>
+          <KeptPane away={section !== 'chats'} onShown={() => botSideScroll.opened()}>
+            {/* The side pane's Bots list opens at the spot it shares with a group chat page's, which may have moved it meanwhile (desktop#256). */}
             {/* Hidden, the list stays mounted, so its search and an open project are there when it comes back. */}
             <div className="list-keeper" hidden={listHidden}>
               {projectsOpen ? (

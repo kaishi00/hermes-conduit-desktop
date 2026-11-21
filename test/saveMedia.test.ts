@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ReadableStream } from 'node:stream/web'
-import { dataUrlBytes as hostBytes, hostFileName, hostFilePath, streamToFile, STALE_PART_MS } from '../src/main/hostFiles'
+import { dataUrlBytes as hostBytes, hostFileName, hostFilePath, isPartOf, streamToFile, STALE_PART_MS } from '../src/main/hostFiles'
 import { dataUrlBytes, pictureFileName } from '../src/renderer/src/state/saveMedia'
 
 describe('saving pictures, files and audio to this computer', () => {
@@ -58,6 +58,13 @@ describe('saving pictures, files and audio to this computer', () => {
     await utimes(other, then, then)
     await streamToFile(bytesThen(['ok']), target)
     expect((await readdir(dir)).sort()).toEqual(['a.png', 'a.png.def456.conduit-part', 'b.png.abc123.conduit-part'])
+  })
+
+  it("sweeps only the destination's own part files, as every build named them (desktop#249)", () => {
+    for (const name of ['foo.txt.abc123.conduit-part', 'foo.txt.4242-0123abcd.conduit-part', 'foo.txt.conduit-part']) expect(isPartOf(name, '/d/foo.txt')).toBe(true)
+    // Another destination's (foo.txt.bak) and names that only look alike.
+    for (const name of ['foo.txt.bak.abc123.conduit-part', 'foo.txt.bak.conduit-part', 'foo.txt.ABC123.conduit-part', 'foo.txt.abc12.conduit-part', 'foo.txt', 'bar.txt.abc123.conduit-part'])
+      expect(isPartOf(name, '/d/foo.txt')).toBe(false)
   })
 
   it('gives up on a download that stops sending, and stops its request', async () => {
