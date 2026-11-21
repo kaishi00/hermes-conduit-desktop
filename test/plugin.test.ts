@@ -112,6 +112,8 @@ describe('host update job', () => {
       scan_findings: [{ severity: 'high', category: 'exec', file: 'tests/x.py', line: 7, description: 'subprocess' }, { severity: 'low' }]
     }
     expect(jobState(held)).toEqual({ phase: 'scanHeld', id: null, findings: ['high · exec · tests/x.py:7: subprocess', 'low'], count: 9 })
+    expect(jobState({ ...held, id: 'j7' })).toMatchObject({ phase: 'scanHeld', id: 'j7' })
+    expect(jobState({ ...held, id: 7 })).toMatchObject({ phase: 'scanHeld', id: null })
     expect(jobState({ ...held, scan_verdict: 'dangerous' })).toEqual({ phase: 'failed', detail: 'BLOCKED' })
     expect(selfUpdatePath(true)).toBe('/api/plugins/conduit_push/self/update?force=true')
     expect(selfUpdatePath()).toBe('/api/plugins/conduit_push/self/update')

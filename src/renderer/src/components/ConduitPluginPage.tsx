@@ -191,15 +191,16 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     // A held scan's Update Anyway belongs to the host that held it: after a switch to another
     // dashboard (or a job that has since moved on) the row would force an update there unseen.
+    // Only the host's answer clears it; a read that fails leaves it as it was.
     const held = update
-    if (held.phase === 'scanHeld')
-      void gateway
-        .http('GET', SELF_UPDATE_PATH)
-        .then(r => (r as { job?: { id?: unknown } })?.job?.id)
-        .catch(() => undefined)
-        .then(id => {
-          if (update === held && (!held.id || id !== held.id)) setUpdate({ phase: 'idle' })
-        })
+    if (held.phase !== 'scanHeld') return
+    void gateway
+      .http('GET', SELF_UPDATE_PATH)
+      .then(r => {
+        const id = (r as { job?: { id?: unknown } })?.job?.id
+        if (update === held && (!held.id || id !== held.id)) setUpdate({ phase: 'idle' })
+      })
+      .catch(() => undefined)
   }, [])
   useEffect(() => {
     void refresh()
