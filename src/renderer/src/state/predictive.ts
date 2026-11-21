@@ -88,6 +88,8 @@ export function clipInstructions(text: string): string {
   return kept
 }
 
+/** The storage key `kind`'s instructions are kept under, so another window can tell they changed. */
+export const instructionsKey = (kind: PredictKind): string => INSTRUCTIONS_KEYS[kind]
 /** What's typed in Settings for `kind`, as kept. */
 export const storedInstructions = (kind: PredictKind): string => read(INSTRUCTIONS_KEYS[kind]) ?? ''
 /** The instructions `kind`'s questions carry, or null when there are none. */

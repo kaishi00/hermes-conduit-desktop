@@ -23,6 +23,9 @@ let host = ''
 /** Whether this dashboard's plugin reads ?conduit_profile=; null until its capabilities answer. */
 let served: boolean | null = null
 
+/** The dashboard signed in to, as its URL ("" before one). */
+export const dashboardHost = (): string => host
+
 /** The dashboard signed in to; another one's plugin is asked again. */
 export function setDashboardProfilesHost(next: string): void {
   if (next === host) return

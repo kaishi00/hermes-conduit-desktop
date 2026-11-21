@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { language } from '@shared/i18n'
+import { language } from '../../../shared/i18n'
 import { gateway } from '../gateway'
-import { STATUS_PATH, pluginStatus, serves } from './plugin'
+import { STATUS_PATH, askPluginStatus, serves } from './plugin'
+import { dashboardHost } from './dashboardProfile'
 import {
   ASK_AGAIN_RANGE,
   MAX_CHECKS,
@@ -33,40 +34,36 @@ import {
   INSTRUCTIONS_CAPABILITY,
   INSTRUCTIONS_EVENT,
   instructions,
+  instructionsKey,
   type PredictKind
 } from './predictive'
 import { languageName } from './stepSummaries'
 import type { TranscriptState } from './transcript'
 
-// Whether this host's plugin answers predictions, asked again every ten minutes.
-let served: { at: number; answer: Promise<boolean> } | null = null
-export function predictionsServed(): Promise<boolean> {
-  if (!served || Date.now() - served.at > 600_000) {
-    served = {
-      at: Date.now(),
-      answer: gateway
-        .http('GET', STATUS_PATH)
-        .then(body => serves(pluginStatus(body), [PREDICT_CAPABILITY]))
-        .catch(() => false)
+// Whether this dashboard's plugin reports a capability: a definite answer (it listed it, or a
+// plugin too old to say) kept ten minutes for that dashboard; one that couldn't tell (a timeout,
+// a restart) counts as no for now and is asked again next time.
+const capabilityAnswers = new Map<string, { host: string; at: number; answer: Promise<boolean> }>()
+function capabilityServed(capability: string): Promise<boolean> {
+  const host = dashboardHost()
+  const kept = capabilityAnswers.get(capability)
+  if (kept && kept.host === host && Date.now() - kept.at <= 600_000) return kept.answer
+  const entry = { host, at: Date.now(), answer: Promise.resolve(false) }
+  entry.answer = askPluginStatus(() => gateway.http('GET', STATUS_PATH)).then(status => {
+    if (status === null) {
+      if (capabilityAnswers.get(capability) === entry) capabilityAnswers.delete(capability)
+      return false
     }
-  }
-  return served.answer
+    return serves(status, [capability])
+  })
+  capabilityAnswers.set(capability, entry)
+  return entry.answer
 }
 
-// Whether this host's plugin uses the user's instructions; an older one ignores them, so none are sent.
-let instructionsAsked: { at: number; answer: Promise<boolean> } | null = null
-export function instructionsServed(): Promise<boolean> {
-  if (!instructionsAsked || Date.now() - instructionsAsked.at > 600_000) {
-    instructionsAsked = {
-      at: Date.now(),
-      answer: gateway
-        .http('GET', STATUS_PATH)
-        .then(body => serves(pluginStatus(body), [INSTRUCTIONS_CAPABILITY]))
-        .catch(() => false)
-    }
-  }
-  return instructionsAsked.answer
-}
+/** Whether this dashboard's plugin answers predictions. */
+export const predictionsServed = (): Promise<boolean> => capabilityServed(PREDICT_CAPABILITY)
+/** Whether this dashboard's plugin uses the user's instructions; an older one ignores them, so none are sent. */
+export const instructionsServed = (): Promise<boolean> => capabilityServed(INSTRUCTIONS_CAPABILITY)
 
 /** The instructions `kind`'s question carries now: none on a plugin that would ignore them. */
 async function sentInstructions(kind: PredictKind): Promise<string | null> {
@@ -99,14 +96,20 @@ export function usePredictions(state: TranscriptState, sessionId: string | undef
       setPausing(pauseEnabled())
     }
     // Replies made under instructions since edited go; the next reply asks with the new ones.
+    // Settings in this window says so with its event; in another window, storage does.
     const edited = (e: Event) => {
       if ((e as CustomEvent).detail === 'replies') setAnswer(null)
     }
+    const stored = (e: StorageEvent) => {
+      if (e.key === instructionsKey('replies')) setAnswer(null)
+    }
     window.addEventListener(PREDICTIVE_EVENT, changed)
     window.addEventListener(INSTRUCTIONS_EVENT, edited)
+    window.addEventListener('storage', stored)
     return () => {
       window.removeEventListener(PREDICTIVE_EVENT, changed)
       window.removeEventListener(INSTRUCTIONS_EVENT, edited)
+      window.removeEventListener('storage', stored)
     }
   }, [])
 

@@ -7,7 +7,7 @@ import { stageFile } from '../state/picture'
 import { useRecorder } from '../state/useRecorder'
 import { blobToBase64, durationLabel, transcribe, voiceFileName, voicePromptText } from '../state/voice'
 import { suggestCommands, type SlashCommand } from '../state/slash'
-import { TAP_GUARD_MS, askable, pauseDelay, type DraftGuesses } from '../state/predictive'
+import { INSTRUCTIONS_EVENT, TAP_GUARD_MS, askable, instructionsKey, pauseDelay, type DraftGuesses } from '../state/predictive'
 import { composerDrafts, draftStoreKey, isEmptyDraft, type ComposerDraft } from '../state/composerDrafts'
 import { SummaryHost } from '../state/useStepSummaries'
 import { ClipInbox, indexedClipStore, keepsAfter, memoryClipStore, withRetries, type DictationClip } from '../state/dictationClips'
@@ -337,6 +337,25 @@ export function Composer({
     }, pauseDelay() * 1000)
     return () => window.clearTimeout(timer)
   }, [text, onDraftPause, staged, running, disabled])
+  // A draft's guesses made under While I pause instructions since edited go, in this window or another.
+  useEffect(() => {
+    const drop = () => {
+      setDraftGuess(null)
+      askedDraft.current = null
+    }
+    const edited = (e: Event) => {
+      if ((e as CustomEvent).detail === 'draft') drop()
+    }
+    const stored = (e: StorageEvent) => {
+      if (e.key === instructionsKey('draft')) drop()
+    }
+    window.addEventListener(INSTRUCTIONS_EVENT, edited)
+    window.addEventListener('storage', stored)
+    return () => {
+      window.removeEventListener(INSTRUCTIONS_EVENT, edited)
+      window.removeEventListener('storage', stored)
+    }
+  }, [])
   useEffect(() => {
     onStagedChange?.(staged)
   }, [staged, onStagedChange])
