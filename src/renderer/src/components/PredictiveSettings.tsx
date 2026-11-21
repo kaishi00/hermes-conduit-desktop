@@ -21,10 +21,45 @@ import {
   setPredictModel,
   setRepliesEnabled,
   setReplyCount,
-  type PredictModel
+  type PredictModel,
+  INSTRUCTIONS_MINIMUM_PLUGIN,
+  setInstructions,
+  storedInstructions,
+  type PredictKind
 } from '../state/predictive'
-import { predictionsServed } from '../state/usePredictions'
+import { instructionsServed, predictionsServed } from '../state/usePredictions'
 import { Select } from './Select'
+
+/**
+ * Your instructions for one kind of guess (hermes-conduit#2970): kept on this
+ * computer, cut at the plugin's limit, sent only with that kind's questions,
+ * and off, with the reason, on a plugin that would ignore them.
+ */
+function InstructionsBox({ kind, on, served, placeholder }: { kind: PredictKind; on: boolean; served: boolean | null; placeholder: string }) {
+  const [text, setText] = useState(() => storedInstructions(kind))
+  if (!on) return null
+  return (
+    <>
+      <textarea
+        className="pset-note"
+        rows={2}
+        value={text}
+        disabled={served === false}
+        placeholder={placeholder}
+        aria-label={t('Your instructions')}
+        onChange={e => {
+          setInstructions(kind, e.target.value)
+          setText(storedInstructions(kind))
+        }}
+      />
+      <p className="meta">
+        {served === false
+          ? t('Instructions need a newer Conduit plugin on your Hermes host ({version} or later).', { version: INSTRUCTIONS_MINIMUM_PLUGIN })
+          : t("Guides only these guesses, not your agent's usual replies. Kept on this device and sent with each of these requests to your Hermes host's model.")}
+      </p>
+    </>
+  )
+}
 
 /** Settings > Chat > Predictive, after the phone's: suggested replies, kept on this computer and off by default. */
 export function PredictiveSettings() {
@@ -36,10 +71,14 @@ export function PredictiveSettings() {
   const [followUp, setFollowUp] = useState(followUpEnabled)
   const [wait, setWait] = useState(followUpDelay)
   const [served, setServed] = useState<boolean | null>(null)
+  const [instructionsOn, setInstructionsOn] = useState<boolean | null>(null)
   const [host, setHost] = useState<{ fast: string | null; today: number } | null>(null)
 
   useEffect(() => {
     let live = true
+    void instructionsServed().then(ok => {
+      if (live) setInstructionsOn(ok)
+    })
     void predictionsServed().then(ok => {
       if (!live) return
       setServed(ok)
@@ -106,6 +145,12 @@ export function PredictiveSettings() {
           ))}
         </Select>
       </div>
+      <InstructionsBox
+        kind="replies"
+        on={on}
+        served={instructionsOn}
+        placeholder={t('Like: favor concrete next steps and questions about tradeoffs; skip plain thanks.')}
+      />
       <p className="meta">
         {t(
           "When you stop typing for a moment, words to finish your message and whole messages you might mean. Your unsent draft goes to your agent's model to make them."
@@ -146,6 +191,12 @@ export function PredictiveSettings() {
           ))}
         </Select>
       </div>
+      <InstructionsBox
+        kind="draft"
+        on={pause}
+        served={instructionsOn}
+        placeholder={t("Like: keep my meaning and tone; never add promises I didn't make.")}
+      />
       <p className="meta">
         {t(
           'While a chat is on screen and you aren\'t writing, Hermes is asked now and then whether it has something useful to add. At most one follow-up per message you send, marked "Hermes followed up".'
@@ -186,6 +237,7 @@ export function PredictiveSettings() {
           ))}
         </Select>
       </div>
+      <InstructionsBox kind="turn" on={followUp} served={instructionsOn} placeholder={t('Like: only for a finished result or something blocking me.')} />
       <div className="pset-row">
         <span>{t('Predictions use')}</span>
         <Select segments

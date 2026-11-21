@@ -4,6 +4,10 @@
  * best first, from the plugin's `POST /predict` (0.80+), a no-tools fork of
  * the chat that saves nothing and answers only the device that asked. Off by
  * default and kept on this computer.
+ *
+ * Each kind may carry the user's own instructions (hermes-conduit#2970), kept
+ * on this computer too, sent only with that kind's questions and only to a
+ * plugin that reports `predict-custom-instructions` (0.190+).
  */
 import type { TranscriptItem } from './transcript'
 
@@ -54,8 +58,62 @@ export const setPredictModel = (m: PredictModel) => write(MODEL_KEY, m)
 /** Fired when the switch changes, so an open chat shows or drops its chips. */
 export const PREDICTIVE_EVENT = 'conduit:predictive'
 
-export function repliesBody(sessionId: string, count: number, language: string, model: PredictModel) {
-  return { session_id: sessionId, kind: 'replies', count: Math.min(Math.max(count, 1), 5), language, model, wait_s: REPLIES_WAIT_S }
+// The user's instructions for each kind of guess (hermes-conduit#2970).
+export type PredictKind = 'replies' | 'draft' | 'turn'
+export const INSTRUCTIONS_CAPABILITY = 'predict-custom-instructions'
+export const INSTRUCTIONS_MINIMUM_PLUGIN = '0.190'
+/** The plugin's limit, in code points as Python counts them. */
+export const MAX_INSTRUCTIONS_CHARS = 1000
+const INSTRUCTIONS_KEYS: Record<PredictKind, string> = {
+  replies: 'conduit.predictive.replies.instructions',
+  draft: 'conduit.predictive.pause.instructions',
+  turn: 'conduit.predictive.followUp.instructions'
+}
+
+/** `text` cut to the plugin's limit at a whole character, so an emoji is never split. */
+export function clipInstructions(text: string): string {
+  if ([...text].length <= MAX_INSTRUCTIONS_CHARS) return text
+  const pieces =
+    typeof Intl !== 'undefined' && 'Segmenter' in Intl
+      ? [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map(s => s.segment)
+      : [...text]
+  let kept = ''
+  let length = 0
+  for (const piece of pieces) {
+    const n = [...piece].length
+    if (length + n > MAX_INSTRUCTIONS_CHARS) break
+    kept += piece
+    length += n
+  }
+  return kept
+}
+
+/** What's typed in Settings for `kind`, as kept. */
+export const storedInstructions = (kind: PredictKind): string => read(INSTRUCTIONS_KEYS[kind]) ?? ''
+/** The instructions `kind`'s questions carry, or null when there are none. */
+export function instructions(kind: PredictKind): string | null {
+  const text = clipInstructions(storedInstructions(kind)).trim()
+  return text ? text : null
+}
+export const setInstructions = (kind: PredictKind, text: string) => {
+  write(INSTRUCTIONS_KEYS[kind], clipInstructions(text))
+  window.dispatchEvent(new CustomEvent(INSTRUCTIONS_EVENT, { detail: kind }))
+}
+/** Fired when a kind's instructions change: guesses made under the old ones go. */
+export const INSTRUCTIONS_EVENT = 'conduit:predictive-instructions'
+
+const withInstructions = (text: string | null | undefined) => (text ? { custom_instructions: text } : {})
+
+export function repliesBody(sessionId: string, count: number, language: string, model: PredictModel, instructions?: string | null) {
+  return {
+    session_id: sessionId,
+    kind: 'replies',
+    count: Math.min(Math.max(count, 1), 5),
+    language,
+    model,
+    wait_s: REPLIES_WAIT_S,
+    ...withInstructions(instructions)
+  }
 }
 
 /** The route's guesses, best first: blank or over-long ones dropped, repeats once, ties in the host's order. */
@@ -120,8 +178,17 @@ export function askable(draft: string): boolean {
   return draft.trim().length >= MIN_DRAFT_CHARS && length <= MAX_DRAFT_CHARS
 }
 
-export function draftBody(sessionId: string, draft: string, count: number, language: string, model: PredictModel) {
-  return { session_id: sessionId, kind: 'draft', draft, count: Math.min(Math.max(count, 1), 5), language, model, wait_s: DRAFT_WAIT_S }
+export function draftBody(sessionId: string, draft: string, count: number, language: string, model: PredictModel, instructions?: string | null) {
+  return {
+    session_id: sessionId,
+    kind: 'draft',
+    draft,
+    count: Math.min(Math.max(count, 1), 5),
+    language,
+    model,
+    wait_s: DRAFT_WAIT_S,
+    ...withInstructions(instructions)
+  }
 }
 
 export interface DraftGuesses {
@@ -178,8 +245,9 @@ export interface TurnFacts {
   localTime?: string
 }
 
-export function turnBody(sessionId: string, facts: TurnFacts, language: string, model: PredictModel) {
+export function turnBody(sessionId: string, facts: TurnFacts, language: string, model: PredictModel, instructions?: string | null) {
   return {
+    ...withInstructions(instructions),
     session_id: sessionId,
     kind: 'turn',
     count: 1,

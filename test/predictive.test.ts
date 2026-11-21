@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   askable,
+  clipInstructions,
   draftBody,
+  instructions,
+  INSTRUCTIONS_EVENT,
+  MAX_INSTRUCTIONS_CHARS,
+  setInstructions,
   draftGuesses,
   followedUpKeys,
   followUpId,
@@ -124,5 +129,42 @@ describe('followed-up tags', () => {
     ] as unknown as TranscriptItem[]
     expect([...followedUpKeys(items, new Set([followUpId(1, 'Hello')]))]).toEqual(['a2'])
     expect(followedUpKeys(items, undefined).size).toBe(0)
+  })
+})
+
+describe('predictive instructions (hermes-conduit#2970)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  function stubStorage() {
+    const store = new Map<string, string>()
+    const events: string[] = []
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) })
+    vi.stubGlobal('window', { dispatchEvent: (e: CustomEvent) => void events.push(`${e.type}:${e.detail}`) })
+    return events
+  }
+
+  it('sends each kind only its own instructions, and nothing when blank', () => {
+    const events = stubStorage()
+    setInstructions('replies', '  Favor next steps.\n')
+    setInstructions('draft', ' \n ')
+    setInstructions('turn', 'Only for results.')
+    expect(events).toEqual([`${INSTRUCTIONS_EVENT}:replies`, `${INSTRUCTIONS_EVENT}:draft`, `${INSTRUCTIONS_EVENT}:turn`])
+    expect(instructions('replies')).toBe('Favor next steps.')
+    expect(instructions('draft')).toBeNull()
+    expect(repliesBody('s1', 3, 'English', 'fast', instructions('replies'))).toMatchObject({ custom_instructions: 'Favor next steps.' })
+    expect(draftBody('s1', 'Can you', 3, 'English', 'fast', instructions('draft'))).not.toHaveProperty('custom_instructions')
+    expect(turnBody('s1', { lastReplyS: 1, onScreenS: 1, check: 1 }, 'English', 'fast', instructions('turn'))).toMatchObject({
+      kind: 'turn',
+      custom_instructions: 'Only for results.'
+    })
+    expect(repliesBody('s1', 3, 'English', 'fast')).not.toHaveProperty('custom_instructions')
+  })
+
+  it('cuts instructions at the plugin limit at a whole character', () => {
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}' // one character, five code points
+    const fits = 'a'.repeat(MAX_INSTRUCTIONS_CHARS)
+    expect(clipInstructions(fits)).toBe(fits)
+    const clipped = clipInstructions('a'.repeat(MAX_INSTRUCTIONS_CHARS - 2) + family)
+    expect(clipped).toBe('a'.repeat(MAX_INSTRUCTIONS_CHARS - 2))
   })
 })
