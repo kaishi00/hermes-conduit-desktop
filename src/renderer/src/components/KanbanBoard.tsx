@@ -8,6 +8,7 @@ import { Markdown } from './Markdown'
 import { Icon } from './icons'
 import { ask } from '../state/dialogs'
 import { Select } from './Select'
+import { useBoardScroll } from '../state/useBoardScroll'
 
 interface Props {
   connected: boolean
@@ -22,7 +23,12 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
  * Tasks > Board, after the phone's Kanban: the board's lanes side by side,
  * each card its title, who has it and how it's going. A card opens its task
  * on the right: details, the latest summary, comments, and moving,
- * assigning, reprioritizing or deleting it. Drag a card to a lane to move it.
+ * assigning, reprioritizing or deleting it. Drag a card to a lane to move it,
+ * or right-click it for the phone's card menu.
+ *
+ * The lanes run wider than the window, so the chips above them bring a lane
+ * into view (the phone's jump bar), the wheel and a grab on empty board space
+ * move it sideways, and a card dragged to the edge rolls the board on.
  */
 export function KanbanBoard({ connected, bots, segment }: Props) {
   const kanban = useKanban(connected, true)
@@ -32,12 +38,15 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
   const [note, setNote] = useState<{ text: string; tone: 'error' | 'info' } | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const dragged = useRef<KanbanTask | null>(null)
+  const [menu, setMenu] = useState<{ task: KanbanTask; x: number; y: number } | null>(null)
+  const lanesRef = useRef<HTMLDivElement | null>(null)
 
   const botTitle = (name?: string) => (name ? bots?.find(b => b.name === name)?.title ?? name : t('Unassigned'))
   const columns = useMemo(
     () => (kanban.board?.columns ?? []).map(column => ({ ...column, tasks: column.tasks.filter(task => matchesTask(task, query)) })),
     [kanban.board, query]
   )
+  const scroll = useBoardScroll(lanesRef, columns.map(column => column.name).join(' '))
   const openTask = kanban.board?.columns.flatMap(c => c.tasks).find(task => task.id === openId) ?? null
   const assignees = useMemo(() => {
     const names = new Set([...(kanban.board?.assignees ?? []), ...(bots ?? []).map(b => b.name)])
@@ -60,6 +69,53 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
         tone: 'error'
       })
     }
+  }
+
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    window.addEventListener('click', close)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('blur', close)
+    }
+  }, [menu])
+
+  function copy(text: string, done: string) {
+    navigator.clipboard.writeText(text).then(
+      () => setNote({ text: done, tone: 'info' }),
+      e => setNote({ text: message(e), tone: 'error' })
+    )
+  }
+
+  async function archive(task: KanbanTask) {
+    setNote(null)
+    try {
+      await kanban.patch(task, { status: 'archived' })
+    } catch (e) {
+      setNote({ text: message(e), tone: 'error' })
+    }
+  }
+
+  async function remove(task: KanbanTask) {
+    if (!(await ask(`${t('Delete task?')}\n\n${t('This removes {title} from the board for good.', { title: task.title })}`, { confirm: t('Delete'), destructive: true }))) return
+    setNote(null)
+    try {
+      await kanban.remove(task)
+      setOpenId(id => (id === task.id ? null : id))
+    } catch (e) {
+      setNote({ text: message(e), tone: 'error' })
+    }
+  }
+
+  function endDrag() {
+    dragged.current = null
+    setDropTarget(null)
+    scroll.stopEdge()
   }
 
   return (
@@ -105,7 +161,33 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
           <span>{kanban.error ? t('Couldn’t load the board: {reason}', { reason: kanban.error }) : t('Loading…')}</span>
         </div>
       ) : (
-        <div className="board-lanes">
+        <>
+        <div className="board-jump" role="toolbar" aria-label={t('Board')}>
+          {columns.map((column, index) => (
+            <button
+              key={column.name}
+              className={`board-chip${scroll.inView[index] ? ' on' : ''}`}
+              aria-label={`${columnTitle(column.name)}, ${t('{count} tasks', { count: column.tasks.length })}`}
+              aria-current={scroll.inView[index] ? 'location' : undefined}
+              onClick={() => scroll.jumpTo(index)}
+            >
+              <span className={`lane-dot ${column.name}`} />
+              {columnTitle(column.name)}
+              <span className="meta">{column.tasks.length}</span>
+              {!MOVABLE.includes(column.name) ? <Icon name="lock" /> : null}
+            </button>
+          ))}
+        </div>
+        <div
+          className="board-lanes"
+          ref={lanesRef}
+          onDragOver={e => {
+            if (dragged.current) scroll.dragAt(e.clientX)
+          }}
+          onDragLeave={e => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) scroll.stopEdge()
+          }}
+        >
           {columns.map(column => {
             const droppable = MOVABLE.includes(column.name)
             return (
@@ -123,9 +205,8 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
                 }}
                 onDrop={e => {
                   e.preventDefault()
-                  setDropTarget(null)
                   const task = dragged.current
-                  dragged.current = null
+                  endDrag()
                   if (task && droppable) void move(task, column.name)
                 }}
               >
@@ -133,6 +214,11 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
                   <span className={`lane-dot ${column.name}`} />
                   <span className="lane-title">{columnTitle(column.name)}</span>
                   <span className="meta">{column.tasks.length}</span>
+                  {!droppable ? (
+                    <span className="lane-lock" title={t('Locked')} aria-label={t('Locked')}>
+                      <Icon name="lock" />
+                    </span>
+                  ) : null}
                 </div>
                 <div className="lane-cards">
                   {column.tasks.map(task => (
@@ -146,9 +232,10 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
                         e.dataTransfer.effectAllowed = 'move'
                         e.dataTransfer.setData('text/plain', task.id)
                       }}
-                      onDragEnd={() => {
-                        dragged.current = null
-                        setDropTarget(null)
+                      onDragEnd={endDrag}
+                      onContextMenu={e => {
+                        e.preventDefault()
+                        setMenu({ task, x: e.clientX, y: e.clientY })
                       }}
                       onClick={() => {
                         setComposing(false)
@@ -178,7 +265,40 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
             )
           })}
         </div>
+        </>
       )}
+      {menu ? (
+        <div className="host-menu row-menu card-menu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 330) }}>
+          <button
+            role="menuitem"
+            onClick={() => {
+              setComposing(false)
+              setOpenId(menu.task.id)
+            }}
+          >
+            {t('Open')}
+          </button>
+          {MOVABLE.filter(status => status !== menu.task.status).map(status => (
+            <button key={status} role="menuitem" disabled={!connected} onClick={() => void move(menu.task, status)}>
+              {t('Move to {lane}', { lane: columnTitle(status) })}
+            </button>
+          ))}
+          <button role="menuitem" onClick={() => copy(menu.task.id, t('Task ID copied'))}>
+            {t('Copy Task ID')}
+          </button>
+          <button role="menuitem" onClick={() => copy(menu.task.title, t('Title copied'))}>
+            {t('Copy Task Title')}
+          </button>
+          {menu.task.status !== 'archived' ? (
+            <button role="menuitem" disabled={!connected} onClick={() => void archive(menu.task)}>
+              {t('Archive')}
+            </button>
+          ) : null}
+          <button role="menuitem" className="danger" disabled={!connected} onClick={() => void remove(menu.task)}>
+            {t('Delete…')}
+          </button>
+        </div>
+      ) : null}
       {composing ? (
         <TaskComposer
           assignees={assignees}

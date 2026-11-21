@@ -4034,6 +4034,74 @@ html[data-window='quick'] body {
   gap: 12px;
   padding: 4px 18px 18px;
   overflow-x: auto;
+  /* The lanes' offsetLeft is measured from here, for the chips. */
+  position: relative;
+}
+
+/* A grab on empty board space pans it. */
+.board-lanes.panning,
+.board-lanes.panning * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Every lane as a chip with its count, after the phone's jump bar; the lanes on screen are marked. */
+.board-jump {
+  display: flex;
+  gap: 6px;
+  padding: 0 18px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: none;
+}
+
+.board-jump::-webkit-scrollbar {
+  display: none;
+}
+
+.board-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.board-chip:hover {
+  background: var(--surface-hover);
+}
+
+.board-chip.on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.board-chip .meta {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-chip .ico,
+.lane-lock .ico {
+  width: 11px;
+  height: 11px;
+  color: var(--text-4);
+}
+
+.lane-lock {
+  display: inline-flex;
+}
+
+.card-menu {
+  z-index: 60;
 }
 
 .lane {
@@ -4059,6 +4127,7 @@ html[data-window='quick'] body {
   padding: 10px 12px 6px;
   font-size: 13px;
   font-weight: 600;
+  user-select: none;
 }
 
 .lane-title {
