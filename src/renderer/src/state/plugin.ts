@@ -161,7 +161,7 @@ export type UpdateState =
   | { phase: 'needsDashboardRestart'; detail: string | null }
   | { phase: 'failed'; detail: string | null }
   /** Hermes' install scan held the update for confirmation (a caution verdict, plugin 0.192.0+): Update Anyway runs it again accepting it. */
-  | { phase: 'scanHeld'; findings: string[]; count: number; detail: string | null }
+  | { phase: 'scanHeld'; id: string | null; findings: string[]; count: number; detail: string | null }
   | { phase: 'runningOnHost' }
 
 /** "Step 2 of 4", as the phone counts them. */
@@ -175,7 +175,7 @@ export const selfUpdatePath = (acceptScan = false) => (acceptScan ? `${SELF_UPDA
 function scanFindingLine(finding: unknown): string {
   if (!finding || typeof finding !== 'object') return ''
   const f = finding as Record<string, unknown>
-  const text = (v: unknown) => (typeof v === 'string' && v ? v : null)
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
   const file = text(f.file)
   const place = file ? (typeof f.line === 'number' ? `${file}:${f.line}` : file) : null
   const head = [text(f.severity), text(f.category), place].filter(Boolean).join(' · ')
@@ -205,7 +205,7 @@ export function jobState(job: unknown): UpdateState | null {
       if (j.code === 'scan_blocked' && j.scan_verdict === 'caution') {
         const findings = (Array.isArray(j.scan_findings) ? j.scan_findings : []).map(scanFindingLine).filter(Boolean)
         const count = typeof j.scan_finding_count === 'number' ? Math.max(j.scan_finding_count, findings.length) : findings.length
-        return { phase: 'scanHeld', findings, count, detail }
+        return { phase: 'scanHeld', id: typeof j.id === 'string' ? j.id : null, findings, count, detail }
       }
       return { phase: 'failed', detail }
     default:

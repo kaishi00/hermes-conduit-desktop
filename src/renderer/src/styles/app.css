@@ -7187,7 +7187,7 @@ button.cap-row-text {
   width: 100%;
 }
 /* A held scan's findings, one per line. */
-.plugin-update-text .meta {
+.plugin-scan-findings {
   white-space: pre-line;
 }
 .plugin-update.ok strong {

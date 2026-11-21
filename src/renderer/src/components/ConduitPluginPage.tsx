@@ -189,6 +189,19 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
     setChecking(false)
   }, [])
   useEffect(() => {
+    // A held scan's Update Anyway belongs to the host that held it: after a switch to another
+    // dashboard (or a job that has since moved on) the row would force an update there unseen.
+    const held = update
+    if (held.phase === 'scanHeld')
+      void gateway
+        .http('GET', SELF_UPDATE_PATH)
+        .then(r => (r as { job?: { id?: unknown } })?.job?.id)
+        .catch(() => undefined)
+        .then(id => {
+          if (update === held && (!held.id || id !== held.id)) setUpdate({ phase: 'idle' })
+        })
+  }, [])
+  useEffect(() => {
     void refresh()
     window.conduit
       .pluginRelease()
@@ -402,7 +415,7 @@ function UpdateRow({ state, onDismiss, onAcceptScan }: { state: UpdateState; onD
           ? t("Hermes' install scan on the host asks you to confirm this update. Findings: {count}", { count: String(state.count) })
           : t("Hermes' install scan on the host asks you to confirm this update."),
         ...state.findings.map(line => `• ${line}`),
-        notShown > 0 && state.findings.length ? t('Not shown here: {count}', { count: String(notShown) }) : null,
+        notShown > 0 ? t('Not shown here: {count}', { count: String(notShown) }) : null,
         t("An older Hermes' scan often flags the plugin's own tests. Update Anyway accepts the scan for this update only; updating Hermes clears it for good.")
       ]
         .filter(Boolean)
@@ -430,7 +443,7 @@ function UpdateRow({ state, onDismiss, onAcceptScan }: { state: UpdateState; onD
             </span>
           </>
         ) : null}
-        {detail ? <span className="meta">{detail}</span> : null}
+        {detail ? <span className={state.phase === 'scanHeld' ? 'meta plugin-scan-findings' : 'meta'}>{detail}</span> : null}
       </div>
       {state.phase === 'scanHeld' && onAcceptScan ? (
         <button className="primary" onClick={onAcceptScan}>
