@@ -3237,7 +3237,17 @@ function Settings({
           <dt>{t('Signed in with')}</dt>
           <dd>
             {status.method ? methods[status.method] : '—'}
-            {status.username ? ` (${status.username})` : ''}
+            {status.username ? ` (${status.username})` : ''}{' '}
+            {/* Sign out sits with how you signed in, where Eric looked for it (2026-11-21). */}
+            <button
+              className="link danger"
+              onClick={() => {
+                composerDrafts.dropHost(status.url ?? '')
+                void window.conduit.signOut()
+              }}
+            >
+              {(status.hosts?.length ?? 0) > 1 ? t('Sign out of {host}', { host: status.hostLabel ?? '' }) : t('Sign out')}
+            </button>
           </dd>
           {status.url ? <HostActions host={status.url} connected={status.phase === 'open'} /> : null}
         </dl>
@@ -3352,15 +3362,6 @@ function Settings({
           </dd>
         </dl>
       </section>
-      <button
-        className="secondary"
-        onClick={() => {
-          composerDrafts.dropHost(status.url ?? '')
-          void window.conduit.signOut()
-        }}
-      >
-        {(status.hosts?.length ?? 0) > 1 ? t('Sign out of {host}', { host: status.hostLabel ?? '' }) : t('Sign out')}
-      </button>
     </main>
   )
 }
