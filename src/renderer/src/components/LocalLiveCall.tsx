@@ -1,4 +1,5 @@
 import { micStep, startCallTrace, type CallTrace } from '../state/callTrace'
+import { CallLines } from './CallLines'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CALL_ME_WHEN_DONE, CallBacks, callbackScope, chatWork, jobWork, type CallWork } from '../state/callbacks'
 import { language, t } from '@shared/i18n'
@@ -971,15 +972,7 @@ export function LocalLiveCall({
             {modeMenu}
           </div>
         </div>
-        {lines.length ? (
-          <ol className="voice-call-lines" aria-live="polite">
-            {lines.map(line => (
-              <li key={line.id} className={line.who === 'user' ? 'voice-call-line said' : 'voice-call-line'}>
-                {line.text}
-              </li>
-            ))}
-          </ol>
-        ) : null}
+        <CallLines lines={lines} />
         <div className="voice-call-buttons">
           {pictureControls}
           {phase === 'failed' ? (
