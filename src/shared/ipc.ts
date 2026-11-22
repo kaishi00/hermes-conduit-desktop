@@ -341,9 +341,9 @@ export interface ConduitApi {
   /**
    * A docked page tells the main window's pane, straight through its frame: 'moved' when its chat opened in
    * a window of its own, 'closed' when its room copy was deleted (either closes the pane), 'ask' for whether
-   * Chats is on screen.
+   * Chats is on screen, 'calling' and 'call-ended' as a call starts and ends in its chat.
    */
-  dockedToPane(message: 'moved' | 'closed' | 'ask'): void
+  dockedToPane(message: 'moved' | 'closed' | 'ask' | 'calling' | 'call-ended'): void
   /** Closes these chats' windows, or every chat window. */
   closeChatWindows(ids?: string[]): void
   /** The chats that have a window of their own, now and whenever that changes. */

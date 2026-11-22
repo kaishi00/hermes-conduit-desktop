@@ -36,6 +36,7 @@ import { ChatQueueDock } from './ChatQueueDock'
 import { ConnectionActionsContext } from './ConnectionCardView'
 import { useReplyFace } from './BotsHome'
 import { AskedQuestionBar, WorkPanel } from './WorkPanel'
+import { useChatCall } from './ChatCall'
 import { ChatHeader } from './ChatHeader'
 import { PanelTabs, workCount, type PanelTab } from './PanelTabs'
 import { ArtifactsPanel } from './ArtifactsPanel'
@@ -58,8 +59,8 @@ const muteHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gatewa
  * for its own bot, beside the main window and any other chat windows. Its
  * rows with their cards, approvals and questions, the composer with
  * attachments, slash commands, the model and context panels, Stop, the
- * queue, the agents and the plan. Calls stay in the main window, which owns
- * the microphone. Open in Main Window opens the chat there and closes this
+ * queue, the agents and the plan. A window's chat has no call: calls stay in
+ * the main window, which owns the microphone. Open in Main Window opens the chat there and closes this
  * window. The window's title follows the chat's and the bot's names as they
  * change. Its chat can be on another combined dashboard, which its calls go
  * to (the main process routes them), and a switch between combined
@@ -69,7 +70,11 @@ const muteHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gatewa
  * Docked, the same page is another combined dashboard's chat opened in the
  * main window's chat pane, with no switch (the phone's no-switch open,
  * stage 2): Open in New Window moves it to a window of its own, and the main
- * window closes it when its dashboard goes.
+ * window closes it when its dashboard goes. Being in the main window, it
+ * offers Call too: the call runs in this page, so it reads and sends through
+ * the chat's own dashboard (Eric, 2026-11-22), and the main window hears it
+ * start and end, to ask before a switch and to keep wake phrases quiet. Like
+ * the main window's, it ends when another chat opens here or Chats goes.
  *
  * Either way its header is the main window's (ChatHeader, Eric, 2026-11-22):
  * a workstream's status and its way back to its bot, the bot's screen, and
@@ -132,7 +137,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     sendQueuedNow,
     discardLost,
     resendLost,
-    react
+    react,
+    noteCorrection
   } = useChat(request.fresh ? null : request.id, profile, status.sessionAuthority === true, connected, botChat, undefined, host)
   // The transcript is drawn by LiveTranscript, so a streaming reply runs that, not this window, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
@@ -155,7 +161,6 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   )
   const commands = useCommands(profile, connected)
   const delegates = useAgents(chat.liveId, connected, running)
-  const predictions = usePredictions(transcriptStore, connected ? (chat.liveId ?? undefined) : undefined)
   const mentionBots = useMemo(() => mentionCandidates(roster.bots ?? [], '', profile ?? 'default'), [roster.bots, profile])
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
@@ -235,6 +240,38 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   )
   // An artifact's Show in Chat: its message, here.
   const showInChat = useRevealRow(transcriptStore, chatId, chat.storedId, key => requestAnimationFrame(() => revealMessage(pane.current, key)))
+  // Docked, the chat's call (components/ChatCall.tsx), running here on the chat's own dashboard.
+  const endCallRef = useRef<() => void>(() => undefined)
+  const chatCall = useChatCall({
+    profile,
+    chatId,
+    liveId: chat.liveId,
+    connected,
+    store: transcriptStore,
+    running,
+    turnsDone,
+    onStop: () => void stop(),
+    onCorrected: noteCorrection,
+    tell: message => notice(message, 'error')
+  })
+  const calling = docked && chatCall.calling
+  const endCall = chatCall.end
+  endCallRef.current = endCall
+  // Replies predicted for the box wait while a call speaks.
+  const predictions = usePredictions(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined)
+  // The main window hears the call start and end.
+  useEffect(() => {
+    if (!docked || !calling) return
+    window.conduit.dockedToPane('calling')
+    return () => window.conduit.dockedToPane('call-ended')
+  }, [docked, calling])
+  // Another chat pointed here ends the call, as another chat opened in the main window does.
+  const callChatKey = `${profile ?? ''}\u001f${request.fresh ? '' : request.id}`
+  const callChat = useRef(callChatKey)
+  useEffect(() => {
+    if (callChat.current !== callChatKey) endCall()
+    callChat.current = callChatKey
+  }, [callChatKey, endCall])
   // The bot's screen, offered where its dashboard can have one, in a window of its own.
   const screenProfile = profile ?? 'default'
   const [screenSupported, setScreenSupported] = useState(false)
@@ -300,7 +337,11 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const paneShown = useRef(true)
   useEffect(() => {
     if (!docked) return
-    const off = window.conduit.onDockedShown(shown => (paneShown.current = shown))
+    const off = window.conduit.onDockedShown(shown => {
+      paneShown.current = shown
+      // Chats went (another section): the call ends, as the main window's does.
+      if (!shown) endCallRef.current()
+    })
     // A tell sent before this listened is asked for again.
     window.conduit.dockedToPane('ask')
     return off
@@ -424,9 +465,15 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 ? undefined
                 : { text: botTitle }
           }
+          call={docked ? chatCall.header : undefined}
           newWindow={
             docked && windowId
-              ? { label: t('Open in New Window'), title: `${t('Open in New Window')}: ${t('Moves this chat to a window of its own.')}`, onClick: () => void openInWindow() }
+              ? {
+                  label: t('Open in New Window'),
+                  title: calling ? t('End the call to move this chat to a window of its own') : `${t('Open in New Window')}: ${t('Moves this chat to a window of its own.')}`,
+                  disabled: calling,
+                  onClick: () => void openInWindow()
+                }
               : undefined
           }
           screen={
@@ -493,6 +540,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             setYolo={setYolo}
           />
         ) : null}
+        {docked ? chatCall.view({ requests: openRequests, onSend }) : null}
         <ControlDock liveId={chat.liveId} profile={profile} connected={connected} pulse={turnsDone + outputs} />
         <AgentsDock
           agents={delegates.agents}
@@ -564,7 +612,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           draftKey={chatDraft(profile, request.id)}
           canAttach
           dropZone={pane}
-          voice={{ profile }}
+          voice={calling ? undefined : { profile }}
           mentionBots={mentionBots}
         />
       </main>

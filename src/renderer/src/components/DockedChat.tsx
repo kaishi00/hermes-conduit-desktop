@@ -28,19 +28,23 @@ export function tellDockedShown(frame: DockedFrame | null, shown: boolean): void
  * the frame at it with no reload; the parent keys the pane by dashboard.
  * The parent holds `frame` and tells it as Chats shows or goes (this pane
  * isn't rendered again while Chats is away); `shown` is read as the page loads
- * and whenever the page asks.
+ * and whenever the page asks. A call in the docked chat runs in its page, on
+ * its dashboard; the pane passes on its start and end.
  */
 export function DockedChatPane({
   chat,
   frame,
   shown,
-  onMoved
+  onMoved,
+  onCall
 }: {
   chat: DockedChat
   frame: MutableRefObject<DockedFrame | null>
   shown: MutableRefObject<boolean>
   /** The chat opened in a window of its own from the pane's header. */
   onMoved: () => void
+  /** A call started (true) or ended (false) in the docked chat, which runs it on its own dashboard. */
+  onCall: (calling: boolean) => void
 }) {
   useEffect(() => {
     const el = frame.current
@@ -51,6 +55,8 @@ export function DockedChatPane({
       if (channel !== IPC.dockedToPane) return
       if (args?.[0] === 'moved') onMoved()
       else if (args?.[0] === 'ask') tell()
+      else if (args?.[0] === 'calling') onCall(true)
+      else if (args?.[0] === 'call-ended') onCall(false)
     }
     el.addEventListener('dom-ready', tell)
     el.addEventListener('ipc-message', heard)
@@ -58,7 +64,9 @@ export function DockedChatPane({
       el.removeEventListener('dom-ready', tell)
       el.removeEventListener('ipc-message', heard)
     }
-  }, [frame, shown, onMoved])
+  }, [frame, shown, onMoved, onCall])
+  // The frame goes with its call: the main window hears it ended.
+  useEffect(() => () => onCall(false), [onCall])
   return (
     <main className="docked-chat" aria-label={chat.title}>
       <webview ref={frame as React.Ref<HTMLElement>} className="docked-chat-frame" src={dockedChatUrl(window.location.href, chat)} />

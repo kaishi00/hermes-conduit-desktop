@@ -822,7 +822,10 @@ function registerIpc(): void {
     const params: Record<string, string> = {}
     if (query && typeof query === 'object') for (const [name, value] of Object.entries(query)) if (typeof value === 'string') params[name] = value
     try {
-      return { ok: true, id: keepLive(event.sender, await connection.openSocket(path, params)) }
+      // A docked far chat's call opens its sockets on its own dashboard.
+      const through = connectionOf(event.sender.id)
+      if (!through) throw new Error('Not connected to that Hermes.')
+      return { ok: true, id: keepLive(event.sender, await through.openSocket(path, params)) }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
@@ -834,7 +837,9 @@ function registerIpc(): void {
     if (typeof path !== 'string' || !LIVE_TOKEN_PATHS.some(allowed => path === allowed || path.startsWith(`${allowed}?`)))
       return { ok: false, error: 'Not a live token route.' }
     try {
-      const minted = mintedSocket(await connection.http('POST', path, {}, 20_000))
+      const through = connectionOf(event.sender.id)
+      if (!through) throw new Error('Not connected to that Hermes.')
+      const minted = mintedSocket(await through.http('POST', path, {}, 20_000))
       if (!minted.ok) return minted
       const socket = new WebSocket(minted.url, { maxPayload: 16 * 1024 * 1024, headers: minted.headers }) as unknown as WebSocketLike
       return { ok: true, id: keepLive(event.sender, socket), model: minted.model, voice: minted.voice }
