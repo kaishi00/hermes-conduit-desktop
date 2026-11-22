@@ -11,11 +11,9 @@ import {
   BADGE_PALETTE,
   hostBadge,
   launchRows,
-  openAfterSwitch,
   openBotAfterSwitch,
   showProfileAfterSwitch,
   takeProfileAfterSwitch,
-  openChatAfterSwitch,
   openPageAfterSwitch,
   takePageAfterSwitch,
   otherHostsChats,
@@ -31,8 +29,6 @@ import {
   profileNames,
   pulseChips,
   takeBotAfterSwitch,
-  takeChatAfterSwitch,
-  takeOpenAfterSwitch,
   keptWorkKey,
   keptWorkPath,
   type KeptWaitingRow,
@@ -344,13 +340,6 @@ describe('combined dashboards in the window', () => {
     expect(otherHostsWaiting(kept, [row('w1')]).map(r => `${r.id}@${r.host}`)).toEqual(['w2@https://studio.example'])
   })
 
-  it('hands a wait opened on another host to that host’s window after the switch', () => {
-    openAfterSwitch(row('w9', 'https://studio.example') as KeptWaitingRow)
-    expect(takeOpenAfterSwitch('https://home.example')).toBeNull()
-    expect(takeOpenAfterSwitch('https://studio.example')).toEqual(row('w9'))
-    expect(takeOpenAfterSwitch('https://studio.example')).toBeNull()
-  })
-
   const chat = (id: string, host?: string) => ({ id, title: id, pinned: false, ...(host ? { host } : {}) })
 
   it('lists another host’s chat once, and not one this host lists too', () => {
@@ -374,13 +363,6 @@ describe('combined dashboards in the window', () => {
     ])
     expect(merged.map(r => `${r.id}@${r.host}`)).toEqual(['d1@https://studio.example', 'm1@https://studio.example', 'd2@https://studio.example'])
     expect(merged.every(r => !r.pinned)).toBe(true)
-  })
-
-  it('opens another host’s chat in that host’s window after the switch', () => {
-    openChatAfterSwitch(chat('c3', 'https://studio.example') as OtherChatRow)
-    expect(takeChatAfterSwitch('https://home.example')).toBeNull()
-    expect(takeChatAfterSwitch('https://studio.example')).toEqual(chat('c3'))
-    expect(takeChatAfterSwitch('https://studio.example')).toBeNull()
   })
 
   it('opens another host’s bot once that host’s bots are read', () => {

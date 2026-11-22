@@ -134,12 +134,10 @@ import { CombineDashboardsSetting, HostBadgeMark } from './components/CombinedDa
 import {
   hostBadge,
   keptStateLabel,
-  openAfterSwitch,
   openBotAfterSwitch,
   showProfileAfterSwitch,
   type HostBadge,
   openRoomAfterSwitch,
-  openChatAfterSwitch,
   openPageAfterSwitch,
   newBotAfterSwitch,
   takeNewBotAfterSwitch,
@@ -149,9 +147,7 @@ import {
   takeBotAfterSwitch,
   takeProfileAfterSwitch,
   keptWorkKey,
-  takeChatAfterSwitch,
   takeRoomAfterSwitch,
-  takeOpenAfterSwitch,
   takePageAfterSwitch,
   useKeptBots,
   useKeptWork,
@@ -214,6 +210,7 @@ import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
 import { ask, askText, tell } from './state/dialogs'
 import { Select } from './components/Select'
 import { KeptPane } from './components/KeptPane'
+import { DockedChatPane, type DockedChat } from './components/DockedChat'
 import { botSideScroll } from './state/keptScroll'
 
 /** A call's transcript while no call reads it. */
@@ -393,6 +390,16 @@ function Shell({
   const statusUrlRef = useRef(status.url)
   statusUrlRef.current = status.url
   const [selected, setSelected] = useState<{ id: string | null; profile?: string; title?: string; botChat?: boolean; folder?: string }>({ id: null })
+  /**
+   * Another combined dashboard's chat opened in place, in the chat pane (the
+   * phone's no-switch open, stage 2). It shows over the chat it was opened
+   * over: anything that opens a chat here (a row, a bot, New Chat, a call)
+   * sets `selected` again, which closes it.
+   */
+  const [docked, setDocked] = useState<{ chat: DockedChat; over: typeof selected } | null>(null)
+  const dockedChat = docked && docked.over === selected ? docked.chat : null
+  const dockedRef = useRef(dockedChat)
+  dockedRef.current = dockedChat
   const [projectsOpen, setProjectsOpen] = useState(false)
   const list = useChatList(connected, status.url ?? '')
   const {
@@ -484,7 +491,7 @@ function Shell({
     else if (action === 'text-smaller') setChatScale(s => nextScale(s, -1))
     else if (action === 'text-normal') setChatScale(1)
     else if (action === 'stop') {
-      if (section === 'chats' && running) void stop()
+      if (section === 'chats' && running && !dockedRef.current) void stop()
     } else if (action === 'toggle-sidebar') {
       if (section === 'chats') hideList(!listHidden)
       else {
@@ -506,7 +513,7 @@ function Shell({
     const offOpen = window.conduit.onOpenChat(ref => {
       // Another combined dashboard's chat, back from its window: a switch to it opens it.
       if (ref.host && ref.host !== statusUrlRef.current) {
-        void openOtherChatRef.current({ id: ref.storedId, profile: ref.profile, title: ref.title ?? '', pinned: false, host: ref.host })
+        openOtherChatRef.current({ id: ref.storedId, profile: ref.profile, title: ref.title ?? '', pinned: false, host: ref.host })
         return
       }
       setSelected({ id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
@@ -826,7 +833,8 @@ function Shell({
   const [workOpen, setWorkOpen] = useState(false)
   const openBotChat = selected.id ? roster.bots?.find(bot => bot.botChatId === selected.id) : undefined
   // The bots sidebar shows while the chat on screen is a bot's: its Bot Chat (or a new one) or one of its workstreams.
-  const botsSideShown = botsSide && !!roster.bots?.length && (selected.botChat === true || !!openBotChat || workSessions.has(selected.id ?? ''))
+  const botsSideShown =
+    botsSide && !!roster.bots?.length && (dockedChat ? dockedChat.botChat === true : selected.botChat === true || !!openBotChat || workSessions.has(selected.id ?? ''))
   // Wherever the bots list shows: beside a bot's chat, a group chat, or New Bot and Edit Bot.
   const botsListShown = section === 'bots' || section === 'room' || (section === 'chats' && botsSideShown)
   const work = useWork(selected.profile, connected, section === 'chats' && (workOpen || botsSideShown || !!openBotChat || workSessions.has(selected.id ?? '')))
@@ -976,6 +984,12 @@ function Shell({
     void window.conduit.chatWindows().then(setChatWindowIds)
     return off
   }, [])
+  // A docked chat closes when its dashboard is no longer kept beside this one (out of the group, signed out of) and
+  // when it moves to a window of its own (its pane's Open in New Window).
+  useEffect(() => {
+    if (!docked) return
+    if (!keptHosts.some(h => h.url === docked.chat.host) || chatWindowIds.includes(docked.chat.id)) setDocked(null)
+  }, [docked, keptHosts, chatWindowIds])
   // A chat opened here closes its window of its own.
   useEffect(() => {
     if (selected.id && chatWindowIds.includes(selected.id)) window.conduit.closeChatWindows([selected.id])
@@ -1609,7 +1623,8 @@ function Shell({
   const waitingRowsRef = useRef(waiting.rows)
   waitingRowsRef.current = waiting.rows
   const watching = useRef({ liveId: chat.liveId, onChats: section === 'chats' })
-  watching.current = { liveId: chat.liveId, onChats: section === 'chats' }
+  // The chat on screen isn't watched while another dashboard's chat is docked over it.
+  watching.current = { liveId: chat.liveId, onChats: section === 'chats' && !dockedChat }
   const notify = useCallback(async (spec: NotificationSpec, sessionId: string) => {
     if (!notificationsEnabled() || typeof Notification === 'undefined') return
     // A chat in a window of its own notifies from that window. One still opening its session can't yet, so this
@@ -1673,34 +1688,44 @@ function Shell({
     [list.rows]
   )
 
-  const openOtherWaiting = useCallback(async (row: KeptWaitingRow) => {
-    if (!(await switchEndingCall(hostName(row.host)))) return
-    openAfterSwitch(row)
-    void window.conduit.switchHost(row.host)
-  }, [])
+  /**
+   * Another combined dashboard's chat opens in place, in the chat pane, with
+   * no switch (the phone's no-switch open, stage 2): the dashboard on screen,
+   * its lists and a call in progress stay as they are.
+   */
+  const openDocked = useCallback(
+    (chat: DockedChat) => {
+      setDocked({ chat, over: selected })
+      setBotsSide(chat.botChat === true)
+      setSection('chats')
+    },
+    [selected]
+  )
+  const openOtherWaiting = useCallback(
+    (row: KeptWaitingRow) => {
+      // The chat as that dashboard's list names it, when it's listed.
+      const known = otherChats.find(r => r.host === row.host && row.sessionIds.includes(r.id))
+      const id = known?.id ?? row.sessionIds[0]
+      if (!id) return
+      openDocked({ host: row.host, id, profile: known?.profile ?? row.profile, title: known?.title ?? row.title })
+    },
+    [otherChats, openDocked]
+  )
   const statusUrl = status.url ?? ''
-  const openOtherChat = useCallback(async (row: OtherChatRow) => {
-    if (!(await switchEndingCall(hostName(row.host)))) return
-    openChatAfterSwitch(row)
-    void window.conduit.switchHost(row.host)
-  }, [])
+  const openOtherChat = useCallback(
+    (row: OtherChatRow) => openDocked({ host: row.host, id: row.id, profile: row.profile, title: row.title }),
+    [openDocked]
+  )
   const openOtherChatRef = useRef(openOtherChat)
   openOtherChatRef.current = openOtherChat
   /** Another dashboard's row whose chat has a window of its own brings the window to the front, with no switch. */
   const selectOtherRow = useCallback(
     (row: OtherChatRow) => {
       if (chatWindowIds.includes(row.id)) void window.conduit.openChatWindow({ id: row.id, profile: row.profile, title: row.title, host: row.host })
-      else void openOtherChat(row)
+      else openOtherChat(row)
     },
     [chatWindowIds, openOtherChat]
   )
-  useEffect(() => {
-    if (!connected) return
-    const row = takeChatAfterSwitch(statusUrl)
-    if (!row) return
-    setSelected({ id: row.id, profile: row.profile, title: row.title })
-    setSection('chats')
-  }, [connected, statusUrl])
   // New Bot picked another dashboard: its sheet opens here with the words, once the roster is read.
   useEffect(() => {
     if (!connected || roster.bots === undefined) return
@@ -1716,6 +1741,11 @@ function Shell({
     void window.conduit.switchHost(url)
   }, [])
   const openOtherBot = useCallback(async (other: OtherBot) => {
+    // Its Bot Chat opens in place; a bot with none yet is made on its own dashboard, after a switch.
+    if (other.bot.botChatId) {
+      openDocked({ host: other.host, id: other.bot.botChatId, profile: other.bot.name, title: other.bot.title, author: other.bot.title, botChat: true })
+      return
+    }
     if (!(await switchEndingCall(hostName(other.host)))) return
     openBotAfterSwitch(other)
     void window.conduit.switchHost(other.host)
@@ -1772,12 +1802,6 @@ function Shell({
     setOpenRoom(null)
     setSection('room')
   }, [connected, statusUrl, groupRooms.rooms, roomCopies.loaded, roomCopies.copies, showRoom])
-  // A wait opened on another host before the switch: open it here once connected.
-  useEffect(() => {
-    if (!connected || list.rows === undefined) return
-    const row = takeOpenAfterSwitch(statusUrl)
-    if (row) openWaiting(row)
-  }, [connected, list.rows, statusUrl, openWaiting])
 
   // Calls from Hermes ring here too.
   const rings = useRings(connected, profiles)
@@ -2212,13 +2236,17 @@ function Shell({
                   onHide={() => hideList(true)}
                 />
               ) : botsSideShown && orderedRoster ? (
-                <BotsHome {...botsHomeProps} side={{ openProfile: selected.profile ?? 'default' }} onHide={() => hideList(true)} />
+                <BotsHome
+                  {...botsHomeProps}
+                  side={dockedChat ? { openProfile: dockedChat.profile ?? 'default', openHost: dockedChat.host } : { openProfile: selected.profile ?? 'default' }}
+                  onHide={() => hideList(true)}
+                />
               ) : (
                 <ChatList
                   rows={listedRows}
                   error={list.error}
                   updating={list.updating}
-                  selectedId={chat.storedId ?? selected.id}
+                  selectedId={dockedChat?.id ?? chat.storedId ?? selected.id}
                   runningIds={runningIds}
                   waitingIds={waitingIds}
                   runningStatus={runningStatus}
@@ -2274,7 +2302,9 @@ function Shell({
                 onCollapse={() => hideList(true)}
               />
             )}
-            <main className="chat" ref={chatPane}>
+            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} /> : null}
+            {/* Kept while another dashboard's chat is docked over it, so coming back to it doesn't open it again. */}
+            <main className="chat" ref={chatPane} style={dockedChat ? { display: 'none' } : undefined}>
               <div className="chat-head soft">
                 <div className="chat-titles">
                   <div className="chat-title-line">
@@ -2608,10 +2638,10 @@ function Shell({
                 mentionBots={mentionBots}
               />
             </main>
-            {(artifactsOpen && selected.id) || showWork || (filesOpen && chat.cwd) || (beside && besideFits) ? (
+            {dockedChat ? null : (artifactsOpen && selected.id) || showWork || (filesOpen && chat.cwd) || (beside && besideFits) ? (
               <ColumnDivider label={t('Side panel width')} bounds={PANEL_COLUMN} sign={-1} width={panelWidth} onLive={setPanelLive} onCommit={commitPanel} />
             ) : null}
-            {artifactsOpen && selected.id ? (
+            {dockedChat ? null : artifactsOpen && selected.id ? (
               <ArtifactsPanel
                 profile={selected.profile}
                 sessionIds={[selected.id]}

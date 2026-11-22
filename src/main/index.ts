@@ -10,6 +10,7 @@ import {
   nativeTheme,
   screen,
   shell,
+  webContents,
   type MenuItemConstructorOptions
 } from 'electron'
 import { registerWake } from './wake'
@@ -46,6 +47,7 @@ import { createFileStore } from './store'
 import { QUICK_ASK_ACCELERATOR, QuickAsk } from './quickAsk'
 import { ChatWindowSet, chatWindowFor } from './chatWindowSet'
 import { createChatWindow } from './chatWindows'
+import { dockedChatRequest } from '../shared/chatWindows'
 import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
 import { releaseScreen } from '../shared/screenWindows'
@@ -134,12 +136,66 @@ let isWakeListener: (window: BrowserWindow) => boolean = () => false
  * window reads through the one on screen.
  */
 const chatWindowHosts = new Map<number, string>()
+/**
+ * The main window's docked chats (another combined dashboard's chat opened in
+ * place, in its chat pane), by their frames' webContents ids. Each reads
+ * through its own dashboard's kept connection, as a chat window on it does,
+ * and never through the one on screen.
+ */
+const dockedChats = new Set<number>()
 /** The dashboard on screen. */
 let shownHost: string | null = null
 /** The other dashboard a window's chat is on; null for the one on screen. */
 function farHost(contentsId: number): string | null {
-  const host = chatWindowHosts.get(contentsId)
+  const host = dockedChats.has(contentsId) ? dockedHost(contentsId) : chatWindowHosts.get(contentsId)
   return host && host !== shownHost ? host : null
+}
+/**
+ * A docked chat's dashboard, read from its address as it is now (its first
+ * load starts before the main window hears it attach, and the main window
+ * points it at another chat by its hash); '' for one that names none.
+ */
+function dockedHost(contentsId: number): string {
+  const page = webContents.fromId(contentsId)
+  if (!page || page.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return ''
+  return dockedChatRequest(page.getURL(), mainWindow.webContents.getURL())?.host ?? ''
+}
+/** The docked chats' frames, which BrowserWindow.getAllWindows() leaves out. */
+function dockedPages(): Electron.WebContents[] {
+  return [...dockedChats].map(id => webContents.fromId(id)).filter((page): page is Electron.WebContents => !!page && !page.isDestroyed())
+}
+/**
+ * The main window's frames: only a docked chat, at the main window's own page,
+ * on a combined dashboard kept beside the one on screen, with the preload and
+ * the sandbox every window has. Its calls go to the dashboard its address names.
+ */
+function watchDockedChats(window: BrowserWindow): void {
+  window.webContents.on('will-attach-webview', (event, preferences, params) => {
+    const chat = dockedChatRequest(params.src, window.webContents.getURL())
+    if (!chat || chat.host === shownHost || !chatWindowDashboards().includes(chat.host)) {
+      event.preventDefault()
+      return
+    }
+    delete (preferences as { preloadURL?: string }).preloadURL
+    preferences.preload = join(__dirname, '../preload/index.js')
+    preferences.contextIsolation = true
+    preferences.sandbox = true
+    preferences.nodeIntegration = false
+    preferences.nodeIntegrationInSubFrames = false
+    preferences.webSecurity = true
+  })
+  window.webContents.on('did-attach-webview', (_event, page) => {
+    const id = page.id
+    dockedChats.add(id)
+    confineNavigation(page)
+    page.on('did-start-navigation', navigation => {
+      if (replacesPage(navigation)) eventRouter.forget(id)
+    })
+    page.once('destroyed', () => {
+      dockedChats.delete(id)
+      eventRouter.forget(id)
+    })
+  })
 }
 
 /** A gateway event (or the pending requests) to the windows that read it, each cloned once per window it goes to (desktop#200). */
@@ -158,10 +214,11 @@ function sendStatus(status: ConnectionStatus): void {
 }
 /** What a kept host says, to the chat windows open on it. */
 function sendToFarWindows(url: string, channel: string, payload: unknown, sessionId?: string): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed() || farHost(window.webContents.id) !== url) continue
-    if (channel === IPC.event && !eventRouter.wants(window.webContents.id, sessionId)) continue
-    window.webContents.send(channel, payload)
+  const pages = [...BrowserWindow.getAllWindows().filter(window => !window.isDestroyed()).map(window => window.webContents), ...dockedPages()]
+  for (const page of pages) {
+    if (farHost(page.id) !== url) continue
+    if (channel === IPC.event && !eventRouter.wants(page.id, sessionId)) continue
+    page.send(channel, payload)
   }
 }
 app.on('browser-window-created', (_event, window) => {
@@ -222,7 +279,10 @@ function closeStrandedChatWindows(): void {
 /** The connection a window's calls go through: a kept host's for a chat window on it, else the one on screen. */
 function connectionOf(contentsId: number): Connection | null {
   const far = farHost(contentsId)
-  return far ? keptHosts.connection(far) : connection
+  if (far) return keptHosts.connection(far)
+  // A docked chat that names no dashboard reads through nothing; one whose dashboard came on screen, through it.
+  if (dockedChats.has(contentsId) && dockedHost(contentsId) !== shownHost) return null
+  return connection
 }
 
 const hostStore = createFileStore()
@@ -329,11 +389,14 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       sandbox: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Only for a docked chat: watchDockedChats lets no other frame in.
+      webviewTag: true
     }
   })
   mainWindow = window
   watchWindowFreezes(window)
+  watchDockedChats(window)
   window.on('ready-to-show', () => window.show())
   window.on('close', event => {
     if (quitting) return
@@ -431,6 +494,10 @@ function registerIpc(): void {
       author: typeof request.author === 'string' ? request.author : undefined,
       ...(request.botChat === true ? { botChat: true } : {})
     })
+  })
+  ipcMain.handle(IPC.pageWatched, event => {
+    const owner = BrowserWindow.fromWebContents(event.sender.hostWebContents ?? event.sender)
+    return !!owner && !owner.isDestroyed() && owner.isVisible() && !owner.isMinimized() && owner.isFocused()
   })
   ipcMain.on(IPC.closeChatWindows, (_event, ids: unknown) => chatWindows.close(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : undefined))
   ipcMain.handle(IPC.chatWindows, () => chatWindows.ids())

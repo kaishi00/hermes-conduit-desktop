@@ -51,6 +51,11 @@ const muteHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gatewa
  * to (the main process routes them), and a switch between combined
  * dashboards keeps it open. A sign-out, a lock or a dashboard that's no
  * longer combined closes it.
+ *
+ * Docked, the same page is another combined dashboard's chat opened in the
+ * main window's chat pane, with no switch (the phone's no-switch open,
+ * stage 2): Open in New Window moves it to a window of its own, and the main
+ * window closes it when its dashboard goes.
  */
 export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
   const [status, setStatus] = useState<ConnectionStatus | null>(null)
@@ -60,8 +65,8 @@ export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
     return off
   }, [])
   useEffect(() => {
-    if (status && (status.phase === 'locked' || status.phase === 'signed-out' || !status.url)) window.close()
-  }, [status])
+    if (!request.docked && status && (status.phase === 'locked' || status.phase === 'signed-out' || !status.url)) window.close()
+  }, [status, request.docked])
   if (!status?.url) return <div className="chat-window-page" />
   return (
     <SummaryHost.Provider value={status.url}>
@@ -75,6 +80,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const host = status.url ?? ''
   const profile = request.profile
   const botChat = request.botChat === true
+  const docked = request.docked === true
   useDashboardProfiles(status.phase, status.url)
   const display = useChatDisplay(profile, connected, true)
   const roster = useBots(connected, host)
@@ -114,8 +120,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   // A Bot Chat goes by its bot's name: Hermes titles every one "Bot Chat".
   const title = botChat ? botTitle : cleanTitle(chat.title || request.title || '') || t('Chat')
   useEffect(() => {
-    document.title = chatWindowTitle(title, botChat ? undefined : botTitle)
-  }, [title, botTitle, botChat])
+    if (!docked) document.title = chatWindowTitle(title, botChat ? undefined : botTitle)
+  }, [title, botTitle, botChat, docked])
 
   const requests = useRequests()
   const openRequests = useMemo(() => requests.filter(r => r.sessionId && r.sessionId === chat.liveId), [requests, chat.liveId])
@@ -156,14 +162,20 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
    */
   const chatRef = useRef({ liveId: chat.liveId, storedId: chat.storedId, profile, title })
   chatRef.current = { liveId: chat.liveId, storedId: chat.storedId, profile, title }
-  const notify = useCallback((spec: NotificationSpec) => {
-    if (!notificationsEnabled() || typeof Notification === 'undefined' || (document.hasFocus() && !document.hidden)) return
-    const n = new Notification(spec.title, { body: spec.body, tag: spec.tag, silent: false })
-    n.onclick = () => {
-      const live = chatRef.current.liveId
-      if (live) void window.conduit.chatWindowOf(live, true)
-    }
-  }, [])
+  const notify = useCallback(
+    async (spec: NotificationSpec) => {
+      if (!notificationsEnabled() || typeof Notification === 'undefined') return
+      // Docked, the chat is watched while the main window is in front, wherever its focus is.
+      if (docked ? await window.conduit.pageWatched() : document.hasFocus() && !document.hidden) return
+      const n = new Notification(spec.title, { body: spec.body, tag: spec.tag, silent: false })
+      n.onclick = () => {
+        const live = chatRef.current.liveId
+        if (docked) window.conduit.window.show()
+        else if (live) void window.conduit.chatWindowOf(live, true)
+      }
+    },
+    [docked]
+  )
   useEffect(
     () =>
       window.conduit.onEvent(event => {
@@ -172,10 +184,10 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
         const spec = turnNotification(event.session_id, event.payload, ref)
         // A muted chat's finished turn stays quiet, as the plugin's push does (state/chatMute).
         if (!spec) return
-        if (!ref.storedId) notify(spec)
+        if (!ref.storedId) void notify(spec)
         else
           void readMuted(muteHttp, { id: ref.storedId, title: ref.title ?? '', pinned: false, profile: ref.profile ?? undefined }).then(
-            muted => muted || notify(spec)
+            muted => muted || void notify(spec)
           )
       }),
     [notify]
@@ -186,10 +198,14 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       if (notified.current.has(request.id)) continue
       notified.current.add(request.id)
       const { liveId: _live, ...ref } = chatRef.current
-      notify(requestNotification(request, ref))
+      void notify(requestNotification(request, ref))
     }
   }, [openRequests, notify])
 
+  // Docked: the chat moves to a window of its own, and the main window, seeing it there, closes this pane.
+  const openInWindow = useCallback(() => {
+    void window.conduit.openChatWindow({ id: request.id, profile, title, author: botTitle, host, ...(botChat ? { botChat: true } : {}) })
+  }, [request.id, profile, title, botTitle, host, botChat])
   const openInMain = useCallback(() => {
     window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
@@ -206,7 +222,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
         const outcome = await command(text, commands, { botChat })
         // A new chat starts in the main window; this one keeps its chat.
         if (outcome.kind === 'new') {
-          notice(t('Start a new chat in the main window. This window keeps its chat.'), 'info')
+          notice(docked ? t('Start a new chat from the chat list. This chat stays open.') : t('Start a new chat in the main window. This window keeps its chat.'), 'info')
           return true
         }
         if (outcome.kind === 'model') setModelOpen(true)
@@ -219,7 +235,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       clearExpired(chat.liveId)
       return true
     },
-    [botChat, command, commands, notice, send, roster.bots, profile, botTitle, chat.liveId]
+    [botChat, docked, command, commands, notice, send, roster.bots, profile, botTitle, chat.liveId]
   )
 
   return (
@@ -234,9 +250,15 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             {botChat ? null : <div className="chat-window-bot">{botTitle}</div>}
           </div>
           <div className="chat-head-actions">
-            <button className="link" onClick={openInMain} title={t('Opens this chat in the main window and closes this one.')}>
-              {t('Open in Main Window')}
-            </button>
+            {docked ? (
+              <button className="link" onClick={openInWindow} title={t('Moves this chat to a window of its own.')}>
+                {t('Open in New Window')}
+              </button>
+            ) : (
+              <button className="link" onClick={openInMain} title={t('Opens this chat in the main window and closes this one.')}>
+                {t('Open in Main Window')}
+              </button>
+            )}
           </div>
         </div>
         <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} />

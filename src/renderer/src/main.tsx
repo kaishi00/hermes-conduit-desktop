@@ -1,8 +1,9 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { QuickAsk } from './components/QuickAsk'
 import { ChatWindow } from './components/ChatWindow'
+import type { ChatWindowRequest } from '@shared/ipc'
 import { chatWindowRequest } from '@shared/chatWindows'
 import { ScreenWindow } from './components/ScreenWindow'
 import { screenWindowRequest } from '@shared/screenWindows'
@@ -25,14 +26,28 @@ window.addEventListener('storage', () => applyStoredAppearance())
 const quick = window.location.hash === '#quick'
 if (quick) document.documentElement.dataset.window = 'quick'
 const chatWindow = chatWindowRequest(window.location.hash)
-if (chatWindow) document.documentElement.dataset.window = 'chat'
+if (chatWindow) document.documentElement.dataset.window = chatWindow.docked ? 'docked' : 'chat'
 const screenWindow = screenWindowRequest(window.location.hash)
 if (screenWindow) document.documentElement.dataset.window = 'screen'
+
+/** A chat window's page; a docked one is pointed at another chat of its dashboard by its hash, with no reload. */
+function ChatPage({ first }: { first: ChatWindowRequest }) {
+  const [chat, setChat] = useState(first)
+  useEffect(() => {
+    const read = () => {
+      const next = chatWindowRequest(window.location.hash)
+      if (next) setChat(next)
+    }
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [])
+  return <ChatWindow key={chat.id} chat={chat} />
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PictureViewerHost>
-      {quick ? <QuickAsk /> : chatWindow ? <ChatWindow chat={chatWindow} /> : screenWindow ? <ScreenWindow screen={screenWindow} /> : <App />}
+      {quick ? <QuickAsk /> : chatWindow ? <ChatPage first={chatWindow} /> : screenWindow ? <ScreenWindow screen={screenWindow} /> : <App />}
       <DialogHost />
     </PictureViewerHost>
   </StrictMode>

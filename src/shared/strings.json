@@ -43768,5 +43768,20 @@
     "tr": "Artık Hermes ana makinende olmayan dosyalar gizlenir.",
     "zh-Hans": "已不在 Hermes 主机上的文件已隐藏。",
     "zh-Hant": "已不在 Hermes 主機上的檔案已隱藏。"
+  },
+  "Start a new chat from the chat list. This chat stays open.": {
+    "de": "Starte einen neuen Chat über die Chatliste. Dieser Chat bleibt offen.",
+    "es": "Empieza un chat nuevo desde la lista de chats. Este chat sigue abierto.",
+    "fr": "Commencez une nouvelle conversation depuis la liste des conversations. Celle-ci reste ouverte.",
+    "id": "Mulai obrolan baru dari daftar obrolan. Obrolan ini tetap terbuka.",
+    "it": "Inizia una nuova chat dall’elenco delle chat. Questa chat resta aperta.",
+    "ja": "新しいチャットはチャットリストから始めてください。このチャットは開いたままです。",
+    "ko": "새 채팅은 채팅 목록에서 시작하세요. 이 채팅은 열린 채로 유지됩니다.",
+    "pl": "Nowy czat zacznij z listy czatów. Ten czat pozostaje otwarty.",
+    "pt-BR": "Comece uma conversa nova pela lista de conversas. Esta conversa continua aberta.",
+    "ru": "Начните новый чат из списка чатов. Этот чат останется открытым.",
+    "tr": "Yeni bir sohbeti sohbet listesinden başlatın. Bu sohbet açık kalır.",
+    "zh-Hans": "请从聊天列表开始新聊天。此聊天保持打开。",
+    "zh-Hant": "請從聊天列表開始新聊天。此聊天保持開啟。"
   }
 }

@@ -215,22 +215,7 @@ export const otherHostsWaiting = (kept: readonly KeptWaitingRow[], here: readonl
   return kept.filter(r => !ids.has(r.id) && !seen.has(r.id) && !!seen.add(r.id))
 }
 
-/** A wait opened from another host: the switch remounts the window, and the new host's window takes it. */
-let pending: { host: string; row: WaitingRow } | null = null
-
-export function openAfterSwitch(row: KeptWaitingRow): void {
-  const { host, ...rest } = row
-  pending = { host, row: rest }
-}
-
-export function takeOpenAfterSwitch(host: string): WaitingRow | null {
-  if (!pending || pending.host !== host) return null
-  const row = pending.row
-  pending = null
-  return row
-}
-
-/** A chat on another combined host: it only opens, through a switch. */
+/** A chat on another combined host: it opens in place, in the main window's chat pane (components/DockedChat). */
 export type OtherChatRow = ChatRow & { host: string }
 
 /** How often the other hosts' chats are read while the window is on screen, at most (the phone's minute). */
@@ -342,21 +327,6 @@ export function otherHostsChats(other: readonly OtherChatRow[], here: readonly C
   const ids = new Set((here ?? []).map(r => r.id))
   const seen = new Set<string>()
   return other.filter(r => !ids.has(r.id) && !seen.has(r.id) && !!seen.add(r.id))
-}
-
-/** A chat opened on another host: the switch remounts the window, and the new host's window opens it. */
-let pendingChat: { host: string; row: ChatRow } | null = null
-
-export function openChatAfterSwitch(row: OtherChatRow): void {
-  const { host, ...rest } = row
-  pendingChat = { host, row: rest }
-}
-
-export function takeChatAfterSwitch(host: string): ChatRow | null {
-  if (!pendingChat || pendingChat.host !== host) return null
-  const row = pendingChat.row
-  pendingChat = null
-  return row
 }
 
 /** Another combined host's group chat: a room its Hermes hosts, or its copy of a room another Hermes hosts. */
