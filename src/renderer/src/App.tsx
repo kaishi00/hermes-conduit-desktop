@@ -149,6 +149,7 @@ import {
   useKeptBots,
   useKeptWork,
   useKeptRooms,
+  dropKeptCopy,
   combinedRooms,
   type OtherRoom,
   useKeptChats,
@@ -1489,6 +1490,8 @@ function Shell({
   const [otherProfile, setOtherProfile] = useState<{ host: string; name: string } | null>(null)
   /** Another combined dashboard's group chat, open in place in the room pane (a frame on its kept connection). */
   const [dockedRoom, setDockedRoom] = useState<(DockedRoomRequest & { roomId: string }) | null>(null)
+  const dockedRoomRef = useRef(dockedRoom)
+  dockedRoomRef.current = dockedRoom
   /** The open room when someone else hosts it: read from this Hermes' copy, by its Link and room. */
   const [openCopy, setOpenCopy] = useState<string | null>(null)
   const shownCopy = openCopy ? roomCopies.copies.find(c => c.id === openCopy) : undefined
@@ -1918,7 +1921,10 @@ function Shell({
     if (openRoom || openCopy) setDockedRoom(null)
   }, [openRoom, openCopy])
   // Its copy deleted from the docked room: Group chats comes back, as when a copy here is deleted.
+  // Its copy was deleted there: it leaves Group chats now, and the pane goes back to Bots.
   const closeDockedRoom = useCallback(() => {
+    const shown = dockedRoomRef.current
+    if (shown?.kind === 'copy') dropKeptCopy(shown.host, shown.id)
     setDockedRoom(null)
     setSection(current => (current === 'room' ? 'bots' : current))
   }, [])

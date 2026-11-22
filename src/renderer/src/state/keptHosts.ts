@@ -360,6 +360,17 @@ const roomsShown = (urls: string[]) => new Map(urls.flatMap(url => {
   return rooms ? [[url, rooms] as const] : []
 }))
 
+const roomsDropped = new Set<() => void>()
+
+/** A copy deleted where it's open in place leaves that host's list now, not at the next minute's read. */
+export function dropKeptCopy(url: string, copyId: string): void {
+  const kept = keptRoomsByHost.get(url)
+  if (kept) keptRoomsByHost.set(url, { ...kept, copies: kept.copies.filter(c => c.id !== copyId) })
+  const own = keptCopies.get(url)
+  if (own) keptCopies.set(url, own.filter(c => c.id !== copyId))
+  for (const listener of roomsDropped) listener()
+}
+
 export function useKeptRooms(kept: readonly KeptHost[], on: boolean): Map<string, HostRooms> {
   // As the bots: drawn while live or reconnecting, from the start; read only while live and shown.
   const shown = kept
@@ -377,7 +388,9 @@ export function useKeptRooms(kept: readonly KeptHost[], on: boolean): Map<string
     const urls = live ? live.split('\n') : []
     const show = () => setRooms(roomsShown(drawn))
     show()
-    if (!on || !urls.length) return
+    roomsDropped.add(show)
+    const unlisten = () => roomsDropped.delete(show)
+    if (!on || !urls.length) return unlisten
     let stopped = false
     const read = async () => {
       if (document.hidden) return
@@ -414,6 +427,7 @@ export function useKeptRooms(kept: readonly KeptHost[], on: boolean): Map<string
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       stopped = true
+      unlisten()
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisible)
     }

@@ -18,6 +18,8 @@ import {
   keptChatsPath,
   mergeKeptChats,
   combinedRooms,
+  dropKeptCopy,
+  keptRoomsByHost,
   openRoomAfterSwitch,
   takeRoomAfterSwitch,
   sameBotWork,
@@ -550,3 +552,14 @@ describe("other hosts' bots' work (desktop#231)", () => {
   })
 })
 
+
+describe('dropKeptCopy', () => {
+  it('takes a copy deleted in place off its host’s list at once, leaving the rest', () => {
+    const url = 'https://far.example'
+    const copy = (id: string) => ({ id }) as never
+    keptRoomsByHost.set(url, { rooms: [], copies: [copy('a'), copy('b')], at: 1 })
+    dropKeptCopy(url, 'a')
+    expect(keptRoomsByHost.get(url)?.copies.map(c => c.id)).toEqual(['b'])
+    keptRoomsByHost.delete(url)
+  })
+})
