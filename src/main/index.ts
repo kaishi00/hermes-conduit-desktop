@@ -75,6 +75,7 @@ import { LIVE_TOKEN_PATHS, mintedSocket, type LiveSocketEvent } from '../shared/
 import { setLanguage, t } from '../shared/i18n'
 import { STALLED_CLOSE_CODE, STALLED_REASON, liveSendDecision } from './liveBacklog'
 import { trustSystemRoots } from './systemRoots'
+import { checkForUpdates, downloadUpdate, installUpdate, setAutoUpdate, startUpdates, updateState } from './updates'
 
 const isMac = process.platform === 'darwin'
 let mainWindow: BrowserWindow | null = null
@@ -116,7 +117,8 @@ const tray = new ConduitTray({
   window: () => mainWindow,
   showWindow,
   command: sendCommand,
-  quit: () => app.quit()
+  quit: () => app.quit(),
+  installUpdate: () => installUpdate()
 })
 
 function send(channel: string, payload: unknown): void {
@@ -486,6 +488,11 @@ function registerIpc(): void {
   const ids = (value: unknown) => (Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [])
   isWakeListener = registerWake(() => mainWindow).isListener
   ipcMain.handle(IPC.deviceReports, () => deviceReports())
+  ipcMain.handle(IPC.updateState, () => updateState())
+  ipcMain.handle(IPC.checkForUpdates, () => checkForUpdates())
+  ipcMain.handle(IPC.downloadUpdate, () => downloadUpdate())
+  ipcMain.on(IPC.installUpdate, () => installUpdate())
+  ipcMain.handle(IPC.setAutoUpdate, (_event, on: unknown) => setAutoUpdate(on !== false))
   ipcMain.handle(IPC.sendDeviceReports, (_event, value: unknown) => sendDeviceReports(ids(value)))
   ipcMain.handle(IPC.declineDeviceReports, (_event, value: unknown) => declineDeviceReports(ids(value)))
   ipcMain.handle(IPC.setAppLock, async (_event, on: unknown) => {
@@ -929,6 +936,10 @@ if (!app.requestSingleInstanceLock()) {
     applyAppIcon(appIconChoice())
     tray.create(appIconChoice())
     quickAsk.register()
+    startUpdates(state => {
+      send(IPC.updateStateChanged, state)
+      tray.setUpdate(state.phase === 'ready' ? (state.version ?? null) : null)
+    })
     void openSavedHosts()
     // The Dock icon brings the hidden window back.
     app.on('activate', () => showWindow())

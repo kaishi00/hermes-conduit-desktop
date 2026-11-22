@@ -84,6 +84,14 @@ const api: ConduitApi = {
   sendDeviceReports: ids => ipcRenderer.invoke(IPC.sendDeviceReports, ids),
   declineDeviceReports: ids => ipcRenderer.invoke(IPC.declineDeviceReports, ids),
   onDeviceReports: listener => listen<void>(IPC.deviceReportsChanged, () => listener()),
+  updates: {
+    state: () => ipcRenderer.invoke(IPC.updateState),
+    check: () => ipcRenderer.invoke(IPC.checkForUpdates),
+    download: () => ipcRenderer.invoke(IPC.downloadUpdate),
+    install: () => ipcRenderer.send(IPC.installUpdate),
+    setAuto: on => ipcRenderer.invoke(IPC.setAutoUpdate, on),
+    onState: listener => listen(IPC.updateStateChanged, listener)
+  },
   unlock: () => ipcRenderer.invoke(IPC.unlock),
   probe: (url, headers) => ipcRenderer.invoke(IPC.probe, url, headers),
   checkCertificate: url => ipcRenderer.invoke(IPC.checkCertificate, url),

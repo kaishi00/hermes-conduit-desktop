@@ -5,6 +5,7 @@
  */
 import type { Language } from './i18n'
 import type { DeviceReport } from './deviceReports'
+import type { UpdateState } from './updates'
 
 /** How a dashboard lets us in, from its public `/api/status`. */
 export type SignInMethod = 'password' | 'token' | 'open'
@@ -238,6 +239,16 @@ export interface ConduitApi {
   /** Not now: Conduit doesn't ask about them again. */
   declineDeviceReports(ids: string[]): Promise<void>
   onDeviceReports(listener: () => void): () => void
+  /** Conduit's own updates (shared/updates.ts). */
+  updates: {
+    state(): Promise<UpdateState>
+    check(): Promise<UpdateState>
+    download(): Promise<void>
+    /** Restart to Update: quits, installs and opens Conduit again. */
+    install(): void
+    setAuto(on: boolean): Promise<UpdateState>
+    onState(listener: (state: UpdateState) => void): () => void
+  }
   /** `headers` are for a proxy in front of the dashboard (Cloudflare Access and the like). */
   probe(url: string, headers?: Record<string, string>): Promise<HostProbe>
   /** Reads the root certificate the server at `url` sends, trusting it for nothing. */
@@ -533,6 +544,12 @@ export const IPC = {
   sendDeviceReports: 'conduit:send-device-reports',
   declineDeviceReports: 'conduit:decline-device-reports',
   deviceReportsChanged: 'conduit:device-reports-changed',
+  updateState: 'conduit:update-state',
+  checkForUpdates: 'conduit:check-for-updates',
+  downloadUpdate: 'conduit:download-update',
+  installUpdate: 'conduit:install-update',
+  setAutoUpdate: 'conduit:set-auto-update',
+  updateStateChanged: 'conduit:update-state-changed',
   pluginRelease: 'conduit:plugin-release',
   liveOpen: 'conduit:live-open',
   liveOpenMinted: 'conduit:live-open-minted',
