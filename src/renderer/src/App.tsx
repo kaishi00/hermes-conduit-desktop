@@ -1031,6 +1031,14 @@ function Shell({
   useEffect(() => {
     if (selected.id && chatWindowIds.includes(selected.id)) window.conduit.closeChatWindows([selected.id])
   }, [selected.id, chatWindowIds])
+  // Bots home: a bot opens its Bot Chat (or a new chat in its profile); Ask sends there once it's open.
+  const lastBot = useRef<string | null>(null)
+  const openBot = useCallback((bot: Bot) => {
+    lastBot.current = bot.name
+    setSelected({ id: bot.botChatId ?? null, profile: bot.name, title: bot.title, botChat: true })
+    setSection('chats')
+    setBotsSide(true)
+  }, [])
   /**
    * Open in New Window, from a row's menu or the chat's header (Eric,
    * 2026-11-21): the chat gets a window of its own, a whole chat for its own
@@ -1049,7 +1057,16 @@ function Shell({
         return
       }
       // Away first, so the main window isn't still showing it when its window opens (which would close it).
-      if (onScreen) setSelected({ id: null, profile: selected.profile })
+      // A Bot Chat's place is the bots sidebar, so this window stays on Bots with another bot's Bot Chat (one
+      // with no window of its own); a new chat here would be Chats, and a new Bot Chat a second one.
+      const nextBot =
+        onScreen && (target.botChat || bot?.botChatId === target.id)
+          ? (orderedRoster ?? roster.bots ?? [])
+              .filter(b => b.botChatId && b.botChatId !== target.id && !chatWindowIds.includes(b.botChatId))
+              .sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0))[0]
+          : undefined
+      if (nextBot) openBot(nextBot)
+      else if (onScreen) setSelected({ id: null, profile: selected.profile })
       const opened = await window.conduit.openChatWindow({
         id: target.id,
         profile: target.profile,
@@ -1059,7 +1076,10 @@ function Shell({
         ...(target.botChat ? { botChat: true } : {})
       })
       if (!opened) {
-        if (onScreen) setSelected(current => (current.id === null ? { id: target.id, profile: target.profile, title: target.title, botChat: target.botChat } : current))
+        if (onScreen)
+          setSelected(current =>
+            current.id === null || (nextBot && current.id === nextBot.botChatId) ? { id: target.id, profile: target.profile, title: target.title, botChat: target.botChat } : current
+          )
         // At the limit, say so; otherwise its dashboard went (a sign-out, a switch) as it opened.
         if (chatWindowIds.length >= CHAT_WINDOW_LIMIT) void tell(t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT }))
         else void tell(t('The chat didn’t open. Try again.'))
@@ -1067,7 +1087,7 @@ function Shell({
       }
       setBeside(current => (current?.id === target.id ? null : current))
     },
-    [roster.bots, selected.id, selected.profile, chat.storedId, status.url, calling, chatWindowIds]
+    [roster.bots, orderedRoster, openBot, selected.id, selected.profile, chat.storedId, status.url, calling, chatWindowIds]
   )
   /** A row whose chat has a window of its own brings that window to the front; any other opens here. */
   const selectRow = useCallback(
@@ -1383,14 +1403,6 @@ function Shell({
     setSection('chats')
   }
 
-  // Bots home: a bot opens its Bot Chat (or a new chat in its profile); Ask sends there once it's open.
-  const lastBot = useRef<string | null>(null)
-  const openBot = useCallback((bot: Bot) => {
-    lastBot.current = bot.name
-    setSelected({ id: bot.botChatId ?? null, profile: bot.name, title: bot.title, botChat: true })
-    setSection('chats')
-    setBotsSide(true)
-  }, [])
   // Picking a bot on the strip opens its newest listed chat, or a new chat when it has none, so the open chat
   // matches the list. Never its Bot Chat, which the list leaves out: that's the bots sidebar's, and opening it
   // here took Chats over to Bots. Chats stays Chats, as the phone's chip only switches the profile the list shows.
@@ -1402,11 +1414,14 @@ function Shell({
       if (!next) return
       const same = (name: string | undefined) => (name ?? 'default').toLowerCase() === next.toLowerCase()
       if (same(selected.profile) && !selected.botChat) return
-      const newest = (listedRows ?? []).filter(row => same(row.profile)).sort((a, b) => (b.activeAt ?? 0) - (a.activeAt ?? 0))[0]
+      // A chat with a window of its own stays there: shown here, its window would close.
+      const newest = (listedRows ?? [])
+        .filter(row => same(row.profile) && !chatWindowIds.includes(row.id))
+        .sort((a, b) => (b.activeAt ?? 0) - (a.activeAt ?? 0))[0]
       setBotsSide(false)
       setSelected(newest ? { id: newest.id, profile: newest.profile, title: newest.title } : { id: null, profile: next })
     },
-    [selected.profile, selected.botChat, listedRows]
+    [selected.profile, selected.botChat, listedRows, chatWindowIds]
   )
   // A bot row's menu: Pin, Duplicate, Hide, Show and Delete. Answers what went wrong, if anything.
   const botAction = useCallback(
@@ -2158,8 +2173,11 @@ function Shell({
     if (section !== 'bots' || newBot || editingBot) return
     const bots = orderedRoster ?? roster.bots
     if (!bots?.length) return
-    const same = (name: string | null) => bots.find(b => b.name.toLowerCase() === name?.toLowerCase())
-    openBot(same(lastBot.current) ?? [...bots].sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0))[0])
+    // A bot whose Bot Chat has a window of its own stays there: opening it here would close that window.
+    const here = bots.filter(b => !b.botChatId || !chatWindowIdsRef.current.includes(b.botChatId))
+    if (!here.length) return
+    const same = (name: string | null) => here.find(b => b.name.toLowerCase() === name?.toLowerCase())
+    openBot(same(lastBot.current) ?? [...here].sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0))[0])
   }, [section, newBot, editingBot, orderedRoster, roster.bots, openBot])
   const botsHomeProps: Omit<ComponentProps<typeof BotsHome>, 'side'> = {
     bots: orderedRoster,
