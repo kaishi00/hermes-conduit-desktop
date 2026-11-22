@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, settle } from './hookHarness'
-import { useCron, type CronSource } from '../src/renderer/src/state/useCron'
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { KEPT_CRON_POLL_MS, useCron, type CronSource } from '../src/renderer/src/state/useCron'
 import { FAR_BOARDS_POLL_MS, useKanban } from '../src/renderer/src/state/useKanban'
 
 const FAR = 'https://far.example'
@@ -17,7 +19,7 @@ function answer(host: string | null, path: string): Outcome {
     return { ok: true, result: { jobs: all.filter(j => !profile || profile === 'all' || j.profile === profile) } }
   }
   if (path.startsWith('/api/plugins/kanban/boards')) return { ok: true, result: { boards: host ? [{ slug: 'releases', name: 'Releases', is_current: true }] : [{ slug: 'seabag', name: 'SeaBag', is_current: true }] } }
-  if (path.startsWith('/api/plugins/kanban/board')) return { ok: true, result: { columns: [{ name: 'todo', tasks: [] }] } }
+  if (path.startsWith('/api/plugins/kanban/board')) return { ok: true, result: { columns: [{ name: 'todo', tasks: host ? [{ id: 't1', title: 'Ship it' }] : [] }] } }
   return { ok: true, result: {} }
 }
 
@@ -69,6 +71,21 @@ describe('Scheduled across combined dashboards', () => {
     expect(hook.result().error).toBeNull()
     hook.unmount()
   })
+
+  it("a dashboard that answered once and then fails keeps its last jobs in All", async () => {
+    vi.useFakeTimers()
+    const conduit = (window as unknown as { conduit: { keptHttp: (url: string, path: string) => Promise<Outcome> } }).conduit
+    let up = true
+    conduit.keptHttp = async (url, path) => (up ? answer(url, path) : { ok: false, error: 'down' })
+    const hook = renderHook(({ s }: { s: CronSource[] }) => useCron(s, true), { s: [{ host: null, profile: null }, { host: FAR, profile: null }] })
+    await settle()
+    expect(hook.result().jobs?.map(j => j.id)).toEqual(['own-1', 'own-2', 'far-1', 'far-2'])
+    up = false
+    await vi.advanceTimersByTimeAsync(KEPT_CRON_POLL_MS)
+    await settle()
+    expect(hook.result().jobs?.map(j => j.id)).toEqual(['own-1', 'own-2', 'far-1', 'far-2'])
+    hook.unmount()
+  })
 })
 
 afterEach(() => vi.useRealTimers())
@@ -111,5 +128,33 @@ describe("Board's boards across combined dashboards", () => {
     await settle()
     expect(again.result().host).toBeNull()
     again.unmount()
+  })
+})
+
+describe('Board', () => {
+  it("closes a far board's open task when that dashboard leaves the group", async () => {
+    // No slug on either side: only the dashboard changes, so the reset must follow the host.
+    localStorage.setItem('conduit.kanbanFarBoard', JSON.stringify({ host: FAR, slug: null }))
+    // A path the node typecheck doesn't follow: the component is the renderer's, checked by tsconfig.web.json.
+    const path = '../src/renderer/src/components/KanbanBoard.tsx'
+    const { KanbanBoard } = (await import(/* @vite-ignore */ path)) as { KanbanBoard: unknown }
+    const bot = { name: 'nova', title: 'Nova', pinned: false, hidden: false, isDefault: false }
+    const far = [{ key: `${FAR}\tnova`, host: FAR, bot, own: false }]
+    const box = document.createElement('div')
+    document.body.append(box)
+    const root = createRoot(box)
+    const draw = (tiles: unknown[]) => act(() => root.render(createElement(KanbanBoard as never, { connected: true, bots: [], tiles, segment: null } as never)))
+    draw(far)
+    await settle()
+    const card = [...box.querySelectorAll<HTMLButtonElement>('button.card')].find(b => b.textContent?.includes('Ship it'))
+    expect(card).toBeTruthy()
+    act(() => card!.click())
+    await settle()
+    expect(box.querySelector('aside.task-panel')).not.toBeNull()
+    draw([])
+    await settle()
+    expect(box.querySelector('aside.task-panel')).toBeNull()
+    act(() => root.unmount())
+    box.remove()
   })
 })

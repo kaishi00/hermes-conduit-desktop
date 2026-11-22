@@ -26,6 +26,7 @@ export function ProfileColumn({
   otherProfile = null,
   onProfile,
   onOther,
+  onLeaveOther,
   badgeFor,
   unread,
   waits,
@@ -39,6 +40,8 @@ export function ProfileColumn({
   onProfile: (profile: string | null) => void
   /** Another dashboard's profile: the list shows its chats, with no switch. */
   onOther?: (tile: MixedTile) => void
+  /** Tapping the chosen far face again; without it, that goes to All. */
+  onLeaveOther?: () => void
   badgeFor?: (tile: MixedTile) => HostBadge | null
   /** Whether a profile has unread chats. */
   unread: (tile: MixedTile) => boolean
@@ -104,7 +107,7 @@ export function ProfileColumn({
               aria-selected={chosen}
               aria-label={badge ? `${bot.title}, ${badge.name}` : bot.title}
               title={badge ? `${bot.title} · ${badge.name}` : bot.title}
-              onClick={() => (tile.own || chosen ? onProfile(chosen ? null : bot.name) : onOther?.(tile))}
+              onClick={() => (tile.own ? onProfile(chosen ? null : bot.name) : chosen ? (onLeaveOther ? onLeaveOther() : onProfile(null)) : onOther?.(tile))}
               onContextMenu={
                 tile.own && onEditProfile
                   ? e => {

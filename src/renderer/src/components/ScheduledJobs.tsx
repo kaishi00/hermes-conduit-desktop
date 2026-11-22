@@ -102,8 +102,10 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [],
     setFar(null)
     onProfile(next)
   }
-  // Chats' profile, shared with this list, stays as it was: a far face shows over it.
+  // Chats' profile, shared with this list, stays as it was: a far face shows over it, and tapping
+  // that face again goes back to it.
   const pickFar = (tile: MixedTile) => setFar({ host: tile.host, name: tile.bot.name })
+  const leaveFar = () => setFar(null)
   const [pins, setPins] = useState(readPins)
   const [pane, setPane] = useState<Pane>(null)
   const [menu, setMenu] = useState<{ job: CronJob; x: number; y: number } | null>(null)
@@ -237,6 +239,7 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [],
               otherProfile={shownFar}
               onProfile={pickProfile}
               onOther={pickFar}
+              onLeaveOther={leaveFar}
               badgeFor={badgeFor}
               unread={() => false}
               waits={() => 0}

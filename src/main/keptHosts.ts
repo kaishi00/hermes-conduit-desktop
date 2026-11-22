@@ -126,7 +126,7 @@ export class KeptHosts {
     return method === 'GET' ? kept.connection.http<T>('GET', path, undefined, 6_000) : kept.connection.http<T>(method, path, body)
   }
 
-  /** A read over a kept host's socket: only what lists that host's bots, reads their pictures and lists its group chats. */
+  /** A read over a kept host's socket: only what lists that host's bots, reads their pictures, lists its group chats and lists its models (a far scheduled job's model picker). */
   async rpc<T>(url: string, method: string, params: Record<string, unknown> = {}): Promise<T> {
     if (!KEPT_RPC_METHODS.includes(method)) throw new Error('Only reads can go to another dashboard.')
     const kept = this.kept.get(url)

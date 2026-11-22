@@ -23,7 +23,7 @@ const sourcesKey = (sources: readonly CronSource[]) => sources.map(s => `${s.hos
 /**
  * The scheduled jobs of each source, every profile's naming its own, read again when Hermes says
  * its jobs changed (another dashboard's on a poll). An action goes to the job's own dashboard and
- * names its own profile, as the phone does. A source whose read fails leaves the rest listed.
+ * names its own profile, as the phone does. A source whose read fails leaves the rest listed, and keeps its own last jobs read.
  */
 export function useCron(sources: readonly CronSource[], connected: boolean) {
   const key = sourcesKey(sources)
@@ -34,6 +34,9 @@ export function useCron(sources: readonly CronSource[], connected: boolean) {
   const [busy, setBusy] = useState<string | null>(null)
   const generation = useRef(0)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Each source's last jobs read: a source whose read fails keeps them, as Board keeps a far
+  // dashboard's board list, so a dashboard that blips doesn't drop out of All.
+  const lastRead = useRef(new Map<string, CronJob[]>())
 
   const load = useCallback(async () => {
     const mine = ++generation.current
@@ -44,7 +47,14 @@ export function useCron(sources: readonly CronSource[], connected: boolean) {
       })
     )
     if (mine !== generation.current) return
-    const read = reads.flatMap(r => (r.status === 'fulfilled' ? r.value : []))
+    const read = reads.flatMap((r, i) => {
+      const at = sourcesKey([shown[i]])
+      if (r.status === 'fulfilled') {
+        lastRead.current.set(at, r.value)
+        return r.value
+      }
+      return lastRead.current.get(at) ?? []
+    })
     const failed = reads.find((r): r is PromiseRejectedResult => r.status === 'rejected')
     if (failed && read.length === 0 && reads.every(r => r.status === 'rejected')) {
       setError(t('Could not load scheduled jobs: {reason}', { reason: message(failed.reason) }))
@@ -59,6 +69,7 @@ export function useCron(sources: readonly CronSource[], connected: boolean) {
   useEffect(() => {
     setJobs(null)
     setError(null)
+    lastRead.current = new Map()
     if (!connected) return
     void load()
     const off = near
