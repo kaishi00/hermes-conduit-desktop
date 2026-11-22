@@ -738,7 +738,7 @@ export function BotsHome({
       <Icon name={name} />
     </span>
   );
-  /** Another combined host's group chat: badged, a tap switches there and opens it. */
+  /** Another combined host's group chat: badged, a tap opens it in place (docked) while that host is kept. */
   const otherRoomRow = (other: OtherRoom) => {
     const room = other.kind === "room" ? other.room : copyRoom(other.copy);
     const badge = badgeFor?.(other.host) ?? null;
@@ -752,7 +752,7 @@ export function BotsHome({
       room.name,
       other.kind === "copy" ? copyLine(other.copy) : room.updatedAt ? timeLabel(room.updatedAt) : null,
       () => onOpenOtherRoom?.(other),
-      { className: other.kind === "copy" && isOver(other.copy) ? "over" : undefined },
+      { className: other.kind === "copy" && isOver(other.copy) ? "over" : undefined, current: side.openHost === other.host && side.openRoomId === room.roomId },
     );
   };
   const otherRooms = [...otherRoomsBefore, ...otherRoomsAfter];
@@ -876,7 +876,7 @@ export function BotsHome({
                 copy.name,
                 copiesWaiting?.has(copy.id) ? t("Approval needed") : copyLine(copy),
                 () => onOpenCopy?.(copy),
-                { className: isOver(copy) ? "over" : undefined, current: side.openRoomId === copy.roomId, waiting: copiesWaiting?.has(copy.id) },
+                { className: isOver(copy) ? "over" : undefined, current: !side.openHost && side.openRoomId === copy.roomId, waiting: copiesWaiting?.has(copy.id) },
               ),
             )}
             {(invites ?? [])
@@ -898,7 +898,7 @@ export function BotsHome({
                 room.name,
                 room.updatedAt ? timeLabel(room.updatedAt) : null,
                 () => onOpenRoom(room),
-                { className: roomTarget === room.roomId ? "move-target" : undefined, current: side.openRoomId === room.roomId, drag: roomDrag(room.roomId) },
+                { className: roomTarget === room.roomId ? "move-target" : undefined, current: !side.openHost && side.openRoomId === room.roomId, drag: roomDrag(room.roomId) },
               ),
             )}
             {otherRoomsAfter.map(otherRoomRow)}

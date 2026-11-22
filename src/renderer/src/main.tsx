@@ -4,8 +4,9 @@ import { App } from './App'
 import { QuickAsk } from './components/QuickAsk'
 import { ChatWindow } from './components/ChatWindow'
 import type { ChatWindowRequest } from '@shared/ipc'
-import { chatWindowRequest, pulseFrameRequest } from '@shared/chatWindows'
+import { chatWindowRequest, pulseFrameRequest, roomFrameRequest } from '@shared/chatWindows'
 import { DockedPulse } from './components/DockedPulse'
+import { DockedRoom } from './components/DockedRoom'
 import { ScreenWindow } from './components/ScreenWindow'
 import { screenWindowRequest } from '@shared/screenWindows'
 import { PictureViewerHost } from './components/Picture'
@@ -30,6 +31,8 @@ const chatWindow = chatWindowRequest(window.location.hash)
 if (chatWindow) document.documentElement.dataset.window = chatWindow.docked ? 'docked' : 'chat'
 const pulseFrame = pulseFrameRequest(window.location.hash)
 if (pulseFrame) document.documentElement.dataset.window = 'docked'
+const roomFrame = roomFrameRequest(window.location.hash)
+if (roomFrame) document.documentElement.dataset.window = 'docked'
 const screenWindow = screenWindowRequest(window.location.hash)
 if (screenWindow) document.documentElement.dataset.window = 'screen'
 
@@ -50,7 +53,7 @@ function ChatPage({ first }: { first: ChatWindowRequest }) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PictureViewerHost>
-      {quick ? <QuickAsk /> : chatWindow ? <ChatPage first={chatWindow} /> : pulseFrame ? <DockedPulse /> : screenWindow ? <ScreenWindow screen={screenWindow} /> : <App />}
+      {quick ? <QuickAsk /> : chatWindow ? <ChatPage first={chatWindow} /> : pulseFrame ? <DockedPulse /> : roomFrame ? <DockedRoom request={roomFrame} /> : screenWindow ? <ScreenWindow screen={screenWindow} /> : <App />}
       <DialogHost />
     </PictureViewerHost>
   </StrictMode>

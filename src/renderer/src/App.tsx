@@ -187,9 +187,12 @@ import { VoiceModeSettings } from './components/VoiceModeSettings'
 import { VOICE_MODE_EVENT, VOICE_MODES, setVoiceMode, voiceMode, voiceModeTitle, type VoiceMode } from './state/gptLive'
 import { readAloud, readsRepliesAloud, setReadsRepliesAloud } from './state/readAloud'
 import { useCommands } from './state/useCommands'
-import { authorityMutation, moveChat, mutateSession, sessionPath } from './state/chatActions'
+import { authorityMutation, moveChat, mutateSession } from './state/chatActions'
 import { branchPlan } from './state/branch'
-import { ROOM_CHATS_CAPABILITY, openRoomChat, roomChatsClient, wrapUpPrompt, type RoomChatAgent } from './state/roomChats'
+import { ROOM_CHATS_CAPABILITY, wrapUpPrompt, type RoomChatAgent } from './state/roomChats'
+import { openRoomChatHere } from './state/roomChatOpen'
+import { DockedRoomFrame } from './components/DockedRoom'
+import type { DockedRoomRequest } from '@shared/chatWindows'
 import { parseProjects, type Project, type ProjectChat } from './state/projects'
 import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
@@ -1478,6 +1481,8 @@ function Shell({
     [roomDrafts.refresh, groupRooms.refresh]
   )
   const [openRoom, setOpenRoom] = useState<Room | null>(null)
+  /** Another combined dashboard's group chat, open in place in the room pane (a frame on its kept connection). */
+  const [dockedRoom, setDockedRoom] = useState<(DockedRoomRequest & { roomId: string }) | null>(null)
   /** The open room when someone else hosts it: read from this Hermes' copy, by its Link and room. */
   const [openCopy, setOpenCopy] = useState<string | null>(null)
   const shownCopy = openCopy ? roomCopies.copies.find(c => c.id === openCopy) : undefined
@@ -1841,10 +1846,32 @@ function Shell({
     setSection(stay ? 'settings' : 'chats')
   }, [connected, listReady, statusUrl, roster.bots, chooseProfile, section])
   const openOtherRoom = useCallback(async (other: OtherRoom) => {
+    // A kept dashboard's group chat opens in place, in the room pane on its kept connection, with no switch.
+    if (keptHosts.some(h => h.url === other.host)) {
+      const room = other.kind === 'room' ? other.room : copyRoom(other.copy)
+      setOpenRoom(null)
+      setOpenCopy(null)
+      setDockedRoom({ host: other.host, kind: other.kind, id: other.kind === 'room' ? other.room.roomId : other.copy.id, roomId: room.roomId, title: room.name })
+      setSection('room')
+      return
+    }
     if (!(await switchEndingCall(hostName(other.host)))) return
     openRoomAfterSwitch(other)
     void window.conduit.switchHost(other.host)
-  }, [])
+  }, [keptHosts])
+  // A near group chat opened closes the docked one; so does its dashboard no longer kept, or the room leaving its list.
+  useEffect(() => {
+    if (openRoom || openCopy) setDockedRoom(null)
+  }, [openRoom, openCopy])
+  useEffect(() => {
+    if (!dockedRoom) return
+    if (!keptHosts.some(h => h.url === dockedRoom.host)) return setDockedRoom(null)
+    const listed = [...groupChats.before, ...groupChats.after].some(
+      o => o.host === dockedRoom.host && (o.kind === 'room' ? o.room.roomId : o.copy.id) === dockedRoom.id
+    )
+    // Its list is read while the bots sidebar shows, which the room pane does; an unread host's list holds nothing yet.
+    if (!listed && keptRooms.has(dockedRoom.host)) setDockedRoom(null)
+  }, [dockedRoom, keptHosts, groupChats.before, groupChats.after, keptRooms])
   // A group chat opened on another host: open it here once its rooms or copies are read.
   useEffect(() => {
     if (!connected) return
@@ -2006,36 +2033,7 @@ function Shell({
   /** A room's private chat with one of your agents: kept, or made and told its room; Wrap Up asks it for notes once it's open. */
   const openRoomChatWith = useCallback(
     async (room: Room, agent: RoomChatAgent, wrapUp: boolean) => {
-      const chats = roomChatsClient((method, path, body, timeoutMs) => gateway.http(method, path, body, timeoutMs))
-      const scoped = (profile: string) => (profile && profile !== 'default' ? { profile } : {})
-      const opened = await openRoomChat(
-        {
-          chats: profile => chats.chats(profile),
-          create: async profile => {
-            const made = await gateway.rpc<{ session_id?: string; stored_session_id?: string | null }>('session.create', { cols: 96, source: 'desktop', ...scoped(profile) })
-            if (!made?.session_id) throw new Error(t('The chat didn’t open. Try again.'))
-            return { runtimeId: made.session_id, storedId: made.stored_session_id ?? null }
-          },
-          register: (roomId, chatId, profile) => chats.open(roomId, chatId, profile),
-          // By the id it runs under, as a Bot Chat's title goes; the authority's is a rename.
-          title: async (runtimeId, profile, title) => {
-            if (status.sessionAuthority) await authorityMutation(gateway.rpc, gateway.http, runtimeId, profile, 'rename', { title })
-            else await gateway.rpc('session.title', { session_id: runtimeId, title, ...scoped(profile) })
-          },
-          exists: async (chatId, profile) => {
-            try {
-              await gateway.http('GET', sessionPath(chatId, profile))
-              return true
-            } catch (e) {
-              if ((e as { code?: unknown })?.code === 404) return false
-              throw e
-            }
-          }
-        },
-        room.roomId,
-        room.name,
-        agent.profile
-      )
+      const opened = await openRoomChatHere(room.roomId, room.name, agent.profile, status.sessionAuthority === true)
       if (wrapUp) pendingAsk.current = { text: wrapUpPrompt(), storedId: opened.chatId, profile: agent.profile }
       setSelected({ id: opened.chatId, profile: agent.profile, title: opened.title })
       setSection('chats')
@@ -2753,7 +2751,7 @@ function Shell({
         {section === 'room' || section === 'bots' ? (
           <BotsHome
             {...botsHomeProps}
-            side={{ openRoomId: section === 'room' ? (shownCopy?.roomId ?? openRoom?.roomId) : undefined, openProfile: editingBot?.name }}
+            side={{ openRoomId: section === 'room' ? (shownCopy?.roomId ?? openRoom?.roomId ?? dockedRoom?.roomId) : undefined, openHost: section === 'room' && !shownCopy && !openRoom ? dockedRoom?.host : undefined, openProfile: editingBot?.name }}
           />
         ) : null}
         {section === 'chats' ? null : section === 'bots' && newBot ? (
@@ -2872,6 +2870,10 @@ function Shell({
                 : undefined
             }
           />
+        ) : section === 'room' && dockedRoom && !openRoom && !shownCopy ? (
+          <main className="docked-chat docked-room" aria-label={dockedRoom.title}>
+            <DockedRoomFrame key={`${dockedRoom.host}\u0000${dockedRoom.kind}\u0000${dockedRoom.id}`} room={dockedRoom} />
+          </main>
         ) : section === 'room' && openRoom ? (
           <RoomView
             key={openRoom.roomId}

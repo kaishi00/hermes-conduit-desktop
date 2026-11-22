@@ -80,11 +80,44 @@ export function pulseFrameRequest(hash: string): { host: string } | null {
   }
 }
 
-/** The dashboard a main window's frame is on, a docked chat or Pulse feed at the main window's own page; null for anything else. */
+/** Another combined dashboard's group chat docked in the main window: a room it hosts, or its copy of one hosted elsewhere. */
+export interface DockedRoomRequest {
+  host: string
+  kind: 'room' | 'copy'
+  /** The room's id, or the copy's. */
+  id: string
+  title?: string
+}
+
+/**
+ * Another combined dashboard's group chat, opened in the main window's room
+ * pane with no switch: the room's page in a frame of its own, on that
+ * dashboard's kept connection, as a docked chat is.
+ */
+export function dockedRoomUrl(base: string, room: DockedRoomRequest): string {
+  return `${pageBase(base)}#room=${encodeURIComponent(JSON.stringify({ ...room, docked: true }))}`
+}
+
+/** The docked group chat a page's hash asks for; null for any other page. */
+export function roomFrameRequest(hash: string): DockedRoomRequest | null {
+  const match = /^#room=(.+)$/.exec(hash)
+  if (!match) return null
+  try {
+    const raw = JSON.parse(decodeURIComponent(match[1]!)) as Record<string, unknown> | null
+    if (!raw || raw.docked !== true || typeof raw.host !== 'string' || !raw.host || typeof raw.id !== 'string' || !raw.id) return null
+    if (raw.kind !== 'room' && raw.kind !== 'copy') return null
+    return { host: raw.host, kind: raw.kind, id: raw.id, ...(typeof raw.title === 'string' ? { title: raw.title } : {}) }
+  } catch {
+    return null
+  }
+}
+
+/** The dashboard a main window's frame is on, a docked chat, Pulse feed or group chat at the main window's own page; null for anything else. */
 export function dockedFrameHost(src: string, base: string): string | null {
   const chat = dockedChatRequest(src, base)
   if (chat) return chat.host
   const page = pageBase(base)
   if (!page || pageBase(src) !== page) return null
-  return pulseFrameRequest(src.slice(page.length))?.host ?? null
+  const hash = src.slice(page.length)
+  return pulseFrameRequest(hash)?.host ?? roomFrameRequest(hash)?.host ?? null
 }

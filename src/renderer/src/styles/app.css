@@ -12178,3 +12178,12 @@ button.ghost:disabled {
   flex: none;
   padding-bottom: 0;
 }
+
+/* Another combined dashboard's group chat in its docked frame: a note over the room when asking an agent fails. */
+.docked-room-page {
+  flex-direction: column;
+}
+.docked-room-page > .notice {
+  flex: none;
+  margin: 8px 16px 0;
+}

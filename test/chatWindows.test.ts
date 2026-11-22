@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_WINDOW_LIMIT, ChatWindowSet } from '../src/main/chatWindowSet'
-import { chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, pulseFrameRequest } from '../src/shared/chatWindows'
+import { chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, dockedRoomUrl, pulseFrameRequest, roomFrameRequest } from '../src/shared/chatWindows'
 
 function harness() {
   const made: { id: string; focused: number; closed: boolean; onClosed: () => void }[] = []
@@ -127,5 +127,18 @@ describe('chat windows of their own', () => {
     expect(chatWindowTitle('Trip plans')).toBe('Trip plans')
     expect(chatWindowTitle('  ', 'Nahida')).toBe('Nahida')
     expect(chatWindowTitle('')).toBe('Conduit')
+  })
+  it('docks another dashboard’s group chat, a room it hosts or its copy, at the main window’s own page only', () => {
+    const main = 'file:///app/index.html'
+    const src = dockedRoomUrl(main, { host: 'https://b.example', kind: 'copy', id: 'copy-1', title: 'Launch' })
+    expect(roomFrameRequest(src.slice(main.length))).toEqual({ host: 'https://b.example', kind: 'copy', id: 'copy-1', title: 'Launch' })
+    expect(dockedFrameHost(src, `${main}#chats`)).toBe('https://b.example')
+    expect(dockedFrameHost(src.replace(main, 'https://evil.example/'), main)).toBeNull()
+    const hash = (raw: object) => `#room=${encodeURIComponent(JSON.stringify(raw))}`
+    expect(roomFrameRequest(hash({ host: 'https://b.example', kind: 'room', id: 'r1' }))).toBeNull()
+    expect(roomFrameRequest(hash({ host: 'https://b.example', kind: 'other', id: 'r1', docked: true }))).toBeNull()
+    expect(roomFrameRequest(hash({ host: 'https://b.example', kind: 'room', docked: true }))).toBeNull()
+    expect(roomFrameRequest(hash({ host: 'https://b.example', kind: 'room', id: 'r1', docked: true }))).toEqual({ host: 'https://b.example', kind: 'room', id: 'r1' })
+    expect(roomFrameRequest('#room=%zz')).toBeNull()
   })
 })
