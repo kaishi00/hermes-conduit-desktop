@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import type { Bot } from '../state/bots'
-import { CREATABLE, MOVABLE, PRIORITIES, ageText, columnTitle, matchesTask, priorityTitle, type KanbanTask, type KanbanTaskDetail } from '../state/kanban'
+import { CREATABLE, MOVABLE, PRIORITIES, ageText, columnTitle, eventPayloadText, kanbanWord, matchesTask, priorityTitle, sizeText, type KanbanAttachment, type KanbanRun, type KanbanTask, type KanbanTaskDetail } from '../state/kanban'
 import { useKanban } from '../state/useKanban'
 import { timeLabel } from '../state/chats'
 import { Markdown } from './Markdown'
@@ -342,6 +342,7 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
           assignees={assignees}
           botTitle={botTitle}
           load={kanban.detail}
+          board={kanban.slug}
           touched={kanban.touched.ids.has(openId!) ? kanban.touched.revision : 0}
           onClose={() => setOpenId(null)}
           onPatch={async fields => {
@@ -368,6 +369,7 @@ function TaskPanel({
   assignees,
   botTitle,
   load,
+  board,
   touched,
   onClose,
   onPatch,
@@ -379,6 +381,8 @@ function TaskPanel({
   assignees: string[]
   botTitle: (name?: string) => string
   load: (id: string) => Promise<KanbanTaskDetail | null>
+  /** The board the task is on, for its attachments' download link. */
+  board: string | null
   /** Bumped when a live batch touched this task. */
   touched: number
   onClose: () => void
@@ -392,7 +396,23 @@ function TaskPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ title: string; body: string } | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const shown = task ?? detail?.task ?? null
+
+  async function saveAttachment(attachment: KanbanAttachment) {
+    if (saving) return
+    setSaving(attachment.id)
+    setAttachmentError(null)
+    try {
+      const outcome = await window.conduit.saveKanbanAttachment(attachment.id, board, attachment.filename)
+      if (outcome !== 'saved' && outcome !== 'cancelled') setAttachmentError(outcome)
+    } catch (e) {
+      setAttachmentError(message(e))
+    } finally {
+      setSaving(null)
+    }
+  }
 
   const refresh = () =>
     load(id)
@@ -661,6 +681,53 @@ function TaskPanel({
             </div>
           </form>
         </section>
+        {detail?.attachments.length ? (
+          <section className="job-section">
+            <h3>{t('Attachments')}</h3>
+            {detail.attachments.map(attachment => (
+              <div key={attachment.id} className="task-attachment">
+                <span className="task-attachment-name">{attachment.filename}</span>
+                <span className="meta">
+                  {[attachment.size !== undefined ? sizeText(attachment.size) : null, attachment.uploadedBy, attachment.createdAt ? timeLabel(attachment.createdAt) : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+                <button type="button" className="secondary" disabled={saving !== null} onClick={() => void saveAttachment(attachment)}>
+                  {saving === attachment.id ? t('Saving…') : t('Save')}
+                </button>
+              </div>
+            ))}
+            {attachmentError ? <div className="error-text">{attachmentError}</div> : null}
+          </section>
+        ) : null}
+        {detail?.runs.length ? (
+          <section className="job-section">
+            <h3>{t('Runs')}</h3>
+            {detail.runs.map(entry => (
+              <TaskRun key={entry.id} run={entry} />
+            ))}
+          </section>
+        ) : null}
+        {detail?.events.length ? (
+          <details className="job-section task-activity">
+            <summary>
+              <h3>{t('Activity')}</h3>
+              <span className="meta">{detail.events.length}</span>
+            </summary>
+            {detail.events.map(event => {
+              const payload = eventPayloadText(event.payload)
+              return (
+                <div key={event.id} className="task-event">
+                  <span className="meta">
+                    <strong>{kanbanWord(event.kind)}</strong>
+                    {event.createdAt ? ` · ${timeLabel(event.createdAt)}` : ''}
+                  </span>
+                  {payload ? <pre className="task-payload">{payload}</pre> : null}
+                </div>
+              )
+            })}
+          </details>
+        ) : null}
         <div className="job-actions task-footer">
           <button className="secondary" disabled={busy} onClick={() => setEditing({ title: shown.title, body: shown.body ?? '' })}>
             {t('Edit')}
@@ -683,6 +750,32 @@ function TaskPanel({
         </div>
       </div>
     </aside>
+  )
+}
+
+/** A worker run, whole: its outcome, who ran it and for how long, its error, its summary, then its metadata. */
+function TaskRun({ run }: { run: KanbanRun }) {
+  const failed = Boolean(run.error) || /fail|crash|error|timed_out|killed/i.test(run.outcome ?? run.status)
+  const meta = [run.profile, run.stepKey, run.startedAt && run.endedAt ? ageText(run.startedAt, run.endedAt) : null, run.endedAt ?? run.startedAt ? timeLabel(run.endedAt ?? run.startedAt) : null]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <div className="task-run">
+      <span className={failed ? 'task-run-title error-text' : 'task-run-title'}>{kanbanWord(run.outcome ?? run.status) || '—'}</span>
+      {meta ? <span className="meta">{meta}</span> : null}
+      {run.error ? <pre className="task-payload error-text">{run.error}</pre> : null}
+      {run.summary ? (
+        <div className="task-body">
+          <Markdown text={run.summary} />
+        </div>
+      ) : null}
+      {run.metadata !== undefined ? (
+        <details>
+          <summary className="meta">{t('Details')}</summary>
+          <pre className="task-payload">{JSON.stringify(run.metadata, null, 2)}</pre>
+        </details>
+      ) : null}
+    </div>
   )
 }
 

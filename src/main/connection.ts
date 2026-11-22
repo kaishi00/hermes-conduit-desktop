@@ -439,7 +439,8 @@ export class Connection {
    * Throws Hermes' refusal as `http` does.
    */
   async download(path: string, signal?: AbortSignal): Promise<Response> {
-    if (!path.startsWith('/api/fs/')) throw new Error('Only dashboard file paths can be downloaded.')
+    // Files on the host, and a Kanban task's attachments (the board's own download link).
+    if (!path.startsWith('/api/fs/') && !path.startsWith('/api/plugins/kanban/attachments/')) throw new Error('Only dashboard file paths can be downloaded.')
     const response = await this.request('GET', path, undefined, signal, '*/*')
     if (!response.ok) {
       const text = await response.text().catch(() => '')

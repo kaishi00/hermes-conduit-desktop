@@ -44158,5 +44158,35 @@
     "tr": "Ses modeli, arama bağlanır bağlanmaz sizi selamlar; böylece aramanın canlı olduğunu anlarsınız. Kendi sözleriyle selamlaması için selamlamayı boş bırakın. Sonraki aramada geçerli olur.",
     "zh-Hans": "通话一接通，语音模型就会向你问候，让你知道已经连上。问候语留空则由模型用自己的话问候。下次通话生效。",
     "zh-Hant": "通話一接通，語音模型就會向你打招呼，讓你知道已經連上。問候語留空，模型就會用自己的話問候。下次通話起生效。"
+  },
+  "Activity": {
+    "de": "Aktivität",
+    "es": "Actividad",
+    "fr": "Activité",
+    "id": "Aktivitas",
+    "it": "Cronologia",
+    "ja": "アクティビティ",
+    "ko": "활동",
+    "pl": "Aktywność",
+    "pt-BR": "Atividade",
+    "ru": "Активность",
+    "tr": "Etkinlik",
+    "zh-Hans": "活动",
+    "zh-Hant": "活動"
+  },
+  "Attachments": {
+    "de": "Anhänge",
+    "es": "Adjuntos",
+    "fr": "Pièces jointes",
+    "id": "Lampiran",
+    "it": "Allegati",
+    "ja": "添付ファイル",
+    "ko": "첨부 파일",
+    "pl": "Załączniki",
+    "pt-BR": "Anexos",
+    "ru": "Вложения",
+    "tr": "Ekler",
+    "zh-Hans": "附件",
+    "zh-Hant": "附件"
   }
 }

@@ -418,6 +418,11 @@ function createWindow(): void {
 }
 
 /** What a host file's save says when it fails: the file gone from Hermes, or try again. */
+/** The Kanban plugin's download route for an attachment, naming the board when one is picked. */
+function kanbanAttachmentPath(id: string, board: string | null): string {
+  return `/api/plugins/kanban/attachments/${encodeURIComponent(id)}${board ? `?board=${encodeURIComponent(board)}` : ''}`
+}
+
 function saveFailure(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code
   return code === 404 || code === 410 ? t('This file is no longer on your Hermes host.') : t("Couldn't save the file. Try again.")
@@ -636,6 +641,25 @@ function registerIpc(): void {
     if (picked.canceled || !picked.filePath) return false
     await writeFile(picked.filePath, bytes instanceof ArrayBuffer ? Buffer.from(bytes) : Buffer.from((bytes as ArrayBufferView).buffer))
     return true
+  })
+  // Save a Kanban task's attachment (the board's own download link) where the person picks.
+  ipcMain.handle(IPC.saveKanbanAttachment, async (event, id: unknown, board: unknown, filename: unknown): Promise<string> => {
+    if (typeof id !== 'string' || !id) return t("Couldn't open this file")
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    const name = hostFileName(typeof filename === 'string' && filename ? filename : id)
+    const picked = owner ? await dialog.showSaveDialog(owner, { defaultPath: name }) : await dialog.showSaveDialog({ defaultPath: name })
+    if (picked.canceled || !picked.filePath) return 'cancelled'
+    try {
+      const stop = new AbortController()
+      const through = connectionOf(event.sender.id)
+      if (!through) throw new Error(t("Couldn't open this file"))
+      const response = await through.download(kanbanAttachmentPath(id, typeof board === 'string' && board ? board : null), stop.signal)
+      if (!response.body) throw new Error(t("Couldn't open this file"))
+      await streamToFile(response.body as import('node:stream/web').ReadableStream, picked.filePath, () => stop.abort())
+      return 'saved'
+    } catch (error) {
+      return saveFailure(error)
+    }
   })
   ipcMain.handle(IPC.keptHosts, () => keptHosts.list())
   ipcMain.handle(IPC.renameHost, (_e, url: unknown, name: unknown) => {

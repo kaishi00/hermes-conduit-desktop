@@ -56,12 +56,38 @@ export interface KanbanEvent {
   id: string
   kind: string
   createdAt?: number
+  /** What Hermes recorded with it (a worker's summary, who claimed it), whole. */
+  payload?: Record<string, unknown>
+}
+
+/** One worker run on a task: its outcome, summary, error and metadata, whole. */
+export interface KanbanRun {
+  id: string
+  status: string
+  outcome?: string
+  profile?: string
+  stepKey?: string
+  summary?: string
+  error?: string
+  metadata?: unknown
+  startedAt?: number
+  endedAt?: number
+}
+
+export interface KanbanAttachment {
+  id: string
+  filename: string
+  size?: number
+  uploadedBy?: string
+  createdAt?: number
 }
 
 export interface KanbanTaskDetail {
   task: KanbanTask
   comments: KanbanComment[]
   events: KanbanEvent[]
+  runs: KanbanRun[]
+  attachments: KanbanAttachment[]
   parents: { id: string; title: string; status: string }[]
   children: { id: string; title: string; status: string; summary?: string }[]
 }
@@ -162,10 +188,76 @@ export function parseTaskDetail(raw: unknown): KanbanTaskDetail | null {
       body: typeof row.body === 'string' ? row.body : '',
       createdAt: when(row.created_at)
     })),
-    events: list(object.events).map((row, index) => ({ id: String(row.id ?? index), kind: str(row.kind) ?? '', createdAt: when(row.created_at) })),
+    events: list(object.events).map((row, index) => ({
+      id: String(row.id ?? index),
+      kind: str(row.kind) ?? '',
+      createdAt: when(row.created_at),
+      ...(row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload) ? { payload: row.payload as Record<string, unknown> } : {})
+    })),
+    runs: list(object.runs).map((row, index) => ({
+      id: String(row.id ?? index),
+      status: str(row.status) ?? '',
+      outcome: str(row.outcome),
+      profile: str(row.profile),
+      stepKey: str(row.step_key),
+      summary: str(row.summary),
+      error: str(row.error),
+      metadata: hasContent(row.metadata) ? row.metadata : undefined,
+      startedAt: when(row.started_at),
+      endedAt: when(row.ended_at)
+    })),
+    attachments: list(object.attachments)
+      .filter(row => row.id !== undefined && row.id !== null)
+      .map(row => ({
+        id: String(row.id),
+        filename: str(row.filename) ?? String(row.id),
+        size: num(row.size),
+        uploadedBy: str(row.uploaded_by),
+        createdAt: when(row.created_at)
+      })),
     parents: linkRows(links.parents),
     children: linkRows(links.children).map(child => ({ ...child, summary: summaries.get(child.id) }))
   }
+}
+
+/** A value worth showing: not null, not an empty object or list. */
+function hasContent(value: unknown): boolean {
+  if (value === null || value === undefined) return false
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') return Object.keys(value).length > 0
+  return true
+}
+
+/** A run's or event's Hermes word as words: "review_requested" reads "review requested". */
+export const kanbanWord = (word: string): string => word.replace(/_/g, ' ')
+
+/**
+ * An event's payload, every entry whole, as the phone's sheet shows it:
+ * short values first as `key: value`, then long text such as a worker's
+ * summary, then nested values as indented JSON. Empty when there's none.
+ */
+export function eventPayloadText(payload: Record<string, unknown> | undefined): string {
+  if (!payload) return ''
+  const isLong = (text: string) => text.length > 60 || text.includes('\n')
+  const rank = (value: unknown) => (value !== null && typeof value === 'object' ? 2 : typeof value === 'string' && isLong(value) ? 1 : 0)
+  const shown = (value: unknown) => (typeof value === 'string' ? value : value !== null && typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value))
+  return Object.keys(payload)
+    .sort((a, b) => rank(payload[a]) - rank(payload[b]) || (a < b ? -1 : a > b ? 1 : 0))
+    .map(key => (rank(payload[key]) === 2 ? `${key}:\n${shown(payload[key])}` : `${key}: ${shown(payload[key])}`))
+    .join('\n\n')
+}
+
+/** A file size as Finder and Explorer say it. */
+export function sizeText(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB']
+  let value = bytes / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`
 }
 
 /** A board path, naming the board when one is picked. */
