@@ -43,7 +43,7 @@ export function phoneTools(response: unknown): PhoneTool[] {
   if (!Array.isArray(tools)) return []
   return tools.flatMap((raw): PhoneTool[] => {
     const tool = (raw ?? {}) as Record<string, unknown>
-    if (typeof tool.name !== 'string' || !/^conduit_[a-z_]{1,40}$/.test(tool.name)) return []
+    if (typeof tool.name !== 'string' || !/^conduit_[a-z][a-z0-9_]{0,39}$/.test(tool.name)) return []
     if (typeof tool.description !== 'string' || !tool.parameters || typeof tool.parameters !== 'object') return []
     return [{ name: tool.name, description: tool.description, parameters: tool.parameters as Record<string, unknown> }]
   })
@@ -58,13 +58,13 @@ export function phoneContext(response: unknown): string {
  * What `reader` may read, asked when the call starts. An older plugin, a
  * phone that allows nothing, or a failed request gives nothing.
  */
-export async function loadPhoneReads(profile: string | undefined, reader: Reader, tools = true): Promise<PhoneReads> {
+export async function loadPhoneReads(profile: string | undefined, reader: Reader): Promise<PhoneReads> {
   const query = (path: string) => {
     const scoped = withProfile(path, profile)
     return `${scoped}${scoped.includes('?') ? '&' : '?'}reader=${reader}`
   }
   const [listed, context] = await Promise.all([
-    tools ? gateway.http('GET', query(VOICE_TOOLS_PATH)).then(phoneTools, () => []) : Promise.resolve([]),
+    gateway.http('GET', query(VOICE_TOOLS_PATH)).then(phoneTools, () => []),
     gateway.http('GET', query(VOICE_CONTEXT_PATH)).then(phoneContext, () => '')
   ])
   return { context, tools: listed }
@@ -118,7 +118,10 @@ export async function readPhoneTyped(
       | Record<string, unknown>
       | undefined
     const result = response?.result
-    if (!result || typeof result !== 'object') return { status: 'error', error: "That couldn't be read. Tell the user." }
+    if (!result || typeof result !== 'object') {
+      const reason = response?.error ?? response?.reason
+      return { status: 'error', error: typeof reason === 'string' && reason ? `That couldn't be read (${reason}). Tell the user.` : "That couldn't be read. Tell the user." }
+    }
     return { status: (result as { ok?: unknown }).ok === false ? 'error' : 'ok', result: JSON.stringify(result) }
   } catch (e) {
     return { status: 'error', error: `That couldn't be read (${e instanceof Error ? e.message : String(e)}). Tell the user.` }

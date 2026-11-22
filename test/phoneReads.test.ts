@@ -41,10 +41,10 @@ describe("a desktop call reads what the user's phone lets its mode read", () => 
     ])
     expect(reads.context).toBe('Where the user is, from their phone: at Home.')
     expect(reads.tools.map(tool => tool.name)).toEqual(['conduit_location'])
-    // GPT-Live has no tools: only the opening facts.
-    http.mockClear()
-    await loadPhoneReads(undefined, 'gpt-live', false)
-    expect(http.mock.calls.map(call => call[1]).filter(ours)).toEqual(['/api/plugins/conduit_push/voice-context?reader=gpt-live'])
+    // A tool name with digits is the host's to choose; anything outside conduit_ is dropped.
+    expect(phoneTools({ tools: [{ ...LOCATION, name: 'conduit_health_v2' }, { ...LOCATION, name: 'other_tool' }] }).map(tool => tool.name)).toEqual([
+      'conduit_health_v2'
+    ])
   })
 
   it('goes on without anything on an older plugin or a failed request', async () => {
