@@ -157,7 +157,9 @@ describe('the chat list draws', () => {
     const { ChatList } = (await import(/* @vite-ignore */ path)) as { ChatList: unknown }
     const now = Date.now()
     localStorage.setItem('conduit.chatFilters', JSON.stringify(['unread']))
-    const html = renderToStaticMarkup(
+    let html = ''
+    try {
+      html = renderToStaticMarkup(
       createElement(ChatList as never, {
         rows: [{ id: 'a', title: 'Here chat', activeAt: now, pinned: false, profile: 'coder' }],
         otherRows: [
@@ -173,12 +175,14 @@ describe('the chat list draws', () => {
         profile: null,
         marks: { stars: [], seen: {}, baseline: now + 1, unread: [] }
       } as never)
-    )
+      )
+    } finally {
+      localStorage.removeItem('conduit.chatFilters')
+    }
     expect(html).toContain('Far ops chat')
     expect(html).not.toContain('Far writer chat')
     expect(html).not.toContain('Here chat')
     expect(html).not.toContain('filter-button')
     expect(html).not.toContain('filter-active')
-    localStorage.removeItem('conduit.chatFilters')
   })
 })

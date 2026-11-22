@@ -252,6 +252,9 @@ export function mergeKeptChats(host: string, pages: readonly unknown[]): OtherCh
  * `sessions.changed` settles. A failed read keeps what the host showed; a host
  * let go shows nothing more.
  */
+/** The kept hosts whose chats have been read at least once since they were last let go: none listed there then means none. */
+export const keptChatsRead = new Set<string>()
+
 export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatRow[] {
   const [rows, setRows] = useState<OtherChatRow[]>([])
   const byHost = useRef(new Map<string, OtherChatRow[]>())
@@ -266,6 +269,7 @@ export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatR
   useEffect(() => {
     const urls = live ? live.split('\n') : []
     for (const url of [...byHost.current.keys()]) if (!urls.includes(url)) byHost.current.delete(url)
+    for (const url of [...keptChatsRead]) if (!urls.includes(url)) keptChatsRead.delete(url)
     for (const url of [...profiles.current.keys()]) if (!urls.includes(url)) profiles.current.delete(url)
     const show = () => setRows([...byHost.current.values()].flat())
     show()
@@ -289,6 +293,7 @@ export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatR
           if (stopped || !outcomes.some(o => o.ok)) return
           // A profile whose read failed keeps nothing back: the rest still show.
           byHost.current.set(url, mergeKeptChats(url, outcomes.filter(o => o.ok).map(o => (o as { result: unknown }).result)))
+          keptChatsRead.add(url)
         })
       )
       if (!stopped) show()
