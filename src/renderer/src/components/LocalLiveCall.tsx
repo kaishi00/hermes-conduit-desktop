@@ -83,6 +83,7 @@ import { pictureNoteText, type PictureNote } from '../state/callPicture'
 import { CANCEL_JOB, INTERRUPT_JOB, LIST_JOBS, START_JOB, VoiceJobs, type VoiceJob } from '../state/voiceJobs'
 import { dashboardProfilePath, dashboardProfileQuery } from '../state/dashboardProfile'
 import { RECONNECT_ATTEMPTS, isRefusalClose, reconnectDelayMs } from '@shared/liveReconnect'
+import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
 
 interface Props {
   profile?: string
@@ -178,6 +179,8 @@ export function LocalLiveCall({
   const [problem, setProblem] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
   // Local Live's agent instructions' parts, built again for each connection.
+  // What the user's phone lets Local Live read (phoneReads), asked as an agent call starts.
+  const phoneRef = useRef<PhoneReads>(NO_PHONE_READS)
   const agentWith = useRef<Parameters<typeof liveInstructions>[0] | null>(null)
   // Agent mode's asking first: the call's held request and its switch, starting as Settings say.
   const askFirst = useRef(new AskFirst(liveAsksFirst()))
@@ -488,8 +491,13 @@ export function LocalLiveCall({
       case END_CONVERSATION:
         answer(event.id, event.name, { status: 'ending' })
         return endCall()
-      default:
-        return answer(event.id, event.name, UNKNOWN_TOOL)
+      default: {
+        // One of the phone's reads the user lets Local Live make; the fast model speaks from its answer.
+        const tool = phoneTool(phoneRef.current, event.name)
+        if (!tool) return answer(event.id, event.name, UNKNOWN_TOOL)
+        void readPhone(profile, 'local-live', tool, event.args).then(result => !ended.current && answer(event.id, event.name, result, true))
+        return
+      }
     }
   }
 
@@ -771,7 +779,10 @@ export function LocalLiveCall({
       if (event.type === 'open') {
         trace.current?.step('Socket open, setup sent')
         // Told asking first as the call's switch is now, a reconnect included.
-        if (agent.current) send(agentConfigure(agentWith.current ? liveInstructions({ ...agentWith.current, asksFirst: askFirst.current.on }) : agent.current, FUNCTION_TOOLS))
+        if (agent.current) send(agentConfigure(agentWith.current ? liveInstructions({ ...agentWith.current, asksFirst: askFirst.current.on }) : agent.current, [
+            ...FUNCTION_TOOLS,
+            ...phoneRef.current.tools.map(tool => ({ type: 'function', ...tool }))
+          ]))
         send(sessionUpdate())
       } else if (event.type === 'message') onFrame(event.data)
       else if (event.type === 'close') {
@@ -848,7 +859,8 @@ export function LocalLiveCall({
               item.kind === 'user' || item.kind === 'assistant' ? [{ role: item.kind, text: item.text }] : []
             )
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-            const asked = await askedQuestionsForCall(profile)
+            const [asked, phoneReads] = await Promise.all([askedQuestionsForCall(profile), loadPhoneReads(profile, 'local-live')])
+            phoneRef.current = phoneReads
             setAgentMode(true)
             agentWith.current = {
               lookups: AGENT_LOOKUPS,
@@ -857,7 +869,8 @@ export function LocalLiveCall({
               language: language(),
               persona,
               asked,
-              chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current)
+              chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current),
+              phoneNow: phoneReads.context
             }
             agent.current = liveInstructions(agentWith.current)
           }

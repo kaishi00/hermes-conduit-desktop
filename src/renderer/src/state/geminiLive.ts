@@ -7,6 +7,7 @@
  */
 import { t } from '../../../shared/i18n'
 import { RECALL_SPEC, TOOL_SPECS, liveInstructions, pcmBase64 } from './liveCall'
+import type { PhoneTool } from './phoneReads'
 import { WEB_SEARCH_SPEC } from './qwenLive'
 
 export const STATUS_PATH = '/api/plugins/conduit_push/gemini-live/status'
@@ -99,6 +100,7 @@ export function instructions(options: {
   chat?: string
   search?: Search
   asksFirst?: boolean
+  phoneNow?: string
 }): string {
   return liveInstructions({
     ...options,
@@ -114,18 +116,20 @@ export function instructions(options: {
  * read_last_reply NON_BLOCKING (the call stays open while the model talks on),
  * end_conversation BLOCKING.
  */
-export function functionDeclarations(recall = false, webSearch = false): Row[] {
+export function functionDeclarations(recall = false, webSearch = false, phoneTools: PhoneTool[] = []): Row[] {
   const upper = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(upper)
     if (value && typeof value === 'object')
       return Object.fromEntries(Object.entries(value as Row).map(([k, v]) => [k, k === 'type' && typeof v === 'string' ? v.toUpperCase() : upper(v)]))
     return value
   }
-  return [...TOOL_SPECS, ...(recall ? [RECALL_SPEC] : []), ...(webSearch ? [WEB_SEARCH_SPEC] : [])].map(tool => ({
+  // The phone's reads answer in a moment: the model waits for them.
+  const blocking = new Set(['end_conversation', 'show_on_screen', 'list_jobs', 'cancel_job', 'call_me_when_done', 'set_ask_first', ...phoneTools.map(tool => tool.name)])
+  return [...TOOL_SPECS, ...(recall ? [RECALL_SPEC] : []), ...(webSearch ? [WEB_SEARCH_SPEC] : []), ...phoneTools].map(tool => ({
     name: tool.name,
     description: tool.description,
     parameters: upper(tool.parameters),
-    behavior: ['end_conversation', 'show_on_screen', 'list_jobs', 'cancel_job', 'call_me_when_done', 'set_ask_first'].includes(tool.name) ? 'BLOCKING' : 'NON_BLOCKING'
+    behavior: blocking.has(tool.name) ? 'BLOCKING' : 'NON_BLOCKING'
   }))
 }
 
@@ -141,7 +145,8 @@ export function setupMessage(
   voice?: string | null,
   recall = false,
   search: Search = 'google',
-  resumption?: { handle?: string | null }
+  resumption?: { handle?: string | null },
+  phoneTools: PhoneTool[] = []
 ): Row {
   const generationConfig: Row = { responseModalities: ['AUDIO'] }
   if (voice) generationConfig.speechConfig = { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } }
@@ -150,7 +155,7 @@ export function setupMessage(
       model: qualifiedModel(model),
       generationConfig,
       systemInstruction: { parts: [{ text: systemInstruction }] },
-      tools: [{ functionDeclarations: functionDeclarations(recall, search === 'hermes') }, ...(search === 'google' ? [{ googleSearch: {} }] : [])],
+      tools: [{ functionDeclarations: functionDeclarations(recall, search === 'hermes', phoneTools) }, ...(search === 'google' ? [{ googleSearch: {} }] : [])],
       realtimeInputConfig: {
         automaticActivityDetection: { disabled: false },
         // The user's speech always interrupts the model.

@@ -3,7 +3,8 @@
  * liveVoiceInstructionsPreview: the instructions the next call in the chosen
  * live mode would get, built by the same code the call uses, with
  * placeholders for what is read from the host when a call starts (memory,
- * personality, the chat and its waiting questions), and the greeting turn.
+ * personality, the chat and its waiting questions, where the user is), and
+ * the greeting turn.
  * What the host decides (its web search, memory recall, Local Live's fast
  * model) comes in as `host`, read as a call reads it.
  */
@@ -40,6 +41,7 @@ export interface LivePreview {
 export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new Date()): LivePreview | null {
   const memory = t('(What your Hermes agent remembers about you, read when the call starts.)')
   const persona = t("(This profile's SOUL.md, read when the call starts.)")
+  const phoneNow = t("(Where you are and your phone's battery and Focus, when your iPhone lets this voice mode read them, read when the call starts.)")
   const lang = language()
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const preview = (text: string, isLocalLive = false): LivePreview => ({
@@ -50,7 +52,7 @@ export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new D
   })
   switch (mode) {
     case 'gpt':
-      return preview(briefing(lang, sendsPersona() ? persona : '', sendsMemory() ? memory : ''))
+      return preview(briefing(lang, sendsPersona() ? persona : '', sendsMemory() ? memory : '', '', undefined, undefined, phoneNow))
     case 'gemini':
     case 'qwen': {
       const qwen = mode === 'qwen'
@@ -61,7 +63,8 @@ export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new D
           persona: (qwen ? qwenSendsPersona() : geminiSendsPersona()) ? persona : '',
           memory: sendsMemory ? memory : '',
           recall: sendsMemory && !!host.recall,
-          search: resolvedSearch(searchMode(mode), !!host.hostSearch, mode)
+          search: resolvedSearch(searchMode(mode), !!host.hostSearch, mode),
+          phoneNow
         })
       )
     }
@@ -73,7 +76,8 @@ export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new D
           memory: grokSendsMemory() ? memory : '',
           recall: grokSendsMemory() && !!host.recall,
           now,
-          timeZone
+          timeZone,
+          phoneNow
         })
       )
     case 'local':
@@ -85,7 +89,8 @@ export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new D
           announces: false,
           extra: AGENT_INSTRUCTIONS + clockInstructions(now, timeZone),
           language: lang,
-          persona: localLivePersona() ? persona : ''
+          persona: localLivePersona() ? persona : '',
+          phoneNow
         }),
         true
       )

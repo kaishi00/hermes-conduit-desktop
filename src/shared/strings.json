@@ -44308,5 +44308,20 @@
     "tr": "Bu görev artık gösterilen panoda değil.",
     "zh-Hans": "此任务已不在当前显示的看板上。",
     "zh-Hant": "此任務已不在目前顯示的看板上。"
+  },
+  "(Where you are and your phone's battery and Focus, when your iPhone lets this voice mode read them, read when the call starts.)": {
+    "de": "(Wo du bist und Akku und Fokus deines Telefons, wenn dein iPhone diesem Sprachmodus das Lesen erlaubt, gelesen zu Beginn des Anrufs.)",
+    "es": "(Dónde estás y la batería y el modo de concentración de tu teléfono, si tu iPhone deja que este modo de voz los lea, leído al empezar la llamada).",
+    "fr": "(Où vous êtes, ainsi que la batterie et la concentration de votre téléphone, si votre iPhone autorise ce mode vocal à les lire, lu au début de l'appel.)",
+    "id": "(Lokasi Anda serta baterai dan Fokus ponsel Anda, jika iPhone Anda mengizinkan mode suara ini membacanya, dibaca saat panggilan dimulai.)",
+    "it": "(Dove ti trovi e batteria e Full immersion del telefono, se il tuo iPhone consente a questa modalità vocale di leggerli, letto all'inizio della chiamata.)",
+    "ja": "（あなたの現在地と、電話のバッテリーと集中モード。iPhoneがこの音声モードに読み取りを許可している場合に、通話の開始時に読み込まれます。）",
+    "ko": "(현재 위치와 휴대폰의 배터리 및 집중 모드로, iPhone이 이 음성 모드의 읽기를 허용할 때 통화가 시작될 때 읽어 와요.)",
+    "pl": "(Gdzie jesteś oraz bateria i tryb skupienia telefonu, jeśli iPhone pozwala temu trybowi głosowemu je odczytać, odczytywane na początku połączenia.)",
+    "pt-BR": "(Onde você está e a bateria e o Foco do seu telefone, se o seu iPhone deixar este modo de voz lê-los, lido quando a chamada começa.)",
+    "ru": "(Где вы находитесь, а также заряд и режим фокусирования телефона, если iPhone разрешает этому голосовому режиму их читать; считывается в начале звонка.)",
+    "tr": "(Nerede olduğunuz ve telefonunuzun pili ile Odak durumu, iPhone'unuz bu ses modunun okumasına izin veriyorsa; arama başladığında okunur.)",
+    "zh-Hans": "（你的位置以及手机的电量和专注模式，在你的 iPhone 允许此语音模式读取时，于通话开始时读取。）",
+    "zh-Hant": "（你的位置以及手機的電量和專注模式，會在你的 iPhone 允許此語音模式讀取時，於通話開始時讀取。）"
   }
 }

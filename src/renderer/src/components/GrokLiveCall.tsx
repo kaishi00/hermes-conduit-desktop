@@ -51,6 +51,7 @@ import { pictureNoteText, type PictureNote } from '../state/callPicture'
 import { CANCEL_JOB, INTERRUPT_JOB, LIST_JOBS, START_JOB, VoiceJobs, type VoiceJob } from '../state/voiceJobs'
 import { dashboardProfileQuery } from '../state/dashboardProfile'
 import { RECONNECT_ATTEMPTS, isRefusalClose, reconnectDelayMs } from '@shared/liveReconnect'
+import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
 
 interface Props {
   profile?: string
@@ -129,6 +130,8 @@ export function GrokLiveCall({
   const [problem, setProblem] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
   // Asking first: the call's held request and its switch, starting as Settings say.
+  // What the user's phone lets Grok Live read (phoneReads), asked as the call starts.
+  const phoneRef = useRef<PhoneReads>(NO_PHONE_READS)
   const askFirst = useRef(new AskFirst(liveAsksFirst()))
   const [asking, setAsking] = useState(askFirst.current.on)
   // The microphone, for the orb's level.
@@ -443,8 +446,13 @@ export function GrokLiveCall({
       case END_CONVERSATION:
         // Left unanswered: the call closes once the goodbye has played.
         return endCall()
-      default:
-        return answer(event.id, UNKNOWN_TOOL)
+      default: {
+        // One of the phone's reads the user lets Grok Live make.
+        const tool = phoneTool(phoneRef.current, event.name)
+        if (!tool) return answer(event.id, UNKNOWN_TOOL)
+        void readPhone(profile, 'grok-live', tool, event.args).then(result => !ended.current && answer(event.id, result))
+        return
+      }
     }
   }
 
@@ -551,7 +559,7 @@ export function GrokLiveCall({
       if (event.type === 'open') {
         trace.current?.step('Socket open, setup sent')
         // Told asking first as the call's switch is now, a reconnect included.
-        send(sessionUpdate(toldWith ? instructions({ ...toldWith, asksFirst: askFirst.current.on }) : '', undefined, recall))
+        send(sessionUpdate(toldWith ? instructions({ ...toldWith, asksFirst: askFirst.current.on }) : '', undefined, recall, phoneRef.current.tools))
       } else if (event.type === 'message') {
         const decoded = decode(event.data)
         if (decoded) handle(decoded)
@@ -622,19 +630,29 @@ export function GrokLiveCall({
           item.kind === 'user' || item.kind === 'assistant' ? [{ role: item.kind, text: item.text }] : []
         )
         // The persona and memory only when switched on; a host without them starts the call without.
-        const [persona, memory] = await Promise.all([
+        const [persona, memory, phoneReads] = await Promise.all([
           grokSendsPersona() ? gateway.http('GET', withProfile(PERSONALITY_PATH, profile)).then(personaText, () => '') : '',
           grokSendsMemory()
             ? gateway.http('GET', withProfile(MEMORY_PATH, profile)).then(
                 r => ({ text: memoryText(r), recall: canRecall(r) }),
                 () => ({ text: '', recall: false })
               )
-            : { text: '', recall: false }
+            : { text: '', recall: false },
+          loadPhoneReads(profile, 'grok-live')
         ])
         const asked = await askedQuestionsForCall(profile)
         if (ended.current) return
         recall = memory.recall
-        toldWith = { language: language(), persona, memory: memory.text, recall, asked, chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current) }
+        phoneRef.current = phoneReads
+        toldWith = {
+          language: language(),
+          persona,
+          memory: memory.text,
+          recall,
+          asked,
+          chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current),
+          phoneNow: phoneReads.context
+        }
         if (!(await openSocket())) return
         // The microphone, as 24 kHz PCM, while the call listens.
         const source = ctx.createMediaStreamSource(stream)

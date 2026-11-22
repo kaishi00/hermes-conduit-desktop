@@ -15,6 +15,7 @@ import { DELEGATED_FIND_CHAT_RULE } from './chatFinder'
 import { DELEGATED_JOBS_RULE, DELEGATED_JOB_FOLLOW_UPS } from './voiceJobs'
 import { CALL_ME_RULE } from './callbacks'
 import { namingFiles } from './media'
+import { phoneContextBlock } from './phoneReads'
 
 export type Billing = 'subscription' | 'api'
 export type Dialect = 'frameless' | 'ga'
@@ -356,7 +357,8 @@ export function briefing(
   memory = '',
   asked = '',
   style: LiveStyle = liveStyle(),
-  asksFirst = liveAsksFirst()
+  asksFirst = liveAsksFirst(),
+  phoneNow = ''
 ): string {
   let personaText = persona.replace(/<\/hermes_persona>/gi, '</ hermes_persona>')
   let memoryText = memory.replace(/<\/hermes_memory>/gi, '</ hermes_memory>')
@@ -364,7 +366,8 @@ export function briefing(
   // The style and the user's instructions go whole too, after the call's blocks and before the language rule.
   const head = rules(answerLengthRule(style.answerLength))
   const tail = asked + askFirstInstructions(asksFirst) + styleInstructions(style) + languageRule(language)
-  const assembled = () => head + personaBlock(personaText) + memoryBlock(memoryText) + tail
+  // Where the user is goes whole, before the memory that may be cut.
+  const assembled = () => head + personaBlock(personaText) + phoneContextBlock(phoneNow) + memoryBlock(memoryText) + tail
   let text = assembled()
   let excess = codePoints(text) - MAX_BRIEFING_CHARACTERS
   if (excess > 0 && memoryText) {

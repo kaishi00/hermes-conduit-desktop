@@ -58,6 +58,7 @@ import { MicOrb } from './MicOrb'
 import { openingTurn } from '../state/liveGreeting'
 import { DelegatedAskFirst, liveAsksFirst, switchedNote, type DelegatedStep } from '../state/askFirst'
 import { AskFirstButton } from './AskFirstButton'
+import { loadPhoneReads } from '../state/phoneReads'
 
 interface Props {
   profile?: string
@@ -556,13 +557,16 @@ export function GptLiveCall({
             )
         )
         // The persona and memory only when switched on; a host without them starts the call without.
-        const [persona, memory] = await Promise.all([
+        // Where the user is and their phone's state, when their phone lets GPT-Live read it. GPT-Live has no tools of
+        // its own, so the phone's read tools aren't asked for.
+        const [persona, memory, phone] = await Promise.all([
           sendsPersona() ? gateway.http('GET', withProfile(PERSONALITY_PATH, profile)).then(personaText, () => '') : '',
-          sendsMemory() ? gateway.http('GET', withProfile(MEMORY_PATH, profile)).then(memoryText, () => '') : ''
+          sendsMemory() ? gateway.http('GET', withProfile(MEMORY_PATH, profile)).then(memoryText, () => '') : '',
+          loadPhoneReads(profile, 'gpt-live', false)
         ])
         const asked = await askedQuestionsForCall(profile)
         if (ended.current) return
-        const told = briefing(language(), persona, memory, asked)
+        const told = briefing(language(), persona, memory, asked, undefined, undefined, phone.context)
         const body: Record<string, unknown> = { sdp: peer.localDescription?.sdp ?? '', billing, briefing: told }
         if (seed.length) body.history = seed
         if (voice) body.voice = voice

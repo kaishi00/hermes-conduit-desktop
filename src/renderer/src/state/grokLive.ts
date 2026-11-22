@@ -8,6 +8,7 @@
  * deltas, function calls and response.done back.
  */
 import { RECALL_SPEC, TOOL_SPECS, clockInstructions, liveInstructions, pcmBase64 } from './liveCall'
+import type { PhoneTool } from './phoneReads'
 
 export {
   ASK_THREAD,
@@ -108,6 +109,7 @@ export function instructions(options: {
   now?: Date
   timeZone?: string
   asksFirst?: boolean
+  phoneNow?: string
 }): string {
   const timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
   return liveInstructions({
@@ -122,7 +124,7 @@ export function instructions(options: {
 // MARK: Client → server
 
 /** The session's configuration: server turn detection, PCM both ways, the instructions and the tools (recall_memory when the host's memory provider can be searched). */
-export function sessionUpdate(text: string, voice?: string | null, recall = false): Row {
+export function sessionUpdate(text: string, voice?: string | null, recall = false, phoneTools: PhoneTool[] = []): Row {
   const session: Row = {
     instructions: text,
     // Fast replies: this is a conversation, the work goes to Hermes.
@@ -132,7 +134,12 @@ export function sessionUpdate(text: string, voice?: string | null, recall = fals
       input: { format: { type: 'audio/pcm', rate: SAMPLE_RATE }, transcription: { model: TRANSCRIPTION_MODEL } },
       output: { format: { type: 'audio/pcm', rate: SAMPLE_RATE } }
     },
-    tools: [...NATIVE_TOOLS, ...FUNCTION_TOOLS, ...(recall ? [{ type: 'function', ...RECALL_SPEC }] : [])],
+    tools: [
+      ...NATIVE_TOOLS,
+      ...FUNCTION_TOOLS,
+      ...(recall ? [{ type: 'function', ...RECALL_SPEC }] : []),
+      ...phoneTools.map(tool => ({ type: 'function', ...tool }))
+    ],
     tool_choice: 'auto'
   }
   if (voice) session.voice = voice

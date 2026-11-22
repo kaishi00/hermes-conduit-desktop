@@ -78,6 +78,7 @@ import { CANCEL_JOB, INTERRUPT_JOB, LIST_JOBS, START_JOB, VoiceJobs, type VoiceJ
 import { RECONNECT_ATTEMPTS, isRefusalClose, isResumptionLost, reconnectDelayMs, rejoinPrompt } from '@shared/liveReconnect'
 import { LiveHandoff } from '@shared/liveHandoff'
 import { askedQuestionsForCall } from '../state/askedForCalls'
+import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
 
 interface Props {
   profile?: string
@@ -238,6 +239,8 @@ export function GeminiLiveCall({
   const modelTurn = useRef(false)
   const userSpokeAt = useRef(0)
   const answered = useRef(new Set<string>())
+  // What the user's phone lets this mode read (phoneReads), asked as the call starts.
+  const phoneRef = useRef<PhoneReads>(NO_PHONE_READS)
   // This turn's words, kept as the call's turns when it completes.
   const heard = useRef('')
   const spoken = useRef('')
@@ -483,8 +486,13 @@ export function GeminiLiveCall({
       case END_CONVERSATION:
         // Left unanswered: the call closes once the goodbye has played.
         return endCall()
-      default:
-        return answer(UNKNOWN_TOOL)
+      default: {
+        // One of the phone's reads the user lets this mode make.
+        const tool = phoneTool(phoneRef.current, event.name)
+        if (!tool) return answer(UNKNOWN_TOOL)
+        void readPhone(profile, qwen ? 'qwen-live' : 'gemini-live', tool, event.args).then(result => !ended.current && answer(result))
+        return
+      }
     }
   }
 
@@ -687,7 +695,7 @@ export function GeminiLiveCall({
     }
     const stopListening = window.conduit.onLive(event => {
       if (handoff.current.id && event.id === handoff.current.id) {
-        if (event.type === 'open') window.conduit.liveSend(event.id, JSON.stringify(setupMessage(model, toldNow(), voice, recall, search, { handle: resumeHandle.current })))
+        if (event.type === 'open') window.conduit.liveSend(event.id, JSON.stringify(setupMessage(model, toldNow(), voice, recall, search, { handle: resumeHandle.current }, phoneRef.current.tools)))
         else if (event.type === 'message') {
           for (const decoded of decode(event.data)) {
             if (decoded.type === 'resumption' && decoded.resumable && decoded.handle) resumeHandle.current = decoded.handle
@@ -715,7 +723,7 @@ export function GeminiLiveCall({
       if (event.id !== socket.current) return
       if (event.type === 'open') {
         trace.current?.step('Socket open, setup sent')
-        send(setupMessage(model, toldNow(), voice, recall, search, qwen ? undefined : { handle: resumeHandle.current }))
+        send(setupMessage(model, toldNow(), voice, recall, search, qwen ? undefined : { handle: resumeHandle.current }, phoneRef.current.tools))
       } else if (event.type === 'message') {
         let frame: string | null = event.data
         // Qwen's turn steps, from its own frames before they're made Gemini's.
@@ -792,7 +800,7 @@ export function GeminiLiveCall({
         // The persona and memory only when switched on; a host without them starts the call without.
         const sendsPersona = qwen ? qwenSendsPersona() : geminiSendsPersona()
         const sendsMemory = qwen ? qwenSendsMemory() : geminiSendsMemory()
-        const [persona, memory, searches] = await Promise.all([
+        const [persona, memory, searches, phoneReads] = await Promise.all([
           sendsPersona ? gateway.http('GET', withProfile(PERSONALITY_PATH, profile)).then(personaText, () => '') : '',
           sendsMemory
             ? gateway.http('GET', withProfile(MEMORY_PATH, profile)).then(
@@ -802,13 +810,23 @@ export function GeminiLiveCall({
             : { text: '', recall: false },
           // The host's web search when it has one, as on the phone's automatic search: Qwen's native search can't run
           // beside function tools, and Gemini's Google Search is metered on a quota of its own.
-          webSearchAvailable(profile)
+          webSearchAvailable(profile),
+          loadPhoneReads(profile, qwen ? 'qwen-live' : 'gemini-live')
         ])
         const asked = await askedQuestionsForCall(profile)
         if (ended.current) return
         recall = memory.recall
+        phoneRef.current = phoneReads
         search = resolvedSearch(searchMode(provider), searches, provider)
-        toldWith = { language: language(), persona, memory: memory.text, recall, asked, chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current) }
+        toldWith = {
+          language: language(),
+          persona,
+          memory: memory.text,
+          recall,
+          asked,
+          chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current),
+          phoneNow: phoneReads.context
+        }
         told = instructions({ ...toldWith, search })
         if (!(await open())) return
         // The microphone, as 16 kHz PCM, while the call listens.
