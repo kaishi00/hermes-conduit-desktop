@@ -82,10 +82,16 @@ export async function downloadUpdate(): Promise<void> {
   }
 }
 
-/** Restart to Update: Conduit quits, the update installs and Conduit opens again. */
-export function installUpdate(): void {
+/**
+ * Restart to Update: Conduit quits, the update installs and Conduit opens again.
+ * `beforeQuit` runs first: on the Mac the updater closes every window before
+ * the app hears before-quit, so a window that only hides on close has to know
+ * the app is quitting already, or Conduit stays open and nothing installs.
+ */
+export function installUpdate(beforeQuit: () => void): void {
   if (state.phase !== 'ready') return
   if (timer) clearInterval(timer)
+  beforeQuit()
   autoUpdater.quitAndInstall(false, true)
 }
 

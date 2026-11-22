@@ -82,6 +82,13 @@ let mainWindow: BrowserWindow | null = null
 /** Set by Quit: until then, closing the window only hides it (Conduit stays in the tray). */
 let quitting = false
 
+/** Restart to Update, from Settings or the tray: the windows close for good rather than hide. */
+function restartToUpdate(): void {
+  installUpdate(() => {
+    quitting = true
+  })
+}
+
 function showWindow(): void {
   if (!mainWindow) createWindow()
   const window = mainWindow
@@ -118,7 +125,7 @@ const tray = new ConduitTray({
   showWindow,
   command: sendCommand,
   quit: () => app.quit(),
-  installUpdate: () => installUpdate()
+  installUpdate: () => restartToUpdate()
 })
 
 function send(channel: string, payload: unknown): void {
@@ -491,7 +498,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.updateState, () => updateState())
   ipcMain.handle(IPC.checkForUpdates, () => checkForUpdates())
   ipcMain.handle(IPC.downloadUpdate, () => downloadUpdate())
-  ipcMain.on(IPC.installUpdate, () => installUpdate())
+  ipcMain.on(IPC.installUpdate, () => restartToUpdate())
   ipcMain.handle(IPC.setAutoUpdate, (_event, on: unknown) => setAutoUpdate(on !== false))
   ipcMain.handle(IPC.sendDeviceReports, (_event, value: unknown) => sendDeviceReports(ids(value)))
   ipcMain.handle(IPC.declineDeviceReports, (_event, value: unknown) => declineDeviceReports(ids(value)))
