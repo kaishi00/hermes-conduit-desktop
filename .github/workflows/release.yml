@@ -3,16 +3,19 @@ name: Release
 # Builds Conduit for the Mac, Windows and Linux from a v* tag and leaves the
 # packages on a draft GitHub release named by package.json's version. A person
 # publishes the draft; the website's download links and the updater then serve
-# it. Each part signs only when its secrets are set, so a release before
+# it. A manual run (workflow_dispatch) builds the same packages as workflow
+# artifacts without touching any release. Each part signs only when its secrets are set, so a release before
 # them is unsigned, like CI's packages.
 #
 # Mac (Developer ID + notarization), secrets:
 #   CSC_LINK, CSC_KEY_PASSWORD        the Developer ID Application .p12 (base64) and its password
 #   APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER   an App Store Connect API key
+#     (APPLE_API_KEY_P8 is the .p8 file's text as downloaded, not base64)
 # Windows: the installer is unsigned (Eric, 2026-11-22: the Microsoft Store is
 # the signed Windows channel). The Store package (appx) is built when these
 # variables, from Partner Center's Product identity page, are set, and kept as
-# a workflow artifact to upload to Partner Center, which signs it:
+# a workflow artifact to upload to Partner Center, which signs it (all three
+# must be set):
 #   APPX_IDENTITY_NAME, APPX_PUBLISHER (CN=...), APPX_PUBLISHER_DISPLAY_NAME
 
 on:
@@ -84,6 +87,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLATFORM: ${{ matrix.platform }}
+          # Only a tag publishes; a manual run keeps its packages as artifacts.
+          PUBLISH: ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
           # Mac
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -109,24 +114,37 @@ jobs:
               echo "::warning::No App Store Connect API key secrets: the Mac app isn't notarized."
             fi
           fi
-          pnpm exec electron-builder --"$PLATFORM" --publish always "${args[@]}"
+          pnpm exec electron-builder --"$PLATFORM" --publish "$PUBLISH" "${args[@]}"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        with:
+          name: conduit-${{ matrix.platform }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14
 
       # The Store package, for Partner Center, not the release: it can't be
       # installed until the Store signs it.
       - name: Store package
-        if: matrix.platform == 'win' && vars.APPX_IDENTITY_NAME != ''
+        if: matrix.platform == 'win' && vars.APPX_IDENTITY_NAME != '' && vars.APPX_PUBLISHER != '' && vars.APPX_PUBLISHER_DISPLAY_NAME != ''
         shell: bash
         env:
           APPX_IDENTITY_NAME: ${{ vars.APPX_IDENTITY_NAME }}
           APPX_PUBLISHER: ${{ vars.APPX_PUBLISHER }}
           APPX_PUBLISHER_DISPLAY_NAME: ${{ vars.APPX_PUBLISHER_DISPLAY_NAME }}
         run: |
-          pnpm exec electron-builder --win appx --publish never \
+          pnpm exec electron-builder --win appx --x64 --arm64 --publish never \
             "-c.appx.identityName=$APPX_IDENTITY_NAME" \
             "-c.appx.publisher=$APPX_PUBLISHER" \
             "-c.appx.publisherDisplayName=$APPX_PUBLISHER_DISPLAY_NAME"
       - uses: actions/upload-artifact@v4
-        if: matrix.platform == 'win' && vars.APPX_IDENTITY_NAME != ''
+        if: matrix.platform == 'win' && vars.APPX_IDENTITY_NAME != '' && vars.APPX_PUBLISHER != '' && vars.APPX_PUBLISHER_DISPLAY_NAME != ''
         with:
           name: conduit-store-appx
           path: release/*.appx

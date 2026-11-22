@@ -33,7 +33,8 @@ extraResources:
 mac:
   category: public.app-category.productivity
   # The dmg for people, the zip for the updater; names without the version, so
-  # releases/latest/download/Conduit-mac.dmg always gets the newest.
+  # releases/latest/download/Conduit-mac.dmg always gets the newest. A pattern
+  # we set is used as written: electron-builder adds no arch to it.
   target:
     - target: dmg
       arch: [universal]
@@ -57,7 +58,8 @@ win:
 nsis:
   oneClick: true
   perMachine: false
-  # One installer for x64 and arm64, named without the version.
+  # One installer for x64 and arm64 (NSIS packs every arch the win target
+  # lists into a single installer), named without the version.
   artifactName: Conduit-Setup.${ext}
 # Partner Center's identity values replace these in the release workflow.
 appx:
