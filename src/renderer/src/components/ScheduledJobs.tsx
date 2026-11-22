@@ -102,10 +102,8 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [],
     setFar(null)
     onProfile(next)
   }
-  const pickFar = (tile: MixedTile) => {
-    onProfile(null)
-    setFar({ host: tile.host, name: tile.bot.name })
-  }
+  // Chats' profile, shared with this list, stays as it was: a far face shows over it.
+  const pickFar = (tile: MixedTile) => setFar({ host: tile.host, name: tile.bot.name })
   const [pins, setPins] = useState(readPins)
   const [pane, setPane] = useState<Pane>(null)
   const [menu, setMenu] = useState<{ job: CronJob; x: number; y: number } | null>(null)

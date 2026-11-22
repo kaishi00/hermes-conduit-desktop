@@ -657,9 +657,11 @@ function registerIpc(): void {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
   })
-  ipcMain.handle(IPC.keptHttp, async (_e, url: unknown, path: unknown, method: unknown, body: unknown): Promise<RpcOutcome> => {
+  ipcMain.handle(IPC.keptHttp, async (event, url: unknown, path: unknown, method: unknown, body: unknown): Promise<RpcOutcome> => {
     if (typeof url !== 'string' || typeof path !== 'string' || !path.startsWith('/api/')) return { ok: false, error: 'Only dashboard API paths can be read.' }
     if (method !== undefined && typeof method !== 'string') return { ok: false, error: 'Bad request.' }
+    // Only the main window's Tasks changes another dashboard; a docked chat or a chat window only reads.
+    if (method !== undefined && method !== 'GET' && event.sender !== mainWindow?.webContents) return { ok: false, error: 'Only reads can go to another dashboard.' }
     try {
       return { ok: true, result: await keptHosts.http(url, path, method ?? 'GET', body) }
     } catch (error) {

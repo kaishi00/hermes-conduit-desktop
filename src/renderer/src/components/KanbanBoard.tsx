@@ -110,8 +110,12 @@ export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, s
     }
   }, [menu])
 
-  // A menu opened on one board never acts on another.
-  useEffect(() => setMenu(null), [kanban.slug, kanban.unavailable])
+  // A menu, an open task or a new task begun on one board never acts on another (another dashboard's included).
+  useEffect(() => setMenu(null), [kanban.slug, kanban.host, kanban.unavailable])
+  useEffect(() => {
+    setOpenId(null)
+    setComposing(false)
+  }, [kanban.slug, kanban.host])
   // With no board picked, the board is whatever Hermes calls current, which another client can change:
   // a menu whose task left the board read closes rather than act on the new one.
   useEffect(() => {
