@@ -4,7 +4,9 @@ import type { ModelSwitch, OpenChat } from '../state/useChat'
 import { REASONING_LEVELS, groupModels, typedModelId, typedModelProviders } from '../state/models'
 import { Icon } from './icons'
 import { isPinned, pinnedRows, recentRows, type ModelPick } from '../state/modelQuickPicks'
-import { useModelQuickPicks } from './ModelOptions'
+import { useModelQuickPicks, useModelVisibility } from './ModelOptions'
+import { modelHidden, visibleProviders } from '../state/modelVisibility'
+import { EditModelsButton, ModelVisibilityEditor } from './ModelVisibilityEditor'
 import { useModelCatalog } from '../state/modelCatalog'
 import { ModelCatalogNote, RefreshModelsButton } from './ModelCatalogNote'
 import { ask } from '../state/dialogs'
@@ -26,13 +28,18 @@ interface Props {
  * Pinned and Recent, All providers opening in place, and Fast and YOLO.
  * Every control applies when it's clicked, with no Apply step, and the panel
  * stays open. Esc or a click outside closes it (Esc on All providers goes
- * back first).
+ * back first, as it does from Edit).
+ *
+ * Edit hides the providers and models not wanted here, as the phone's does:
+ * they leave Quick picks, the matches and All providers, and the typed id
+ * isn't offered on a hidden provider or as a hidden model.
  */
 export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, setSpeed, setYolo }: Props) {
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<{ text: string; tone: 'error' | 'info' } | null>(null)
   const [allProviders, setAllProviders] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [toggled, setToggled] = useState<Record<string, boolean>>({})
   const [highlight, setHighlight] = useState(0)
   const panel = useRef<HTMLDivElement>(null)
@@ -47,15 +54,18 @@ export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, se
   }, [chat.liveId, profile])
   const catalog = useModelCatalog(params)
   const providers = catalog.providers
+  const { visibility } = useModelVisibility()
+  const shownProviders = useMemo(() => (providers ? visibleProviders(visibility, providers) : null), [providers, visibility])
   useEffect(() => {
     search.current?.focus()
-  }, [allProviders])
+  }, [allProviders, editing])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.preventDefault()
-      if (allProviders) setAllProviders(false)
+      if (editing) setEditing(false)
+      else if (allProviders) setAllProviders(false)
       else onClose()
     }
     const onDown = (e: MouseEvent) => {
@@ -69,14 +79,14 @@ export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, se
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('mousedown', onDown)
     }
-  }, [onClose, allProviders])
+  }, [onClose, allProviders, editing])
 
   const searching = !!query.trim()
-  const all = useMemo(() => groupModels(providers ?? [], ''), [providers])
+  const all = useMemo(() => groupModels(shownProviders ?? [], ''), [shownProviders])
   // Every match names its provider, the same model from two providers being two matches, as on the phone.
   const matches = useMemo(
-    () => (searching ? groupModels(providers ?? [], query).flatMap(group => group.models.map(model => ({ model, provider: group.slug }))) : []),
-    [providers, query, searching]
+    () => (searching ? groupModels(shownProviders ?? [], query).flatMap(group => group.models.map(model => ({ model, provider: group.slug }))) : []),
+    [shownProviders, query, searching]
   )
   useEffect(() => {
     setHighlight(0)
@@ -85,12 +95,14 @@ export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, se
     highlighted.current?.scrollIntoView({ block: 'nearest' })
   }, [highlight])
   // A model Hermes doesn't list, typed as its id, on any provider (issue 2841): one row under the matches.
+  // Checked against every listed row and what Edit hid, so a hidden model stays hidden once its row is gone.
   const typedId = typedModelId(query)
-  const typedProviders = typedId && catalog.answered ? typedModelProviders(providers ?? [], typedId, chat.provider) : []
+  const typedProviders =
+    typedId && catalog.answered ? typedModelProviders(providers ?? [], typedId, chat.provider).filter(provider => !modelHidden(visibility, provider.slug, typedId)) : []
   const quick = useModelQuickPicks()
   const inUse: ModelPick | null = chat.model ? { model: chat.model, provider: chat.provider ?? '' } : null
-  const pinned = pinnedRows(quick.picks, providers ?? [])
-  const recent = recentRows(quick.picks, providers ?? [], inUse)
+  const pinned = pinnedRows(quick.picks, shownProviders ?? [])
+  const recent = recentRows(quick.picks, shownProviders ?? [], inUse)
   const current = (model: string, provider: string) => model === chat.model && (!chat.provider || provider === chat.provider)
 
   async function pick(model: string, provider: string) {
@@ -159,6 +171,7 @@ export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, se
       actions={
         <>
           <RefreshModelsButton catalog={catalog} />
+          <EditModelsButton onClick={() => setEditing(true)} />
           <button className="staged-remove" aria-label={t('Close')} onClick={onClose}>
             <Icon name="close" />
           </button>
@@ -197,7 +210,9 @@ export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, se
 
   return (
     <div className={`model-picker model-sheet${allProviders || searching ? ' tall' : ''}`} role="dialog" aria-label={t('Model')} ref={panel}>
-      {allProviders ? (
+      {editing ? (
+        <ModelVisibilityEditor providers={providers} openProvider={chat.provider} onDone={() => setEditing(false)} />
+      ) : allProviders ? (
         <>
           <div className="model-sheet-bar">
             <button className="staged-remove" aria-label={t('Back')} title={t('Back')} onClick={() => setAllProviders(false)}>
@@ -205,6 +220,13 @@ export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, se
             </button>
             <span className="model-sheet-title">{t('All providers')}</span>
             <RefreshModelsButton catalog={catalog} />
+            {/* Edit goes back to the panel's, so "Click Edit to restore one" holds here too. */}
+            <EditModelsButton
+              onClick={() => {
+                setAllProviders(false)
+                setEditing(true)
+              }}
+            />
             <button className="staged-remove" aria-label={t('Close')} onClick={onClose}>
               <Icon name="close" />
             </button>
@@ -212,6 +234,7 @@ export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, se
           {note ? <div className={`model-note${note.tone === 'error' ? ' error' : ''}`}>{note.text}</div> : null}
           <div className="model-list">
             <ModelCatalogNote catalog={catalog} />
+            {!!providers?.length && !all.length ? <div className="model-note">{t('All providers are hidden. Click Edit to restore one.')}</div> : null}
             {all.map(group => {
               // The provider holding the model in use opens first.
               const opened = toggled[group.slug] ?? group.slug === chat.provider

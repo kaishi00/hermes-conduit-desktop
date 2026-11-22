@@ -150,7 +150,7 @@ export function ReasoningBars({
   )
 }
 
-/** A model row: the model, and under it the provider with its logo where the row names one; checked, switching, highlighted; Pin beside it. */
+/** A model row: the model, and under it the provider with its logo where the row names one, and Hidden for one hidden with Edit; checked, switching, highlighted; Pin beside it. */
 export function PickRow({
   model,
   provider,
@@ -161,6 +161,7 @@ export function PickRow({
   highlighted,
   disabled,
   pinned,
+  hidden,
   onPick,
   onPin,
   rowRef
@@ -174,6 +175,8 @@ export function PickRow({
   highlighted?: boolean
   disabled?: boolean
   pinned: boolean
+  /** Hidden with Edit, found by a setting's search all the same. */
+  hidden?: boolean
   onPick: () => void
   onPin: () => void
   rowRef?: (node: HTMLDivElement | null) => void
@@ -186,10 +189,15 @@ export function PickRow({
       <button className="pick-row" aria-pressed={on} disabled={disabled} onClick={onPick}>
         <span className="pick-row-text">
           <span className="pick-row-name">{model}</span>
-          {withProvider ? (
+          {withProvider || hidden ? (
             <span className="pick-row-provider">
-              <ProviderLogo slug={provider} title={name} size={15} />
-              {name}
+              {withProvider ? (
+                <>
+                  <ProviderLogo slug={provider} title={name} size={15} />
+                  {name}
+                </>
+              ) : null}
+              {hidden ? <span className="pick-row-hidden">{withProvider ? ` · ${t('Hidden')}` : t('Hidden')}</span> : null}
             </span>
           ) : null}
         </span>

@@ -5,7 +5,9 @@ import { groupModels, reasoningTitle, typedModelId, typedModelProviders, type Mo
 import { ModelCard, PickRow, ProviderHeader, ReasoningBars, TypedIdRow } from './ModelSheet'
 import { isPinned, pinnedRows, recentRows } from '../state/modelQuickPicks'
 import { chooserLines, chooserListed, chooserPick, chooserValue, providerStartsOpen } from '../state/modelChooser'
-import { useModelQuickPicks } from './ModelOptions'
+import { useModelQuickPicks, useModelVisibility } from './ModelOptions'
+import { modelHidden, visibleProviders } from '../state/modelVisibility'
+import { EditModelsButton, ModelVisibilityEditor } from './ModelVisibilityEditor'
 import { Icon } from './icons'
 import { inSelectMenu } from './Select'
 
@@ -38,6 +40,10 @@ export interface ChooserReasoning {
  * Quick picks and every provider, closed (the phone's ModelChooserPage,
  * Eric 2026-11-08: no drop-down menus). The setting keeps its own saves;
  * this only hands back a pick.
+ *
+ * Models hidden with Edit (the page has its own) leave its lists, as in the
+ * Model panel; the pick stays on top marked Hidden, and search finds hidden
+ * models marked Hidden, so a setting can still be put on one.
  */
 export function ModelChooser({ value, onChange, providers, defaultLabel, emptyLabel, label, disabled, className, reasoning }: Props) {
   const [open, setOpen] = useState(false)
@@ -99,22 +105,28 @@ function ModelChooserPage({
 }) {
   const [query, setQuery] = useState('')
   const [toggled, setToggled] = useState<Record<string, boolean>>({})
+  const [editing, setEditing] = useState(false)
   const search = useRef<HTMLInputElement>(null)
   useEffect(() => {
     search.current?.focus()
-  }, [])
+  }, [editing])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || inSelectMenu(e)) return
       e.preventDefault()
       e.stopPropagation()
-      onClose()
+      // Esc leaves Edit first.
+      if (editing) setEditing(false)
+      else onClose()
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
+  }, [onClose, editing])
 
-  const all = useMemo(() => groupModels(providers ?? [], ''), [providers])
+  const { visibility } = useModelVisibility()
+  const shownProviders = useMemo(() => (providers ? visibleProviders(visibility, providers) : []), [providers, visibility])
+  const listed = useMemo(() => groupModels(providers ?? [], ''), [providers])
+  const all = useMemo(() => groupModels(shownProviders, ''), [shownProviders])
   const quick = useModelQuickPicks()
   const searching = !!query.trim()
   const current = value ? chooserPick(value) : null
@@ -131,8 +143,8 @@ function ModelChooserPage({
   useEffect(() => {
     highlighted.current?.scrollIntoView({ block: 'nearest' })
   }, [highlight])
-  const pinned = searching ? [] : pinnedRows(quick.picks, providers ?? [])
-  const recent = searching ? [] : recentRows(quick.picks, providers ?? [], current)
+  const pinned = searching ? [] : pinnedRows(quick.picks, shownProviders)
+  const recent = searching ? [] : recentRows(quick.picks, shownProviders, current)
   const typedId = typedModelId(query)
   const typedProviders = typedId && providers ? typedModelProviders(providers, typedId, current?.provider) : []
   const lines = chooserLines(value, providers, defaultLabel ?? emptyLabel ?? t('Not set'))
@@ -150,6 +162,7 @@ function ModelChooserPage({
         on={v === value}
         highlighted={lit}
         pinned={isPinned(quick.picks, { model, provider })}
+        hidden={modelHidden(visibility, provider, model)}
         onPick={() => onPick(v)}
         onPin={() => quick.toggle({ model, provider })}
         rowRef={lit ? node => (highlighted.current = node) : undefined}
@@ -168,93 +181,103 @@ function ModelChooserPage({
       }}
     >
       <div className="model-picker model-sheet model-chooser" role="dialog" aria-label={label}>
-        <ModelCard
-          model={lines.title}
-          provider={current?.model ? current.provider : null}
-          providers={providers}
-          note={value && !chooserListed(value, all) ? t('Saved') : undefined}
-          actions={
-            <button className="staged-remove" aria-label={t('Close')} onClick={onClose}>
-              <Icon name="close" />
-            </button>
-          }
-        >
-          {reasoning ? <ReasoningChoice reasoning={reasoning} /> : null}
-        </ModelCard>
-        <label className="model-search-field">
-          <Icon name="search" />
-          <input
-            ref={search}
-            type="search"
-            placeholder={t('Search providers or models')}
-            aria-label={t('Search providers or models')}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => {
-              if (!matches.length) return
-              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                e.preventDefault()
-                setHighlight(h => Math.min(matches.length - 1, Math.max(0, h + (e.key === 'ArrowDown' ? 1 : -1))))
-              } else if (e.key === 'Enter') {
-                // Return picks the highlighted match, as on the phone.
-                e.preventDefault()
-                const match = matches[Math.min(highlight, matches.length - 1)]
-                if (match) onPick(chooserValue(match.provider, match.model))
+        {editing ? (
+          <ModelVisibilityEditor providers={providers} openProvider={current?.provider} onDone={() => setEditing(false)} />
+        ) : (
+          <>
+            <ModelCard
+              model={lines.title}
+              provider={current?.model ? current.provider : null}
+              providers={providers}
+              note={value && !chooserListed(value, listed) ? t('Saved') : current?.model && modelHidden(visibility, current.provider, current.model) ? t('Hidden') : undefined}
+              actions={
+                <>
+                  <EditModelsButton onClick={() => setEditing(true)} />
+                  <button className="staged-remove" aria-label={t('Close')} onClick={onClose}>
+                    <Icon name="close" />
+                  </button>
+                </>
               }
-            }}
-          />
-        </label>
-        <div className="model-list">
-          {defaultLabel !== null && !searching ? (
-            <section className="model-group-card">
-              <div className={`pick-row-wrap${!value ? ' on' : ''}`}>
-                <button className="pick-row" aria-pressed={!value} onClick={() => onPick('')}>
-                  <span className="pick-row-text">
-                    <span className="pick-row-name">{defaultLabel}</span>
-                  </span>
-                  {!value ? <Icon name="check" className="pick-row-check" /> : null}
-                </button>
-              </div>
-            </section>
-          ) : null}
-          {searching ? (
-            <>
-              {providers && !matches.length ? <div className="model-note">{t('Nothing matches “{query}”.', { query: query.trim() })}</div> : null}
-              {matches.length ? <section className="model-group-card">{matches.map((m, i) => row(m.model, m.provider, true, i))}</section> : null}
-              {typedId && typedProviders.length ? (
-                <TypedIdRow key={typedId} id={typedId}>{typedProviders.map(provider => row(typedId, provider.slug, true))}</TypedIdRow>
-              ) : null}
-            </>
-          ) : (
-            <>
-              {pinned.length || recent.length ? (
-                <section className="model-group-card" aria-label={t('Quick picks')}>
-                  {pinned.length ? <div className="model-group-name">{t('Pinned')}</div> : null}
-                  {pinned.map(p => row(p.model, p.provider, true))}
-                  {recent.length ? <div className="model-group-name">{t('Recent')}</div> : null}
-                  {recent.map(p => row(p.model, p.provider, true))}
+            >
+              {reasoning ? <ReasoningChoice reasoning={reasoning} /> : null}
+            </ModelCard>
+            <label className="model-search-field">
+              <Icon name="search" />
+              <input
+                ref={search}
+                type="search"
+                placeholder={t('Search providers or models')}
+                aria-label={t('Search providers or models')}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (!matches.length) return
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setHighlight(h => Math.min(matches.length - 1, Math.max(0, h + (e.key === 'ArrowDown' ? 1 : -1))))
+                  } else if (e.key === 'Enter') {
+                    // Return picks the highlighted match, as on the phone.
+                    e.preventDefault()
+                    const match = matches[Math.min(highlight, matches.length - 1)]
+                    if (match) onPick(chooserValue(match.provider, match.model))
+                  }
+                }}
+              />
+            </label>
+            <div className="model-list">
+              {defaultLabel !== null && !searching ? (
+                <section className="model-group-card">
+                  <div className={`pick-row-wrap${!value ? ' on' : ''}`}>
+                    <button className="pick-row" aria-pressed={!value} onClick={() => onPick('')}>
+                      <span className="pick-row-text">
+                        <span className="pick-row-name">{defaultLabel}</span>
+                      </span>
+                      {!value ? <Icon name="check" className="pick-row-check" /> : null}
+                    </button>
+                  </div>
                 </section>
               ) : null}
-              {all.map(group => {
-                const opened = toggled[group.slug] ?? providerStartsOpen(group.slug, value, '')
-                return (
-                  <section key={group.slug} className="provider-section">
-                    <ProviderHeader
-                      provider={group.slug}
-                      name={group.name}
-                      row={providers?.find(p => p.slug === group.slug)}
-                      count={group.models.length}
-                      open={opened}
-                      holdsPick={current?.provider === group.slug}
-                      onToggle={() => setToggled(s => ({ ...s, [group.slug]: !opened }))}
-                    />
-                    {opened ? group.models.map(model => row(model, group.slug, false)) : null}
-                  </section>
-                )
-              })}
-            </>
-          )}
-        </div>
+              {searching ? (
+                <>
+                  {providers && !matches.length ? <div className="model-note">{t('Nothing matches “{query}”.', { query: query.trim() })}</div> : null}
+                  {matches.length ? <section className="model-group-card">{matches.map((m, i) => row(m.model, m.provider, true, i))}</section> : null}
+                  {typedId && typedProviders.length ? (
+                    <TypedIdRow key={typedId} id={typedId}>{typedProviders.map(provider => row(typedId, provider.slug, true))}</TypedIdRow>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  {pinned.length || recent.length ? (
+                    <section className="model-group-card" aria-label={t('Quick picks')}>
+                      {pinned.length ? <div className="model-group-name">{t('Pinned')}</div> : null}
+                      {pinned.map(p => row(p.model, p.provider, true))}
+                      {recent.length ? <div className="model-group-name">{t('Recent')}</div> : null}
+                      {recent.map(p => row(p.model, p.provider, true))}
+                    </section>
+                  ) : null}
+                  {!!providers?.length && !all.length ? <div className="model-note">{t('All providers are hidden. Click Edit to restore one.')}</div> : null}
+                  {all.map(group => {
+                    const opened = toggled[group.slug] ?? providerStartsOpen(group.slug, value, '')
+                    return (
+                      <section key={group.slug} className="provider-section">
+                        <ProviderHeader
+                          provider={group.slug}
+                          name={group.name}
+                          row={providers?.find(p => p.slug === group.slug)}
+                          count={group.models.length}
+                          open={opened}
+                          holdsPick={current?.provider === group.slug}
+                          onToggle={() => setToggled(s => ({ ...s, [group.slug]: !opened }))}
+                        />
+                        {opened ? group.models.map(model => row(model, group.slug, false)) : null}
+                      </section>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>,
     document.body

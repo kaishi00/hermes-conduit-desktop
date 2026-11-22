@@ -3471,6 +3471,146 @@ html[data-window='quick'] body {
   font-weight: 650;
 }
 
+/* Edit: text buttons beside the panel's icon buttons, Done in its bar. */
+.model-edit-button {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.model-edit-button:hover {
+  background: var(--surface-hover);
+}
+
+.pick-row-hidden {
+  color: var(--text-3);
+}
+
+/* Edit's providers: the row opens to its models, the pill beside it shows or hides it. */
+.visibility-provider {
+  flex: none;
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.visibility-provider-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+  border-radius: 14px;
+  background: var(--menu);
+  background-image: linear-gradient(var(--surface), var(--surface));
+}
+
+.visibility-provider-head .provider-header {
+  position: static;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+}
+
+.visibility-provider.hidden .provider-header-name,
+.visibility-provider.hidden .provider-logo {
+  opacity: 0.55;
+}
+
+.visibility-pill {
+  flex: none;
+  min-width: 64px;
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.visibility-pill.hidden,
+.visibility-model.hidden .visibility-state {
+  background: var(--surface-hover);
+  color: var(--text-3);
+}
+
+.visibility-all {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 4px 8px;
+}
+
+.visibility-all button,
+.visibility-more {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.visibility-all button:hover,
+.visibility-more:hover,
+.visibility-model:hover {
+  background: var(--surface-hover);
+}
+
+.visibility-more {
+  display: block;
+  width: calc(100% - 8px);
+  margin: 0 4px 4px;
+  padding: 8px;
+}
+
+.visibility-model {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% - 8px);
+  min-height: 36px;
+  margin: 0 4px;
+  padding: 6px 10px 6px 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.visibility-model .pick-row-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.visibility-state {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--success);
+}
+
 /* Fast and YOLO: switches, the whole row a target. */
 .model-switches {
   flex: none;
