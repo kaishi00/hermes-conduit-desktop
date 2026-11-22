@@ -7,6 +7,7 @@
  * to Hermes as the chat's next message, and Hermes' reply goes back on that
  * delegation for the model to tell. Pure, so every message shape is testable.
  */
+import { answerLengthRule, liveStyle, styleInstructions, type LiveStyle } from './liveStyle'
 import { t } from '../../../shared/i18n'
 import { DELEGATED_REQUESTS_RULE } from './liveRequests'
 import { DELEGATED_FIND_CHAT_RULE } from './chatFinder'
@@ -305,8 +306,8 @@ const END_CALL_RULE =
   'When the user says goodbye to you, even at the end of a longer sentence (not a goodbye to someone or something else), or asks to end, hang up or close the call, say a short goodbye, then delegate "End call:": Conduit closes the call. Never say the marker aloud.'
 export const ACKNOWLEDGEMENT =
   'Keep that acknowledgement to a word or a few, in your own words and different each time; "Sure.", "On it." or "Okay, give me a moment." only show the length, so don\'t reuse them word for word. Don\'t keep saying you\'ll ask, tell or check with Hermes: say Hermes is on it at most once on a call, or when the user asks who\'s doing it. If you just told the user what you\'re about to do, that was the acknowledgement: don\'t add another.'
-export const ANSWER_LENGTH =
-  "Say enough to be useful. Answer a real question fully the first time: the answer, then the details that make it useful (the reasons, numbers, names, steps or options that matter, and any caveat), usually several sentences and more when the topic needs it. Don't leave the user asking follow-up questions to get the substance, and don't stop at a headline or end on an offer to say more instead of saying it. This goes for everything you say, Hermes' results included, except a read-back: when the user asks to hear a reply again or in full and Conduit gives it to you to read, read all of it word for word, however long. It is still speech: say it in natural spoken sentences, not lists, headings or Markdown, and never read out URLs. When the detail is on the user's screen, that takes the place of a long spoken answer. Keep it short only for greetings, small talk, acknowledgements and confirmations."
+/** The default answer-length rule; a call takes the one its style picks (answerLengthRule). */
+export const ANSWER_LENGTH = answerLengthRule('standard')
 
 /** The language's English name, so the model reads it whatever it was trained on most. */
 function languageName(code: string): string | null {
@@ -348,11 +349,14 @@ const memoryBlock = (body: string) =>
  * the plugin takes: the memory is cut first, then the persona, so the rules
  * always go whole. Written for the model, not UI copy.
  */
-export function briefing(language?: string, persona = '', memory = '', asked = ''): string {
+export function briefing(language?: string, persona = '', memory = '', asked = '', style: LiveStyle = liveStyle()): string {
   let personaText = persona.replace(/<\/hermes_persona>/gi, '</ hermes_persona>')
   let memoryText = memory.replace(/<\/hermes_memory>/gi, '</ hermes_memory>')
   // The waiting questions go whole, as the rules do: only the persona and memory are cut.
-  const assembled = () => rules + personaBlock(personaText) + memoryBlock(memoryText) + asked + languageRule(language)
+  // The style and the user's instructions go whole too, after the call's blocks and before the language rule.
+  const head = rules(answerLengthRule(style.answerLength))
+  const tail = asked + styleInstructions(style) + languageRule(language)
+  const assembled = () => head + personaBlock(personaText) + memoryBlock(memoryText) + tail
   let text = assembled()
   let excess = codePoints(text) - MAX_BRIEFING_CHARACTERS
   if (excess > 0 && memoryText) {
@@ -367,8 +371,8 @@ export function briefing(language?: string, persona = '', memory = '', asked = '
   return text
 }
 
-const rules = `[Conduit voice app rules. You are the voice of the user's Hermes agent, speaking with them through the Conduit app on their computer, in a call attached to the chat open on their screen. This is speech, not text: talk naturally, in full spoken sentences.
-${ANSWER_LENGTH} This replaces any other guidance on reply length in these instructions; it doesn't change what you delegate.
+const rules = (answerLength: string) => `[Conduit voice app rules. You are the voice of the user's Hermes agent, speaking with them through the Conduit app on their computer, in a call attached to the chat open on their screen. This is speech, not text: talk naturally, in full spoken sentences.
+${answerLength} This replaces any other guidance on reply length in these instructions; it doesn't change what you delegate.
 Answer yourself, without delegating: greetings and small talk, repeating or rephrasing something already said on this call, and questions you can fully answer from this conversation, from the context Conduit sends you, or from settled general knowledge. Delegate real work to the client: anything to do, check, find, send, change or remember; current information (news, weather, prices, anything that may have changed); anything about their files, code, systems, accounts or earlier work that isn't in your context; and complex reasoning or research. This takes precedence over any other delegation policy in these instructions. Each delegation goes to Hermes as the chat's next message, so Hermes has the chat's earlier turns; while Hermes is still answering one, the next waits and goes once it's done. Never say something was done, sent, saved or changed unless Conduit or Hermes told you it was. Before delegating, acknowledge it out loud. ${ACKNOWLEDGEMENT} Then keep talking; Hermes' reply arrives later on that delegation. When it arrives, tell the user what Hermes found or did, with the details that matter.
 ${READ_BACK_RULE}
 ${DELEGATED_REQUESTS_RULE}
