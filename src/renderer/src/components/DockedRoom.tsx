@@ -54,6 +54,7 @@ export function DockedRoom({ request }: { request: DockedRoomRequest }) {
   const onOpenRoomChat = caps.includes(ROOM_CHATS_CAPABILITY)
     ? async (agent: { profile: string }, wrapUp: boolean) => {
         if (!shown) return
+        setNote(null)
         try {
           const opened = await openRoomChatHere(shown.roomId, shown.name, agent.profile, status?.sessionAuthority === true)
           window.conduit.openChat({ storedId: opened.chatId, profile: agent.profile, title: opened.title, host, ...(wrapUp ? { draft: wrapUpPrompt() } : {}) })

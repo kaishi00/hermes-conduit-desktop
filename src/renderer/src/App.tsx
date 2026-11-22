@@ -1868,15 +1868,20 @@ function Shell({
   useEffect(() => {
     if (openRoom || openCopy) setDockedRoom(null)
   }, [openRoom, openCopy])
+  // The docked room as its dashboard lists it now, for its name.
+  const dockedRoomListed = useMemo(
+    () => (dockedRoom ? [...groupChats.before, ...groupChats.after].find(o => o.host === dockedRoom.host && (o.kind === 'room' ? o.room.roomId : o.copy.id) === dockedRoom.id) : undefined),
+    [dockedRoom, groupChats.before, groupChats.after]
+  )
   useEffect(() => {
     if (!dockedRoom) return
-    if (!keptHosts.some(h => h.url === dockedRoom.host)) return setDockedRoom(null)
-    const listed = [...groupChats.before, ...groupChats.after].some(
-      o => o.host === dockedRoom.host && (o.kind === 'room' ? o.room.roomId : o.copy.id) === dockedRoom.id
-    )
     // Its list is read while the bots sidebar shows, which the room pane does; an unread host's list holds nothing yet.
-    if (!listed && keptRooms.has(dockedRoom.host)) setDockedRoom(null)
-  }, [dockedRoom, keptHosts, groupChats.before, groupChats.after, keptRooms])
+    const gone = !keptHosts.some(h => h.url === dockedRoom.host) || (!dockedRoomListed && keptRooms.has(dockedRoom.host))
+    if (!gone) return
+    setDockedRoom(null)
+    // Group chats comes back, as when a room here is deleted, rather than an empty room pane.
+    if (!openRoom && !openCopy) setSection(current => (current === 'room' ? 'bots' : current))
+  }, [dockedRoom, dockedRoomListed, keptHosts, keptRooms, openRoom, openCopy])
   // A group chat opened on another host: open it here once its rooms or copies are read.
   useEffect(() => {
     if (!connected) return
@@ -2876,7 +2881,7 @@ function Shell({
             }
           />
         ) : section === 'room' && dockedRoom && !openRoom && !shownCopy ? (
-          <main className="docked-chat docked-room" aria-label={dockedRoom.title}>
+          <main className="docked-chat docked-room" aria-label={dockedRoomListed ? (dockedRoomListed.kind === 'room' ? dockedRoomListed.room.name : copyRoom(dockedRoomListed.copy).name) : dockedRoom.title}>
             <DockedRoomFrame key={`${dockedRoom.host}\u0000${dockedRoom.kind}\u0000${dockedRoom.id}`} room={dockedRoom} />
           </main>
         ) : section === 'room' && openRoom ? (
