@@ -7,7 +7,7 @@ talks to the same Hermes dashboard and the same
 [Conduit plugin](https://github.com/kaishi00/hermes-conduit-notifier) the
 phone does.
 
-**Status: early prototype.** Sign in (or pair with the phone by QR code),
+**Status: beta (1.0.0-beta), heading for 1.0.** Sign in (or pair with the phone by QR code),
 chats and quick ask (with pictures and files: Attach, paste or drop them, and a long
 paste goes as a text file, as on the phone), Needs you (approvals and
 questions), Bots home and group chats (files too, on a Hermes that keeps room attachments),
