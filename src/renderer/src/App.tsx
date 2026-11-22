@@ -504,7 +504,7 @@ function Shell({
     else if (action === 'stop') {
       if (section === 'chats' && running && !dockedRef.current) void stop()
     } else if (action === 'toggle-sidebar') {
-      if (section === 'chats') hideList(!listHidden)
+      if (section === 'chats' || section === 'room' || section === 'bots') hideList(!listHidden)
       else {
         setSection('chats')
         hideList(false)
@@ -992,7 +992,7 @@ function Shell({
   const columnShown = section === 'chats' && !listHidden && !projectsOpen && !botsSideShown && columnTiles > 1
   const listColumn = columnShown ? PROFILE_COLUMN_WIDTH : 0
   const listWidth = shownListWidth(listLive ?? listStored, windowWidth - listColumn)
-  const listTaken = section === 'chats' && listHidden ? 0 : (listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28))) + listColumn
+  const listTaken = (section === 'chats' || section === 'room' || section === 'bots') && listHidden ? 0 : (listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28))) + listColumn
   const panelWidth = shownPanelWidth(panelLive ?? panelStored, windowWidth, listTaken)
   // A chat beside the open one: only where both fit, else the pane hides until the window widens.
   const [beside, setBeside] = useState<BesideChat | null>(null)
@@ -2255,7 +2255,7 @@ function Shell({
         }
       >
         <nav className="rail" aria-label={t('Sections')}>
-          {section === 'chats' && listHidden ? (
+          {(section === 'chats' || section === 'room' || section === 'bots') && listHidden ? (
             <button
               className="railbtn rail-show-list"
               aria-label={t('Show Sidebar')}
@@ -2820,11 +2820,12 @@ function Shell({
             ) : null}
           </KeptPane>
         ) : null}
-        {/* A group chat, New Bot and Edit Bot keep the bots beside them, as an open Bot Chat does. */}
-        {section === 'room' || section === 'bots' ? (
+        {/* A group chat, New Bot and Edit Bot keep the bots beside them, as an open Bot Chat does, hidden and shown with it (its « and the rail's »). */}
+        {(section === 'room' || section === 'bots') && !listHidden ? (
           <BotsHome
             {...botsHomeProps}
             side={{ openRoomId: section === 'room' ? (shownCopy?.roomId ?? openRoom?.roomId ?? dockedRoom?.roomId) : undefined, openHost: section === 'room' && !shownCopy && !openRoom ? dockedRoom?.host : undefined, openProfile: editingBot?.name }}
+            onHide={() => hideList(true)}
           />
         ) : null}
         {section === 'chats' ? null : section === 'bots' && newBot ? (
