@@ -9,7 +9,7 @@ import { autoUpdater } from 'electron-updater'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { writeFileAtomic } from './atomicWrite'
-import { CHECK_EVERY_MS, FIRST_CHECK_MS, updatesOff, type UpdateState } from '../shared/updates'
+import { CHECK_EVERY_MS, FIRST_CHECK_MS, mayCheck, mayDownload, nextUpdateState, updatesOff, type UpdateEvent, type UpdateState } from '../shared/updates'
 
 const file = () => join(app.getPath('userData'), 'updates.json')
 
@@ -25,8 +25,8 @@ let state: UpdateState = { current: '', off: null, auto: true, phase: 'idle' }
 let listener: ((state: UpdateState) => void) | null = null
 let timer: NodeJS.Timeout | null = null
 
-function set(next: Partial<UpdateState>): void {
-  state = { ...state, ...next }
+function apply(event: UpdateEvent): void {
+  state = nextUpdateState(state, event, Date.now())
   listener?.(state)
 }
 
@@ -49,36 +49,36 @@ export function startUpdates(changed: (state: UpdateState) => void): void {
   autoUpdater.autoInstallOnAppQuit = true
   // electron-updater's own log goes to the console, where a packaged app keeps nothing.
   autoUpdater.logger = null
-  autoUpdater.on('checking-for-update', () => set({ phase: 'checking' }))
-  autoUpdater.on('update-not-available', () => set({ phase: 'none', version: undefined, percent: undefined, checkedAt: Date.now() }))
-  autoUpdater.on('update-available', info => set({ phase: state.auto ? 'downloading' : 'available', version: info.version, percent: 0, checkedAt: Date.now() }))
-  autoUpdater.on('download-progress', progress => set({ phase: 'downloading', percent: Math.round(progress.percent) }))
-  autoUpdater.on('update-downloaded', info => set({ phase: 'ready', version: info.version, percent: 100 }))
-  // A failed check or download (offline, GitHub down) shows in Settings and is tried again at the next check.
-  autoUpdater.on('error', () => set({ phase: 'error', checkedAt: Date.now() }))
+  autoUpdater.on('checking-for-update', () => apply({ kind: 'checking' }))
+  autoUpdater.on('update-not-available', () => apply({ kind: 'none' }))
+  autoUpdater.on('update-available', info => apply({ kind: 'found', version: info.version }))
+  autoUpdater.on('download-progress', progress => apply({ kind: 'progress', percent: progress.percent }))
+  autoUpdater.on('update-downloaded', info => apply({ kind: 'downloaded', version: info.version }))
+  // A failed check or download (offline, GitHub down) shows in Settings and is tried again at the next check or with Try Again.
+  autoUpdater.on('error', () => apply({ kind: 'failed' }))
   setTimeout(() => void checkForUpdates(), FIRST_CHECK_MS)
   timer = setInterval(() => void checkForUpdates(), CHECK_EVERY_MS)
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
   // A downloaded update stays put until it's installed; a check under way isn't doubled.
-  if (state.off || state.phase === 'ready' || state.phase === 'checking' || state.phase === 'downloading') return state
+  if (!mayCheck(state)) return state
   try {
     await autoUpdater.checkForUpdates()
   } catch {
-    set({ phase: 'error', checkedAt: Date.now() })
+    if (state.phase === 'checking') apply({ kind: 'failed' })
   }
   return state
 }
 
-/** Settings' Download button, when updates don't download by themselves. */
+/** Settings' Download button, when updates don't download by themselves, and Try Again after a failed download. */
 export async function downloadUpdate(): Promise<void> {
-  if (state.off || state.phase !== 'available') return
-  set({ phase: 'downloading', percent: 0 })
+  if (!mayDownload(state)) return
+  apply({ kind: 'download' })
   try {
     await autoUpdater.downloadUpdate()
   } catch {
-    set({ phase: 'error' })
+    if (state.phase === 'downloading') apply({ kind: 'failed' })
   }
 }
 
@@ -96,7 +96,7 @@ export function setAutoUpdate(auto: boolean): UpdateState {
     // Not saved: it still applies until Conduit quits.
   }
   autoUpdater.autoDownload = auto
-  set({ auto })
+  apply({ kind: 'auto', on: auto })
   if (auto && state.phase === 'available') void downloadUpdate()
   return state
 }

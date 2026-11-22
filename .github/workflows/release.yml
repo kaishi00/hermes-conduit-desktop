@@ -92,8 +92,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLATFORM: ${{ matrix.platform }}
-          # A tag publishes, and a manual run from main with publish; any other run keeps its packages as artifacts.
-          PUBLISH: ${{ (startsWith(github.ref, 'refs/tags/') || (inputs.publish && github.ref == 'refs/heads/main')) && 'always' || 'never' }}
+          # A pushed tag publishes, and a manual run from main with publish; any other run (a manual one on a tag too) keeps its packages as artifacts.
+          PUBLISH: ${{ ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (inputs.publish && github.ref == 'refs/heads/main')) && 'always' || 'never' }}
           # Mac
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -127,7 +127,7 @@ jobs:
           pnpm exec electron-builder --"$PLATFORM" --publish "$PUBLISH" "${args[@]}"
 
       - uses: actions/upload-artifact@v4
-        if: ${{ !(startsWith(github.ref, 'refs/tags/') || (inputs.publish && github.ref == 'refs/heads/main')) }}
+        if: ${{ !((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (inputs.publish && github.ref == 'refs/heads/main')) }}
         with:
           name: conduit-${{ matrix.platform }}
           path: |

@@ -44488,5 +44488,20 @@
     "tr": "Conduit açıldığında ve birkaç saatte bir yeni sürümü denetler, sonra bir sonraki çıkışta yükler.",
     "zh-Hans": "Conduit 会在打开时和每隔几小时检查新版本，并在你下次退出时安装。",
     "zh-Hant": "Conduit 會在開啟時和每隔幾小時檢查新版本，並在你下次結束時安裝。"
+  },
+  "Couldn’t download version {version}": {
+    "de": "Version {version} konnte nicht geladen werden",
+    "es": "No se pudo descargar la versión {version}",
+    "fr": "Impossible de télécharger la version {version}",
+    "id": "Tidak dapat mengunduh versi {version}",
+    "it": "Impossibile scaricare la versione {version}",
+    "ja": "バージョン {version} をダウンロードできませんでした",
+    "ko": "버전 {version}을(를) 다운로드할 수 없습니다",
+    "pl": "Nie udało się pobrać wersji {version}",
+    "pt-BR": "Não foi possível baixar a versão {version}",
+    "ru": "Не удалось загрузить версию {version}",
+    "tr": "{version} sürümü indirilemedi",
+    "zh-Hans": "无法下载版本 {version}",
+    "zh-Hant": "無法下載版本 {version}"
   }
 }

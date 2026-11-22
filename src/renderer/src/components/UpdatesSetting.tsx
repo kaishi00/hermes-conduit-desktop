@@ -29,7 +29,9 @@ export function UpdatesSetting() {
               ? t('Version {version} is ready to install', { version })
               : state.phase === 'error'
                 ? t("Couldn't check for updates")
-                : null
+                : state.phase === 'download-failed'
+                  ? t('Couldn’t download version {version}', { version })
+                  : null
   return (
     <>
       <dt>{t('Updates')}</dt>
@@ -49,23 +51,23 @@ export function UpdatesSetting() {
                 <button className="primary" onClick={() => window.conduit.updates.install()}>
                   {t('Restart to Update')}
                 </button>
-              ) : state.phase === 'available' ? (
+              ) : state.phase === 'available' || state.phase === 'download-failed' ? (
                 <button className="primary" onClick={() => void window.conduit.updates.download()}>
-                  {t('Download')}
+                  {state.phase === 'download-failed' ? t('Try Again') : t('Download')}
                 </button>
               ) : (
-                <button disabled={state.phase === 'checking' || state.phase === 'downloading'} onClick={() => void window.conduit.updates.check().then(setState)}>
+                <button disabled={state.phase === 'checking' || state.phase === 'downloading'} onClick={() => void window.conduit.updates.check().then(setState, () => undefined)}>
                   {state.phase === 'error' ? t('Try Again') : t('Check for Updates')}
                 </button>
               )}
-              {version && (state.phase === 'available' || state.phase === 'downloading' || state.phase === 'ready') ? (
+              {version && (state.phase === 'available' || state.phase === 'downloading' || state.phase === 'ready' || state.phase === 'download-failed') ? (
                 <a href={releaseUrl(version)} target="_blank" rel="noreferrer">
                   {t('What’s new in {version}', { version })}
                 </a>
               ) : null}
             </div>
             <label className="toggle">
-              <input type="checkbox" checked={state.auto} onChange={e => void window.conduit.updates.setAuto(e.target.checked).then(setState)} />
+              <input type="checkbox" checked={state.auto} onChange={e => void window.conduit.updates.setAuto(e.target.checked).then(setState, () => undefined)} />
               {t('Install updates automatically')}
             </label>
             <p className="meta">{t('Conduit checks for a new version when it opens and every few hours, then installs it the next time you quit.')}</p>
