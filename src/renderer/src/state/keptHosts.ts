@@ -236,6 +236,9 @@ export type OtherChatRow = ChatRow & { host: string }
 /** How often the other hosts' chats are read while the window is on screen, at most (the phone's minute). */
 export const KEPT_CHATS_POLL_MS = 60_000
 
+/** How long a kept host's chat changes settle before its chats are read: a burst is one read, as on the phone. */
+export const KEPT_CHATS_CHANGE_WAIT_MS = 2_000
+
 /** The newest chats read from each of another host's profiles, as on the phone. */
 export const KEPT_CHATS_PER_PROFILE = 50
 
@@ -260,8 +263,9 @@ export function mergeKeptChats(host: string, pages: readonly unknown[]): OtherCh
 /**
  * Every live kept host's newest chats, 50 from each of its profiles as on
  * the phone (one page across them while its profiles can't be read), read
- * once a minute while the window is on screen. A failed read keeps what the
- * host showed; a host let go shows nothing more.
+ * once a minute while the window is on screen, and a host's alone once its own
+ * `sessions.changed` settles. A failed read keeps what the host showed; a host
+ * let go shows nothing more.
  */
 export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatRow[] {
   const [rows, setRows] = useState<OtherChatRow[]>([])
@@ -290,10 +294,10 @@ export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatR
       if (read) profiles.current.set(url, { names: read, at: Date.now() })
       return read ?? last?.names ?? null
     }
-    const read = async () => {
+    const read = async (only?: string) => {
       if (document.hidden) return
       await Promise.all(
-        urls.map(async url => {
+        urls.filter(url => !only || url === only).map(async url => {
           const names = await namesOf(url)
           const paths = names ? names.map(keptChatsPath) : [CHAT_LIST_PATH]
           const outcomes = await Promise.all(paths.map(path => window.conduit.keptHttp(url, path)))
@@ -310,10 +314,23 @@ export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatR
       if (!document.hidden) void read()
     }
     document.addEventListener('visibilitychange', onVisible)
+    const changed = new Map<string, ReturnType<typeof setTimeout>>()
+    const offChanged = window.conduit.onKeptChatsChanged?.(url => {
+      if (!urls.includes(url) || changed.has(url)) return
+      changed.set(
+        url,
+        setTimeout(() => {
+          changed.delete(url)
+          if (!stopped) void read(url)
+        }, KEPT_CHATS_CHANGE_WAIT_MS)
+      )
+    })
     return () => {
       stopped = true
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisible)
+      offChanged?.()
+      for (const wait of changed.values()) clearTimeout(wait)
     }
   }, [live])
 

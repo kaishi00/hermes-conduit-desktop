@@ -3,7 +3,7 @@ import { act, createElement, useLayoutEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, settle } from './hookHarness'
-import { keptWorkKey, useKeptRooms, useKeptWork, type OtherBot } from '../src/renderer/src/state/keptHosts'
+import { KEPT_CHATS_CHANGE_WAIT_MS, keptWorkKey, useKeptChats, useKeptRooms, useKeptWork, type OtherBot } from '../src/renderer/src/state/keptHosts'
 import { COPIES_PATH } from '../src/renderer/src/state/roomCopies'
 import { PREFS_PATH } from '../src/renderer/src/state/pinnedOrder'
 import { useShownAgain } from '../src/renderer/src/state/keptScroll'
@@ -108,5 +108,48 @@ describe('a kept pane shown again (desktop#256)', () => {
     act(() => root.render(createElement(Pane, { away: false })))
     expect(log).toEqual(['shown', 'child drew'])
     act(() => root.unmount())
+  })
+})
+
+describe("a kept host's own chat changes", () => {
+  it('read its chats once they settle, not on the minute', async () => {
+    vi.useFakeTimers()
+    let changed: ((url: string) => void) | undefined
+    const chatReads = () => paths.filter(p => p.includes('/api/profiles/sessions')).length
+    const conduit = (window as unknown as { conduit: Record<string, unknown> }).conduit
+    const http = conduit.keptHttp as (url: string, path: string) => Promise<Outcome>
+    conduit.keptHttp = async (url: string, path: string): Promise<Outcome> => {
+      if (path === '/api/profiles') return { ok: true, result: { profiles: [{ name: 'default' }] } }
+      if (path.includes('/api/profiles/sessions')) {
+        paths.push(path)
+        return { ok: true, result: { sessions: [{ id: 'made-there', title: 'Made there', message_count: 1, last_active: 2 }] } }
+      }
+      return http(url, path)
+    }
+    conduit.onKeptChatsChanged = (listener: (url: string) => void) => {
+      changed = listener
+      return () => (changed = undefined)
+    }
+    const hook = renderHook(({ kept }: { kept: KeptHost[] }) => useKeptChats(kept, true), { kept: live })
+    await settle()
+    expect(chatReads()).toBe(1)
+
+    // A burst from it is one read, after the wait.
+    changed?.(HOST)
+    changed?.(HOST)
+    changed?.('https://not-kept.example')
+    await settle()
+    expect(chatReads()).toBe(1)
+    await act(async () => vi.advanceTimersByTime(KEPT_CHATS_CHANGE_WAIT_MS))
+    await settle()
+    expect(chatReads()).toBe(2)
+    expect(hook.result().map(r => r.id)).toContain('made-there')
+
+    // Let go, nothing waits on it.
+    changed?.(HOST)
+    hook.unmount()
+    expect(changed).toBeUndefined()
+    await act(async () => vi.advanceTimersByTime(KEPT_CHATS_CHANGE_WAIT_MS))
+    expect(chatReads()).toBe(2)
   })
 })

@@ -264,6 +264,8 @@ export interface ConduitApi {
   /** Combine Dashboards: the group's hosts kept beside the open one, and how each is doing. */
   keptHosts(): Promise<KeptHost[]>
   onKeptHosts(listener: (hosts: KeptHost[]) => void): () => void
+  /** A kept host's own `sessions.changed`: a chat made, renamed or deleted there. */
+  onKeptChatsChanged(listener: (url: string) => void): () => void
   setCombined(url: string, on: boolean): Promise<void>
   /** Settings' Rename for a saved host: '' goes back to the automatic name. */
   renameHost(url: string, name: string): Promise<void>
@@ -454,6 +456,7 @@ export const IPC = {
   status: 'conduit:status',
   keptHosts: 'conduit:kept-hosts',
   keptHostsChanged: 'conduit:kept-hosts-changed',
+  keptChatsChanged: 'conduit:kept-chats-changed',
   setCombined: 'conduit:set-combined',
   renameHost: 'conduit:rename-host',
   keptHttp: 'conduit:kept-http',
