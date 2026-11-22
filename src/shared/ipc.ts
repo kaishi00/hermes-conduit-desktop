@@ -334,10 +334,11 @@ export interface ConduitApi {
   /** Whether the window this page is drawn in is in front: a docked chat's main window, else its own. */
   pageWatched(): Promise<boolean>
   /**
-   * A docked chat's page tells the main window's pane, straight through its frame: 'moved' when the chat
-   * opened in a window of its own (the pane closes), 'ask' for whether Chats is on screen.
+   * A docked page tells the main window's pane, straight through its frame: 'moved' when its chat opened in
+   * a window of its own, 'closed' when its room copy was deleted (either closes the pane), 'ask' for whether
+   * Chats is on screen.
    */
-  dockedToPane(message: 'moved' | 'ask'): void
+  dockedToPane(message: 'moved' | 'closed' | 'ask'): void
   /** Closes these chats' windows, or every chat window. */
   closeChatWindows(ids?: string[]): void
   /** The chats that have a window of their own, now and whenever that changes. */

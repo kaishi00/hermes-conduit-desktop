@@ -17,12 +17,13 @@ export const PROFILE_COLUMN_WIDTH = 52
  * holds them. It scrolls on its own, so any number of profiles costs the
  * same. A face carries its profile's unread dot and the count waiting on
  * you; a moving picture plays here, never with Reduce Motion (Eric,
- * 2026-11-21). Another dashboard's face switches there and shows that
- * profile's chats.
+ * 2026-11-21). Another dashboard's face shows that profile's chats, read
+ * through its kept connection, with no switch.
  */
 export function ProfileColumn({
   tiles,
   profile,
+  otherProfile = null,
   onProfile,
   onOther,
   badgeFor,
@@ -33,8 +34,10 @@ export function ProfileColumn({
 }: {
   tiles: readonly MixedTile[]
   profile: string | null
+  /** Another dashboard's profile the list shows, picked by its face. */
+  otherProfile?: { host: string; name: string } | null
   onProfile: (profile: string | null) => void
-  /** Another dashboard's profile: a switch there, landing on it. */
+  /** Another dashboard's profile: the list shows its chats, with no switch. */
   onOther?: (tile: MixedTile) => void
   badgeFor?: (tile: MixedTile) => HostBadge | null
   /** Whether a profile has unread chats. */
@@ -65,14 +68,14 @@ export function ProfileColumn({
   const column = useRef<HTMLDivElement>(null)
   useEffect(() => {
     column.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
-  }, [profile])
+  }, [profile, otherProfile])
   return (
     <>
       <div className="profile-column" role="tablist" aria-orientation="vertical" aria-label={t('Profiles')} ref={column}>
         <button
           role="tab"
           className="profile-column-all"
-          aria-selected={profile === null}
+          aria-selected={profile === null && !otherProfile}
           title={onShowInAll ? t('Right-click to choose which profiles All shows') : t('All')}
           onClick={() => (profile === null && onShowInAll ? onShowInAll() : onProfile(null))}
           onContextMenu={
@@ -89,7 +92,7 @@ export function ProfileColumn({
         <span className="profile-column-rule" aria-hidden="true" />
         {tiles.map(tile => {
           const { bot } = tile
-          const chosen = tile.own && same(profile, bot.name)
+          const chosen = tile.own ? same(profile, bot.name) : !!otherProfile && otherProfile.host === tile.host && same(otherProfile.name, bot.name)
           const badge = badgeFor?.(tile) ?? null
           const waiting = waits(tile)
           const fresh = !waiting && unread(tile)
@@ -101,7 +104,7 @@ export function ProfileColumn({
               aria-selected={chosen}
               aria-label={badge ? `${bot.title}, ${badge.name}` : bot.title}
               title={badge ? `${bot.title} · ${badge.name}` : bot.title}
-              onClick={() => (tile.own ? onProfile(chosen ? null : bot.name) : onOther?.(tile))}
+              onClick={() => (tile.own || chosen ? onProfile(chosen ? null : bot.name) : onOther?.(tile))}
               onContextMenu={
                 tile.own && onEditProfile
                   ? e => {

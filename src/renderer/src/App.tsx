@@ -134,7 +134,6 @@ import { CombineDashboardsSetting, HostBadgeMark } from './components/CombinedDa
 import {
   hostBadge,
   keptStateLabel,
-  openBotAfterSwitch,
   showProfileAfterSwitch,
   type HostBadge,
   openRoomAfterSwitch,
@@ -1486,6 +1485,8 @@ function Shell({
     [roomDrafts.refresh, groupRooms.refresh]
   )
   const [openRoom, setOpenRoom] = useState<Room | null>(null)
+  /** Another combined dashboard's profile the Chats list shows, picked by its face in the column. */
+  const [otherProfile, setOtherProfile] = useState<{ host: string; name: string } | null>(null)
   /** Another combined dashboard's group chat, open in place in the room pane (a frame on its kept connection). */
   const [dockedRoom, setDockedRoom] = useState<(DockedRoomRequest & { roomId: string }) | null>(null)
   /** The open room when someone else hosts it: read from this Hermes' copy, by its Link and room. */
@@ -1731,11 +1732,14 @@ function Shell({
 
   const openWaiting = useCallback(
     (row: WaitingRow) => {
+      // A wait in a room this Hermes hosts opens the room, as the phone's does.
+      const room = row.roomId ? groupRooms.rooms?.find(r => r.roomId === row.roomId) : undefined
+      if (room) return showRoom(room)
       const known = (list.rows ?? []).find(r => row.sessionIds.includes(r.id))
       setSelected({ id: known?.id ?? row.sessionIds[0] ?? null, profile: known?.profile ?? row.profile, title: known?.title ?? row.title })
       setSection('chats')
     },
-    [list.rows]
+    [list.rows, groupRooms.rooms, showRoom]
   )
 
   /**
@@ -1769,13 +1773,22 @@ function Shell({
   openDockedRef.current = openDocked
   const openOtherWaiting = useCallback(
     (row: KeptWaitingRow) => {
+      // A wait in a room that dashboard hosts opens the room in place, as the phone's does, while its list holds it.
+      const room = row.roomId ? [...groupChats.before, ...groupChats.after].find(o => o.host === row.host && o.kind === 'room' && o.room.roomId === row.roomId) : undefined
+      if (room && room.kind === 'room') {
+        setOpenRoom(null)
+        setOpenCopy(null)
+        setDockedRoom({ host: row.host, kind: 'room', id: room.room.roomId, roomId: room.room.roomId, title: room.room.name })
+        setSection('room')
+        return
+      }
       // The chat as that dashboard's list names it, when it's listed.
       const known = otherChats.find(r => r.host === row.host && row.sessionIds.includes(r.id))
       const id = known?.id ?? row.sessionIds[0]
       if (!id) return
       openDocked({ host: row.host, id, profile: known?.profile ?? row.profile, title: known?.title ?? row.title })
     },
-    [otherChats, openDocked]
+    [otherChats, openDocked, groupChats.before, groupChats.after]
   )
   const statusUrl = status.url ?? ''
   const openOtherChat = useCallback(
@@ -1804,26 +1817,49 @@ function Shell({
     newBotAfterSwitch(url, bot)
     void window.conduit.switchHost(url)
   }, [])
-  const openOtherBot = useCallback(async (other: OtherBot) => {
-    // Its Bot Chat opens in place; a bot with none yet is made on its own dashboard, after a switch.
-    if (other.bot.botChatId) {
-      openDocked({ host: other.host, id: other.bot.botChatId, profile: other.bot.name, title: other.bot.title, author: other.bot.title, botChat: true })
-      return
-    }
-    if (!(await switchEndingCall(hostName(other.host)))) return
-    openBotAfterSwitch(other)
-    void window.conduit.switchHost(other.host)
+  const openOtherBot = useCallback((other: OtherBot) => {
+    // Its Bot Chat opens in place; a bot with none yet starts one there, made on its own dashboard by the first send.
+    openDocked(
+      other.bot.botChatId
+        ? { host: other.host, id: other.bot.botChatId, profile: other.bot.name, title: other.bot.title, author: other.bot.title, botChat: true }
+        : { host: other.host, id: `new-${Date.now()}`, fresh: true, profile: other.bot.name, title: other.bot.title, author: other.bot.title, botChat: true }
+    )
   }, [openDocked])
   useEffect(() => {
     const bot = takeBotAfterSwitch(statusUrl, roster.bots)
     if (bot) openBot(bot)
   }, [statusUrl, roster.bots, openBot])
-  // Another dashboard's face in the chat list's column: switch there and show that profile's chats.
-  const showOtherProfile = useCallback(async (tile: MixedTile) => {
-    if (!(await switchEndingCall(hostName(tile.host)))) return
-    showProfileAfterSwitch({ host: tile.host, bot: tile.bot })
-    void window.conduit.switchHost(tile.host)
-  }, [])
+  /**
+   * Another dashboard's face in the chat list's column: the list shows that profile's chats, read through its
+   * kept connection, with no switch, and its newest chat (its Bot Chat when that's newer) opens docked, as this
+   * dashboard's faces open theirs.
+   */
+  const showOtherProfile = useCallback(
+    (tile: MixedTile) => {
+      const same = (name: string | undefined) => (name ?? 'default').toLowerCase() === tile.bot.name.toLowerCase()
+      setChatProfile(null)
+      setOtherProfile({ host: tile.host, name: tile.bot.name })
+      const newest = otherChats.filter(r => r.host === tile.host && same(r.profile)).sort((a, b) => (b.activeAt ?? 0) - (a.activeAt ?? 0))[0]
+      if (tile.bot.botChatId && (tile.bot.lastActive ?? 0) >= (newest?.activeAt ?? 0)) return openOtherBot({ host: tile.host, bot: tile.bot })
+      if (newest) openDocked({ host: newest.host, id: newest.id, profile: newest.profile, title: newest.title })
+    },
+    [otherChats, openOtherBot, openDocked]
+  )
+  // This dashboard's profile picked anywhere (a face, Settings' dropdown) stops showing the far one.
+  useEffect(() => {
+    if (chatProfile) setOtherProfile(null)
+  }, [chatProfile])
+  // A far face stops showing when its dashboard is no longer kept.
+  useEffect(() => {
+    if (otherProfile && !keptHosts.some(h => h.url === otherProfile.host)) setOtherProfile(null)
+  }, [otherProfile, keptHosts])
+  const pickProfile = useCallback(
+    (next: string | null) => {
+      setOtherProfile(null)
+      chooseProfile(next)
+    },
+    [chooseProfile]
+  )
   // Settings' profile dropdown: this dashboard's profile is picked as the Chats list's faces pick it, staying
   // in Settings; another dashboard's switches there and comes back to Settings on that profile.
   const pickSettingsProfile = useCallback(
@@ -1868,6 +1904,11 @@ function Shell({
   useEffect(() => {
     if (openRoom || openCopy) setDockedRoom(null)
   }, [openRoom, openCopy])
+  // Its copy deleted from the docked room: Group chats comes back, as when a copy here is deleted.
+  const closeDockedRoom = useCallback(() => {
+    setDockedRoom(null)
+    setSection(current => (current === 'room' ? 'bots' : current))
+  }, [])
   // The docked room as its dashboard lists it now, for its name.
   const dockedRoomListed = useMemo(
     () => (dockedRoom ? [...groupChats.before, ...groupChats.after].find(o => o.host === dockedRoom.host && (o.kind === 'room' ? o.room.roomId : o.copy.id) === dockedRoom.id) : undefined),
@@ -2320,7 +2361,8 @@ function Shell({
                   onNewChat={newChat}
                   bots={roster.bots}
                   profile={chatProfile}
-                  onProfile={chooseProfile}
+                  onProfile={pickProfile}
+                  otherProfile={otherProfile}
                   onEditProfile={connected ? editProfile : undefined}
                   profileTiles={profileTiles}
                   tileBadge={tileBadge}
@@ -2882,7 +2924,7 @@ function Shell({
           />
         ) : section === 'room' && dockedRoom && !openRoom && !shownCopy ? (
           <main className="docked-chat docked-room" aria-label={dockedRoomListed ? (dockedRoomListed.kind === 'room' ? dockedRoomListed.room.name : copyRoom(dockedRoomListed.copy).name) : dockedRoom.title}>
-            <DockedRoomFrame key={`${dockedRoom.host}\u0000${dockedRoom.kind}\u0000${dockedRoom.id}`} room={dockedRoom} />
+            <DockedRoomFrame key={`${dockedRoom.host}\u0000${dockedRoom.kind}\u0000${dockedRoom.id}`} room={dockedRoom} onClosed={closeDockedRoom} />
           </main>
         ) : section === 'room' && openRoom ? (
           <RoomView

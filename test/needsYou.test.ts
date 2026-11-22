@@ -69,6 +69,11 @@ describe('the waiting list', () => {
     ])
   })
 
+  it('keeps the hosted room a wait is in, so its row opens the room', () => {
+    const rows = waitingFromResponse({ waiting: [{ id: 'w2', kind: 'approval', session_ids: ['s9'], title: 'Launch', room: ' room-7 ' }, { id: 'w3', kind: 'approval', session_ids: ['s8'], room: '' }] })
+    expect(rows.map(r => r.roomId)).toEqual(['room-7', undefined])
+  })
+
   it('lists a question that waits past its turn as a row that opens the chat that asked', () => {
     const rows = waitingFromResponse(
       {

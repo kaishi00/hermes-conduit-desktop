@@ -35,6 +35,8 @@ export interface WaitingRow {
   /** When the wait began, in milliseconds. */
   at: number
   profile?: string
+  /** A wait in a group room this Hermes hosts: the room, which its row opens (the phone's NeedsYouItem.roomID). */
+  roomId?: string
   /** A question that waits past its turn: its card, drawn in the chat that asked. */
   question?: WorkQuestion
 }
@@ -51,6 +53,7 @@ export function waitingFromResponse(body: unknown, profile?: string): WaitingRow
     const item = raw as Record<string, unknown>
     if (typeof item.id !== 'string' || (item.kind !== 'approval' && item.kind !== 'question')) continue
     const at = typeof item.at === 'number' ? item.at : 0
+    const room = typeof item.room === 'string' ? item.room.trim() : ''
     rows.push({
       id: item.id,
       kind: item.kind,
@@ -59,7 +62,8 @@ export function waitingFromResponse(body: unknown, profile?: string): WaitingRow
       summary: typeof item.summary === 'string' ? item.summary : '',
       questions: typeof item.questions === 'number' ? item.questions : 0,
       at: at > 0 && at < 1e11 ? at * 1000 : at,
-      profile
+      profile,
+      ...(room ? { roomId: room } : {})
     })
   }
   return [...rows, ...askedRows(body, profile)]

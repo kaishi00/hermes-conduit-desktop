@@ -109,8 +109,10 @@ interface Props {
   tileBadge?: (tile: MixedTile) => HostBadge | null
   /** What waits on the person in another dashboard's profile, read through its kept connection. */
   otherWaits?: (tile: MixedTile) => number
-  /** Another dashboard's face: a switch there, landing on that profile. */
+  /** Another dashboard's face: the list shows that profile's chats, with no switch. */
   onOtherProfile?: (tile: MixedTile) => void
+  /** Another dashboard's profile the list shows, from its face; this dashboard's `profile` is null then. */
+  otherProfile?: { host: string; name: string } | null
   /** A row's menu (right-click or ⋯): Pin or Unpin, Rename, Delete. */
   onPin?: (row: ChatRow) => void
   onRename?: (row: ChatRow, title: string) => void
@@ -203,6 +205,7 @@ export function ChatList({
   tileBadge,
   otherWaits,
   onOtherProfile,
+  otherProfile = null,
   onPin,
   onRename,
   onDelete,
@@ -301,7 +304,7 @@ export function ChatList({
   const pinOrder = usePinnedOrder(searchScope, rows, prefsHttp)
   // All profiles, grouped by profile: a section per profile with its pinned chats and five newest (issue 1560, #1571).
   // Offered under All with two or more profiles, as the profile strip is.
-  const canGroup = !profile && (bots?.length ?? 0) > 1
+  const canGroup = !profile && !otherProfile && (bots?.length ?? 0) > 1
   const [groupByProfile, setGroupByProfile] = useState(readGroupByProfile)
   const grouped = canGroup && groupByProfile
   const [showingAll, setShowingAll] = useState<Set<string>>(() => new Set())
@@ -350,7 +353,9 @@ export function ChatList({
   const groupOpenId = grouped ? selectedId : null
   const { sections, listed, allowed, pinnedSection, nesting, hidesEverything } = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const inProfile = profile
+    const inProfile = otherProfile
+      ? []
+      : profile
       ? (rows ?? []).filter(r => sameProfile(r, profile))
       : allLeftOut.length
         ? (rows ?? []).filter(r => shownInAll(r.profile, botNames, allLeftOut))
@@ -363,9 +368,11 @@ export function ChatList({
         ? selected
         : selected.filter(r => !hidesChat(projectOf(projectsIndex, r), r.pinned, listsWaits && waitingIds.has(r.id), hiddenProjects))
     const filtered = q ? sourced.filter(r => searchText(r).includes(q)) : sourced
-    // Another combined host's chats, only in All with no filter: found by title or by the host's name.
-    const others =
-      !profile && !active.length
+    // Another combined host's chats, only in All with no filter: found by title or by the host's name. Another
+    // dashboard's face shows only its profile's, and none of this dashboard's.
+    const others = otherProfile
+      ? otherRows.filter(r => r.host === otherProfile.host && sameProfile(r, otherProfile.name) && (!q || `${r.title} ${r.preview ?? ''}`.toLowerCase().includes(q)))
+      : !profile && !active.length
         ? otherRows.filter(r => !q || `${r.title} ${r.preview ?? ''} ${badgeFor?.(r.host)?.name ?? ''}`.toLowerCase().includes(q))
         : []
     const sections = sectionRows(grouped ? filtered : [...filtered, ...others])
@@ -415,7 +422,7 @@ export function ChatList({
       nesting,
       hidesEverything: !filtered.length && selected.length > 0 && !q
     }
-  }, [rows, query, profile, marks, active, looksUp, filterContext, pinOrder.orders, grouped, showingAll, groupOpenId, bots, botNames, allLeftOut, otherRows, badgeFor, hiddenProjects, projectsIndex, waitingIds])
+  }, [rows, query, profile, marks, active, looksUp, filterContext, pinOrder.orders, grouped, showingAll, groupOpenId, bots, botNames, allLeftOut, otherRows, otherProfile, badgeFor, hiddenProjects, projectsIndex, waitingIds])
   /**
    * The pins a pinned row moves among: the Pinned section, or grouped by
    * profile its own section's, so a move there orders only that profile's
@@ -574,6 +581,7 @@ export function ChatList({
           <ProfileColumn
             tiles={tiles}
             profile={profile}
+            otherProfile={otherProfile}
             onProfile={onProfile!}
             onOther={onOtherProfile}
             badgeFor={tileBadge}

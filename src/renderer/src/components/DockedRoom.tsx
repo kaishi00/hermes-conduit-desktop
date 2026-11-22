@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { ConnectionStatus } from '@shared/ipc'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { IPC, type ConnectionStatus } from '@shared/ipc'
 import { dockedRoomUrl, type DockedRoomRequest } from '@shared/chatWindows'
 import { t } from '../../../shared/i18n'
 import { ROOM_RULES_CAPABILITY } from '../state/roomChoices'
@@ -20,7 +20,7 @@ import { RoomView } from './RoomView'
  * Another combined dashboard's group chat, in a frame in the main window's
  * room pane (the phone's no-switch open, stage 2): the room it hosts, or its
  * copy of one hosted elsewhere, read and written on that dashboard's kept
- * connection, with no switch. Asking an agent about it (or Wrap Up) opens
+ * connection, with no switch, Leave and Delete Copy included. Asking an agent about it (or Wrap Up) opens
  * that agent's chat docked in the main window's chat pane, Wrap Up's ask
  * left in its message box.
  */
@@ -90,6 +90,17 @@ export function DockedRoom({ request }: { request: DockedRoomRequest }) {
             copyApprovals={approvals}
             copyAnswers={copies.answers}
             onAnswerCopyApproval={(approval, choice) => void copies.answer(approval, choice)}
+            onDeleteCopy={
+              copies.canForget
+                ? async () => {
+                    const invite = invites.invites.find(i => i.id === copy.id)
+                    await copies.remove(copy, invite)
+                    // Its invite, ended, would take its tile back.
+                    if (invite) void invites.remove(invite)
+                    window.conduit.dockedToPane('closed')
+                  }
+                : undefined
+            }
             onLeaveCopy={
               canLeaveCopy(copy, copies.canLeave)
                 ? async () => {
@@ -123,7 +134,21 @@ export function DockedRoom({ request }: { request: DockedRoomRequest }) {
   )
 }
 
-/** The frame the main window's room pane shows another dashboard's group chat in; the parent keys it by dashboard and room. */
-export function DockedRoomFrame({ room }: { room: DockedRoomRequest }) {
-  return <webview className="docked-chat-frame" src={dockedRoomUrl(window.location.href, room)} />
+/**
+ * The frame the main window shows another dashboard's group chat in, where the room screen goes; the parent
+ * keys it by dashboard and room. `onClosed`: its copy was deleted there.
+ */
+export function DockedRoomFrame({ room, onClosed }: { room: DockedRoomRequest; onClosed: () => void }) {
+  const frame = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const el = frame.current
+    if (!el) return
+    const heard = (event: Event) => {
+      const { channel, args } = event as Event & { channel?: string; args?: unknown[] }
+      if (channel === IPC.dockedToPane && args?.[0] === 'closed') onClosed()
+    }
+    el.addEventListener('ipc-message', heard)
+    return () => el.removeEventListener('ipc-message', heard)
+  }, [onClosed])
+  return <webview ref={frame} className="docked-chat-frame" src={dockedRoomUrl(window.location.href, room)} />
 }
