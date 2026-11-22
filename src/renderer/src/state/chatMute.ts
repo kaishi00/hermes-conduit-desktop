@@ -90,6 +90,41 @@ export async function readMuted(http: Http, row: ChatRow): Promise<boolean> {
 }
 
 /**
+ * The chat an event names, as a mute knows it. `profileUnknown`: neither an
+ * open chat, Needs you nor the list knows its profile (a compacted chat this
+ * window never opened), so a mute is looked for under every profile read.
+ */
+export type MuteTarget = ChatRow & { profileUnknown?: boolean }
+
+/** The target's mute while it lasts, under its own profile or, when that isn't known, any profile read. */
+export function muteOfTarget(mutes: ChatMutes, target: MuteTarget, now = Date.now()): ChatMute | null {
+  if (!target.profileUnknown) return muteOf(mutes, target, now)
+  for (const key of Object.keys(mutes ?? {})) {
+    const found = muteOf(mutes, { ...target, profile: key }, now)
+    if (found) return found
+  }
+  return null
+}
+
+/** readMuted for a target: each listed profile asked when its own isn't known (none listed: the default). */
+export async function readMutedTarget(http: Http, target: MuteTarget, profiles: string[]): Promise<boolean> {
+  if (!target.profileUnknown) return readMuted(http, target)
+  const names = profiles.length ? profiles : ['default']
+  return (await Promise.all(names.map(profile => readMuted(http, { ...target, profile })))).some(Boolean)
+}
+
+/**
+ * Whether a chat's finished turn notifies here: not while it's muted, as the
+ * plugin doesn't push it, by the mutes read so far, and then asked at once
+ * for a mute set on another device since. Approvals and questions don't come
+ * through here: they notify whatever the mute, as on the phone.
+ */
+export async function turnNotifies(http: Http, mutes: ChatMutes, target: MuteTarget, profiles: string[]): Promise<boolean> {
+  if (muteOfTarget(mutes, target)) return false
+  return !(await readMutedTarget(http, target, profiles))
+}
+
+/**
  * The listed profiles' mutes, read again as the list changes (`version`), each
  * profile at most every MUTE_READ_INTERVAL_MS. `available` says the plugin keeps
  * them: the menu waits for it. `onError` hears a mute that didn't take.

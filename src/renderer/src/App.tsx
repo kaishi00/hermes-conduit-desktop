@@ -194,7 +194,7 @@ import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply }
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isUnread, type ChatMarks } from './state/chatMarks'
 import { isDone, useChatDone } from './state/chatDone'
-import { muteOf, readMuted, useChatMute } from './state/chatMute'
+import { muteOf, muteOfTarget, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { GO_TO, SCALES, applyScale, glyphs, nextScale, readScale, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
@@ -1123,17 +1123,25 @@ function Shell({
   // doesn't push it; approvals and questions still do, as on the phone.
   // The chat an event names, as a mute knows it: its stored id and profile from
   // an open chat, else from Needs you's row (a chat this window never opened),
-  // else the id the event carries.
-  const muteRowRef = useRef<(sessionId: string) => ChatRow>(id => ({ id, title: '', pinned: false }))
+  // else the id the event carries, whose profile no one knows: its mute is
+  // looked for under every listed profile (muteOfTarget).
+  const muteRowRef = useRef<(sessionId: string) => MuteTarget>(id => ({ id, title: '', pinned: false, profileUnknown: true }))
   muteRowRef.current = (sessionId: string) => {
     const ref = chats.current.get(sessionId)
     const waitingRows = waitingRowsRef.current
     const waitingRow = ref ? undefined : waitingRows.find(row => row.sessionIds.includes(sessionId))
     const id = ref?.storedId ?? (waitingRow ? chatIdsOf(sessionId, null, waitingRows)[0] : undefined) ?? sessionId
-    return (list.rows ?? []).find(r => r.id === id) ?? { id, title: '', pinned: false, profile: ref?.profile ?? waitingRow?.profile }
+    const listed = (list.rows ?? []).find(r => r.id === id)
+    if (listed) return listed
+    const profile = ref?.profile ?? waitingRow?.profile
+    return { id, title: '', pinned: false, profile, profileUnknown: !ref && !waitingRow && !profile }
   }
   const mutedRef = useRef<(sessionId: string) => boolean>(() => false)
-  mutedRef.current = (sessionId: string) => !!muteOf(chatMute.mutes, muteRowRef.current(sessionId))
+  mutedRef.current = (sessionId: string) => !!muteOfTarget(chatMute.mutes, muteRowRef.current(sessionId))
+  const chatMuteRef = useRef(chatMute.mutes)
+  chatMuteRef.current = chatMute.mutes
+  const muteProfilesRef = useRef<string[]>([])
+  muteProfilesRef.current = doneProfiles
   const [marks, setMarks] = useState<ChatMarks>(() => loadMarks(markHost))
   useEffect(() => setMarks(loadMarks(markHost)), [markHost])
   const updateMarks = useCallback(
@@ -1631,9 +1639,10 @@ function Shell({
         const spec = turnNotification(sid, event.payload, chats.current.get(sid))
         if (!spec || mutedRef.current(sid)) return
         // A mute set on another device since the last read: asked at once.
-        // A chat this window never opened is asked under what Needs you knows of it.
-        void readMuted(muteHttp, muteRowRef.current(sid)).then(muted => {
-          if (!muted) void notify(spec, sid)
+        // A chat this window never opened is asked under what Needs you knows
+        // of it, or under every listed profile when nothing does.
+        void turnNotifies(muteHttp, chatMuteRef.current, muteRowRef.current(sid), muteProfilesRef.current).then(notifies => {
+          if (notifies) void notify(spec, sid)
         })
       }),
     [notify]

@@ -12,6 +12,24 @@ import { isOlder, pluginStatus, runningVersion, STATUS_PATH, type PluginStatus }
 export const SPOKEN_QUESTION_ANSWERS_VERSION = '0.191.0'
 
 /**
+ * The call's profile's plugin status, which decides whether a spoken answer
+ * is recorded: asked of that profile, as the call's other plugin reads are
+ * (rings.ts), and asked once more after a transient failure (a timeout, a
+ * gateway hiccup), since an unread version leaves the questions out of the
+ * whole call. A 404 (no plugin) isn't asked again.
+ */
+async function callPluginStatus(profile?: string): Promise<PluginStatus> {
+  const path = profile ? `${STATUS_PATH}?profile=${encodeURIComponent(profile)}` : STATUS_PATH
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return pluginStatus(await gateway.http('GET', path, undefined, 8_000))
+    } catch (e) {
+      if (attempt > 0 || (e as { code?: unknown } | null)?.code === 404) return { state: 'unknown' }
+    }
+  }
+}
+
+/**
  * The questions `profile`'s bot asked that wait past their turn, as a live
  * call's instructions block (askedQuestionsBlock), read from the plugin's
  * waiting list as the call starts. Empty when none waits, the list can't be
@@ -21,10 +39,7 @@ export const SPOKEN_QUESTION_ANSWERS_VERSION = '0.191.0'
 export async function askedQuestionsForCall(profile?: string): Promise<string> {
   try {
     const name = profile && profile !== 'default' ? profile : undefined
-    const [status, waiting] = await Promise.all([
-      gateway.http('GET', STATUS_PATH, undefined, 8_000).then(pluginStatus, (): PluginStatus => ({ state: 'unknown' })),
-      gateway.http('GET', waitingPath(name))
-    ])
+    const [status, waiting] = await Promise.all([callPluginStatus(name), gateway.http('GET', waitingPath(name))])
     if (isOlder(runningVersion(status), SPOKEN_QUESTION_ANSWERS_VERSION)) return ''
     return askedQuestionsBlock(waitingFromResponse(waiting, name))
   } catch {

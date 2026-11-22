@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { muteIds, muteOf, mutePath, parseMutes, settingMute } from '../src/renderer/src/state/chatMute'
+import { describe, expect, it, vi } from 'vitest'
+import { muteIds, muteOf, muteOfTarget, mutePath, parseMutes, settingMute, turnNotifies } from '../src/renderer/src/state/chatMute'
 import type { ChatRow } from '../src/renderer/src/state/chats'
 
 const row = (id: string, extra: Partial<ChatRow> = {}): ChatRow => ({ id, title: id, pinned: false, ...extra })
@@ -48,5 +48,50 @@ describe('Muted chats', () => {
   it('asks a named profile’s plugin by name and the default without one', () => {
     expect(mutePath('default')).toBe('/api/plugins/conduit_push/notifications/muted-chats')
     expect(mutePath('my bot')).toBe('/api/plugins/conduit_push/notifications/muted-chats?profile=my%20bot')
+  })
+})
+
+describe("a finished turn's notification and the chat's mute (hermes-conduit issue 3032)", () => {
+  /** The plugin answering each profile's mutes from `byProfile` (by its `?profile=`, none for the default). */
+  const plugin = (byProfile: Record<string, string[]>) =>
+    vi.fn(async (_method: 'GET' | 'PUT', path: string) => {
+      const profile = new URLSearchParams(path.split('?')[1] ?? '').get('profile') ?? 'default'
+      return { ok: true, chats: (byProfile[profile] ?? []).map(id => ({ session_ids: [id], until: null, remaining_s: null })) }
+    })
+
+  it("doesn't notify for a chat muted in the mutes read, and asks nothing more", async () => {
+    const http = plugin({})
+    const mutes = { default: [{ ids: ['s1'], until: null }] }
+    expect(await turnNotifies(http, mutes, row('s1'), ['default'])).toBe(false)
+    expect(http).not.toHaveBeenCalled()
+  })
+
+  it('notifies for an unmuted chat once the plugin, asked at once, has no mute for it', async () => {
+    const http = plugin({ work: ['other'] })
+    expect(await turnNotifies(http, { work: [] }, row('s1', { profile: 'work' }), ['work'])).toBe(true)
+    expect(http).toHaveBeenCalledWith('GET', expect.stringContaining('profile=work'))
+  })
+
+  it("doesn't notify for a chat muted on another device since the last read", async () => {
+    const http = plugin({ work: ['s1'] })
+    expect(await turnNotifies(http, { work: [] }, row('s1', { profile: 'work' }), ['work'])).toBe(false)
+  })
+
+  it("finds a never-opened chat's mute under any listed profile when nothing knows its profile", async () => {
+    const target = { ...row('compacted'), profileUnknown: true }
+    expect(muteOfTarget({ default: [], work: [{ ids: ['compacted'], until: null }] }, target)).not.toBeNull()
+    // Its own profile known, only that profile counts.
+    expect(muteOfTarget({ default: [], work: [{ ids: ['compacted'], until: null }] }, row('compacted'))).toBeNull()
+    const http = plugin({ work: ['compacted'] })
+    expect(await turnNotifies(http, { default: [], work: [] }, target, ['default', 'work'])).toBe(false)
+    expect(http).toHaveBeenCalledTimes(2)
+    expect(await turnNotifies(plugin({}), null, target, ['default', 'work'])).toBe(true)
+  })
+
+  it('notifies when the mutes can’t be read (an older plugin, the host away)', async () => {
+    const http = vi.fn(async () => {
+      throw new Error('404')
+    })
+    expect(await turnNotifies(http, null, row('s1'), ['default'])).toBe(true)
   })
 })
