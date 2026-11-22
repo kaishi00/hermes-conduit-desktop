@@ -32,6 +32,8 @@ describe('greet me when a call connects', () => {
     expect(openingTurn()).toContain(`Say: "Hey 'boss', ready" Then wait for them.]`)
     expect(spokenGreeting()).toBe("Hey 'boss', ready")
     expect(cleanedGreeting('x'.repeat(300))).toHaveLength(200)
+    // Characters, as the phone counts them: never half an emoji.
+    expect(cleanedGreeting('x'.repeat(199) + '👋👋')).toBe('x'.repeat(199) + '👋')
     setLiveGreeting(null)
     expect(liveGreeting()).toBeNull()
   })

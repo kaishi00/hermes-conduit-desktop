@@ -32,7 +32,8 @@ export function setLiveGreeting(greeting: string | null): void {
 
 /** The greeting on one line, without double quotes (it is quoted to the model), clipped. */
 export function cleanedGreeting(text: string): string {
-  return text.replace(/"/g, "'").split(/\s+/).filter(Boolean).join(' ').slice(0, MAX_GREETING_CHARACTERS)
+  const one = text.replace(/"/g, "'").split(/\s+/).filter(Boolean).join(' ')
+  return Array.from(one).slice(0, MAX_GREETING_CHARACTERS).join('')
 }
 
 /**

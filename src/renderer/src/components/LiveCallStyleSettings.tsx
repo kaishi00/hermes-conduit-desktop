@@ -65,7 +65,7 @@ export function LiveCallStyleSettings() {
       ) : null}
       <p className="meta settings-caption">
         {t(
-          "The voice model greets you as soon as a call connects, so you know it's live. Leave the greeting empty for one in its own words. GPT-Live needs an up-to-date Hermes notifier plugin for this. Applies to the next call."
+          "The voice model greets you as soon as a call connects, so you know it's live. Leave the greeting empty for one in its own words. Applies to the next call."
         )}
       </p>
       <label className="voice-mode-pick">
