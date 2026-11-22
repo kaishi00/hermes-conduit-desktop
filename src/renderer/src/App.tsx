@@ -1661,8 +1661,9 @@ function Shell({
    */
   const openDocked = useCallback(
     (chat: DockedChat, fromWindow = false) => {
-      // A chat that has a window of its own brings it to the front, as its row does (Open in Main Window excepted).
-      if (!fromWindow && chatWindowIdsRef.current.includes(chat.id)) {
+      // A chat that has a window of its own brings it to the front, as its row does (Open in Main Window excepted, and
+      // words for its message box, which a window can't take, dock it here).
+      if (!fromWindow && !chat.draft && chatWindowIdsRef.current.includes(chat.id)) {
         void window.conduit.openChatWindow(chat)
         return
       }

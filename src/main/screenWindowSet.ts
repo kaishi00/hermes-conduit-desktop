@@ -73,14 +73,14 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
     if (windows.length) this.changed(this.profiles())
   }
 
-  /** The page's viewer id for its bot, and whether it holds the screen now. */
-  note(profile: string, viewerId: string, holds: boolean): void {
-    this.viewers.set(profile, viewerId)
+  /** The page's viewer id for its bot (its screen key), and whether it holds the screen now. */
+  note(key: string, viewerId: string, holds: boolean): void {
+    this.viewers.set(key, viewerId)
     if (holds) {
-      this.cancelHandBack(profile)
-      this.pending.delete(profile)
-      this.holding.add(profile)
-    } else this.holding.delete(profile)
+      this.cancelHandBack(key)
+      this.pending.delete(key)
+      this.holding.add(key)
+    } else this.holding.delete(key)
   }
 
   /** Closes every screen window. Another dashboard forgets this one's viewers and holds, which are its host's. */
@@ -100,21 +100,21 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
     if (windows.length) this.changed(this.profiles())
   }
 
-  private handBack(profile: string): void {
-    const viewer = this.viewers.get(profile)
-    if (!this.holding.delete(profile) || !viewer) return
-    const mine = this.cancelHandBack(profile)
-    const owed = () => this.handBacks.get(profile) === mine
-    this.pending.add(profile)
+  private handBack(key: string): void {
+    const viewer = this.viewers.get(key)
+    if (!this.holding.delete(key) || !viewer) return
+    const mine = this.cancelHandBack(key)
+    const owed = () => this.handBacks.get(key) === mine
+    this.pending.add(key)
     const settled = () => {
-      if (owed()) this.pending.delete(profile)
+      if (owed()) this.pending.delete(key)
     }
-    void Promise.resolve(this.release(profile, viewer, owed)).then(settled, settled)
+    void Promise.resolve(this.release(key, viewer, owed)).then(settled, settled)
   }
 
-  private cancelHandBack(profile: string): number {
+  private cancelHandBack(key: string): number {
     const next = ++this.handBackCount
-    this.handBacks.set(profile, next)
+    this.handBacks.set(key, next)
     return next
   }
 }
