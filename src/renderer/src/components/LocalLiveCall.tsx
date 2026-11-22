@@ -73,6 +73,7 @@ import { approvalView, clarifyQuestions } from '../state/needsYou'
 import { newCallId, saveCall, type CallResume, type CallTurn } from '../state/voiceSave'
 import { Icon } from './icons'
 import { MicOrb } from './MicOrb'
+import { spokenGreeting } from '../state/liveGreeting'
 import { CallCards } from './CallCards'
 import { FIND_CHAT, READ_CHAT, chatFinder } from '../state/chatFinder'
 import { pictureNoteText, type PictureNote } from '../state/callPicture'
@@ -217,6 +218,8 @@ export function LocalLiveCall({
   const playUntil = useRef(0)
   const ended = useRef(false)
   const ready = useRef(false)
+  // The greeting goes once per call, never on a reconnect's check.
+  const greeted = useRef(false)
   const mutedRef = useRef(false)
   const lineId = useRef(0)
   // The readiness check: its marker, and whether its (unspoken) response is still going.
@@ -591,6 +594,14 @@ export function LocalLiveCall({
     const words = text.trim()
     // The readiness check's ask: answered with nothing, so the server says nothing.
     if (marker.current && words === marker.current) {
+      // The greeting, once per call, is the check's answer: the server reads it as written, and it's the cue to talk.
+      const greeting = greeted.current ? null : spokenGreeting()
+      if (greeting) {
+        greeted.current = true
+        checking.current = false
+        trace.current?.step("Greeting sent as the check's answer")
+        for (const chunk of deltaChunks(greeting)) send(turnDelta(id, chunk))
+      }
       send(turnDone(id))
       if (!ready.current) becomeReady()
       return

@@ -73,6 +73,7 @@ import {
 } from '../state/geminiLive'
 import { ask } from '../state/dialogs'
 import { Select } from './Select'
+import { LiveGreetingSetting } from './LiveGreetingSetting'
 
 /** Settings > Voice's mode, after the phone's Voice mode: Classic, or GPT-Live with how it's paid for. */
 export function VoiceModeSettings({ profile }: { profile?: string }) {
@@ -525,6 +526,7 @@ export function VoiceModeSettings({ profile }: { profile?: string }) {
               "Each call's transcript is saved to your Hermes server's history and shows under Voice in Sessions, where you can read it or resume the call. Needs an up-to-date Hermes notifier plugin. Shared by every live voice mode. Applies to the next conversation."
             )}
           </p>
+          <LiveGreetingSetting />
         </>
       ) : null}
     </div>

@@ -67,6 +67,7 @@ import type { PendingRequest } from '@shared/ipc'
 import { ANSWER_APPROVAL, ANSWER_QUESTION, answerApproval, answerQuestion, requestUpdate } from '../state/liveRequests'
 import { Icon } from './icons'
 import { MicOrb } from './MicOrb'
+import { openingTurn } from '../state/liveGreeting'
 import { CallCards } from './CallCards'
 import { FIND_CHAT, READ_CHAT, chatFinder } from '../state/chatFinder'
 import { pictureNoteText, type PictureNote, imageFrame } from '../state/callPicture'
@@ -216,6 +217,8 @@ export function GeminiLiveCall({
   const ended = useRef(false)
   const ending = useRef(false)
   const ready = useRef(false)
+  // The greeting goes once per call, at the first ready, never on a reconnect or handoff.
+  const opened = useRef(false)
   // A replaced connection, as on the phone: Gemini's newest resumption handle, the attempt since the last ready,
   // the connection a GoAway hands off to while the current one serves, and a recap owed to a session that lost the call.
   const resumeHandle = useRef<string | null>(null)
@@ -453,6 +456,14 @@ export function GeminiLiveCall({
     }
   }
 
+  const sendOpening = () => {
+    const opening = openingTurn()
+    if (opened.current || !opening) return
+    opened.current = true
+    trace.current?.step('Opening sent')
+    send(textTurn(opening))
+  }
+
   const handle = (event: ServerEvent) => {
     switch (event.type) {
       case 'ready':
@@ -467,6 +478,7 @@ export function GeminiLiveCall({
           trace.current?.step('Session ready')
           setPhase('listening')
         }
+        sendOpening()
         return
       case 'audio':
         if (ended.current) return
