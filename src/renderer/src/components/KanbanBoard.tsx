@@ -343,7 +343,7 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
           botTitle={botTitle}
           load={kanban.detail}
           board={kanban.slug}
-          touched={kanban.touched.ids.has(openId!) ? kanban.touched.revision : 0}
+          touched={kanban.touched}
           onClose={() => setOpenId(null)}
           onPatch={async fields => {
             if (!openTask) return
@@ -383,8 +383,8 @@ function TaskPanel({
   load: (id: string) => Promise<KanbanTaskDetail | null>
   /** The board the task is on, for its attachments' download link. */
   board: string | null
-  /** Bumped when a live batch touched this task. */
-  touched: number
+  /** The live stream's last batch: the task reads again when it touched this task or one of its children (a child's result). */
+  touched: { revision: number; ids: ReadonlySet<string> }
   onClose: () => void
   onPatch: (fields: Record<string, unknown>) => Promise<void>
   onComment: (body: string) => Promise<void>
@@ -399,6 +399,7 @@ function TaskPanel({
   const [saving, setSaving] = useState<string | null>(null)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const shown = task ?? detail?.task ?? null
+  const touchedHere = touched.ids.has(id) || Boolean(detail?.children.some(child => touched.ids.has(child.id))) ? touched.revision : 0
 
   async function saveAttachment(attachment: KanbanAttachment) {
     if (saving) return
@@ -426,7 +427,7 @@ function TaskPanel({
   useEffect(() => {
     void refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, task?.status, task?.assignee, task?.commentCount, task?.latestSummary, touched])
+  }, [id, task?.status, task?.assignee, task?.commentCount, task?.latestSummary, touchedHere])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -70,6 +70,12 @@ describe('the task board', () => {
       child_results: [{ id: 'c', latest_summary: 'Run summary', result: 'Handed back' }]
     })
     expect(detail?.children[0]?.summary).toBe('Handed back')
+    const blank = parseTaskDetail({
+      task: { id: 'p', title: 'Parent', status: 'todo', priority: 0 },
+      links: { children: ['c'] },
+      child_results: [{ id: 'c', latest_summary: 'Run summary', result: '  ' }]
+    })
+    expect(blank?.children[0]?.summary).toBe('Run summary')
   })
 
   it('names the board only when one is picked', () => {
