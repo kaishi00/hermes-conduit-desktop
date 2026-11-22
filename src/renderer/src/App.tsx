@@ -979,11 +979,17 @@ function Shell({
   const sameProfileAs = (a?: string, b?: string) => (a ?? 'default').toLowerCase() === (b ?? 'default').toLowerCase()
   // The chats in windows of their own (up to three), from the main process.
   const [chatWindowIds, setChatWindowIds] = useState<string[]>([])
+  const chatWindowIdsRef = useRef(chatWindowIds)
+  chatWindowIdsRef.current = chatWindowIds
   useEffect(() => {
     const off = window.conduit.onChatWindows(setChatWindowIds)
     void window.conduit.chatWindows().then(setChatWindowIds)
     return off
   }, [])
+  // A call started in place (a wake phrase or a ring on the chat on screen) brings back the chat that has its controls.
+  useEffect(() => {
+    if (calling) setDocked(null)
+  }, [calling])
   // A docked chat closes when its dashboard is no longer kept beside this one (out of the group, signed out of) and
   // when it moves to a window of its own (its pane's Open in New Window).
   useEffect(() => {
@@ -1698,7 +1704,9 @@ function Shell({
       // During a call the chat on screen keeps the call's controls, so another dashboard's chat opens in a window of its own.
       if (calling) {
         void window.conduit.openChatWindow(chat).then(opened => {
-          if (!opened) void tell(t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT }))
+          if (opened) return
+          if (chatWindowIdsRef.current.length >= CHAT_WINDOW_LIMIT) void tell(t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT }))
+          else void tell(t('The chat didn’t open. Try again.'))
         })
         return
       }

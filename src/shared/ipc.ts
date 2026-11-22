@@ -396,7 +396,7 @@ export interface OpenChatRequest {
   title?: string
   /** A bot's Bot Chat, coming back from a window of its own. */
   botChat?: boolean
-  /** Another combined dashboard's chat, coming back from a window of its own: the main window switches to it. */
+  /** Another combined dashboard's chat, coming back from a window of its own (or a docked chat's notification): it docks in the chat pane, with no switch. */
   host?: string
 }
 
