@@ -6,8 +6,13 @@ import { keepsFor } from './savedHosts'
 
 /** The bots roster, read when the connection opens, when profiles change and when a turn ends. */
 
-/** `host`: the dashboard this window shows. */
-export function useBots(connected: boolean, host = '') {
+/**
+ * `host`: the dashboard this window shows. `withSessions: false` reads the bots
+ * without their chats and again only when profiles change, for a window that
+ * draws one bot's name and face (a pop-out chat, desktop#292); that roster
+ * isn't kept for the dashboard, whose windows need the chats.
+ */
+export function useBots(connected: boolean, host = '', { withSessions = true }: { withSessions?: boolean } = {}) {
   const kept = keptRosters.get(host)
   const [bots, setBots] = useState<Bot[] | null>(kept?.bots ?? null)
   const [hidden, setHidden] = useState<Bot[]>(kept?.hidden ?? [])
@@ -17,9 +22,9 @@ export function useBots(connected: boolean, host = '') {
 
   const load = useCallback(async () => {
     try {
-      const body = await gateway.rpc('profiles.list', { include_sessions: true })
+      const body = await gateway.rpc('profiles.list', withSessions ? { include_sessions: true } : {})
       const roster = rosterFromProfiles(body)
-      if (keepsFor(host)) keptRosters.set(host, { bots: roster.bots, hidden: roster.hidden, protocol: roster.protocol, at: Date.now() })
+      if (withSessions && keepsFor(host)) keptRosters.set(host, { bots: roster.bots, hidden: roster.hidden, protocol: roster.protocol, at: Date.now() })
       setBots(roster.bots)
       setHidden(roster.hidden)
       setProtocol(roster.protocol)
@@ -27,13 +32,13 @@ export function useBots(connected: boolean, host = '') {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [host])
+  }, [host, withSessions])
 
   useEffect(() => {
     if (!connected) return
     void load()
     const off = window.conduit.onEvent(event => {
-      if (event.type === 'profiles.changed' || event.type === 'message.complete' || event.type === 'sessions.changed') {
+      if (event.type === 'profiles.changed' || (withSessions && (event.type === 'message.complete' || event.type === 'sessions.changed'))) {
         if (timer.current) clearTimeout(timer.current)
         timer.current = setTimeout(() => void load(), 1200)
       }
@@ -42,7 +47,7 @@ export function useBots(connected: boolean, host = '') {
       off()
       if (timer.current) clearTimeout(timer.current)
     }
-  }, [connected, load])
+  }, [connected, load, withSessions])
 
   return { bots, hidden, protocol, error, refresh: load }
 }

@@ -308,6 +308,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const request = useRef(0)
   /** A chat this hook just created: selecting it in the list mustn't resume it over its first turn. */
   const created = useRef<string | null>(null)
+  /** The open chat's resume while it runs (settles, never rejects): a send or command waits for it (desktop#298). */
+  const openingChat = useRef<Promise<void> | null>(null)
+  /** The chat whose transcript the store holds, so a switch while offline doesn't show the last chat's rows (desktop#283). */
+  const drawn = useRef<string | null>(storedId)
   const chatRef = useRef(chat)
   chatRef.current = chat
   /** Another app holds the chat and Take over automatically is off: the offer, naming who holds it. */
@@ -323,28 +327,41 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // (desktop#201). It also drops what this re-run's cleanup just kept: React runs that first.
     if (!connected) forgetTranscripts(host)
     // A chat just created here: its first turn is already drawn, so no resume, but leaving it keeps it.
-    if (storedId && storedId === created.current) return () => keepTranscript(storedId, profile, transcriptRef.current, host)
+    if (storedId && storedId === created.current) {
+      drawn.current = storedId
+      return () => keepTranscript(storedId, profile, transcriptRef.current, host)
+    }
     created.current = null
     const ticket = ++request.current
     liveId.current = null
+    openingChat.current = null
+    // A resume this re-run abandons can't clear it any more: its finally is fenced by the ticket.
+    setLoading(false)
     setTakeover(null)
     setQueue([])
     setChat(storedId || !folder ? { storedId, liveId: null } : { storedId, liveId: null, cwd: folder })
     setError(null)
     if (!storedId) {
+      drawn.current = null
       dispatch({ type: 'reset', state: emptyTranscript })
       return
     }
-    if (!connected) return
+    if (!connected) {
+      // The chat that was open stays drawn through a drop; another one picked meanwhile starts blank.
+      if (drawn.current !== storedId) dispatch({ type: 'reset', state: emptyTranscript })
+      drawn.current = storedId
+      return
+    }
     setLoading(true)
     // A chat left a moment ago draws as it was while its resume runs, which replaces it (desktop#201).
     const cached = keptTranscript(storedId, profile, host)
+    drawn.current = storedId
     dispatch({ type: 'reset', state: cached ?? emptyTranscript })
     const params: Record<string, unknown> = { session_id: storedId, cols: 96, source: 'desktop' }
     if (profile) params.profile = profile
     // The transcript without every stored picture's bytes; the session authority refuses the flag.
     if (!sessionAuthority) params.inline_images = false
-    resumeChat(params, storedId, profile)
+    openingChat.current = resumeChat(params, storedId, profile)
       .then(({ result, rows }) => {
         if (ticket !== request.current) return
         liveId.current = result.session_id
@@ -383,7 +400,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         else setError(e instanceof Error ? e.message : String(e))
       })
       .finally(() => {
-        if (ticket === request.current) setLoading(false)
+        if (ticket !== request.current) return
+        setLoading(false)
+        openingChat.current = null
       })
     // Leaving the chat keeps its transcript for coming back.
     return () => keepTranscript(storedId, profile, transcriptRef.current, host)
@@ -437,9 +456,31 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     liveId.current = sid
     created.current = storedId
     request.current++ // a resume still in flight is stale now
+    openingChat.current = null
+    setLoading(false)
     setChat(c => ({ ...c, liveId: sid, storedId: storedId ?? c.storedId, ...chatSettings(made.info) }))
     return { sid, storedId }
   }, [profile, sessionAuthority, botChat, folder])
+
+  /** Waits out the open chat's resume, if one runs; throws when the chat moved on or didn't open. */
+  const openSettled = useCallback(async () => {
+    const open = openingChat.current
+    if (liveId.current || !open || !chatRef.current.storedId) return
+    const ticket = request.current
+    await open
+    if (request.current !== ticket) throw new ChatMovedOn()
+    if (!liveId.current) throw new Error(t('The chat didn’t open. Try again.'))
+  }, [])
+
+  /**
+   * The session a send or command goes to. A stored chat still opening is waited for, so the words reach it,
+   * not a new chat made over its resume (desktop#298); only a draft gets a new session.
+   */
+  const sessionFor = useCallback(async (): Promise<{ sid: string; storedId: string | null }> => {
+    await openSettled()
+    if (liveId.current) return { sid: liveId.current, storedId: null }
+    return createSession()
+  }, [openSettled, createSession])
 
   /** The chat's history read again, after a command changed it (/undo, /retry, /compress). */
   const reloadHistory = useCallback(async () => {
@@ -537,6 +578,13 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         a.kind === 'image' ? { kind: 'image', value: a.name, preview: `data:${a.mime};base64,${a.base64}` } : { kind: 'file', value: a.name }
       )
       const key = `u-${uuid()}`
+      // A chat still opening is waited for before its row is drawn, so the resume's answer doesn't wipe it.
+      try {
+        await openSettled()
+      } catch (e) {
+        if (!(e instanceof ChatMovedOn)) dispatch({ type: 'notice', text: e instanceof Error ? e.message : String(e), tone: 'error' })
+        return false
+      }
       // Hermes' receipt says `queued` for every send; only one into a running turn, or behind a turn a restart cut off, waits.
       const joinsRunningTurn = transcriptRef.current.running || lostRows(queueRef.current).length > 0
       dispatch({ type: 'pending', text: trimmed, attachments: shown, key })
@@ -546,7 +594,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       try {
         let createdStoredId: string | null = null
         if (!sid) {
-          const made = await createSession()
+          const made = await sessionFor()
           sid = made.sid
           createdStoredId = made.storedId
         }
@@ -639,7 +687,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         return false
       }
     },
-    [profile, sessionAuthority, createSession, takeOverChat, respondConnection]
+    [profile, sessionAuthority, openSettled, sessionFor, takeOverChat, respondConnection]
   )
 
   const stop = useCallback(async () => {
@@ -711,7 +759,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       const done: CommandOutcome = { kind: 'done', created: null }
       try {
         if (!sid) {
-          const made = await createSession()
+          const made = await sessionFor()
           sid = made.sid
           created = made.storedId
           done.created = created
@@ -792,7 +840,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           return done
       }
     },
-    [profile, createSession, reloadHistory, send, stop]
+    [profile, sessionFor, reloadHistory, send, stop]
   )
 
   /** A line in the chat from Conduit itself (a refusal, say), as a command's notice shows. */

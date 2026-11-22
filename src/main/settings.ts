@@ -4,7 +4,8 @@
  * Conduit's languages), the theme ("system", dark or light) and the lock.
  */
 import { app, nativeTheme } from 'electron'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import { writeFileAtomic } from './atomicWrite'
 import { join } from 'node:path'
 import { LANGUAGES, pickLanguage, setLanguage, type Language } from '../shared/i18n'
 import type { AppIconChoice, LanguageChoice, ThemeChoice } from '../shared/ipc'
@@ -33,7 +34,7 @@ export function resolvedLanguage(choice = languageChoice()): Language {
 export function chooseLanguage(choice: LanguageChoice): Language {
   const valid: LanguageChoice = choice === 'system' || (LANGUAGES as readonly string[]).includes(choice) ? choice : 'system'
   try {
-    writeFileSync(path(), JSON.stringify({ ...read(), language: valid }, null, 2))
+    writeFileAtomic(path(), JSON.stringify({ ...read(), language: valid }, null, 2))
   } catch {
     // Not saved: it still applies until Conduit quits.
   }
@@ -52,7 +53,7 @@ export function appIconChoice(): AppIconChoice {
 export function chooseAppIcon(choice: AppIconChoice): AppIconChoice {
   const valid: AppIconChoice = choice === 'light' ? 'light' : 'dark'
   try {
-    writeFileSync(path(), JSON.stringify({ ...read(), appIcon: valid }, null, 2))
+    writeFileAtomic(path(), JSON.stringify({ ...read(), appIcon: valid }, null, 2))
   } catch {
     // Not saved: it still applies until Conduit quits.
   }
@@ -69,7 +70,7 @@ export function chooseTheme(choice: ThemeChoice = themeChoice(), save = true): T
   const valid: ThemeChoice = THEMES.includes(choice) ? choice : 'system'
   if (save) {
     try {
-      writeFileSync(path(), JSON.stringify({ ...read(), theme: valid }, null, 2))
+      writeFileAtomic(path(), JSON.stringify({ ...read(), theme: valid }, null, 2))
     } catch {
       // Not saved: it still applies until Conduit quits.
     }
@@ -83,7 +84,7 @@ export const lockOnLaunch = (): boolean => read().lock === true
 
 export function chooseLock(on: boolean): boolean {
   try {
-    writeFileSync(path(), JSON.stringify({ ...read(), lock: on }, null, 2))
+    writeFileAtomic(path(), JSON.stringify({ ...read(), lock: on }, null, 2))
     return true
   } catch {
     return false
@@ -95,7 +96,7 @@ export const askHostAtLaunch = (): boolean => read().askHost === true
 
 export function chooseAskHost(on: boolean): boolean {
   try {
-    writeFileSync(path(), JSON.stringify({ ...read(), askHost: on }, null, 2))
+    writeFileAtomic(path(), JSON.stringify({ ...read(), askHost: on }, null, 2))
     return true
   } catch {
     return false

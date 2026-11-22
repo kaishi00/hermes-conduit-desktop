@@ -6,12 +6,14 @@
  * asked for again while this dashboard is open; a read that fails (no
  * connection, a busy or rate-limited gateway, a sign-in to redo) may load the
  * next time it's shown. Pictures are kept per dashboard, and a dashboard
- * switch drops them, as the phone's TranscriptImageCache does (desktop#222).
+ * switch drops them, as the phone's TranscriptImageCache does (desktop#222),
+ * and the least recently shown go past a size budget (desktop#294).
  */
 import { gateway } from '../gateway'
+import { PictureCache } from './pictureCache'
 import { forgetRoomPictures } from './roomPictures'
 const MAX_DATA_URL = Math.ceil((16 * 1024 * 1024) / 3) * 4 + 64
-const kept = new Map<string, string | null>()
+const kept = new PictureCache()
 const reading = new Map<string, Promise<string | null>>()
 let keptHost = ''
 
@@ -58,7 +60,8 @@ export function keptPicture(path: string, profile?: string): string | null | und
 
 export function readGatewayPicture(path: string, profile?: string): Promise<string | null> {
   const key = pictureKey(path, profile)
-  if (kept.has(key)) return Promise.resolve(kept.get(key) ?? null)
+  const known = kept.get(key)
+  if (known !== undefined) return Promise.resolve(known)
   let read = reading.get(key)
   if (!read) {
     read = gateway

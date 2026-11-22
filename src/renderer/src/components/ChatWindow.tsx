@@ -83,7 +83,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const docked = request.docked === true
   useDashboardProfiles(status.phase, status.url)
   const display = useChatDisplay(profile, connected, true)
-  const roster = useBots(connected, host)
+  // Only this chat's bot is drawn here: its name and face, not every bot's chats (desktop#292).
+  const roster = useBots(connected, host, { withSessions: false })
   const bot = roster.bots?.find(b => b.name === (profile ?? 'default'))
   const face = useReplyFace(bot)
   const botTitle = bot?.title ?? request.author ?? 'Hermes'
@@ -169,8 +170,10 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
    */
   const paneShown = useRef(true)
   useEffect(() => (docked ? window.conduit.onDockedShown(shown => (paneShown.current = shown)) : undefined), [docked])
-  const chatRef = useRef({ liveId: chat.liveId, storedId: chat.storedId, profile, title })
-  chatRef.current = { liveId: chat.liveId, storedId: chat.storedId, profile, title }
+  // A notification takes the chat's own title, not the window's "Chat" for an untitled one, and else its bot.
+  const chatTitle = botChat ? botTitle : cleanTitle(chat.title || request.title || '') || undefined
+  const chatRef = useRef({ liveId: chat.liveId, storedId: chat.storedId, profile, title: chatTitle, bot: botTitle })
+  chatRef.current = { liveId: chat.liveId, storedId: chat.storedId, profile, title: chatTitle, bot: botTitle }
   const notify = useCallback(
     async (spec: NotificationSpec) => {
       if (!notificationsEnabled() || typeof Notification === 'undefined') return
