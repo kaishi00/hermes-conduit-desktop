@@ -134,6 +134,10 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [],
     return tiles.find(tile => (job.host ? !tile.own && tile.host === job.host : tile.own) && tile.bot.name.toLowerCase() === name)
   }
   const botTitle = (job: CronJob) => tileOf(job)?.bot.title ?? (job.host ? undefined : bots?.find(b => b.name === (job.profile ?? 'default'))?.title) ?? job.profile ?? ''
+  const farName = (job: CronJob) => {
+    const tile = tileOf(job) ?? tiles.find(t => !t.own && t.host === job.host)
+    return tile ? (badgeFor?.(tile)?.name ?? null) : null
+  }
   // The list names each job's bot while it holds more than one profile's.
   const namesBots = !profile && !shownFar && Math.max(tiles.length, bots?.length ?? 0) > 1
   const showColumn = tiles.length > 1
@@ -189,6 +193,8 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [],
           <Icon name="clock" />
           {nextRunLine(job)}
           {namesBots && (job.profile || job.host) ? ` · ${botTitle(job)}` : ''}
+          {/* Another dashboard's job names its dashboard too: two can each have a bot of the same name. */}
+          {namesBots && job.host && farName(job) ? ` · ${farName(job)}` : ''}
         </span>
       </button>
       {!isFinished(job) ? (
