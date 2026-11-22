@@ -641,7 +641,8 @@ function registerIpc(): void {
   ipcMain.handle(IPC.saveKanbanAttachment, async (event, id: unknown, board: unknown, filename: unknown): Promise<string> => {
     if (typeof id !== 'string' || !id) return t("Couldn't open this file")
     const owner = BrowserWindow.fromWebContents(event.sender)
-    const name = hostFileName(typeof filename === 'string' && filename ? filename : id)
+    const original = typeof filename === 'string' && filename ? filename : id
+    const name = hostFileName(original)
     const picked = owner ? await dialog.showSaveDialog(owner, { defaultPath: name }) : await dialog.showSaveDialog({ defaultPath: name })
     if (picked.canceled || !picked.filePath) return 'cancelled'
     try {
@@ -650,7 +651,7 @@ function registerIpc(): void {
       if (!through) throw new Error(t("Couldn't open this file"))
       const response = await through.download(kanbanAttachmentPath(id, typeof board === 'string' && board ? board : null), stop.signal)
       // A dashboard that serves its page for a route it doesn't know has no attachment route: never save that page as the file.
-      if (isDashboardPage(response.headers.get('content-type'), name)) throw Object.assign(new Error('no attachment route'), { code: 404 })
+      if (isDashboardPage(response.headers.get('content-type'), original)) throw Object.assign(new Error('no attachment route'), { code: 404 })
       if (!response.body) throw new Error(t("Couldn't open this file"))
       await streamToFile(response.body as import('node:stream/web').ReadableStream, picked.filePath, () => stop.abort())
       return 'saved'

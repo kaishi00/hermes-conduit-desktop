@@ -21,7 +21,6 @@ export function hostFileName(path: string): string {
   return clean && clean !== '.' && clean !== '..' ? clean.slice(0, 200) : 'file'
 }
 
-/** `/api/fs/download` or `/api/fs/read-data-url` for `path`, in a profile's scope when it isn't the default. */
 /** The Kanban plugin's download route for an attachment, naming the board when one is picked. */
 export function kanbanAttachmentPath(id: string, board: string | null): string {
   return `/api/plugins/kanban/attachments/${encodeURIComponent(id)}${board ? `?board=${encodeURIComponent(board)}` : ''}`
@@ -36,6 +35,7 @@ export function isDashboardPage(contentType: string | null, filename: string): b
   return /text\/html/i.test(contentType ?? '') && !/\.html?$/i.test(filename)
 }
 
+/** `/api/fs/download` or `/api/fs/read-data-url` for `path`, in a profile's scope when it isn't the default. */
 export function hostFilePath(route: 'download' | 'read-data-url', path: string, profile?: string): string {
   const query = `path=${encodeURIComponent(path)}`
   return profile && profile !== 'default' ? `/api/fs/${route}?${query}&profile=${encodeURIComponent(profile)}` : `/api/fs/${route}?${query}`
