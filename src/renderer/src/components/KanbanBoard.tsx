@@ -93,6 +93,13 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
 
   // A menu opened on one board never acts on another.
   useEffect(() => setMenu(null), [kanban.slug, kanban.unavailable])
+  // A task belongs to its board: picking another closes its panel, so nothing in it (an attachment's Save) acts on the wrong board.
+  const shownSlug = useRef(kanban.slug)
+  useEffect(() => {
+    if (shownSlug.current === kanban.slug) return
+    shownSlug.current = kanban.slug
+    setOpenId(null)
+  }, [kanban.slug])
   // With no board picked, the board is whatever Hermes calls current, which another client can change:
   // a menu whose task left the board read closes rather than act on the new one.
   useEffect(() => {

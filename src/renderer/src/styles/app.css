@@ -12208,6 +12208,7 @@ button.ghost:disabled {
   margin: 8px 16px 0;
 }
 
+<<<<<<< HEAD
 /* A child's result under its Blocks row: indented past the lane dot. */
 .task-body.child-result {
   margin: 2px 0 6px 16px;
@@ -12267,3 +12268,25 @@ button.ghost:disabled {
 .task-activity > summary h3 {
   display: inline;
 }
+=======
+/* Live call style's "What Conduit sends" */
+.live-preview-open {
+  justify-self: start;
+}
+.live-preview {
+  width: min(680px, 100%);
+}
+.live-preview-text {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  user-select: text;
+}
+>>>>>>> origin/main
