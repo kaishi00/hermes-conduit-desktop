@@ -825,7 +825,8 @@ export function GeminiLiveCall({
           recall,
           asked,
           chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current),
-          phoneNow: phoneReads.context
+          phoneNow: phoneReads.context,
+          phoneTools: phoneReads.tools
         }
         told = instructions({ ...toldWith, search })
         if (!(await open())) return

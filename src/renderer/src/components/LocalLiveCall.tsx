@@ -870,7 +870,8 @@ export function LocalLiveCall({
               persona,
               asked,
               chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current),
-              phoneNow: phoneReads.context
+              phoneNow: phoneReads.context,
+              phoneTools: phoneReads.tools
             }
             agent.current = liveInstructions(agentWith.current)
           }

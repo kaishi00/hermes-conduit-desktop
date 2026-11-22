@@ -117,12 +117,16 @@ export async function readPhoneTyped(
     const response = (await gateway.http('POST', withProfile(VOICE_READ_PATH, profile), { reader, tool: tool.name, args }, 15_000)) as
       | Record<string, unknown>
       | undefined
-    const result = response?.result
+    const result = response?.result as Record<string, unknown> | undefined
+    if (result && typeof result === 'object' && result.ok === false) {
+      const reason = result.error ?? result.reason
+      return { status: 'error', error: typeof reason === 'string' && reason ? `That couldn't be read (${reason}). Tell the user.` : "That couldn't be read. Tell the user." }
+    }
     if (!result || typeof result !== 'object') {
       const reason = response?.error ?? response?.reason
       return { status: 'error', error: typeof reason === 'string' && reason ? `That couldn't be read (${reason}). Tell the user.` : "That couldn't be read. Tell the user." }
     }
-    return { status: (result as { ok?: unknown }).ok === false ? 'error' : 'ok', result: JSON.stringify(result) }
+    return { status: 'ok', result: JSON.stringify(result) }
   } catch (e) {
     return { status: 'error', error: `That couldn't be read (${e instanceof Error ? e.message : String(e)}). Tell the user.` }
   }
@@ -130,6 +134,17 @@ export async function readPhoneTyped(
 
 /** The phone tool a call named, if it's one this call was given. */
 export const phoneTool = (reads: PhoneReads, name: string) => reads.tools.find(tool => tool.name === name)
+
+/**
+ * Leads a call's instructions when it has the phone's read tools, as the
+ * phone's VoiceHostTool.functionToolsFirst does: the call's own rules send
+ * work to Hermes, and Grok's and Local Live's say the voice can't see the
+ * user's calendar or health, so this puts the tools first. '' without any.
+ */
+export function phoneToolsFirst(tools: PhoneTool[]): string {
+  if (!tools.length) return ''
+  return `\n\nConduit's own tools: ${tools.map(tool => tool.name).join(', ')}. Conduit runs these itself, reading what the user's iPhone shares, at once and much faster than Hermes. When the user asks about something one of them covers (where they are, their calendar, reminders, phone or health, for example), call the tool yourself: this takes precedence over the ask_thread rule and over any line saying you can't see their calendar, schedule, to-dos or health, and don't say you'll have Hermes do it. Call ask_thread only for what they can't do, or when the user asks for Hermes.`
+}
 
 /** The opening facts as a block of the instructions; '' without any. */
 export function phoneContextBlock(context: string): string {

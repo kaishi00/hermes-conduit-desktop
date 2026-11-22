@@ -101,6 +101,7 @@ export function instructions(options: {
   search?: Search
   asksFirst?: boolean
   phoneNow?: string
+  phoneTools?: PhoneTool[]
 }): string {
   return liveInstructions({
     ...options,

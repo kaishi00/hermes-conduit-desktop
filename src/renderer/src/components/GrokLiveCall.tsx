@@ -651,7 +651,8 @@ export function GrokLiveCall({
           recall,
           asked,
           chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current),
-          phoneNow: phoneReads.context
+          phoneNow: phoneReads.context,
+          phoneTools: phoneReads.tools
         }
         if (!(await openSocket())) return
         // The microphone, as 24 kHz PCM, while the call listens.

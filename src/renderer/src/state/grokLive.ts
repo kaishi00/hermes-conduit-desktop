@@ -110,6 +110,7 @@ export function instructions(options: {
   timeZone?: string
   asksFirst?: boolean
   phoneNow?: string
+  phoneTools?: PhoneTool[]
 }): string {
   const timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
   return liveInstructions({
