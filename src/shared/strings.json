@@ -44503,5 +44503,20 @@
     "tr": "{version} sürümü indirilemedi",
     "zh-Hans": "无法下载版本 {version}",
     "zh-Hant": "無法下載版本 {version}"
+  },
+  "Conduit checks for a new version when it opens and every few hours. Download it here, and it installs the next time you quit.": {
+    "de": "Conduit sucht beim Öffnen und alle paar Stunden nach einer neuen Version. Lade sie hier herunter, dann wird sie beim nächsten Beenden installiert.",
+    "es": "Conduit busca una versión nueva al abrirse y cada pocas horas. Descárgala aquí y se instalará la próxima vez que salgas.",
+    "fr": "Conduit recherche une nouvelle version à l’ouverture et toutes les quelques heures. Téléchargez-la ici, et elle s’installe la prochaine fois que vous quittez.",
+    "id": "Conduit memeriksa versi baru saat dibuka dan setiap beberapa jam. Unduh di sini, lalu versi itu terpasang saat Anda keluar berikutnya.",
+    "it": "Conduit cerca una nuova versione all’apertura e ogni poche ore. Scaricala qui e verrà installata la prossima volta che esci.",
+    "ja": "Conduit は起動時と数時間ごとに新しいバージョンを確認します。ここでダウンロードすると、次に終了するときにインストールされます。",
+    "ko": "Conduit은 열 때와 몇 시간마다 새 버전을 확인합니다. 여기서 다운로드하면 다음에 종료할 때 설치됩니다.",
+    "pl": "Conduit sprawdza nową wersję przy uruchomieniu i co kilka godzin. Pobierz ją tutaj, a zainstaluje się przy następnym zamknięciu.",
+    "pt-BR": "O Conduit procura uma nova versão ao abrir e a cada poucas horas. Baixe-a aqui, e ela será instalada na próxima vez que você sair.",
+    "ru": "Conduit проверяет новую версию при запуске и раз в несколько часов. Скачайте её здесь, и она установится при следующем выходе.",
+    "tr": "Conduit açıldığında ve birkaç saatte bir yeni sürümü denetler. Buradan indirin, bir sonraki çıkışta yüklenir.",
+    "zh-Hans": "Conduit 会在打开时和每隔几小时检查新版本。在这里下载后，它会在你下次退出时安装。",
+    "zh-Hant": "Conduit 會在開啟時和每隔幾小時檢查新版本。在這裡下載後，它會在你下次結束時安裝。"
   }
 }

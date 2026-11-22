@@ -70,7 +70,11 @@ export function UpdatesSetting() {
               <input type="checkbox" checked={state.auto} onChange={e => void window.conduit.updates.setAuto(e.target.checked).then(setState, () => undefined)} />
               {t('Install updates automatically')}
             </label>
-            <p className="meta">{t('Conduit checks for a new version when it opens and every few hours, then installs it the next time you quit.')}</p>
+            <p className="meta">
+              {state.auto
+                ? t('Conduit checks for a new version when it opens and every few hours, then installs it the next time you quit.')
+                : t('Conduit checks for a new version when it opens and every few hours. Download it here, and it installs the next time you quit.')}
+            </p>
           </>
         )}
       </dd>
