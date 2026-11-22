@@ -991,10 +991,18 @@ function Shell({
     if (calling) setDocked(null)
   }, [calling])
   // A docked chat closes when its dashboard is no longer kept beside this one (out of the group, signed out of) and
-  // when it moves to a window of its own (its pane's Open in New Window).
+  // when it moves to a window of its own (its pane's Open in New Window): only a window that opens after it docked,
+  // since Open in Main Window docks the chat before its own window has closed.
+  const windowsAtDock = useRef<string[]>([])
+  useEffect(() => {
+    windowsAtDock.current = chatWindowIdsRef.current
+  }, [docked])
   useEffect(() => {
     if (!docked) return
-    if (!keptHosts.some(h => h.url === docked.chat.host) || chatWindowIds.includes(docked.chat.id)) setDocked(null)
+    const windowed = chatWindowIds.includes(docked.chat.id) && !windowsAtDock.current.includes(docked.chat.id)
+    if (!keptHosts.some(h => h.url === docked.chat.host) || windowed) setDocked(null)
+    // Its old window gone, a window opened again later closes the pane.
+    windowsAtDock.current = windowsAtDock.current.filter(id => chatWindowIds.includes(id))
   }, [docked, keptHosts, chatWindowIds])
   // A chat opened here closes its window of its own.
   useEffect(() => {

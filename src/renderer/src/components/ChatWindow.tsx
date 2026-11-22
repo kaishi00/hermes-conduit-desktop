@@ -22,7 +22,7 @@ import { readMuted } from '../state/chatMute'
 import { gateway } from '../gateway'
 
 import type { StagedAttachment } from '../state/attachments'
-import { chatWindowTitle } from '@shared/chatWindows'
+import { CHAT_WINDOW_LIMIT, chatWindowTitle } from '@shared/chatWindows'
 import { Composer } from './Composer'
 import { ModelPicker } from './ModelPicker'
 import { ContextPanel } from './ContextPanel'
@@ -204,9 +204,17 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   }, [openRequests, notify])
 
   // Docked: the chat moves to a window of its own, and the main window, seeing it there, closes this pane.
-  const openInWindow = useCallback(() => {
-    void window.conduit.openChatWindow({ id: request.id, profile, title, author: botTitle, host, ...(botChat ? { botChat: true } : {}) })
-  }, [request.id, profile, title, botTitle, host, botChat])
+  const openInWindow = useCallback(async () => {
+    const opened = await window.conduit.openChatWindow({ id: request.id, profile, title, author: botTitle, host, ...(botChat ? { botChat: true } : {}) })
+    if (opened) return
+    const open = await window.conduit.chatWindows()
+    notice(
+      open.length >= CHAT_WINDOW_LIMIT
+        ? t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT })
+        : t('The chat didn’t open. Try again.'),
+      'error'
+    )
+  }, [request.id, profile, title, botTitle, host, botChat, notice])
   const openInMain = useCallback(() => {
     window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
@@ -252,7 +260,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           </div>
           <div className="chat-head-actions">
             {docked ? (
-              <button className="link" onClick={openInWindow} title={t('Moves this chat to a window of its own.')}>
+              <button className="link" onClick={() => void openInWindow()} title={t('Moves this chat to a window of its own.')}>
                 {t('Open in New Window')}
               </button>
             ) : (

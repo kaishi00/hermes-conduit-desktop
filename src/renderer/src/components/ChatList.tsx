@@ -746,7 +746,8 @@ export function ChatList({
                         : undefined
                     }
                   >
-                    <button className="row" onClick={() => onOpenOther?.(row)}>
+                    {/* Open in place (docked in the chat pane), it's marked as this dashboard's open chat is. */}
+                    <button className="row" aria-current={row.id === selectedId ? 'true' : undefined} onClick={() => onOpenOther?.(row)}>
                       <span className="row-top">
                         <span className="row-title">
                           {badge ? <HostBadgeMark badge={badge} /> : null}
