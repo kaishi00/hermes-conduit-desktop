@@ -575,7 +575,11 @@ export function GptLiveCall({
         const asked = await askedQuestionsForCall(profile)
         if (ended.current) return
         phoneRef.current = phone
-        const told = briefing(language(), persona, memory, asked, undefined, undefined, phone.context, gptLivePhoneRules(phone.tools))
+        // The phone's read rules only where a delegation carries its text: GA's carries none (the request is in the
+        // transcript), so a marker could never match there and the model would be taught a read it can't make.
+        const briefed = (rules: boolean) =>
+          briefing(language(), persona, memory, asked, undefined, undefined, phone.context, rules ? gptLivePhoneRules(phone.tools) : '')
+        const told = briefed(billing !== 'api')
         const body: Record<string, unknown> = { sdp: peer.localDescription?.sdp ?? '', billing, briefing: told }
         if (seed.length) body.history = seed
         if (voice) body.voice = voice
@@ -584,11 +588,13 @@ export function GptLiveCall({
         trace.current.step(`Session answered (${answer.dialect} events, briefing ${answer.briefingApplied ? 'applied' : 'sent after start'})`)
         if (ended.current) return
         dialect.current = answer.dialect
+        if (answer.dialect === 'ga') phoneRef.current = { ...phone, tools: [] }
         setNote(voiceNote(voice, answer.voice))
         await peer.setRemoteDescription({ type: 'answer', sdp: answer.sdp })
         // Given with the session where the host takes it; otherwise once it starts.
         if (!answer.briefingApplied) {
-          const sendBriefing = () => append(told, 'instructions', null)
+          const late = answer.dialect === 'ga' ? briefed(false) : told
+          const sendBriefing = () => append(late, 'instructions', null)
           if (dc.readyState === 'open') sendBriefing()
           else dc.addEventListener('open', sendBriefing, { once: true })
         }
