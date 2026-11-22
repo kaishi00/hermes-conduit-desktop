@@ -1853,7 +1853,12 @@ function Shell({
       if (newest) openDocked({ host: newest.host, id: newest.id, profile: newest.profile, title: newest.title })
       // A bot with no chats there yet starts a new chat in place, as this dashboard's faces do; not before that
       // dashboard's chats are first read, when it may have some.
-      else if (keptChatsRead.has(tile.host)) openDocked({ host: tile.host, id: `new-${Date.now()}`, fresh: true, profile: tile.bot.name })
+      else if (keptChatsRead.has(tile.host)) {
+        // A second click while that fresh one is shown keeps it, and what's typed in it, as openOtherBot's does.
+        const shown = dockedRef.current
+        if (shown?.fresh && !shown.botChat && shown.host === tile.host && same(shown.profile)) return
+        openDocked({ host: tile.host, id: `new-${Date.now()}`, fresh: true, profile: tile.bot.name, title: tile.bot.title, author: tile.bot.title })
+      }
     },
     [otherChats, openDocked]
   )
