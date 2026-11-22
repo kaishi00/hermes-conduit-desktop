@@ -16,9 +16,14 @@ export class KeptScroll {
   private top = 0
   private restoring = false
 
-  /** A list drew for the first time: it starts restoring the kept spot. */
+  /**
+   * A list drew for the first time, or a kept one is shown again: it starts
+   * restoring the kept spot. The top too: a kept list shown again still sits
+   * where it was when it went away, though the group chat page's list has
+   * since scrolled back up.
+   */
   opened(): void {
-    this.restoring = this.top > 0
+    this.restoring = true
   }
 
   /** After each draw: puts the list back at the kept spot while restoring. */

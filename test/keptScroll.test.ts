@@ -70,4 +70,25 @@ describe('KeptScroll', () => {
     kept.drew(next)
     expect(next.scrollTop).toBe(0)
   })
+  it('puts a kept list shown again back at the top when the other list scrolled up', () => {
+    const kept = new KeptScroll()
+    const side = list(1000)
+    kept.opened()
+    kept.drew(side)
+    side.scrollTop = 600
+    kept.scrolled(side)
+
+    // A group chat's page draws its own list at the spot, then you scroll it to the top.
+    const page = list(1000)
+    kept.opened()
+    kept.drew(page)
+    kept.touched()
+    page.scrollTop = 0
+    kept.scrolled(page)
+
+    // A bot's chat shows the kept side list again, still at 600 underneath.
+    kept.opened()
+    kept.drew(side)
+    expect(side.scrollTop).toBe(0)
+  })
 })
