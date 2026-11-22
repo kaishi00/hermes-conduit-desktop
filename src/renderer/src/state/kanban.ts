@@ -153,7 +153,7 @@ export function parseTaskDetail(raw: unknown): KanbanTaskDetail | null {
       const row = linked.get(String(id))
       return { id: String(id), title: str(row?.title) ?? String(id), status: str(row?.status) ?? '' }
     })
-  const summaries = new Map(list(object.child_results).map(row => [String(row.id), str(row.latest_summary) ?? str(row.result)]))
+  const summaries = new Map(list(object.child_results).map(row => [String(row.id), str(row.result) ?? str(row.latest_summary)]))
   return {
     task,
     comments: list(object.comments).map((row, index) => ({

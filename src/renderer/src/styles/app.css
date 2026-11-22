@@ -12207,3 +12207,9 @@ button.ghost:disabled {
   flex: none;
   margin: 8px 16px 0;
 }
+
+/* A child's result under its Blocks row: indented past the lane dot. */
+.task-body.child-result {
+  margin: 2px 0 6px 16px;
+  font-size: 13px;
+}

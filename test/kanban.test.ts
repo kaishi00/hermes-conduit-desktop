@@ -43,6 +43,15 @@ describe('the task board', () => {
     expect(parseTaskDetail({})).toBeNull()
   })
 
+  it("takes a child's result over its latest run summary, as the phone does", () => {
+    const detail = parseTaskDetail({
+      task: { id: 'p', title: 'Parent', status: 'todo', priority: 0 },
+      links: { children: ['c'] },
+      child_results: [{ id: 'c', latest_summary: 'Run summary', result: 'Handed back' }]
+    })
+    expect(detail?.children[0]?.summary).toBe('Handed back')
+  })
+
   it('names the board only when one is picked', () => {
     expect(boardPath('/board', null)).toBe('/api/plugins/kanban/board')
     expect(boardPath('/tasks/t1', 'my board')).toBe('/api/plugins/kanban/tasks/t1?board=my%20board')

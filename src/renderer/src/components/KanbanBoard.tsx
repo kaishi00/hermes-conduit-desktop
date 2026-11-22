@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import type { Bot } from '../state/bots'
 import { CREATABLE, MOVABLE, PRIORITIES, ageText, columnTitle, matchesTask, priorityTitle, type KanbanTask, type KanbanTaskDetail } from '../state/kanban'
@@ -564,10 +564,18 @@ function TaskPanel({
           <section className="job-section">
             <h3>{t('Blocks')}</h3>
             {detail.children.map(child => (
-              <span key={child.id} className="task-link">
-                <span className={`lane-dot ${child.status}`} />
-                {child.title}
-              </span>
+              <Fragment key={child.id}>
+                <span className="task-link">
+                  <span className={`lane-dot ${child.status}`} />
+                  {child.title}
+                </span>
+                {/* What the child handed back (child_results), whole, as the phone's Blocks row previews it. */}
+                {child.summary ? (
+                  <div className="task-body child-result">
+                    <Markdown text={child.summary} />
+                  </div>
+                ) : null}
+              </Fragment>
             ))}
           </section>
         ) : null}
