@@ -38,6 +38,9 @@ describe('updates', () => {
     expect(failed).toMatchObject({ phase: 'download-failed', version: '1.0.1' })
     expect(mayDownload(failed)).toBe(true)
     expect(mayCheck(failed)).toBe(true)
+    // The next scheduled check fails too (offline): Try Again and the version stay.
+    expect(run(failed, { kind: 'checking' }, { kind: 'failed' })).toMatchObject({ phase: 'download-failed', version: '1.0.1' })
+    expect(run(found, { kind: 'checking' }, { kind: 'failed' })).toMatchObject({ phase: 'available', version: '1.0.1' })
   })
 
   it('calls a failed check an error, and an empty one up to date', () => {

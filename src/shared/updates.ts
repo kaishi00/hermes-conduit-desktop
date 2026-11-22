@@ -24,6 +24,8 @@ export interface UpdateState {
   percent?: number
   /** When the last check ended, ms. */
   checkedAt?: number
+  /** The phase a check started from, so a failed check after Download or a failed download goes back to it. */
+  before?: UpdatePhase
 }
 
 /** A check at launch, after the window's first work, then every four hours. */
@@ -57,11 +59,11 @@ export type UpdateEvent =
   | { kind: 'failed' }
   | { kind: 'auto'; on: boolean }
 
-/** The next state after an event, at `now` (ms). A failure while downloading keeps the version for Try Again. */
+/** The next state after an event, at `now` (ms). A failure while downloading keeps the version for Try Again, and so does a failed check that started from one. */
 export function nextUpdateState(state: UpdateState, event: UpdateEvent, now: number): UpdateState {
   switch (event.kind) {
     case 'checking':
-      return { ...state, phase: 'checking' }
+      return { ...state, phase: 'checking', before: state.phase }
     case 'none':
       return { ...state, phase: 'none', version: undefined, percent: undefined, checkedAt: now }
     case 'found':
@@ -72,8 +74,12 @@ export function nextUpdateState(state: UpdateState, event: UpdateEvent, now: num
       return { ...state, phase: 'downloading', percent: Math.max(0, Math.min(100, Math.round(event.percent))) }
     case 'downloaded':
       return { ...state, phase: 'ready', version: event.version, percent: 100 }
-    case 'failed':
-      return { ...state, phase: state.phase === 'downloading' && state.version ? 'download-failed' : 'error', percent: undefined, checkedAt: now }
+    case 'failed': {
+      // A failed check that started with a known version (Download or Try Again showing) keeps it and its button.
+      const kept = state.phase === 'checking' && state.version && (state.before === 'available' || state.before === 'download-failed') ? state.before : null
+      const phase = kept ?? (state.phase === 'downloading' && state.version ? 'download-failed' : 'error')
+      return { ...state, phase, percent: undefined, checkedAt: now }
+    }
     case 'auto':
       return { ...state, auto: event.on }
   }

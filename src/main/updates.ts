@@ -97,6 +97,6 @@ export function setAutoUpdate(auto: boolean): UpdateState {
   }
   autoUpdater.autoDownload = auto
   apply({ kind: 'auto', on: auto })
-  if (auto && state.phase === 'available') void downloadUpdate()
+  if (auto && (state.phase === 'available' || state.phase === 'download-failed')) void downloadUpdate()
   return state
 }
