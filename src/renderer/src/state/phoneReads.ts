@@ -190,13 +190,29 @@ function gptLiveRule(tool: PhoneTool): string {
   return `${tool.description}\nTo use it, delegate "${marker}:" followed by its arguments as one JSON object, like ${marker}: {"action": "${example}"}. Arguments: ${args.join('; ')}. Conduit answers on that delegation at once (it isn't a Hermes job); answer the user from it. The marker is for Conduit only: never say it aloud.`
 }
 
+/** The lead of the briefing's phone-read rules, naming each marker; '' without any tools. */
+export function gptLivePhoneFirst(tools: PhoneTool[]): string {
+  if (!tools.length) return ''
+  const markers = tools.map(tool => `"${phoneMarker(tool)}:"`).join(', ')
+  return `\n\n[Conduit's own tools: ${markers}. Conduit answers these itself, much faster than a Hermes job. Use them first. When the user asks about something one of them covers, delegate its marker, not a request for Hermes: this takes precedence over the first rule, which sends real work to Hermes. Don't say you'll have Hermes look: no acknowledgement is needed, answer from what comes back. Delegate to Hermes only what they can't do, or when the user asks for Hermes.]`
+}
+
 /** The briefing's rules for the phone's read tools; '' without any. */
 export function gptLivePhoneRules(tools: PhoneTool[]): string {
   if (!tools.length) return ''
-  const markers = tools.map(tool => `"${phoneMarker(tool)}:"`).join(', ')
-  const first = `[Conduit's own tools: ${markers}. Conduit answers these itself, much faster than a Hermes job. Use them first. When the user asks about something one of them covers, delegate its marker, not a request for Hermes: this takes precedence over the first rule, which sends real work to Hermes. Don't say you'll have Hermes look: no acknowledgement is needed, answer from what comes back. Delegate to Hermes only what they can't do, or when the user asks for Hermes.]`
-  return `\n\n${first}\n\n${tools.map(gptLiveRule).join('\n\n')}`
+  return `${gptLivePhoneFirst(tools)}\n\n${tools.map(gptLiveRule).join('\n\n')}`
 }
+
+/**
+ * The phone's read tools a call's instructions preview names, before any
+ * call has asked the host what the phone allows: the names alone, as the
+ * rules that lead the instructions show them.
+ */
+export const PREVIEW_PHONE_TOOLS: PhoneTool[] = ['conduit_location', 'conduit_calendar', 'conduit_phone', 'conduit_health'].map(name => ({
+  name,
+  description: '',
+  parameters: {}
+}))
 
 /** "Health: {...}" at the very start of a delegation: the tool and its JSON arguments (empty when none came). */
 export function markedPhoneRead(text: string, tools: PhoneTool[]): { tool: PhoneTool; args: Record<string, unknown> } | null {
@@ -224,6 +240,6 @@ const ANSWER_NOTE =
 
 /** A read's answer on its delegation, as the phone words it (VoiceHostTool.delegatedReply). */
 export function delegatedPhoneReply(result: Record<string, string>): string {
-  if (result.error) return `[${result.error} Tell the user in a few words.]`
+  if (result.error) return `[${result.error.replace(/\s*Tell the user\.\s*$/, '')} Tell the user in a few words.]`
   return `[${ANSWER_NOTE}]\n${result.result ?? ''}`
 }

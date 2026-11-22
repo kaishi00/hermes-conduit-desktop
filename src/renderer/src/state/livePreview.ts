@@ -16,6 +16,7 @@ import { grokSendsMemory, grokSendsPersona, instructions as grokInstructions } f
 import { AGENT_INSTRUCTIONS, AGENT_LOOKUPS, localLiveAgent, localLivePersona } from './localLive'
 import { clockInstructions, liveInstructions } from './liveCall'
 import { openingTurn, spokenGreeting } from './liveGreeting'
+import { PREVIEW_PHONE_TOOLS, gptLivePhoneFirst } from './phoneReads'
 
 /** What a call reads from the host as it starts. */
 export interface PreviewHost {
@@ -52,7 +53,9 @@ export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new D
   })
   switch (mode) {
     case 'gpt':
-      return preview(briefing(lang, sendsPersona() ? persona : '', sendsMemory() ? memory : '', '', undefined, undefined, phoneNow))
+      return preview(
+        briefing(lang, sendsPersona() ? persona : '', sendsMemory() ? memory : '', '', undefined, undefined, phoneNow, gptLivePhoneFirst(PREVIEW_PHONE_TOOLS))
+      )
     case 'gemini':
     case 'qwen': {
       const qwen = mode === 'qwen'
@@ -64,7 +67,8 @@ export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new D
           memory: sendsMemory ? memory : '',
           recall: sendsMemory && !!host.recall,
           search: resolvedSearch(searchMode(mode), !!host.hostSearch, mode),
-          phoneNow
+          phoneNow,
+          phoneTools: PREVIEW_PHONE_TOOLS
         })
       )
     }
@@ -77,7 +81,8 @@ export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new D
           recall: grokSendsMemory() && !!host.recall,
           now,
           timeZone,
-          phoneNow
+          phoneNow,
+          phoneTools: PREVIEW_PHONE_TOOLS
         })
       )
     case 'local':
@@ -90,7 +95,8 @@ export function livePreview(mode: VoiceMode, host: PreviewHost = {}, now = new D
           extra: AGENT_INSTRUCTIONS + clockInstructions(now, timeZone),
           language: lang,
           persona: localLivePersona() ? persona : '',
-          phoneNow
+          phoneNow,
+          phoneTools: PREVIEW_PHONE_TOOLS
         }),
         true
       )

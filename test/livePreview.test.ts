@@ -32,6 +32,12 @@ describe("Live call style's What Conduit sends", () => {
     expect(livePreview('gpt')?.mode).toBe('GPT-Live')
   })
 
+  it("shows Conduit's own tools leading each mode's rules", () => {
+    for (const mode of ['gpt', 'gemini', 'qwen', 'grok'] as const) {
+      expect(livePreview(mode)?.instructions).toContain("Conduit's own tools")
+    }
+  })
+
   it('has no greeting turn with the greeting off', () => {
     expect(livePreview('gemini')?.openingTurn).toBeNull()
   })

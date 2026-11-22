@@ -131,5 +131,26 @@ describe('GPT-Live reads the phone with a marked delegation', async () => {
   it('answers on the delegation in the phone words', () => {
     expect(delegatedPhoneReply({ status: 'ok', result: '{"ok":true}' })).toContain("This is the user's own data")
     expect(delegatedPhoneReply({ status: 'error', error: "That couldn't be read." })).toBe("[That couldn't be read. Tell the user in a few words.]")
+    // The plugin's own "Tell the user." isn't doubled.
+    expect(delegatedPhoneReply({ status: 'error', error: 'Location is off. Tell the user.' })).toBe('[Location is off. Tell the user in a few words.]')
+  })
+
+  it('teaches the markers only where a delegation carries its words', async () => {
+    const { teachesPhoneReads } = await import('../src/renderer/src/state/gptLive')
+    expect(teachesPhoneReads('subscription')).toBe(true)
+    expect(teachesPhoneReads('subscription', 'frameless')).toBe(true)
+    expect(teachesPhoneReads('subscription', 'ga')).toBe(false)
+    expect(teachesPhoneReads('api')).toBe(false)
+    expect(teachesPhoneReads('api', 'frameless')).toBe(false)
+  })
+
+  it('drops the read rules before refusing a briefing that is still too long', async () => {
+    const { MAX_BRIEFING_CHARACTERS } = await import('../src/renderer/src/state/gptLive')
+    const rules = gptLivePhoneRules([LOCATION])
+    const huge = 'x'.repeat(MAX_BRIEFING_CHARACTERS)
+    const fits = briefing(undefined, '', '', '', undefined, undefined, '', rules)
+    expect(fits).toContain(rules)
+    const over = briefing(undefined, '', '', huge, undefined, undefined, '', rules)
+    expect(over).not.toContain("Conduit's own tools")
   })
 })

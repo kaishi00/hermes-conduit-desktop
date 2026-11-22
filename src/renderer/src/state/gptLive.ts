@@ -94,6 +94,16 @@ export function sessionAnswer(response: unknown, billing: Billing): SessionAnswe
   }
 }
 
+/**
+ * Whether a call is taught the phone's read markers: only where a delegation
+ * carries its text. GA's carries none (the request is in the transcript), so
+ * an API-key call never is, and a subscription call only while its host
+ * hasn't answered with GA events.
+ */
+export function teachesPhoneReads(billing: 'subscription' | 'api' | string, dialect?: 'ga' | 'frameless'): boolean {
+  return billing !== 'api' && dialect !== 'ga'
+}
+
 // MARK: Server → client
 
 export type ServerEvent =
@@ -378,6 +388,12 @@ export function briefing(
   }
   if (excess > 0 && personaText) {
     personaText = clipped(personaText, excess)
+    text = assembled()
+    excess = codePoints(text) - MAX_BRIEFING_CHARACTERS
+  }
+  // A host listing many read tools: their rules go before the call is refused, and the request goes to Hermes.
+  if (excess > 0 && phoneRules) {
+    phoneRules = ''
     text = assembled()
   }
   return text
