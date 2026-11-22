@@ -4,7 +4,7 @@ name: Release
 # packages on a draft GitHub release named by package.json's version. A person
 # publishes the draft; the website's download links and the updater then serve
 # it. A manual run (workflow_dispatch) builds the same packages as workflow
-# artifacts without touching any release. Each part signs only when its secrets are set, so a release before
+# artifacts without touching any release, unless it's from main with publish. Each part signs only when its secrets are set, so a release before
 # them is unsigned, like CI's packages.
 #
 # Mac (Developer ID + notarization), secrets:
@@ -19,7 +19,14 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Cloud sessions can't push tags, so a run from main can publish too: the
+  # draft release names the tag, which GitHub makes when the draft is published.
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload to the draft release for package.json's version (from main only)
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref }}
@@ -85,8 +92,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLATFORM: ${{ matrix.platform }}
-          # Only a tag publishes; a manual run keeps its packages as artifacts.
-          PUBLISH: ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+          # A tag publishes, and a manual run from main with publish; any other run keeps its packages as artifacts.
+          PUBLISH: ${{ (startsWith(github.ref, 'refs/tags/') || (inputs.publish && github.ref == 'refs/heads/main')) && 'always' || 'never' }}
           # Mac
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -120,7 +127,7 @@ jobs:
           pnpm exec electron-builder --"$PLATFORM" --publish "$PUBLISH" "${args[@]}"
 
       - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !(startsWith(github.ref, 'refs/tags/') || (inputs.publish && github.ref == 'refs/heads/main')) }}
         with:
           name: conduit-${{ matrix.platform }}
           path: |

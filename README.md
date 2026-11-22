@@ -55,7 +55,9 @@ A `v*` tag matching `package.json`'s version (`v1.0.0` for `1.0.0`) runs
 the Developer ID and notarized), the Windows installer (unsigned) and the
 Linux AppImage onto a draft GitHub release, and the Microsoft Store package
 as a workflow artifact to upload to Partner Center, which signs it.
-Publishing the draft releases it.
+Publishing the draft releases it. A manual run of the workflow from main
+with publish checked does the same without a tag (GitHub makes the tag when
+the draft is published); mark a beta's release as a pre-release.
 
 Installed copies update themselves from the newest published release
 (`src/main/updates.ts`, electron-updater): they check at launch and every
