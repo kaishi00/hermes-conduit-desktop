@@ -642,7 +642,8 @@ export function ChatList({
           <span className="sr-only">{t('Search chats')}</span>
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('Search chats')} />
         </label>
-        {marks ? (
+        {/* Another dashboard's chats aren't filtered from here, so its face shows no Filter menu. */}
+        {marks && !otherProfile ? (
           <ChatFilterMenu
             selection={active}
             allCount={inShown.length}
@@ -669,7 +670,7 @@ export function ChatList({
           />
         ) : null}
       </div>
-      {active.length || hiddenProjects.size ? (
+      {!otherProfile && (active.length || hiddenProjects.size) ? (
         <div className="filter-active">
           <button className="filter-active-chip" onClick={() => setFilterOpen(true)}>
             {chipParts.join(', ')}

@@ -152,5 +152,33 @@ describe('the chat list draws', () => {
     expect(render({})).toContain('Website copy')
     localStorage.removeItem('conduit.hiddenChatProjects')
   })
+  it('shows only another dashboard’s profile under its face, with no Filter menu or chip for this one’s chats', async () => {
+    const path = '../src/renderer/src/components/ChatList.tsx'
+    const { ChatList } = (await import(/* @vite-ignore */ path)) as { ChatList: unknown }
+    const now = Date.now()
+    localStorage.setItem('conduit.chatFilters', JSON.stringify(['unread']))
+    const html = renderToStaticMarkup(
+      createElement(ChatList as never, {
+        rows: [{ id: 'a', title: 'Here chat', activeAt: now, pinned: false, profile: 'coder' }],
+        otherRows: [
+          { host: 'https://lab', id: 'f1', title: 'Far ops chat', activeAt: now, pinned: false, profile: 'ops' },
+          { host: 'https://lab', id: 'f2', title: 'Far writer chat', activeAt: now, pinned: false, profile: 'writer' }
+        ],
+        otherProfile: { host: 'https://lab', name: 'ops' },
+        error: null,
+        selectedId: null,
+        runningIds: new Set(),
+        onSelect: () => {},
+        onNewChat: () => {},
+        profile: null,
+        marks: { stars: [], seen: {}, baseline: now + 1, unread: [] }
+      } as never)
+    )
+    expect(html).toContain('Far ops chat')
+    expect(html).not.toContain('Far writer chat')
+    expect(html).not.toContain('Here chat')
+    expect(html).not.toContain('filter-button')
+    expect(html).not.toContain('filter-active')
+    localStorage.removeItem('conduit.chatFilters')
+  })
 })
-
