@@ -1,12 +1,22 @@
-# Packaging. Windows ships through the Microsoft Store (appx, signed by the
-# Store) and as an unsigned installer for testing; the Mac as a dmg, notarized
-# once the Apple ID secrets are in the repo's Actions secrets.
+# Packaging. Releases are built by .github/workflows/release.yml from a v* tag
+# and published to GitHub Releases, which the website's download page and the
+# updater read. Signing comes from that workflow's secrets: without them the
+# packages are unsigned, as in CI. The appx is for the Microsoft Store, which
+# signs it.
+# appId names the installed app: never change it after a public release.
 appId: dev.conduit.desktop
 productName: Conduit
 copyright: Copyright © 2026 kaishi00
 directories:
   output: release
   buildResources: build
+# A draft release for the tag the version names (v1.0.0 for 1.0.0), with the
+# latest*.yml files the updater reads; a person publishes the draft.
+publish:
+  provider: github
+  owner: kaishi00
+  repo: hermes-conduit-desktop
+  releaseType: draft
 files:
   - out/**
   - package.json
@@ -22,17 +32,22 @@ extraResources:
     filter: ['tray*.png', 'app-icon-*.png']
 mac:
   category: public.app-category.productivity
+  # The dmg for people, the zip for the updater; names without the version, so
+  # releases/latest/download/Conduit-mac.dmg always gets the newest.
   target:
     - target: dmg
       arch: [universal]
+    - target: zip
+      arch: [universal]
+  artifactName: Conduit-mac.${ext}
   hardenedRuntime: true
   # The microphone, for dictation and voice messages: macOS asks once, with this.
   extendInfo:
     NSMicrophoneUsageDescription: Conduit uses the microphone for dictation and voice messages.
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # Signing and notarizing come with the Developer ID secrets.
-  identity: null
+  # Signing (CSC_LINK) and notarizing (APPLE_API_KEY) come from the release
+  # workflow's secrets; CI's packages turn identity discovery off.
 win:
   # Full size, as Windows icons are drawn; build/icon.png keeps the Mac's margin.
   icon: build/icon-win.png
@@ -42,10 +57,13 @@ win:
 nsis:
   oneClick: true
   perMachine: false
+  # One installer for x64 and arm64, named without the version.
+  artifactName: Conduit-Setup.${ext}
 appx:
   identityName: Conduit
   displayName: Conduit
   publisherDisplayName: kaishi00
 linux:
   target: [AppImage]
+  artifactName: Conduit-linux-${arch}.${ext}
   category: Utility
