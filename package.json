@@ -1,7 +1,7 @@
 {
   "name": "conduit-desktop",
   "productName": "Conduit",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "private": true,
   "description": "Conduit for Windows and Mac: a desktop client for Hermes Agent",
   "license": "MIT",
