@@ -27,16 +27,38 @@ export function tellDockedShown(frame: DockedFrame | null, shown: boolean): void
  * the whole chat a chat window is. Another chat of the same dashboard points
  * the frame at it with no reload; the parent keys the pane by dashboard.
  * The parent holds `frame` and tells it as Chats shows or goes (this pane
- * isn't rendered again while Chats is away); `shown` is read as the page loads.
+ * isn't rendered again while Chats is away); `shown` is read as the page loads
+ * and whenever the page asks.
  */
-export function DockedChatPane({ chat, frame, shown }: { chat: DockedChat; frame: MutableRefObject<DockedFrame | null>; shown: MutableRefObject<boolean> }) {
+export function DockedChatPane({
+  chat,
+  frame,
+  shown,
+  onMoved
+}: {
+  chat: DockedChat
+  frame: MutableRefObject<DockedFrame | null>
+  shown: MutableRefObject<boolean>
+  /** The chat opened in a window of its own from the pane's header. */
+  onMoved: () => void
+}) {
   useEffect(() => {
     const el = frame.current
     if (!el) return
     const tell = () => tellDockedShown(el, shown.current)
+    const heard = (event: Event) => {
+      const { channel, args } = event as Event & { channel?: string; args?: unknown[] }
+      if (channel !== IPC.dockedToPane) return
+      if (args?.[0] === 'moved') onMoved()
+      else if (args?.[0] === 'ask') tell()
+    }
     el.addEventListener('dom-ready', tell)
-    return () => el.removeEventListener('dom-ready', tell)
-  }, [frame, shown])
+    el.addEventListener('ipc-message', heard)
+    return () => {
+      el.removeEventListener('dom-ready', tell)
+      el.removeEventListener('ipc-message', heard)
+    }
+  }, [frame, shown, onMoved])
   return (
     <main className="docked-chat" aria-label={chat.title}>
       <webview ref={frame as React.Ref<HTMLElement>} className="docked-chat-frame" src={dockedChatUrl(window.location.href, chat)} />

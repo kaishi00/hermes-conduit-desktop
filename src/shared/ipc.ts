@@ -333,6 +333,11 @@ export interface ConduitApi {
   chatWindowOf(sessionId: string, show?: boolean, storedIds?: readonly string[]): Promise<'watching' | 'open' | 'opening' | null>
   /** Whether the window this page is drawn in is in front: a docked chat's main window, else its own. */
   pageWatched(): Promise<boolean>
+  /**
+   * A docked chat's page tells the main window's pane, straight through its frame: 'moved' when the chat
+   * opened in a window of its own (the pane closes), 'ask' for whether Chats is on screen.
+   */
+  dockedToPane(message: 'moved' | 'ask'): void
   /** Closes these chats' windows, or every chat window. */
   closeChatWindows(ids?: string[]): void
   /** The chats that have a window of their own, now and whenever that changes. */
@@ -448,6 +453,7 @@ export const IPC = {
   chatWindowOf: 'conduit:chat-window-of',
   pageWatched: 'conduit:page-watched',
   dockedShown: 'conduit:docked-shown',
+  dockedToPane: 'conduit:docked-to-pane',
   chatWindowsChanged: 'conduit:chat-windows-changed',
   openScreenWindow: 'conduit:open-screen-window',
   screenWindows: 'conduit:screen-windows',

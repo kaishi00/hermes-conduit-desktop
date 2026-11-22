@@ -404,6 +404,7 @@ function Shell({
   // doesn't render it again while another section shows, so it couldn't tell the frame itself.
   const dockedFrame = useRef<DockedFrame | null>(null)
   const dockedShown = useRef(true)
+  const closeDocked = useCallback(() => setDocked(null), [])
   dockedShown.current = section === 'chats'
   const dockedHost = dockedChat?.host
   useEffect(() => {
@@ -2354,7 +2355,7 @@ function Shell({
                 onCollapse={() => hideList(true)}
               />
             )}
-            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} frame={dockedFrame} shown={dockedShown} /> : null}
+            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} frame={dockedFrame} shown={dockedShown} onMoved={closeDocked} /> : null}
             {/* Kept while another dashboard's chat is docked over it, so coming back to it doesn't open it again. */}
             <main className="chat" ref={chatPane} style={dockedChat ? { display: 'none' } : undefined}>
               <div className="chat-head soft">
