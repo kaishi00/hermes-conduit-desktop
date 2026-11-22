@@ -11,7 +11,7 @@
  * provider's live list first. Only the last read asked lands.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { gateway, GatewayError } from '../gateway'
+import { gateway, GatewayError, keptGateway } from '../gateway'
 import type { ModelProviderRow } from './models'
 
 export const READ_AGAIN_MS = 4000
@@ -21,6 +21,8 @@ export interface CatalogOptions {
   quietReadAgain?: boolean
   /** Off while the picker isn't up. */
   enabled?: boolean
+  /** Another combined dashboard's models (a scheduled job there), read through its kept connection. */
+  host?: string | null
 }
 
 export interface ModelCatalog {
@@ -70,7 +72,9 @@ export function catalogNote(catalog: Pick<ModelCatalog, 'providers' | 'answered'
 type Read = 'open' | 'again' | 'try' | 'refresh'
 
 export function useModelCatalog(params: Record<string, unknown>, options: CatalogOptions = {}): ModelCatalog {
-  const key = catalogKey(params)
+  const host = options.host ?? null
+  const key = host ? `${host}\n${catalogKey(params)}` : catalogKey(params)
+  const rpc = host ? keptGateway(host).rpc : gateway.rpc
   const enabled = options.enabled ?? true
   const quiet = !!options.quietReadAgain
   const [providers, setProviders] = useState<ModelProviderRow[] | null>(() => kept.get(key) ?? null)
@@ -103,12 +107,12 @@ export function useModelCatalog(params: Record<string, unknown>, options: Catalo
         let answer: { providers?: ModelProviderRow[] } | null
         if (kind === 'refresh') {
           try {
-            answer = await gateway.rpc('model.options', { ...body, refresh: true })
+            answer = await rpc('model.options', { ...body, refresh: true })
           } catch (e) {
             if (!refusesRefresh(e)) throw e
-            answer = await gateway.rpc('model.options', body)
+            answer = await rpc('model.options', body)
           }
-        } else answer = await gateway.rpc('model.options', body)
+        } else answer = await rpc('model.options', body)
         if (!answer || typeof answer !== 'object') throw new Error('invalid response')
         if (mine !== latest.current) return
         const rows = Array.isArray(answer.providers) ? answer.providers : []

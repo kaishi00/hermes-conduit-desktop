@@ -35,6 +35,8 @@ export interface CronJob {
   reasoningEffort?: string
   /** The profile that holds it, from a list of every profile's jobs. */
   profile?: string
+  /** Another combined dashboard that holds it (its URL); none for this dashboard's. */
+  host?: string
 }
 
 /** One run of a job: an agent run is a conversation (`id`); a script's run has only its output. */
@@ -45,6 +47,8 @@ export interface CronRun {
   preview?: string
   model?: string
   profile?: string
+  /** Another combined dashboard's run (its URL), from its job there. */
+  host?: string
   /** Epoch milliseconds. */
   startedAt?: number
   active: boolean

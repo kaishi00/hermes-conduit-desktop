@@ -31,8 +31,10 @@ import {
   type JobDraft,
   type ScheduleMode
 } from '../state/cron'
-import { useCron } from '../state/useCron'
-import { ProfileStrip } from './ChatList'
+import { useCron, type CronSource } from '../state/useCron'
+import { ProfileColumn } from './ProfileColumn'
+import type { MixedTile } from '../state/botOrder'
+import type { HostBadge } from '../state/keptHosts'
 import { Icon } from './icons'
 import { REASONING_LEVELS } from '../state/models'
 import { useModelCatalog } from '../state/modelCatalog'
@@ -47,13 +49,19 @@ interface Props {
   /** The profile the list shows (null: every one), shared with Chats. */
   profile: string | null
   onProfile: (profile: string | null) => void
+  /**
+   * The Chats column's faces: every combined dashboard's profiles. Another dashboard's face lists
+   * that profile's jobs, read and changed through its kept connection, with no switch.
+   */
+  tiles?: readonly MixedTile[]
+  badgeFor?: (tile: MixedTile) => HostBadge | null
   /** Opens a run's conversation. */
   onOpenRun: (run: CronRun, job: CronJob) => void
   /** The Board | Scheduled switch, for the header. */
   segment?: ReactNode
 }
 
-/** Pinned jobs, kept on this computer as "profile\tjobID" (Hermes has no pin for a job). */
+/** Pinned jobs, kept on this computer as "profile\tjobID", "host\tprofile\tjobID" for another dashboard's (Hermes has no pin for a job). */
 const PIN_KEY = 'conduit.pinnedCronJobs'
 const readPins = (): string[] => {
   try {
@@ -62,7 +70,7 @@ const readPins = (): string[] => {
     return []
   }
 }
-const pinKey = (job: CronJob) => `${job.profile ?? 'default'}\t${job.id}`
+const pinKey = (job: CronJob) => `${job.host ? `${job.host}\t` : ''}${job.profile ?? 'default'}\t${job.id}`
 const jobKey = pinKey
 
 type Pane = { kind: 'job'; key: string } | { kind: 'edit'; job: CronJob | null } | null
@@ -73,8 +81,31 @@ type Pane = { kind: 'job'; key: string } | { kind: 'edit'; job: CronJob | null }
  * details hold Run now, its settings and its run history, each run a
  * conversation. Jobs are made and changed here or by asking Hermes.
  */
-export function ScheduledJobs({ bots, connected, profile, onProfile, onOpenRun, segment }: Props) {
-  const cron = useCron(profile, connected)
+export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [], badgeFor, onOpenRun, segment }: Props) {
+  /** Another dashboard's profile the list shows, picked by its face. */
+  const [far, setFar] = useState<{ host: string; name: string } | null>(null)
+  const farHosts = useMemo(() => [...new Set(tiles.filter(tile => !tile.own).map(tile => tile.host))], [tiles])
+  // A far face whose dashboard is no longer combined goes back to All.
+  const shownFar = far && farHosts.includes(far.host) ? far : null
+  // All lists every combined dashboard's jobs, as Chats' All lists their chats.
+  const sources = useMemo<CronSource[]>(
+    () =>
+      shownFar
+        ? [{ host: shownFar.host, profile: shownFar.name }]
+        : profile
+          ? [{ host: null, profile }]
+          : [{ host: null, profile: null }, ...farHosts.map(host => ({ host, profile: null }))],
+    [shownFar, profile, farHosts]
+  )
+  const cron = useCron(sources, connected)
+  const pickProfile = (next: string | null) => {
+    setFar(null)
+    onProfile(next)
+  }
+  const pickFar = (tile: MixedTile) => {
+    onProfile(null)
+    setFar({ host: tile.host, name: tile.bot.name })
+  }
   const [pins, setPins] = useState(readPins)
   const [pane, setPane] = useState<Pane>(null)
   const [menu, setMenu] = useState<{ job: CronJob; x: number; y: number } | null>(null)
@@ -94,13 +125,20 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, onOpenRun, 
     }
   }, [menu])
 
-  useEffect(() => setPane(null), [profile])
+  useEffect(() => setPane(null), [profile, shownFar?.host, shownFar?.name])
 
   const jobs = cron.jobs ?? []
   const pinned = useMemo(() => pins.flatMap(key => jobs.filter(job => pinKey(job) === key)), [pins, jobs])
   const others = useMemo(() => jobs.filter(job => !pins.includes(pinKey(job))), [pins, jobs])
   const selected = pane?.kind === 'job' ? jobs.find(job => jobKey(job) === pane.key) ?? null : null
-  const botTitle = (name?: string) => bots?.find(b => b.name === (name ?? 'default'))?.title ?? name ?? ''
+  const tileOf = (job: CronJob) => {
+    const name = (job.profile ?? 'default').toLowerCase()
+    return tiles.find(tile => (job.host ? !tile.own && tile.host === job.host : tile.own) && tile.bot.name.toLowerCase() === name)
+  }
+  const botTitle = (job: CronJob) => tileOf(job)?.bot.title ?? (job.host ? undefined : bots?.find(b => b.name === (job.profile ?? 'default'))?.title) ?? job.profile ?? ''
+  // The list names each job's bot while it holds more than one profile's.
+  const namesBots = !profile && !shownFar && Math.max(tiles.length, bots?.length ?? 0) > 1
+  const showColumn = tiles.length > 1
 
   function togglePin(job: CronJob) {
     const key = pinKey(job)
@@ -152,7 +190,7 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, onOpenRun, 
         <span className={`meta job-next${isActive(job) ? ' on' : ''}`}>
           <Icon name="clock" />
           {nextRunLine(job)}
-          {!profile && job.profile && (bots?.length ?? 0) > 1 ? ` · ${botTitle(job.profile)}` : ''}
+          {namesBots && (job.profile || job.host) ? ` · ${botTitle(job)}` : ''}
         </span>
       </button>
       {!isFinished(job) ? (
@@ -186,14 +224,28 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, onOpenRun, 
 
   return (
     <>
-      <section className="chatlist" aria-label={t('Scheduled')}>
+      <section className={`chatlist${showColumn ? ' has-column' : ''}`} aria-label={t('Scheduled')}>
+        {showColumn ? (
+          <div className="profile-column-wrap">
+            <ProfileColumn
+              tiles={tiles}
+              profile={shownFar ? null : profile}
+              otherProfile={shownFar}
+              onProfile={pickProfile}
+              onOther={pickFar}
+              badgeFor={badgeFor}
+              unread={() => false}
+              waits={() => 0}
+            />
+          </div>
+        ) : null}
+        <div className="chatlist-main">
         <div className="chatlist-head">
           {segment ?? <h1>{t('Scheduled')}</h1>}
           <button className="round" aria-label={t('New job')} title={t('New job')} disabled={!connected} onClick={() => setPane({ kind: 'edit', job: null })}>
             <Icon name="plus" />
           </button>
         </div>
-        {(bots?.length ?? 0) > 1 ? <ProfileStrip bots={bots!} profile={profile} onProfile={onProfile} /> : null}
         <div className="chatlist-scroll">
           {cron.jobs === null && !cron.error ? <div className="empty">{t('Loading…')}</div> : null}
           {cron.error ? <div className="empty">{cron.error}</div> : null}
@@ -234,6 +286,7 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, onOpenRun, 
             </button>
           </div>
         ) : null}
+        </div>
       </section>
       <main className="needs job-pane">
         <div className="needs-inner">
@@ -250,7 +303,8 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, onOpenRun, 
               key={pane.job ? jobKey(pane.job) : 'new'}
               job={pane.job}
               bots={bots}
-              profile={profile}
+              profile={shownFar ? shownFar.name : profile}
+              host={pane.job ? (pane.job.host ?? null) : (shownFar?.host ?? null)}
               loadTargets={cron.deliveryTargets}
               onCancel={() => setPane(pane.job ? { kind: 'job', key: jobKey(pane.job) } : null)}
               onSave={async (draft, original, owner) => {
@@ -260,7 +314,7 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, onOpenRun, 
                 } else {
                   const body = createBody(draft)
                   if (!body) return
-                  const made = await cron.create(body, owner)
+                  const made = await cron.create(body, owner, shownFar?.host ?? null)
                   setPane(made ? { kind: 'job', key: jobKey(made) } : null)
                   // Hermes' create takes no reasoning; the new job gets it as an edit.
                   const reasoning = createReasoningUpdate(draft)
@@ -280,7 +334,7 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, onOpenRun, 
               key={jobKey(selected)}
               job={selected}
               busy={cron.busy === selected.id}
-              profileName={!profile && (bots?.length ?? 0) > 1 ? botTitle(selected.profile) : null}
+              profileName={namesBots ? botTitle(selected) : null}
               loadRuns={cron.runs}
               onAct={action => void act(action, selected)}
               onEdit={() => setPane({ kind: 'edit', job: selected })}
@@ -426,6 +480,7 @@ function JobEditor({
   job,
   bots,
   profile,
+  host,
   loadTargets,
   onCancel,
   onSave
@@ -433,7 +488,9 @@ function JobEditor({
   job: CronJob | null
   bots: Bot[] | null
   profile: string | null
-  loadTargets: (owner: string | undefined) => Promise<DeliveryTarget[]>
+  /** Another combined dashboard the job is on (its models and delivery targets are read there); null for this one. */
+  host: string | null
+  loadTargets: (owner: string | undefined, host: string | null) => Promise<DeliveryTarget[]>
   onCancel: () => void
   onSave: (draft: JobDraft, original: JobDraft, owner: string | undefined) => Promise<void>
 }) {
@@ -446,13 +503,13 @@ function JobEditor({
 
   useEffect(() => {
     let live = true
-    void loadTargets(owner).then(list => live && setTargets(list))
+    void loadTargets(owner, host).then(list => live && setTargets(list))
     return () => {
       live = false
     }
-  }, [owner, loadTargets])
+  }, [owner, host, loadTargets])
 
-  const catalog = useModelCatalog(useMemo(() => ({ profile: owner, explicit_only: true }), [owner]))
+  const catalog = useModelCatalog(useMemo(() => ({ profile: owner, explicit_only: true }), [owner]), { host })
   const modelValue = draft.provider || draft.model ? `${draft.provider}\n${draft.model}` : ''
 
   const schedule = draft.schedule

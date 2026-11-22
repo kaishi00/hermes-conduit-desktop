@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { t } from '@shared/i18n'
 import type { Bot } from '../state/bots'
+import type { MixedTile } from '../state/botOrder'
+import type { HostBadge } from '../state/keptHosts'
 import type { CronJob, CronRun } from '../state/cron'
 import { KanbanBoard } from './KanbanBoard'
 import { ScheduledJobs } from './ScheduledJobs'
@@ -13,11 +15,16 @@ interface Props {
   connected: boolean
   profile: string | null
   onProfile: (profile: string | null) => void
+  /** Every combined dashboard's profiles, in the Chats column's order, for Scheduled's column. */
+  tiles?: readonly MixedTile[]
+  badgeFor?: (tile: MixedTile) => HostBadge | null
+  /** A dashboard's badge by its URL (null: this one), for Board's picker. */
+  hostBadge?: (host: string | null) => HostBadge | null
   onOpenRun: (run: CronRun, job: CronJob) => void
 }
 
 /** The phone's Tasks tab: the task board, and the scheduled jobs. */
-export function Tasks({ bots, connected, profile, onProfile, onOpenRun }: Props) {
+export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, hostBadge, onOpenRun }: Props) {
   const [segment, setSegment] = useState<Segment>(() => {
     try {
       return localStorage.getItem(SEGMENT_KEY) === 'scheduled' ? 'scheduled' : 'board'
@@ -44,8 +51,8 @@ export function Tasks({ bots, connected, profile, onProfile, onOpenRun }: Props)
     </div>
   )
   return segment === 'board' ? (
-    <KanbanBoard connected={connected} bots={bots} segment={switcher} />
+    <KanbanBoard connected={connected} bots={bots} tiles={tiles} hostBadge={hostBadge} segment={switcher} />
   ) : (
-    <ScheduledJobs bots={bots} connected={connected} profile={profile} onProfile={onProfile} onOpenRun={onOpenRun} segment={switcher} />
+    <ScheduledJobs bots={bots} connected={connected} profile={profile} onProfile={onProfile} tiles={tiles} badgeFor={badgeFor} onOpenRun={onOpenRun} segment={switcher} />
   )
 }

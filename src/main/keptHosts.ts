@@ -17,7 +17,15 @@ import type { ConnectionStatus, GatewayEventMessage, KeptHost, KeptHostState, Pe
 /** Kept beside the one on screen (stage 0's cap of four live dashboards). */
 export const MAX_KEPT = 3
 /** What the window may ask a kept host over its socket. */
-export const KEPT_RPC_METHODS: readonly string[] = ['profiles.list', 'profiles.get_asset', 'groups.list']
+export const KEPT_RPC_METHODS: readonly string[] = ['profiles.list', 'profiles.get_asset', 'groups.list', 'model.options']
+/**
+ * What another dashboard takes besides reads: its scheduled jobs and its task board, which Tasks
+ * shows and changes in place, with no switch (Eric, 2026-11-22: Scheduled's faces and Board's
+ * dropdown reach every combined dashboard).
+ */
+export const KEPT_WRITE_PATHS: readonly string[] = ['/api/cron/jobs', '/api/plugins/kanban/']
+const KEPT_WRITE_METHODS: readonly string[] = ['POST', 'PUT', 'PATCH', 'DELETE']
+const writable = (path: string) => !path.includes('..') && KEPT_WRITE_PATHS.some(prefix => path === prefix || path.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`) || path.startsWith(`${prefix}?`))
 export const KEPT_BACKOFF = { baseDelayMs: 30_000, capMs: 300_000, jitter: false }
 
 export interface KeptHostsDeps {
@@ -94,11 +102,15 @@ export class KeptHosts {
     return handed
   }
 
-  /** A read through a kept host's connection; only GETs, since what it shows only opens through a switch. */
-  async http<T>(url: string, path: string): Promise<T> {
+  /**
+   * A request through a kept host's connection: a GET for anything it shows, and a change only to
+   * what Tasks changes in place there (KEPT_WRITE_PATHS); the rest opens through a switch.
+   */
+  async http<T>(url: string, path: string, method = 'GET', body?: unknown): Promise<T> {
+    if (method !== 'GET' && !(KEPT_WRITE_METHODS.includes(method) && writable(path))) throw new Error('Only reads can go to another dashboard.')
     const kept = this.kept.get(url)
     if (!kept || kept.state !== 'live') throw new Error('Not connected to that Hermes.')
-    return kept.connection.http<T>('GET', path, undefined, 6_000)
+    return method === 'GET' ? kept.connection.http<T>('GET', path, undefined, 6_000) : kept.connection.http<T>(method, path, body)
   }
 
   /** A read over a kept host's socket: only what lists that host's bots, reads their pictures and lists its group chats. */

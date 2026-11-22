@@ -32,3 +32,24 @@ export const gateway = {
     return settled(await window.conduit.httpOutcome<T>(method, path, body, timeoutMs))
   }
 }
+
+/** A dashboard's calls: this one's, or (`host`) another combined dashboard's, through its kept connection. */
+export type DashboardHttp = <T = unknown>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown) => Promise<T>
+
+/**
+ * Another combined dashboard's calls, through its kept connection: any read, and changes only to
+ * its scheduled jobs and task board (main's KEPT_WRITE_PATHS).
+ */
+export function keptGateway(host: string) {
+  return {
+    async rpc<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+      return settled(await window.conduit.keptRpc<T>(host, method, params))
+    },
+    async http<T = unknown>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
+      return settled(await window.conduit.keptHttp<T>(host, path, method === 'GET' ? undefined : method, body))
+    }
+  }
+}
+
+/** This dashboard's http (null), or a kept one's. */
+export const dashboardHttp = (host: string | null): DashboardHttp => (host ? keptGateway(host).http : (method, path, body) => gateway.http(method, path, body))

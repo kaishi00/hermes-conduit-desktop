@@ -269,8 +269,8 @@ export interface ConduitApi {
   setCombined(url: string, on: boolean): Promise<void>
   /** Settings' Rename for a saved host: '' goes back to the automatic name. */
   renameHost(url: string, name: string): Promise<void>
-  /** A GET through a kept host's connection. */
-  keptHttp<T = unknown>(url: string, path: string): Promise<RpcOutcome<T>>
+  /** A GET through a kept host's connection, or a change to its scheduled jobs or task board (KEPT_WRITE_PATHS). */
+  keptHttp<T = unknown>(url: string, path: string, method?: string, body?: unknown): Promise<RpcOutcome<T>>
   /** A read over a kept host's socket (its bots: `profiles.list`). */
   keptRpc<T = unknown>(url: string, method: string, params?: Record<string, unknown>): Promise<RpcOutcome<T>>
   /** Pairing from the phone: the QR code's link, then events as the phone answers. */

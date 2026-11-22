@@ -1,18 +1,34 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { gateway } from '../gateway'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { dashboardHttp } from '../gateway'
 import { t } from '../../../shared/i18n'
 import { cronPath, parseDeliveryTargets, parseJob, parseJobs, parseRuns, type CronJob, type CronRun, type DeliveryTarget } from './cron'
 
 export type CronAction = 'pause' | 'resume' | 'trigger'
 
+/**
+ * Where the list's jobs come from: this dashboard (host null) or another combined one, read and
+ * changed through its kept connection, and its profile (null: every profile's).
+ */
+export interface CronSource {
+  host: string | null
+  profile: string | null
+}
+
+/** Another dashboard's jobs are read again this often, since its "jobs changed" events don't reach this window. */
+export const KEPT_CRON_POLL_MS = 60_000
+
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
+const sourcesKey = (sources: readonly CronSource[]) => sources.map(s => `${s.host ?? ''}\t${s.profile ?? ''}`).join('\n')
 
 /**
- * The scheduled jobs of `profile` (null: every profile's, each naming its
- * own), read again when Hermes says its jobs changed. An action names the
- * job's own profile, as the phone does.
+ * The scheduled jobs of each source, every profile's naming its own, read again when Hermes says
+ * its jobs changed (another dashboard's on a poll). An action goes to the job's own dashboard and
+ * names its own profile, as the phone does. A source whose read fails leaves the rest listed.
  */
-export function useCron(profile: string | null, connected: boolean) {
+export function useCron(sources: readonly CronSource[], connected: boolean) {
+  const key = sourcesKey(sources)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const shown = useMemo(() => sources, [key])
   const [jobs, setJobs] = useState<CronJob[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -21,44 +37,62 @@ export function useCron(profile: string | null, connected: boolean) {
 
   const load = useCallback(async () => {
     const mine = ++generation.current
-    try {
-      const raw = await gateway.http('GET', cronPath('/api/cron/jobs', profile ?? 'all'))
-      if (mine !== generation.current) return
-      setJobs(parseJobs(raw))
-      setError(null)
-    } catch (e) {
-      if (mine !== generation.current) return
-      setError(t('Could not load scheduled jobs: {reason}', { reason: message(e) }))
+    const reads = await Promise.allSettled(
+      shown.map(async source => {
+        const raw = await dashboardHttp(source.host)('GET', cronPath('/api/cron/jobs', source.profile ?? 'all'))
+        return source.host ? parseJobs(raw).map(job => ({ ...job, host: source.host! })) : parseJobs(raw)
+      })
+    )
+    if (mine !== generation.current) return
+    const read = reads.flatMap(r => (r.status === 'fulfilled' ? r.value : []))
+    const failed = reads.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+    if (failed && read.length === 0 && reads.every(r => r.status === 'rejected')) {
+      setError(t('Could not load scheduled jobs: {reason}', { reason: message(failed.reason) }))
+      return
     }
-  }, [profile])
+    setJobs(read)
+    setError(null)
+  }, [shown])
 
+  const far = shown.some(s => s.host)
+  const near = shown.some(s => !s.host)
   useEffect(() => {
     setJobs(null)
     setError(null)
     if (!connected) return
     void load()
-    const off = window.conduit.onEvent(event => {
-      if (event.type !== 'cron.changed') return
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => void load(), 400)
-    })
+    const off = near
+      ? window.conduit.onEvent(event => {
+          if (event.type !== 'cron.changed') return
+          if (timer.current) clearTimeout(timer.current)
+          timer.current = setTimeout(() => void load(), 400)
+        })
+      : () => undefined
+    const poll = far ? setInterval(() => !document.hidden && void load(), KEPT_CRON_POLL_MS) : null
     return () => {
       off()
+      if (poll) clearInterval(poll)
       if (timer.current) clearTimeout(timer.current)
     }
-  }, [connected, load])
+  }, [connected, load, near, far])
 
-  const jobProfile = (job: CronJob) => job.profile ?? profile ?? undefined
+  /** The job's own profile, else the one its source lists. */
+  const ownerOf = useCallback(
+    (job: CronJob) => job.profile ?? shown.find(s => (s.host ?? undefined) === job.host)?.profile ?? undefined,
+    [shown]
+  )
+  const http = (job: CronJob) => dashboardHttp(job.host ?? null)
+  const same = (a: CronJob, b: CronJob) => a.id === b.id && a.profile === b.profile && a.host === b.host
 
   /** Pause, Resume or Run now; null when it worked, else what to tell the user. */
   const act = useCallback(
     async (action: CronAction, job: CronJob): Promise<string | null> => {
       setBusy(job.id)
-      const owner = job.profile ?? profile ?? undefined
+      const owner = ownerOf(job)
       try {
-        await gateway.http('POST', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}/${action}`, owner), owner ? { profile: owner } : {})
+        await http(job)('POST', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}/${action}`, owner), owner ? { profile: owner } : {})
         if (action !== 'trigger') {
-          setJobs(list => list?.map(row => (row.id === job.id && row.profile === job.profile ? { ...row, enabled: action === 'resume' } : row)) ?? list)
+          setJobs(list => list?.map(row => (same(row, job) ? { ...row, enabled: action === 'resume' } : row)) ?? list)
         }
         void load()
         return null
@@ -73,15 +107,16 @@ export function useCron(profile: string | null, connected: boolean) {
         setBusy(null)
       }
     },
-    [load, profile]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [load, ownerOf]
   )
 
   const remove = useCallback(
     async (job: CronJob): Promise<string | null> => {
       setBusy(job.id)
       try {
-        await gateway.http('DELETE', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}`, job.profile ?? profile ?? undefined))
-        setJobs(list => list?.filter(row => !(row.id === job.id && row.profile === job.profile)) ?? list)
+        await http(job)('DELETE', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}`, ownerOf(job)))
+        setJobs(list => list?.filter(row => !same(row, job)) ?? list)
         void load()
         return null
       } catch (e) {
@@ -90,16 +125,17 @@ export function useCron(profile: string | null, connected: boolean) {
         setBusy(null)
       }
     },
-    [load, profile]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [load, ownerOf]
   )
 
-  /** A new job in `owner`; the job Hermes made, when it says. */
+  /** A new job in `owner` on `host` (null: this dashboard); the job Hermes made, when it says. */
   const create = useCallback(
-    async (body: Record<string, unknown>, owner: string | undefined): Promise<CronJob | null> => {
-      const raw = (await gateway.http('POST', cronPath('/api/cron/jobs', owner), body)) as Record<string, unknown> | null
+    async (body: Record<string, unknown>, owner: string | undefined, host: string | null = null): Promise<CronJob | null> => {
+      const raw = (await dashboardHttp(host)('POST', cronPath('/api/cron/jobs', owner), body)) as Record<string, unknown> | null
       void load()
       const job = parseJob(raw?.job ?? raw)
-      return job ? { ...job, profile: job.profile ?? owner } : null
+      return job ? { ...job, profile: job.profile ?? owner, ...(host ? { host } : {}) } : null
     },
     [load]
   )
@@ -107,27 +143,29 @@ export function useCron(profile: string | null, connected: boolean) {
   const update = useCallback(
     async (job: CronJob, updates: Record<string, unknown>): Promise<void> => {
       if (!Object.keys(updates).length) return
-      await gateway.http('PUT', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}`, job.profile ?? profile ?? undefined), { updates })
+      await http(job)('PUT', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}`, ownerOf(job)), { updates })
       void load()
     },
-    [load, profile]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [load, ownerOf]
   )
 
   const runs = useCallback(
     async (job: CronJob): Promise<CronRun[]> => {
-      const raw = await gateway.http('GET', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}/runs?limit=20`, job.profile ?? profile ?? undefined))
-      return parseRuns(raw)
+      const raw = await http(job)('GET', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}/runs?limit=20`, ownerOf(job)))
+      return parseRuns(raw).map(run => (job.host ? { ...run, host: job.host } : run))
     },
-    [profile]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ownerOf]
   )
 
-  const deliveryTargets = useCallback(async (owner: string | undefined): Promise<DeliveryTarget[]> => {
+  const deliveryTargets = useCallback(async (owner: string | undefined, host: string | null = null): Promise<DeliveryTarget[]> => {
     try {
-      return parseDeliveryTargets(await gateway.http('GET', cronPath('/api/cron/delivery-targets', owner)))
+      return parseDeliveryTargets(await dashboardHttp(host)('GET', cronPath('/api/cron/delivery-targets', owner)))
     } catch {
       return []
     }
   }, [])
 
-  return { jobs, error, busy, reload: load, act, remove, create, update, runs, deliveryTargets, jobProfile }
+  return { jobs, error, busy, reload: load, act, remove, create, update, runs, deliveryTargets, jobProfile: ownerOf }
 }

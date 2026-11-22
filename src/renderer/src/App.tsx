@@ -984,8 +984,8 @@ function Shell({
   // Combined dashboards: the other hosts kept connected beside this one...
   const keptHosts = useKeptHosts(status.url ?? '')
   // ...their bots, on Bots Home and in the chat list's profile column (Eric, 2026-11-21: Chats held only this dashboard's).
-  // Settings too: its profile dropdown lists every combined dashboard's profiles.
-  const otherBots = useKeptBots(keptHosts, botsListShown || section === 'chats' || section === 'settings')
+  // Settings too: its profile dropdown lists every combined dashboard's profiles. So does Scheduled's column (Eric, 2026-11-22).
+  const otherBots = useKeptBots(keptHosts, botsListShown || section === 'chats' || section === 'settings' || section === 'tasks')
   // ...with their pills, from their work read there (Eric, 2026-11-21: another host's "needs you" didn't show).
   const otherWork = useKeptWork(otherBots, botsListShown || section === 'chats')
   // The chat list's profile column, beside the list's own width: the list gives way to it before the chat does.
@@ -2890,8 +2890,16 @@ function Shell({
             profile={chatProfile}
             // Only the list's profile: picking one here doesn't open its chats.
             onProfile={setChatProfile}
+            tiles={profileTiles}
+            badgeFor={tileBadge}
+            hostBadge={host => badgeFor(host ?? status.url ?? '')}
             onOpenRun={(run, job) => {
               if (!run.id) return
+              // Another dashboard's run opens docked, on its kept connection, as its chats do.
+              if (run.host) {
+                openDocked({ host: run.host, id: run.id, profile: run.profile ?? job.profile, title: run.title })
+                return
+              }
               setSelected({ id: run.id, profile: run.profile ?? job.profile, title: run.title })
               setSection('chats')
             }}

@@ -1,10 +1,12 @@
-import { gateway } from '../gateway'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { dashboardHttp, keptGateway } from '../gateway'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { answerKeeper, keptAnswer } from './keptAnswers'
 import { LIVE_BOARD_POLL_MS, startKanbanStream, windowSockets } from './kanbanEvents'
 import { boardPath, boardPollDelay, defaultAssignee, failedInTransit, FIRST_READ_RETRY_MS, parseBoard, parseBoards, parseTask, parseTaskDetail, type KanbanBoard, type KanbanBoardRow, type KanbanTask, type KanbanTaskDetail } from './kanban'
 
 const BOARD_KEY = 'conduit.kanbanBoard'
+/** A board on another combined dashboard, picked last: {"host", "slug"}. */
+const FAR_BOARD_KEY = 'conduit.kanbanFarBoard'
 
 const savedBoard = (): string | null => {
   try {
@@ -12,6 +14,30 @@ const savedBoard = (): string | null => {
   } catch {
     return null
   }
+}
+
+const savedFarBoard = (): { host: string; slug: string | null } | null => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAR_BOARD_KEY) ?? 'null') as { host?: unknown; slug?: unknown } | null
+    return raw && typeof raw.host === 'string' ? { host: raw.host, slug: typeof raw.slug === 'string' ? raw.slug : null } : null
+  } catch {
+    return null
+  }
+}
+
+const store = (key: string, value: string | null) => {
+  try {
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, value)
+  } catch {
+    // Kept for this window only.
+  }
+}
+
+/** One combined dashboard's boards, for the picker: this one's (host null) first. */
+export interface BoardList {
+  host: string | null
+  boards: KanbanBoardRow[]
 }
 
 /**
@@ -22,7 +48,9 @@ const savedBoard = (): string | null => {
 let keptHost = ''
 const kept = new Map<string, KanbanBoard>()
 let keptBoards: KanbanBoardRow[] | null = null
-const keptKey = (slug: string | null) => slug ?? ''
+/** Another dashboard's boards are kept for this run only, under its URL. */
+const keptKey = (slug: string | null, host: string | null = null) => (host ? `${host}\n${slug ?? ''}` : (slug ?? ''))
+const farLists = new Map<string, KanbanBoardRow[]>()
 
 /** The dashboard signed in to; another one's board is never shown. */
 export function setKanbanHost(host: string): void {
@@ -33,9 +61,9 @@ export function setKanbanHost(host: string): void {
 }
 
 /** This run's board, else the one kept on this computer from the last (keptAnswers.ts), so a launch opens on it too. */
-function keptBoard(slug: string | null): KanbanBoard | null {
-  const key = keptKey(slug)
-  if (!kept.has(key)) {
+function keptBoard(slug: string | null, host: string | null = null): KanbanBoard | null {
+  const key = keptKey(slug, host)
+  if (!kept.has(key) && !host) {
     const raw = keptAnswer(boardPath('/board', slug))
     if (raw !== undefined) {
       try {
@@ -54,12 +82,31 @@ const missing = (error: unknown) => (error as { code?: unknown } | null)?.code =
 /**
  * The task board: its boards, the one picked (kept on this computer; the
  * server's current board is never changed), and its lanes, read again every
- * few seconds while `shown`.
+ * few seconds while `shown`. A board can be on another combined dashboard
+ * (`farHosts`, those kept live now): it is read and changed through that
+ * dashboard's kept connection, with no switch, at the poll's pace, since its
+ * live stream runs on that dashboard's socket.
  */
-export function useKanban(connected: boolean, shown: boolean) {
+export function useKanban(connected: boolean, shown: boolean, farHosts: readonly string[] = []) {
   const [boards, setBoards] = useState<KanbanBoardRow[] | null>(keptBoards)
-  const [slug, setSlug] = useState<string | null>(savedBoard)
-  const [board, setBoard] = useState<KanbanBoard | null>(() => keptBoard(slug))
+  const [ownSlug, setOwnSlug] = useState<string | null>(savedBoard)
+  const [farPick, setFarPick] = useState(savedFarBoard)
+  // Another dashboard's board while that dashboard is kept; this one's otherwise.
+  const host = farPick && farHosts.includes(farPick.host) ? farPick.host : null
+  const slug = host ? farPick!.slug : ownSlug
+  const http = useMemo(() => dashboardHttp(host), [host])
+  const [board, setBoard] = useState<KanbanBoard | null>(() => keptBoard(slug, host))
+  // Another board shown (a pick, or a far dashboard kept again or no longer): its kept copy, until the read.
+  const shownKey = keptKey(slug, host)
+  const lastKey = useRef(shownKey)
+  useEffect(() => {
+    if (lastKey.current === shownKey) return
+    lastKey.current = shownKey
+    setBoard(keptBoard(slug, host))
+    setError(null)
+    setUnavailable(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownKey])
   const [error, setError] = useState<string | null>(null)
   const [unavailable, setUnavailable] = useState(false)
   const [assignee, setAssignee] = useState('default')
@@ -81,19 +128,20 @@ export function useKanban(connected: boolean, shown: boolean) {
    */
   const load = useCallback(async () => {
     const mine = ++generation.current
-    const key = keptKey(slug)
+    const key = keptKey(slug, host)
     for (let attempt = 0; ; attempt++) {
       try {
         const path = boardPath('/board', slug)
-        const keep = answerKeeper(path)
-        const raw = await gateway.http('GET', path)
+        // Only this dashboard's board is kept on this computer for the next launch.
+        const keep = host ? null : answerKeeper(path)
+        const raw = await http('GET', path)
         if (mine !== generation.current) return
         const read = parseBoard(raw)
         const before = kept.get(key)
         const same = before !== undefined && JSON.stringify(before) === JSON.stringify(read)
         unchanged.current = same ? unchanged.current + 1 : 0
         // Written only when it changed: the poll reads every few seconds.
-        if (!same || keptAnswer(path) === undefined) keep(raw)
+        if (keep && (!same || keptAnswer(path) === undefined)) keep(raw)
         kept.set(key, read)
         // The same read keeps the board drawn, unless a move shown at once is still on it.
         setBoard(current => (same && current === before ? current : read))
@@ -113,24 +161,62 @@ export function useKanban(connected: boolean, shown: boolean) {
         return
       }
     }
-  }, [slug])
+  }, [slug, host, http])
 
   const loadBoards = useCallback(async () => {
     try {
-      const list = parseBoards(await gateway.http('GET', boardPath('/boards', null)))
+      const list = parseBoards(await dashboardHttp(null)('GET', boardPath('/boards', null)))
       keptBoards = list
       setBoards(list)
       // A saved board that's gone falls back to the server's current one.
-      if (slug && !list.some(row => row.slug === slug)) setSlug(null)
+      if (ownSlug && !list.some(row => row.slug === ownSlug)) setOwnSlug(null)
     } catch {
       setBoards(list => list ?? [])
     }
-    try {
-      setAssignee(defaultAssignee(await gateway.http('GET', boardPath('/orchestration', null))))
-    } catch {
-      // An older plugin: the default profile.
+  }, [ownSlug])
+
+  // Who a new task goes to by default, on the board's own dashboard.
+  useEffect(() => {
+    if (!connected || !shown) return
+    let live = true
+    setAssignee('default')
+    http('GET', boardPath('/orchestration', null))
+      .then(raw => live && setAssignee(defaultAssignee(raw)))
+      .catch(() => {
+        // An older plugin: the default profile.
+      })
+    return () => {
+      live = false
     }
-  }, [slug])
+  }, [connected, shown, http])
+
+  // The other combined dashboards' boards, for the picker; one without the board plugin lists none.
+  const farKey = farHosts.join('\n')
+  const [farBoards, setFarBoards] = useState<ReadonlyMap<string, KanbanBoardRow[]>>(() => new Map(farLists))
+  useEffect(() => {
+    const hosts = farKey ? farKey.split('\n') : []
+    for (const url of [...farLists.keys()]) if (!hosts.includes(url)) farLists.delete(url)
+    setFarBoards(new Map(farLists))
+    if (!connected || !shown || !hosts.length) return
+    let live = true
+    void Promise.all(
+      hosts.map(async url => {
+        try {
+          farLists.set(url, parseBoards(await keptGateway(url).http('GET', boardPath('/boards', null))))
+        } catch {
+          farLists.delete(url)
+        }
+      })
+    ).then(() => live && setFarBoards(new Map(farLists)))
+    return () => {
+      live = false
+    }
+  }, [connected, shown, farKey])
+  const lists = useMemo<BoardList[]>(
+    () => [{ host: null, boards: boards ?? [] }, ...farHosts.flatMap(url => (farBoards.get(url)?.length ? [{ host: url, boards: farBoards.get(url)! }] : []))],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [boards, farBoards, farKey]
+  )
 
   useEffect(() => {
     if (!connected || !shown) return
@@ -167,7 +253,7 @@ export function useKanban(connected: boolean, shown: boolean) {
     return () => document.removeEventListener('visibilitychange', onChange)
   }, [])
   useEffect(() => {
-    if (!connected || !shown || !visible || !hasCursor) return
+    if (!connected || !shown || !visible || !hasCursor || host) return
     const stream = startKanbanStream({
       board: slug,
       since: startAt.current!,
@@ -189,21 +275,24 @@ export function useKanban(connected: boolean, shown: boolean) {
     return () => {
       stream.stop()
     }
-  }, [connected, shown, visible, hasCursor, slug, load])
+  }, [connected, shown, visible, hasCursor, slug, host, load])
 
   useEffect(() => {
     if (connected && shown) void loadBoards()
   }, [connected, shown, loadBoards])
 
-  const pickBoard = useCallback((next: string | null) => {
-    setSlug(next)
-    setBoard(keptBoard(next))
-    try {
-      if (next) localStorage.setItem(BOARD_KEY, next)
-      else localStorage.removeItem(BOARD_KEY)
-    } catch {
-      // Kept for this window only.
+  /** A board by its slug, on another combined dashboard (`on`) or this one. */
+  const pickBoard = useCallback((next: string | null, on: string | null = null) => {
+    setBoard(keptBoard(next, on))
+    if (on) {
+      setFarPick({ host: on, slug: next })
+      store(FAR_BOARD_KEY, JSON.stringify({ host: on, slug: next }))
+      return
     }
+    setFarPick(null)
+    store(FAR_BOARD_KEY, null)
+    setOwnSlug(next)
+    store(BOARD_KEY, next)
   }, [])
 
   /** A task's change (status, assignee, priority, title, body); the task as Hermes now has it. */
@@ -223,43 +312,43 @@ export function useKanban(connected: boolean, shown: boolean) {
         )
       }
       try {
-        const raw = (await gateway.http('PATCH', boardPath(`/tasks/${encodeURIComponent(task.id)}`, slug), fields)) as { task?: unknown } | null
+        const raw = (await http('PATCH', boardPath(`/tasks/${encodeURIComponent(task.id)}`, slug), fields)) as { task?: unknown } | null
         return parseTask(raw?.task)
       } finally {
         void load()
       }
     },
-    [slug, load]
+    [slug, http, load]
   )
 
   const create = useCallback(
     async (body: Record<string, unknown>): Promise<{ task: KanbanTask | null; warning?: string }> => {
-      const raw = (await gateway.http('POST', boardPath('/tasks', slug), body)) as { task?: unknown; warning?: unknown } | null
+      const raw = (await http('POST', boardPath('/tasks', slug), body)) as { task?: unknown; warning?: unknown } | null
       void load()
       return { task: parseTask(raw?.task), warning: typeof raw?.warning === 'string' ? raw.warning : undefined }
     },
-    [slug, load]
+    [slug, http, load]
   )
 
   const remove = useCallback(
     async (task: KanbanTask): Promise<void> => {
-      await gateway.http('DELETE', boardPath(`/tasks/${encodeURIComponent(task.id)}`, slug))
+      await http('DELETE', boardPath(`/tasks/${encodeURIComponent(task.id)}`, slug))
       void load()
     },
-    [slug, load]
+    [slug, http, load]
   )
 
   const comment = useCallback(
     async (task: KanbanTask, body: string): Promise<void> => {
-      await gateway.http('POST', boardPath(`/tasks/${encodeURIComponent(task.id)}/comments`, slug), { body })
+      await http('POST', boardPath(`/tasks/${encodeURIComponent(task.id)}/comments`, slug), { body })
     },
-    [slug]
+    [slug, http]
   )
 
   const detail = useCallback(
-    async (id: string): Promise<KanbanTaskDetail | null> => parseTaskDetail(await gateway.http('GET', boardPath(`/tasks/${encodeURIComponent(id)}`, slug))),
-    [slug]
+    async (id: string): Promise<KanbanTaskDetail | null> => parseTaskDetail(await http('GET', boardPath(`/tasks/${encodeURIComponent(id)}`, slug))),
+    [slug, http]
   )
 
-  return { boards, slug, pickBoard, board, error, unavailable, defaultAssignee: assignee, reload: load, patch, create, remove, comment, detail, live, touched }
+  return { boards, lists, host, slug, pickBoard, board, error, unavailable, defaultAssignee: assignee, reload: load, patch, create, remove, comment, detail, live, touched }
 }

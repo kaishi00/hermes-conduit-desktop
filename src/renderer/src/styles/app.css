@@ -1278,6 +1278,22 @@ a:hover {
   gap: 1px;
 }
 
+.conduit-select-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.conduit-select-group:not(:first-child) {
+  margin-top: 4px;
+}
+
 .conduit-select-menu button {
   justify-content: space-between;
   color: var(--text);
@@ -2363,52 +2379,6 @@ html[data-window='quick'] body {
 
 .add-host {
   padding-left: 0;
-}
-
-/* The chat list's bots */
-.profile-strip {
-  display: flex;
-  gap: 4px;
-  padding: 0 12px 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  flex: none;
-}
-
-.profile-strip::-webkit-scrollbar {
-  display: none;
-}
-
-.profile-chip {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 10px 0 4px;
-  border: 1px solid var(--line);
-  border-radius: 15px;
-  background: var(--surface);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.profile-chip.all {
-  padding: 0 12px;
-}
-
-.profile-chip.face-only {
-  padding: 0 3px;
-}
-
-.profile-chip:hover {
-  background: var(--surface-hover);
-}
-
-.profile-chip[aria-selected='true'] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
 }
 
 /* Pairing from the phone */
@@ -4131,6 +4101,12 @@ html[data-window='quick'] body {
 .board-search {
   margin: 0;
   width: 220px;
+}
+
+.board-picker-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .board-picker,

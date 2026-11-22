@@ -657,10 +657,11 @@ function registerIpc(): void {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
   })
-  ipcMain.handle(IPC.keptHttp, async (_e, url: unknown, path: unknown): Promise<RpcOutcome> => {
+  ipcMain.handle(IPC.keptHttp, async (_e, url: unknown, path: unknown, method: unknown, body: unknown): Promise<RpcOutcome> => {
     if (typeof url !== 'string' || typeof path !== 'string' || !path.startsWith('/api/')) return { ok: false, error: 'Only dashboard API paths can be read.' }
+    if (method !== undefined && typeof method !== 'string') return { ok: false, error: 'Bad request.' }
     try {
-      return { ok: true, result: await keptHosts.http(url, path) }
+      return { ok: true, result: await keptHosts.http(url, path, method ?? 'GET', body) }
     } catch (error) {
       const code = (error as { code?: unknown }).code
       return { ok: false, error: error instanceof Error ? error.message : String(error), ...(typeof code === 'number' ? { code } : {}) }

@@ -9,7 +9,15 @@ import { Icon } from './icons'
  * children as a <select> does, so a screen swaps the tag and reads the picked value directly.
  */
 
-export type SelectOptionRow = { value: string; label: ReactNode; disabled: boolean; lang?: string }
+export type SelectOptionRow = { value: string; label: ReactNode; disabled: boolean; lang?: string; group?: SelectGroupHead }
+
+/** A heading over some of the rows (a combined dashboard's boards), as an <optgroup> heads its options. */
+export type SelectGroupHead = { key: string; label: ReactNode }
+
+/** Rows under a heading; the menu draws the heading once, above its first row. */
+export function SelectGroup(_props: { id: string; label: ReactNode; children?: ReactNode }): null {
+  return null
+}
 
 type Props = {
   value: string | number
@@ -23,23 +31,30 @@ type Props = {
   'aria-labelledby'?: string
   /** Two or three short, fixed choices: drawn as segmented buttons, as the phone's Settings draw them. */
   segments?: boolean
+  /** What the field shows for the picked row, in place of its label (a board with its dashboard's badge). */
+  shownLabel?: ReactNode
 }
 
 type OptionProps = { value?: string | number; disabled?: boolean; lang?: string; children?: ReactNode }
 
 /** The <option> rows among the children, through fragments, arrays and conditionals. */
-export function selectOptions(children: ReactNode): SelectOptionRow[] {
+export function selectOptions(children: ReactNode, group?: SelectGroupHead): SelectOptionRow[] {
   const rows: SelectOptionRow[] = []
   Children.forEach(children, child => {
     if (!isValidElement(child)) return
     if (child.type === Fragment) {
-      rows.push(...selectOptions((child as ReactElement<{ children?: ReactNode }>).props.children))
+      rows.push(...selectOptions((child as ReactElement<{ children?: ReactNode }>).props.children, group))
+      return
+    }
+    if (child.type === SelectGroup) {
+      const props = (child as ReactElement<{ id: string; label: ReactNode; children?: ReactNode }>).props
+      rows.push(...selectOptions(props.children, { key: props.id, label: props.label }))
       return
     }
     if (child.type !== 'option') return
     const props = (child as ReactElement<OptionProps>).props
     const label = props.children ?? ''
-    rows.push({ value: String(props.value ?? textOf(label)), label, disabled: !!props.disabled, lang: props.lang })
+    rows.push({ value: String(props.value ?? textOf(label)), label, disabled: !!props.disabled, lang: props.lang, ...(group ? { group } : {}) })
   })
   return rows
 }
@@ -95,7 +110,7 @@ function Segments({ value, onChange, children, disabled, title, id, ...aria }: P
   )
 }
 
-function Menu({ value, onChange, children, disabled, className, title, id, ...aria }: Props) {
+function Menu({ value, onChange, children, disabled, className, title, id, shownLabel, ...aria }: Props) {
   const rows = selectOptions(children)
   const current = String(value)
   const shown = shownOption(rows, current)
@@ -223,7 +238,7 @@ function Menu({ value, onChange, children, disabled, className, title, id, ...ar
         }}
       >
         <span className="conduit-select-value" lang={shown?.lang}>
-          {shown?.label}
+          {shown ? (shownLabel ?? shown.label) : null}
         </span>
         <Icon name="chevronDown" className="conduit-select-chevron" />
       </button>
@@ -246,8 +261,13 @@ function Menu({ value, onChange, children, disabled, className, title, id, ...ar
               onKeyDown={onMenuKey}
             >
               {rows.map((row, i) => (
+                <Fragment key={`${row.value}-${i}`}>
+                {row.group && row.group.key !== rows[i - 1]?.group?.key ? (
+                  <div className="conduit-select-group" role="presentation">
+                    {row.group.label}
+                  </div>
+                ) : null}
                 <button
-                  key={`${row.value}-${i}`}
                   type="button"
                   role="option"
                   tabIndex={i === active ? 0 : -1}
@@ -262,6 +282,7 @@ function Menu({ value, onChange, children, disabled, className, title, id, ...ar
                   </span>
                   {row.value === current ? <Icon name="check" className="host-check" /> : <span className="host-check" />}
                 </button>
+                </Fragment>
               ))}
             </div>,
             document.body

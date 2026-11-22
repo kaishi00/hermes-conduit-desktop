@@ -80,7 +80,7 @@ function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: str
   const sockets: FakeSocket[] = []
   const changes: KeptHost[][] = []
   const timers: { fn: () => void; ms: number }[] = []
-  const fetchImpl: Fetch = async input => {
+  const fetchImpl: Fetch = async (input, init) => {
     const url = new URL(String(input))
     const origin = url.origin
     if (opts.down?.includes(origin)) throw new TypeError('fetch failed')
@@ -90,6 +90,7 @@ function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: str
     }
     if (url.pathname === '/api/auth/ws-ticket') return opts.refuse?.includes(origin) ? json({ detail: 'Not authenticated' }, 401) : json({ ticket: 'T' })
     if (url.pathname === '/api/profiles') return json({ profiles: [{ name: 'default' }, { name: 'mira' }] })
+    if (url.pathname.startsWith('/api/cron/jobs') || url.pathname.startsWith('/api/plugins/kanban/')) return json({ method: init?.method ?? 'GET', path: url.pathname })
     if (url.pathname === '/api/plugins/conduit_push/capabilities') return json({ ok: true, name: `Hermes at ${url.hostname}` })
     return json({ detail: 'Not Found' }, 404)
   }
@@ -138,11 +139,17 @@ describe('combined dashboards in the main process', () => {
     expect(h.sockets.map(s => new URL(s.url).host)).toEqual(['b.example', 'c.example'])
     // Reads go through the kept connection.
     expect(await h.kept.http('https://b.example', '/api/profiles')).toEqual({ profiles: [{ name: 'default' }, { name: 'mira' }] })
+    // Tasks changes another dashboard's scheduled jobs and task board in place; nothing else is written there.
+    expect(await h.kept.http('https://b.example', '/api/cron/jobs/j1/pause?profile=mira', 'POST', { profile: 'mira' })).toEqual({ method: 'POST', path: '/api/cron/jobs/j1/pause' })
+    expect(await h.kept.http('https://b.example', '/api/plugins/kanban/tasks/t1', 'PATCH', { status: 'done' })).toEqual({ method: 'PATCH', path: '/api/plugins/kanban/tasks/t1' })
+    await expect(h.kept.http('https://b.example', '/api/sessions/s1', 'DELETE')).rejects.toThrow(/Only reads/)
+    await expect(h.kept.http('https://b.example', '/api/cron/jobs/../../sessions/s1', 'DELETE')).rejects.toThrow(/Only reads/)
+    await expect(h.kept.http('https://b.example', '/api/cron/jobsx', 'POST')).rejects.toThrow(/Only reads/)
     // Only reads go over a kept socket.
     await expect(h.kept.rpc('https://b.example', 'prompt.submit', {})).rejects.toThrow(/Only reads/)
     await expect(h.kept.rpc('https://b.example', 'profiles.set_asset', {})).rejects.toThrow(/Only reads/)
-    // Its bots' pictures are a read, and so is its list of group chats.
-    expect(KEPT_RPC_METHODS).toEqual(['profiles.list', 'profiles.get_asset', 'groups.list'])
+    // Its bots' pictures are a read, and so are its list of group chats and its models (a scheduled job's there).
+    expect(KEPT_RPC_METHODS).toEqual(['profiles.list', 'profiles.get_asset', 'groups.list', 'model.options'])
     await expect(h.kept.rpc('https://d.example', 'profiles.list')).rejects.toThrow(/Not connected/)
   })
 
