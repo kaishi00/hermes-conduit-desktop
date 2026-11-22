@@ -391,7 +391,7 @@ function createWindow(): void {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
-      // Only for a docked chat: watchDockedChats lets no other frame in.
+      // Only for a docked chat or Pulse feed: watchDockedChats lets no other frame in.
       webviewTag: true
     }
   })

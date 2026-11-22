@@ -23,7 +23,7 @@ export function DockedPulse() {
   const pulse = usePulse(status?.phase === 'open', true)
   if (!host) return <div className="chat-window-page" />
   return (
-    <div className="chat-window-page docked-pulse-page">
+    <div className="chat-window-page">
       <PulsePage
         pulse={pulse}
         onOpenChat={(target, draft) =>
