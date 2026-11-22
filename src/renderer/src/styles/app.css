@@ -12154,3 +12154,17 @@ button.ghost:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Another combined dashboard's chat opened in place: the chat window's page, filling the chat pane. */
+.docked-chat {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  background: var(--canvas);
+}
+.docked-chat-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

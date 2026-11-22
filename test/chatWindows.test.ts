@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_WINDOW_LIMIT, ChatWindowSet } from '../src/main/chatWindowSet'
-import { chatWindowRequest, chatWindowTitle } from '../src/shared/chatWindows'
+import { chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl } from '../src/shared/chatWindows'
 
 function harness() {
   const made: { id: string; focused: number; closed: boolean; onClosed: () => void }[] = []
@@ -84,6 +84,24 @@ describe('chat windows of their own', () => {
     const botChat = { id: 'b1', profile: 'ops', botChat: true, host: 'https://b.example' }
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify(botChat))}`)).toEqual(botChat)
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify({ id: 'b1', botChat: 'yes' }))}`)).toEqual({ id: 'b1' })
+  })
+
+  it('docks another dashboard’s chat at the main window’s own page, and lets in nothing else', () => {
+    const main = 'file:///app/out/renderer/index.html'
+    const chat = { id: 's1', profile: 'ops', title: 'Plans', host: 'https://b.example', botChat: true }
+    const src = dockedChatUrl(`${main}#ignored`, chat)
+    expect(src.startsWith(`${main}#chat=`)).toBe(true)
+    expect(dockedChatRequest(src, main)).toEqual({ ...chat, docked: true })
+    // The page reads it as a chat window's request, docked.
+    expect(chatWindowRequest(src.slice(main.length))).toEqual({ ...chat, docked: true })
+    // Another page, a chat window's request that isn't docked, or one naming no dashboard isn't let in.
+    expect(dockedChatRequest(src.replace('/app/', '/elsewhere/'), main)).toBeNull()
+    expect(dockedChatRequest(`https://evil.example/#chat=${src.split('#chat=')[1]}`, main)).toBeNull()
+    expect(dockedChatRequest(`${main}#chat=${encodeURIComponent(JSON.stringify(chat))}`, main)).toBeNull()
+    expect(dockedChatRequest(`${main}#chat=${encodeURIComponent(JSON.stringify({ id: 's1', docked: true }))}`, main)).toBeNull()
+    expect(dockedChatRequest(src, '')).toBeNull()
+    // A dev server's page works the same.
+    expect(dockedChatRequest(dockedChatUrl('http://localhost:5173/', chat), 'http://localhost:5173/')).toEqual({ ...chat, docked: true })
   })
 
   it('titles a window by its chat, then its bot', () => {

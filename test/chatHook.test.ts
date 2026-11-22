@@ -383,3 +383,77 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
     expect(paths).toEqual([])
   })
 })
+
+describe('a send while the chat is still opening (desktop#298)', () => {
+  let submitted: unknown[] = []
+  beforeEach(() => {
+    submitted = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const rpc = conduit.rpcOutcome
+    conduit.rpcOutcome = (method, params) => {
+      if (method === 'prompt.submit') submitted.push(params.session_id)
+      return rpc(method, params)
+    }
+  })
+
+  it('waits for the open and sends into that chat, not a new one', async () => {
+    resumes.a = { messages: history('one') }
+    const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
+    await settle()
+    hook.rerender({ storedId: null, connected: true, url: 'h1' })
+    await settle()
+    holdResumes = true
+    hook.rerender({ storedId: 'a', connected: true, url: 'h1' })
+    expect(hook.result().loading).toBe(true)
+    let created: unknown
+    const sending = act(async () => {
+      created = await hook.result().send('hello')
+    })
+    await settle()
+    expect(calls).not.toContain('session.create')
+    expect(submitted).toEqual([])
+    await act(async () => pendingResumes.forEach(resume => resume()))
+    await sending
+    expect(created).toBeNull()
+    expect(calls).not.toContain('session.create')
+    expect(submitted).toEqual(['live-a'])
+    expect(words(hook.result().transcript)).toEqual(['one', 're: one', 'hello'])
+  })
+
+  it('sends nothing when the user moves to another chat meanwhile', async () => {
+    holdResumes = true
+    const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
+    let created: unknown
+    const sending = act(async () => {
+      created = await hook.result().send('hello')
+    })
+    await settle()
+    hook.rerender({ storedId: 'b', connected: true, url: 'h1' })
+    await act(async () => pendingResumes.forEach(resume => resume()))
+    await sending
+    expect(created).toBe(false)
+    expect(calls).not.toContain('session.create')
+    expect(submitted).toEqual([])
+  })
+
+  it("doesn't leave a draft showing Loading after an abandoned open", async () => {
+    holdResumes = true
+    const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
+    expect(hook.result().loading).toBe(true)
+    hook.rerender({ storedId: null, connected: true, url: 'h1' })
+    expect(hook.result().loading).toBe(false)
+  })
+})
+
+describe('a chat picked while offline (desktop#283)', () => {
+  it("starts blank instead of showing the last chat's rows, and the open chat stays drawn through a drop", async () => {
+    resumes.a = { messages: history('one') }
+    const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
+    await settle()
+    hook.rerender({ storedId: 'a', connected: false, url: 'h1' })
+    expect(words(hook.result().transcript)).toEqual(['one', 're: one'])
+    hook.rerender({ storedId: 'b', connected: false, url: 'h1' })
+    expect(hook.result().chat.storedId).toBe('b')
+    expect(hook.result().transcript.items).toEqual([])
+  })
+})

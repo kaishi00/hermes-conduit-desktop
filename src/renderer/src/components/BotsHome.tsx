@@ -216,7 +216,8 @@ interface Props {
    * page (Eric, 2026-11-20): the bots as rows, Group chats under them, and
    * New Bot and New Group Chat on their headings. Names what's open.
    */
-  side: { openProfile?: string; openRoomId?: string };
+  /** `openHost`: the open Bot Chat is another combined dashboard's, docked in place, so its bot is the one marked open. */
+  side: { openProfile?: string; openRoomId?: string; openHost?: string };
   /** Hides the list beside the chat: the « at its top. */
   onHide?: () => void;
 }
@@ -802,7 +803,11 @@ export function BotsHome({
         {error ? <div className="empty">{t("Couldn’t load your bots: {error}", { error })}</div> : null}
         {tiles.map((tile) => {
           const { bot } = tile;
-          const open = tile.own && !side.openRoomId && !!side.openProfile && side.openProfile.toLowerCase() === bot.name.toLowerCase();
+          const open =
+            (side.openHost ? !tile.own && tile.host === side.openHost : tile.own) &&
+            !side.openRoomId &&
+            !!side.openProfile &&
+            side.openProfile.toLowerCase() === bot.name.toLowerCase();
           const picked = tile.own ? (draft?.members.includes(bot.name) ?? false) : draftFar.some((m) => m.key === tile.key);
           const pill = workPill(tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name)));
           const badge = tile.own ? ownBadge : (badgeFor?.(tile.host) ?? null);

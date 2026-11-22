@@ -331,6 +331,8 @@ export interface ConduitApi {
    * doesn't notify for it yet, so the asking window does.
    */
   chatWindowOf(sessionId: string, show?: boolean, storedIds?: readonly string[]): Promise<'watching' | 'open' | 'opening' | null>
+  /** Whether the window this page is drawn in is in front: a docked chat's main window, else its own. */
+  pageWatched(): Promise<boolean>
   /** Closes these chats' windows, or every chat window. */
   closeChatWindows(ids?: string[]): void
   /** The chats that have a window of their own, now and whenever that changes. */
@@ -394,7 +396,7 @@ export interface OpenChatRequest {
   title?: string
   /** A bot's Bot Chat, coming back from a window of its own. */
   botChat?: boolean
-  /** Another combined dashboard's chat, coming back from a window of its own: the main window switches to it. */
+  /** Another combined dashboard's chat, coming back from a window of its own (or a docked chat's notification): it docks in the chat pane, with no switch. */
   host?: string
 }
 
@@ -416,6 +418,8 @@ export interface ChatWindowRequest {
   botChat?: boolean
   /** The dashboard the chat is on: the one on screen, or another combined one. */
   host?: string
+  /** Shown in the main window's chat pane rather than a window of its own: another combined dashboard's chat, opened in place. */
+  docked?: boolean
 }
 
 export const IPC = {
@@ -432,6 +436,7 @@ export const IPC = {
   closeChatWindows: 'conduit:close-chat-windows',
   chatWindows: 'conduit:chat-windows',
   chatWindowOf: 'conduit:chat-window-of',
+  pageWatched: 'conduit:page-watched',
   chatWindowsChanged: 'conduit:chat-windows-changed',
   openScreenWindow: 'conduit:open-screen-window',
   screenWindows: 'conduit:screen-windows',
