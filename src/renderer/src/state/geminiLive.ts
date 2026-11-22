@@ -124,7 +124,7 @@ export function functionDeclarations(recall = false, webSearch = false): Row[] {
     name: tool.name,
     description: tool.description,
     parameters: upper(tool.parameters),
-    behavior: ['end_conversation', 'show_on_screen', 'list_jobs', 'cancel_job', 'call_me_when_done'].includes(tool.name) ? 'BLOCKING' : 'NON_BLOCKING'
+    behavior: ['end_conversation', 'show_on_screen', 'list_jobs', 'cancel_job', 'call_me_when_done', 'set_ask_first'].includes(tool.name) ? 'BLOCKING' : 'NON_BLOCKING'
   }))
 }
 

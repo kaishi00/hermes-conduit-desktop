@@ -14,6 +14,7 @@ import {
   type LiveTone
 } from '../state/liveStyle'
 import { Select } from './Select'
+import { liveAsksFirst, setLiveAsksFirst } from '../state/askFirst'
 
 const toneLabel = (tone: LiveTone) => (tone === 'relaxed' ? t('Relaxed') : tone === 'neutral' ? t('Neutral') : t('Professional'))
 const lengthLabel = (length: AnswerLength) => (length === 'concise' ? t('Concise') : length === 'detailed' ? t('Detailed') : t('Default'))
@@ -27,6 +28,7 @@ export function LiveCallStyleSettings() {
   const [greeting, setGreeting] = useState<string | null>(liveGreeting)
   const [style, setStyle] = useState(liveStyle)
   const [instructions, setInstructions] = useState(() => style.extraInstructions ?? '')
+  const [asksFirst, setAsksFirst] = useState(liveAsksFirst)
   return (
     <>
       <span className="meta">{t('Live call style')}</span>
@@ -123,6 +125,22 @@ export function LiveCallStyleSettings() {
         {t('Backchannels')}
       </label>
       <p className="meta settings-caption">{t('Short sounds like “mm-hmm” while you talk. Turn them off for a quieter listener. Applies to the next call.')}</p>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={asksFirst}
+          onChange={e => {
+            setAsksFirst(e.target.checked)
+            setLiveAsksFirst(e.target.checked)
+          }}
+        />
+        {t('Ask before sending to Hermes')}
+      </label>
+      <p className="meta settings-caption">
+        {t(
+          "The voice model tells you what it will send and waits for your OK before Hermes starts on it. Say “send it to Hermes” to skip the question. Change it during a call with the call screen's button or by asking. Applies to the next call."
+        )}
+      </p>
       <label className="local-live-field">
         <span className="meta">{t('Your instructions')}</span>
         <textarea

@@ -51,6 +51,8 @@ describe('Gemini Live session', () => {
       'read_chat:NON_BLOCKING',
       'answer_approval:NON_BLOCKING',
       'answer_question:NON_BLOCKING',
+      'send_request:NON_BLOCKING',
+      'set_ask_first:BLOCKING',
       'recall_memory:NON_BLOCKING'
     ])
     expect(setup.realtimeInputConfig.activityHandling).toBe('START_OF_ACTIVITY_INTERRUPTS')

@@ -61,7 +61,9 @@ describe('Grok Live session', () => {
       'find_chat',
       'read_chat',
       'answer_approval',
-      'answer_question'
+      'answer_question',
+      'send_request',
+      'set_ask_first'
     ])
     expect((sessionUpdate('x') as { session: Record<string, unknown> }).session.voice).toBeUndefined()
   })

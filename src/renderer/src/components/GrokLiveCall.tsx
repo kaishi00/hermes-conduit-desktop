@@ -43,6 +43,8 @@ import { ANSWER_APPROVAL, ANSWER_QUESTION, answerApproval, answerQuestion, reque
 import { Icon } from './icons'
 import { MicOrb } from './MicOrb'
 import { openingTurn } from '../state/liveGreeting'
+import { AskFirst, SEND_REQUEST, SET_ASK_FIRST, liveAsksFirst, switchedNote } from '../state/askFirst'
+import { AskFirstButton } from './AskFirstButton'
 import { CallCards } from './CallCards'
 import { FIND_CHAT, READ_CHAT, chatFinder } from '../state/chatFinder'
 import { pictureNoteText, type PictureNote } from '../state/callPicture'
@@ -126,6 +128,9 @@ export function GrokLiveCall({
   const [phase, setPhase] = useState<Phase>('starting')
   const [problem, setProblem] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
+  // Asking first: the call's held request and its switch, starting as Settings say.
+  const askFirst = useRef(new AskFirst(liveAsksFirst()))
+  const [asking, setAsking] = useState(askFirst.current.on)
   // The microphone, for the orb's level.
   const [micStream, setMicStream] = useState<MediaStream | null>(null)
   const [lines, setLines] = useState<Line[]>([])
@@ -344,6 +349,14 @@ export function GrokLiveCall({
     if (speaks) respond()
   }
 
+  // A request for the chat: it goes once the chat is free.
+  const toChat = (request: string) => {
+    const waits = !!active.current || live.current.running
+    queue.current.push(request)
+    pump()
+    return waits ? QUEUED : SENT
+  }
+
   const toolCall = (event: Extract<ServerEvent, { type: 'toolCall' }>) => {
     // The arguments event and the finished item carry the same call: run it once.
     if (answered.current.has(event.id)) return
@@ -355,19 +368,34 @@ export function GrokLiveCall({
       case ASK_THREAD: {
         const request = (event.args.request ?? '').trim()
         if (!request) return answer(event.id, NO_REQUEST)
-        const waits = !!active.current || live.current.running
-        queue.current.push(request)
-        pump()
-        return answer(event.id, waits ? QUEUED : SENT)
+        const held = askFirst.current.hold(ASK_THREAD, request)
+        if (held) return answer(event.id, held)
+        return answer(event.id, toChat(request))
+      }
+      case SEND_REQUEST:
+        void askFirst.current.release().then(release => {
+          if (ended.current) return
+          if (!release.send) return answer(event.id, release.result)
+          if (release.tool === ASK_THREAD) return answer(event.id, toChat(release.request))
+          void jobs.current?.start(release.request).then(result => !ended.current && answer(event.id, result))
+        })
+        return
+      case SET_ASK_FIRST: {
+        const result = askFirst.current.setMode(event.args.mode)
+        setAsking(askFirst.current.on)
+        return answer(event.id, result)
       }
       case CALL_ME_WHEN_DONE:
         void (callbacks.current?.request(callbackScope(event.args)) ?? Promise.resolve({ status: 'unavailable', message: 'Not in a call.' })).then(
           result => !ended.current && answer(event.id, result)
         )
         return
-      case START_JOB:
+      case START_JOB: {
+        const held = askFirst.current.hold(START_JOB, (event.args.instructions ?? '').trim())
+        if (held) return answer(event.id, held)
         void jobs.current?.start(event.args.instructions ?? '').then(result => !ended.current && answer(event.id, result))
         return
+      }
       case LIST_JOBS: {
         const result = jobs.current?.list() ?? { summary: 'No background jobs are running.' }
         return answer(event.id, result)
@@ -468,6 +496,7 @@ export function GrokLiveCall({
         return
       case 'input':
         userSpokeAt.current = Date.now()
+        askFirst.current.heard(event.text, true)
         userLine(event.itemId, event.text, event.final)
         if (event.final) keep('user', event.text)
         return
@@ -476,6 +505,7 @@ export function GrokLiveCall({
         play(event.pcm)
         return
       case 'output':
+        askFirst.current.modelSpoke()
         spoken.current += event.text
         assistantLine(event.text)
         return
@@ -720,6 +750,15 @@ export function GrokLiveCall({
         <CallLines lines={lines} />
         <div className="voice-call-buttons">
           {pictureControls}
+          <AskFirstButton
+            on={asking}
+            onToggle={() => {
+              const on = !askFirst.current.on
+              askFirst.current.set(on)
+              setAsking(on)
+              updates.current.push(switchedNote(on))
+            }}
+          />
           {phase === 'failed' ? (
             <button className="secondary" onClick={onClassic}>
               {t('Classic voice')}

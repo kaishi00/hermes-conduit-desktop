@@ -75,6 +75,8 @@ describe('Qwen Live session', () => {
       'read_chat',
       'answer_approval',
       'answer_question',
+      'send_request',
+      'set_ask_first',
       'recall_memory',
       'web_search'
     ])

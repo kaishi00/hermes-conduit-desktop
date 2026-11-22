@@ -56,6 +56,8 @@ import { Icon } from './icons'
 import { pictureNoteText, type PictureNote } from '../state/callPicture'
 import { MicOrb } from './MicOrb'
 import { openingTurn } from '../state/liveGreeting'
+import { DelegatedAskFirst, liveAsksFirst, switchedNote, type DelegatedStep } from '../state/askFirst'
+import { AskFirstButton } from './AskFirstButton'
 
 interface Props {
   profile?: string
@@ -196,6 +198,9 @@ export function GptLiveCall({
   const opened = useRef(false)
   const heard = useRef(false)
   const openingTimer = useRef(0)
+  // Asking first: the call's held request and its switch, starting as Settings say.
+  const askFirst = useRef(new DelegatedAskFirst(liveAsksFirst()))
+  const [asking, setAsking] = useState(askFirst.current.on)
   const keep = (role: CallTurn['role'], text: string) => text.trim() && record.current.push({ role, text: text.trim(), at: Date.now() / 1000 })
   const save = () => {
     if (saved.current) return
@@ -311,6 +316,12 @@ export function GptLiveCall({
       void answering.then(result => append(result.next_question ?? result.message ?? result.error ?? '', 'speakable', id))
       return
     }
+    // "Mode: ask first" / "Mode: send directly": asking first for this call.
+    const mode = askFirst.current.mode(id, text)
+    if (mode) {
+      setAsking(askFirst.current.on)
+      return carryOut(mode)
+    }
     // "Call me:": Hermes calls once the call's newest request is done (the job named, or all of them).
     let callMe = callMeMarker(text)
     if (callMe) {
@@ -360,12 +371,22 @@ export function GptLiveCall({
       return
     }
     const request = requestWords(text, said)
+    // Work the user wants kept apart from the chat runs as a background job.
+    const background = asksForBackground(text) || asksForBackground(said)
+    // Asking first: a new request waits for the user's OK, and the next delegation carries their answer.
+    const step = askFirst.current.delegation(id, text, said, request, background)
+    if (step.kind !== 'pass') return carryOut(step)
     if (!request) {
       append(NOTHING_TO_SEND, 'commentary', id)
       return
     }
-    // Work the user wants kept apart from the chat runs as a background job; its result comes on this delegation.
-    if (asksForBackground(text) || asksForBackground(said)) {
+    askFirst.current.sent()
+    go(id, request, background)
+  }
+
+  // A request that goes to Hermes now: a background job's result, or the chat's reply, comes on its delegation.
+  const go = (id: string, request: string, background: boolean) => {
+    if (background) {
       void jobs.current?.start(request).then(result => {
         if (ended.current) return
         if (result.status === 'started' && result.job_id) {
@@ -378,6 +399,11 @@ export function GptLiveCall({
     queue.current.push({ id, request })
     if (active.current || live.current.running) append(WAITING_FOR_CHAT, 'commentary', id)
     pump()
+  }
+
+  const carryOut = (step: DelegatedStep) => {
+    if (step.kind === 'reply') append(step.text, step.channel, step.delegationId)
+    else if (step.kind === 'send') go(step.delegationId, step.request, step.background)
   }
 
   // The greeting as Conduit's own turn: gpt-live-1-codex doesn't speak first from its instructions, so it's asked
@@ -421,9 +447,16 @@ export function GptLiveCall({
           words.current = { done: [words.current.done, text].filter(Boolean).join(' '), open: '' }
           closeLine('user', event.transcript)
           keep('user', text)
+          // With a request held, these words may be the answer: then they're spent on it.
+          const answered = askFirst.current.userFinished(text)
+          if (answered) {
+            words.current = { done: '', open: '' }
+            carryOut(answered)
+          }
         } else if (event.role === 'assistant') {
           closeLine('assistant', event.transcript)
           keep('assistant', event.transcript)
+          askFirst.current.modelFinishedTurn()
           if (ending.current) endSoon(END_GRACE_MS)
           else setPhase('listening')
         }
@@ -656,6 +689,15 @@ export function GptLiveCall({
         <CallLines lines={lines} />
         <div className="voice-call-buttons">
           {pictureControls}
+          <AskFirstButton
+            on={asking}
+            onToggle={() => {
+              const on = !askFirst.current.on
+              askFirst.current.set(on)
+              setAsking(on)
+              append(switchedNote(on), 'commentary', null)
+            }}
+          />
           {phase === 'failed' ? (
             <button className="secondary" onClick={onClassic}>
               {t('Classic voice')}

@@ -5885,6 +5885,26 @@ code.file-link:hover {
   color: #fff;
 }
 
+/* The call's Ask before sending switch, its caption over the call above it */
+.voice-call-ask {
+  position: relative;
+  display: inline-flex;
+}
+
+.voice-call-ask-caption {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: 260px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  font-size: 12px;
+  pointer-events: none;
+}
+
 /* Settings > Voice's mode */
 .voice-mode-settings {
   margin-top: 14px;

@@ -8,6 +8,7 @@
  * delegation for the model to tell. Pure, so every message shape is testable.
  */
 import { answerLengthRule, liveStyle, styleInstructions, type LiveStyle } from './liveStyle'
+import { DELEGATED_ASK_FIRST_RULE, askFirstInstructions, liveAsksFirst } from './askFirst'
 import { t } from '../../../shared/i18n'
 import { DELEGATED_REQUESTS_RULE } from './liveRequests'
 import { DELEGATED_FIND_CHAT_RULE } from './chatFinder'
@@ -349,13 +350,20 @@ const memoryBlock = (body: string) =>
  * the plugin takes: the memory is cut first, then the persona, so the rules
  * always go whole. Written for the model, not UI copy.
  */
-export function briefing(language?: string, persona = '', memory = '', asked = '', style: LiveStyle = liveStyle()): string {
+export function briefing(
+  language?: string,
+  persona = '',
+  memory = '',
+  asked = '',
+  style: LiveStyle = liveStyle(),
+  asksFirst = liveAsksFirst()
+): string {
   let personaText = persona.replace(/<\/hermes_persona>/gi, '</ hermes_persona>')
   let memoryText = memory.replace(/<\/hermes_memory>/gi, '</ hermes_memory>')
   // The waiting questions go whole, as the rules do: only the persona and memory are cut.
   // The style and the user's instructions go whole too, after the call's blocks and before the language rule.
   const head = rules(answerLengthRule(style.answerLength))
-  const tail = asked + styleInstructions(style) + languageRule(language)
+  const tail = asked + askFirstInstructions(asksFirst) + styleInstructions(style) + languageRule(language)
   const assembled = () => head + personaBlock(personaText) + memoryBlock(memoryText) + tail
   let text = assembled()
   let excess = codePoints(text) - MAX_BRIEFING_CHARACTERS
@@ -380,6 +388,7 @@ ${DELEGATED_FIND_CHAT_RULE}
 ${DELEGATED_JOBS_RULE} ${DELEGATED_JOB_FOLLOW_UPS}
 ${CALL_ME_RULE.trim()}
 Only say you're sending or passing something to Hermes in a turn where you delegate it: saying so sends nothing, only the delegation does.
+${DELEGATED_ASK_FIRST_RULE}
 ${END_CALL_RULE}]`
 
 export function languageRule(language?: string): string {
