@@ -140,6 +140,7 @@ const api: ConduitApi = {
   onOpenChat: listener => listen<OpenChatRequest>(IPC.openChat, listener),
   openChatWindow: chat => ipcRenderer.invoke(IPC.openChatWindow, chat),
   pageWatched: () => ipcRenderer.invoke(IPC.pageWatched),
+  onDockedShown: listener => listen<boolean>(IPC.dockedShown, listener),
   closeChatWindows: ids => ipcRenderer.send(IPC.closeChatWindows, ids),
   chatWindows: () => ipcRenderer.invoke(IPC.chatWindows),
   chatWindowOf: (sessionId, show, storedIds) => ipcRenderer.invoke(IPC.chatWindowOf, sessionId, show === true, storedIds ? [...storedIds] : []),

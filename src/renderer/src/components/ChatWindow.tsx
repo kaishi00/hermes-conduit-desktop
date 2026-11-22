@@ -161,13 +161,15 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
    * it, so a chat on another combined dashboard notifies too; a click brings
    * this window back.
    */
+  const paneShown = useRef(true)
+  useEffect(() => (docked ? window.conduit.onDockedShown(shown => (paneShown.current = shown)) : undefined), [docked])
   const chatRef = useRef({ liveId: chat.liveId, storedId: chat.storedId, profile, title })
   chatRef.current = { liveId: chat.liveId, storedId: chat.storedId, profile, title }
   const notify = useCallback(
     async (spec: NotificationSpec) => {
       if (!notificationsEnabled() || typeof Notification === 'undefined') return
-      // Docked, the chat is watched while the main window is in front, wherever its focus is.
-      if (docked ? await window.conduit.pageWatched() : document.hasFocus() && !document.hidden) return
+      // Docked, the chat is watched while its pane is on screen and the main window is in front, wherever its focus is.
+      if (docked ? paneShown.current && (await window.conduit.pageWatched()) : document.hasFocus() && !document.hidden) return
       const n = new Notification(spec.title, { body: spec.body, tag: spec.tag, silent: false })
       n.onclick = () => {
         const live = chatRef.current.liveId

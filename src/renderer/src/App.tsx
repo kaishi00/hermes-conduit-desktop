@@ -393,7 +393,7 @@ function Shell({
    * over: anything that opens a chat here (a row, a bot, New Chat, a call)
    * sets `selected` again, which closes it.
    */
-  const [docked, setDocked] = useState<{ chat: DockedChat; over: typeof selected } | null>(null)
+  const [docked, setDocked] = useState<{ chat: DockedChat; over: typeof selected; fromWindow?: boolean } | null>(null)
   const dockedChat = docked && docked.over === selected ? docked.chat : null
   const dockedRef = useRef(dockedChat)
   dockedRef.current = dockedChat
@@ -519,7 +519,7 @@ function Shell({
           ...(ref.botChat ? { botChat: true } : {}),
           ...(ref.draft ? { draft: ref.draft } : {}),
           ...(fresh ? { fresh: true } : {})
-        })
+        }, true)
         return
       }
       setSelected({ id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
@@ -997,11 +997,11 @@ function Shell({
     if (calling) setDocked(null)
   }, [calling])
   // A docked chat closes when its dashboard is no longer kept beside this one (out of the group, signed out of) and
-  // when it moves to a window of its own (its pane's Open in New Window): only a window that opens after it docked,
-  // since Open in Main Window docks the chat before its own window has closed.
+  // when it moves to a window of its own (its pane's Open in New Window). Open in Main Window docks the chat before
+  // its own window has closed, so only that window is let be until it goes.
   const windowsAtDock = useRef<string[]>([])
   useEffect(() => {
-    windowsAtDock.current = chatWindowIdsRef.current
+    windowsAtDock.current = docked?.fromWindow ? [docked.chat.id] : []
   }, [docked])
   useEffect(() => {
     if (!docked) return
@@ -1721,7 +1721,12 @@ function Shell({
    * its lists and a call in progress stay as they are.
    */
   const openDocked = useCallback(
-    (chat: DockedChat) => {
+    (chat: DockedChat, fromWindow = false) => {
+      // A chat that has a window of its own brings it to the front, as its row does (Open in Main Window excepted).
+      if (!fromWindow && chatWindowIdsRef.current.includes(chat.id)) {
+        void window.conduit.openChatWindow(chat)
+        return
+      }
       // During a call the chat on screen keeps the call's controls, so another dashboard's chat opens in a window of its own.
       if (calling) {
         void window.conduit.openChatWindow(chat).then(opened => {
@@ -1731,7 +1736,7 @@ function Shell({
         })
         return
       }
-      setDocked({ chat, over: selected })
+      setDocked({ chat, over: selected, ...(fromWindow ? { fromWindow: true } : {}) })
       setBotsSide(chat.botChat === true)
       setSection('chats')
     },
@@ -2338,7 +2343,7 @@ function Shell({
                 onCollapse={() => hideList(true)}
               />
             )}
-            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} /> : null}
+            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} shown={section === 'chats'} /> : null}
             {/* Kept while another dashboard's chat is docked over it, so coming back to it doesn't open it again. */}
             <main className="chat" ref={chatPane} style={dockedChat ? { display: 'none' } : undefined}>
               <div className="chat-head soft">
