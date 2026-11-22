@@ -58,7 +58,7 @@ import { MicOrb } from './MicOrb'
 import { openingTurn } from '../state/liveGreeting'
 import { DelegatedAskFirst, liveAsksFirst, switchedNote, type DelegatedStep } from '../state/askFirst'
 import { AskFirstButton } from './AskFirstButton'
-import { loadPhoneReads } from '../state/phoneReads'
+import { NO_PHONE_READS, delegatedPhoneReply, gptLivePhoneRules, loadPhoneReads, markedPhoneRead, readPhoneTyped, type PhoneReads } from '../state/phoneReads'
 
 interface Props {
   profile?: string
@@ -150,6 +150,8 @@ export function GptLiveCall({
   const quiet = useRef<number | null>(null)
   const ended = useRef(false)
   const finder = useRef(chatFinder(profile))
+  // What the user's phone lets this call read, loaded as the call starts.
+  const phoneRef = useRef<PhoneReads>(NO_PHONE_READS)
   const [jobList, setJobList] = useState<VoiceJob[]>([])
   const jobs = useRef<VoiceJobs | null>(null)
   // "Call me when it's done": the call's jobs and its request in the chat, as they run.
@@ -362,6 +364,12 @@ export function GptLiveCall({
       })
       return
     }
+    // "Health: {...}": what the user's phone lets this call read, answered here, never a Hermes job.
+    const marked = markedPhoneRead(text, phoneRef.current.tools)
+    if (marked) {
+      void readPhoneTyped(profile, 'gpt-live', marked.tool, marked.args).then(result => !ended.current && append(delegatedPhoneReply(result), 'commentary', id))
+      return
+    }
     if (isReadBack(text)) {
       const read = readBack(live.current.lastReply)
       if (!read) append(NOTHING_TO_READ, 'speakable', id)
@@ -557,16 +565,17 @@ export function GptLiveCall({
             )
         )
         // The persona and memory only when switched on; a host without them starts the call without.
-        // Where the user is and their phone's state, when their phone lets GPT-Live read it. GPT-Live has no tools of
-        // its own, so the phone's read tools aren't asked for.
+        // Where the user is and their phone's state, when their phone lets GPT-Live read it, and the phone's read
+        // tools, which GPT-Live reaches with a marked delegation answered here.
         const [persona, memory, phone] = await Promise.all([
           sendsPersona() ? gateway.http('GET', withProfile(PERSONALITY_PATH, profile)).then(personaText, () => '') : '',
           sendsMemory() ? gateway.http('GET', withProfile(MEMORY_PATH, profile)).then(memoryText, () => '') : '',
-          loadPhoneReads(profile, 'gpt-live', false)
+          loadPhoneReads(profile, 'gpt-live')
         ])
         const asked = await askedQuestionsForCall(profile)
         if (ended.current) return
-        const told = briefing(language(), persona, memory, asked, undefined, undefined, phone.context)
+        phoneRef.current = phone
+        const told = briefing(language(), persona, memory, asked, undefined, undefined, phone.context, gptLivePhoneRules(phone.tools))
         const body: Record<string, unknown> = { sdp: peer.localDescription?.sdp ?? '', billing, briefing: told }
         if (seed.length) body.history = seed
         if (voice) body.voice = voice

@@ -93,3 +93,34 @@ describe("a desktop call reads what the user's phone lets its mode read", () => 
     expect(tools.find((tool: Record<string, unknown>) => tool.name === 'conduit_location')).toMatchObject({ type: 'function' })
   })
 })
+
+describe('GPT-Live reads the phone with a marked delegation', async () => {
+  const { delegatedPhoneReply, gptLivePhoneRules, markedPhoneRead, phoneMarker } = await import('../src/renderer/src/state/phoneReads')
+  const tools = phoneTools({ tools: [LOCATION, HEALTH] })
+
+  it('names each tool as the phone does and teaches its marker in the briefing', () => {
+    expect(tools.map(phoneMarker)).toEqual(['Location', 'Health'])
+    const rules = gptLivePhoneRules(tools)
+    expect(rules).toContain(`Conduit's own tools: "Location:", "Health:"`)
+    expect(rules).toContain('delegate "Health:" followed by its arguments as one JSON object')
+    expect(gptLivePhoneRules([])).toBe('')
+    const told = briefing('en', '', 'remembered', '', undefined, false, 'At Home.', rules)
+    expect(told.indexOf(`Conduit's own tools`)).toBeGreaterThan(-1)
+    expect(told.indexOf(`Conduit's own tools`)).toBeLessThan(told.indexOf('remembered'))
+  })
+
+  it('reads the marker and its JSON, words after it included, and leaves other delegations alone', () => {
+    expect(markedPhoneRead('health: {"action": "summary", "days": 3} for this week', tools)).toEqual({
+      tool: tools[1],
+      args: { action: 'summary', days: 3 }
+    })
+    expect(markedPhoneRead('Location:', tools)).toEqual({ tool: tools[0], args: {} })
+    expect(markedPhoneRead('Ask Hermes about my health', tools)).toBeNull()
+    expect(markedPhoneRead('Health: {}', [])).toBeNull()
+  })
+
+  it('answers on the delegation in the phone words', () => {
+    expect(delegatedPhoneReply({ status: 'ok', result: '{"ok":true}' })).toContain("This is the user's own data")
+    expect(delegatedPhoneReply({ status: 'error', error: "That couldn't be read." })).toBe("[That couldn't be read. Tell the user in a few words.]")
+  })
+})
