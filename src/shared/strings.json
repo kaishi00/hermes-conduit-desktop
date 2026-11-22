@@ -44293,5 +44293,20 @@
     "tr": "Ekler",
     "zh-Hans": "附件",
     "zh-Hant": "附件"
+  },
+  "This task is no longer on the board shown.": {
+    "de": "Diese Aufgabe ist nicht mehr auf dem angezeigten Board.",
+    "es": "Esta tarea ya no está en el tablero mostrado.",
+    "fr": "Cette tâche n'est plus sur le tableau affiché.",
+    "id": "Tugas ini sudah tidak ada di papan yang ditampilkan.",
+    "it": "Questa attività non è più nella bacheca mostrata.",
+    "ja": "このタスクは表示中のボードにもうありません。",
+    "ko": "이 작업은 더 이상 표시된 보드에 없습니다.",
+    "pl": "To zadanie nie jest już na wyświetlanej tablicy.",
+    "pt-BR": "Esta tarefa não está mais no quadro exibido.",
+    "ru": "Этой задачи больше нет на показанной доске.",
+    "tr": "Bu görev artık gösterilen panoda değil.",
+    "zh-Hans": "此任务已不在当前显示的看板上。",
+    "zh-Hant": "此任務已不在目前顯示的看板上。"
   }
 }

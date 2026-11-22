@@ -3,10 +3,21 @@ import { mkdtemp, readFile, readdir, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ReadableStream } from 'node:stream/web'
-import { dataUrlBytes as hostBytes, hostFileName, hostFilePath, isPartOf, streamToFile, STALE_PART_MS } from '../src/main/hostFiles'
+import { dataUrlBytes as hostBytes, hostFileName, hostFilePath, isDashboardPage, isPartOf, kanbanAttachmentPath, streamToFile, STALE_PART_MS } from '../src/main/hostFiles'
 import { dataUrlBytes, pictureFileName } from '../src/renderer/src/state/saveMedia'
 
 describe('saving pictures, files and audio to this computer', () => {
+  it("saves a Kanban attachment from its board's route, never the dashboard's page in its place", () => {
+    expect(kanbanAttachmentPath('3', null)).toBe('/api/plugins/kanban/attachments/3')
+    expect(kanbanAttachmentPath('a/b', 'my board')).toBe('/api/plugins/kanban/attachments/a%2Fb?board=my%20board')
+    expect(isDashboardPage('text/html; charset=utf-8', 'ROOT-HANDOFF.md')).toBe(true)
+    expect(isDashboardPage('text/html', 'report.html')).toBe(false)
+    expect(isDashboardPage('text/html', 'REPORT.HTM')).toBe(false)
+    expect(isDashboardPage('text/html', 'page.html5')).toBe(true)
+    expect(isDashboardPage('text/markdown', 'ROOT-HANDOFF.md')).toBe(false)
+    expect(isDashboardPage(null, 'x.bin')).toBe(false)
+  })
+
   it('names the file from the host path, safely', () => {
     expect(hostFileName('/home/h/out/voice note.ogg')).toBe('voice note.ogg')
     expect(hostFileName('C:\\Users\\h\\a:b?.txt')).toBe('a_b_.txt')

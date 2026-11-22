@@ -94,14 +94,12 @@ export function KanbanBoard({ connected, bots, segment }: Props) {
   // A menu opened on one board never acts on another.
   useEffect(() => setMenu(null), [kanban.slug, kanban.unavailable])
   // A task belongs to its board: picking another closes its panel, so nothing in it (an attachment's Save) acts on the wrong board.
-  // With no board picked that's the board Hermes calls current, which another client can change.
-  const boardShown = kanban.slug ?? kanban.boards?.find(b => b.current)?.slug ?? null
-  const shownSlug = useRef(boardShown)
+  const shownSlug = useRef(kanban.slug)
   useEffect(() => {
-    if (shownSlug.current === boardShown) return
-    shownSlug.current = boardShown
+    if (shownSlug.current === kanban.slug) return
+    shownSlug.current = kanban.slug
     setOpenId(null)
-  }, [boardShown])
+  }, [kanban.slug])
   // With no board picked, the board is whatever Hermes calls current, which another client can change:
   // a menu whose task left the board read closes rather than act on the new one.
   useEffect(() => {
@@ -721,7 +719,15 @@ function TaskPanel({
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
-                <button type="button" className="secondary" disabled={saving !== null} onClick={() => void saveAttachment(attachment)}>
+                {/* Like the panel's other actions, Save needs the task on the board read: with no board picked, another
+                    client can change Hermes' current board, and the old board's attachment would be asked of the new one. */}
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={saving !== null || !task}
+                  title={task ? undefined : t('This task is no longer on the board shown.')}
+                  onClick={() => void saveAttachment(attachment)}
+                >
                   {saving === attachment.id ? t('Saving…') : t('Save')}
                 </button>
               </div>

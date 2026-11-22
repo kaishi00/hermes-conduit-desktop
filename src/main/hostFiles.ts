@@ -22,6 +22,20 @@ export function hostFileName(path: string): string {
 }
 
 /** `/api/fs/download` or `/api/fs/read-data-url` for `path`, in a profile's scope when it isn't the default. */
+/** The Kanban plugin's download route for an attachment, naming the board when one is picked. */
+export function kanbanAttachmentPath(id: string, board: string | null): string {
+  return `/api/plugins/kanban/attachments/${encodeURIComponent(id)}${board ? `?board=${encodeURIComponent(board)}` : ''}`
+}
+
+/**
+ * Whether an attachment download answered with the dashboard's own page (a
+ * route it doesn't know) rather than the file: HTML for a file that isn't a
+ * page. An attachment named .html or .htm is the file.
+ */
+export function isDashboardPage(contentType: string | null, filename: string): boolean {
+  return /text\/html/i.test(contentType ?? '') && !/\.html?$/i.test(filename)
+}
+
 export function hostFilePath(route: 'download' | 'read-data-url', path: string, profile?: string): string {
   const query = `path=${encodeURIComponent(path)}`
   return profile && profile !== 'default' ? `/api/fs/${route}?${query}&profile=${encodeURIComponent(profile)}` : `/api/fs/${route}?${query}`

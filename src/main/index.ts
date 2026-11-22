@@ -40,7 +40,7 @@ import { cleanHeaders } from './proxyHeaders'
 import { KeptHosts } from './keptHosts'
 import { readServerCertificate } from './serverCertificate'
 import { writeFile } from 'node:fs/promises'
-import { hostFileName, hostFilePath, dataUrlBytes, streamToFile } from './hostFiles'
+import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath } from './hostFiles'
 import { Connection, DISPLAY_SOCKET_PATH } from './connection'
 import { Pairing } from './pairing'
 import { createFileStore } from './store'
@@ -417,11 +417,6 @@ function createWindow(): void {
   }
 }
 
-/** The Kanban plugin's download route for an attachment, naming the board when one is picked. */
-function kanbanAttachmentPath(id: string, board: string | null): string {
-  return `/api/plugins/kanban/attachments/${encodeURIComponent(id)}${board ? `?board=${encodeURIComponent(board)}` : ''}`
-}
-
 /** What a host file's save says when it fails: the file gone from Hermes, or try again. */
 function saveFailure(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code
@@ -655,8 +650,7 @@ function registerIpc(): void {
       if (!through) throw new Error(t("Couldn't open this file"))
       const response = await through.download(kanbanAttachmentPath(id, typeof board === 'string' && board ? board : null), stop.signal)
       // A dashboard that serves its page for a route it doesn't know has no attachment route: never save that page as the file.
-      // An attachment that is itself a page (report.html) is the file.
-      if (/text\/html/i.test(response.headers.get('content-type') ?? '') && !/\.html?$/i.test(name)) throw Object.assign(new Error('no attachment route'), { code: 404 })
+      if (isDashboardPage(response.headers.get('content-type'), name)) throw Object.assign(new Error('no attachment route'), { code: 404 })
       if (!response.body) throw new Error(t("Couldn't open this file"))
       await streamToFile(response.body as import('node:stream/web').ReadableStream, picked.filePath, () => stop.abort())
       return 'saved'
