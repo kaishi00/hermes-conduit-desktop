@@ -408,10 +408,24 @@ function TaskPanel({
   const shown = task ?? detail?.task ?? null
   // The last live batch that touched this task or a child; an unrelated batch keeps it, so it reads nothing again.
   const lastTouched = useRef(0)
+  // Tasks a batch touched before the first read came back, when the children weren't known yet.
+  const touchedBeforeRead = useRef(new Set<string>())
+  const touchedSeen = useRef(0)
+  const missedReads = useRef(0)
+  if (touched.revision !== touchedSeen.current) {
+    touchedSeen.current = touched.revision
+    if (!detail) touched.ids.forEach(touchedId => touchedBeforeRead.current.add(touchedId))
+  }
+  if (detail && touchedBeforeRead.current.size) {
+    const missed = detail.children.some(child => touchedBeforeRead.current.has(child.id))
+    touchedBeforeRead.current.clear()
+    // A child changed while the first read was out: read once more.
+    if (missed) missedReads.current += 1
+  }
   if (touched.revision !== lastTouched.current && (touched.ids.has(id) || Boolean(detail?.children.some(child => touched.ids.has(child.id))))) {
     lastTouched.current = touched.revision
   }
-  const touchedHere = lastTouched.current
+  const touchedHere = `${lastTouched.current}:${missedReads.current}`
 
   async function saveAttachment(attachment: KanbanAttachment) {
     if (saving) return
