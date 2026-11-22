@@ -83,7 +83,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const docked = request.docked === true
   useDashboardProfiles(status.phase, status.url)
   const display = useChatDisplay(profile, connected, true)
-  const roster = useBots(connected, host)
+  // Only this chat's bot is drawn here: its name and face, not every bot's chats (desktop#292).
+  const roster = useBots(connected, host, { withSessions: false })
   const bot = roster.bots?.find(b => b.name === (profile ?? 'default'))
   const face = useReplyFace(bot)
   const botTitle = bot?.title ?? request.author ?? 'Hermes'

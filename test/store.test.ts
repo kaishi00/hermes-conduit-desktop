@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -20,6 +20,7 @@ vi.mock('electron', () => ({
 }))
 
 const { createFileStore } = await import('../src/main/store')
+const { writeFileAtomic } = await import('../src/main/atomicWrite')
 const secrets = (value: object) => Buffer.from(`enc:${JSON.stringify(value)}`).toString('base64')
 
 describe('the saved hosts file', () => {
@@ -82,5 +83,38 @@ describe('the saved hosts file', () => {
     again.rename!('http://192.168.1.5:9119', 'Lab')
     again.replace!('http://192.168.1.5:9119', { url: 'http://192.168.1.9:9119', method: 'open' })
     expect(again.list!()[0]).toMatchObject({ url: 'http://192.168.1.9:9119', name: 'Lab' })
+  })
+})
+
+describe('saving the hosts file safely (desktop#297)', () => {
+  beforeEach(() => {
+    state.dir = mkdtempSync(join(tmpdir(), 'conduit-store-'))
+    state.ready = true
+  })
+
+  it('replaces the file whole and leaves no temporary file behind', () => {
+    const store = createFileStore()
+    store.save({ url: 'http://one', method: 'open' })
+    store.save({ url: 'http://two', method: 'open' })
+    expect(readdirSync(state.dir)).toEqual(['connection.json'])
+  })
+
+  it('keeps an unreadable file beside it before the next save replaces it', () => {
+    const path = join(state.dir, 'connection.json')
+    writeFileSync(path, '{"version":2,"active":"http://one","hosts":[{"url":"http://o')
+    const store = createFileStore()
+    expect(store.list!()).toEqual([])
+    store.save({ url: 'http://two', method: 'open' })
+    expect(readFileSync(`${path}.corrupt`, 'utf8')).toContain('"http://o')
+    expect(JSON.parse(readFileSync(path, 'utf8')).hosts).toMatchObject([{ url: 'http://two' }])
+  })
+
+  it('removes its temporary file when the rename fails', () => {
+    const blocked = join(state.dir, 'connection.json')
+    mkdirSync(blocked)
+    writeFileSync(join(blocked, 'inside'), 'x')
+    expect(() => writeFileAtomic(blocked, 'new')).toThrow()
+    expect(readdirSync(state.dir)).toEqual(['connection.json'])
+    expect(readdirSync(blocked)).toEqual(['inside'])
   })
 })
