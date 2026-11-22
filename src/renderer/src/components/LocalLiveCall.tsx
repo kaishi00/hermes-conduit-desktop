@@ -177,6 +177,8 @@ export function LocalLiveCall({
   const [phase, setPhase] = useState<Phase>('starting')
   const [problem, setProblem] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
+  // Local Live's agent instructions' parts, built again for each connection.
+  const agentWith = useRef<Parameters<typeof liveInstructions>[0] | null>(null)
   // Agent mode's asking first: the call's held request and its switch, starting as Settings say.
   const askFirst = useRef(new AskFirst(liveAsksFirst()))
   const [asking, setAsking] = useState(askFirst.current.on)
@@ -768,7 +770,8 @@ export function LocalLiveCall({
       if (event.id !== socket.current) return
       if (event.type === 'open') {
         trace.current?.step('Socket open, setup sent')
-        if (agent.current) send(agentConfigure(agent.current, FUNCTION_TOOLS))
+        // Told asking first as the call's switch is now, a reconnect included.
+        if (agent.current) send(agentConfigure(agentWith.current ? liveInstructions({ ...agentWith.current, asksFirst: askFirst.current.on }) : agent.current, FUNCTION_TOOLS))
         send(sessionUpdate())
       } else if (event.type === 'message') onFrame(event.data)
       else if (event.type === 'close') {
@@ -847,7 +850,7 @@ export function LocalLiveCall({
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
             const asked = await askedQuestionsForCall(profile)
             setAgentMode(true)
-            agent.current = liveInstructions({
+            agentWith.current = {
               lookups: AGENT_LOOKUPS,
               announces: false,
               extra: AGENT_INSTRUCTIONS + clockInstructions(new Date(), timeZone),
@@ -855,7 +858,8 @@ export function LocalLiveCall({
               persona,
               asked,
               chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current)
-            })
+            }
+            agent.current = liveInstructions(agentWith.current)
           }
           if (ended.current) return
         }
@@ -1023,9 +1027,9 @@ export function LocalLiveCall({
               on={asking}
               onToggle={() => {
                 const on = !askFirst.current.on
-                askFirst.current.set(on)
+                const dropped = askFirst.current.set(on)
                 setAsking(on)
-                updates.current.push(switchedNote(on))
+                updates.current.push(switchedNote(on, dropped))
               }}
             />
           ) : null}

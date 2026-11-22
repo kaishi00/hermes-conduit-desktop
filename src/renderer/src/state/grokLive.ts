@@ -107,6 +107,7 @@ export function instructions(options: {
   chat?: string
   now?: Date
   timeZone?: string
+  asksFirst?: boolean
 }): string {
   const timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
   return liveInstructions({

@@ -69,10 +69,12 @@ export const ASK_FIRST_TOOL_SPECS: { name: string; description: string; paramete
 ]
 
 /** A switch on the call screen reaches the model as a quiet note. */
-export const switchedNote = (on: boolean) =>
+export const switchedNote = (on: boolean, dropped = false) =>
   on
     ? "[Background only. The user turned on asking first for this call: from now on, Hermes gets a new request only once the user OKs it. Don't respond to this note now.]"
-    : "[Background only. The user turned off asking first for this call: new requests go to Hermes straight away again. Don't respond to this note now.]"
+    : dropped
+      ? "[Background only. The user turned off asking first for this call: new requests go to Hermes straight away again. The request that was waiting wasn't sent: if the user still wants it, ask for it again. Don't respond to this note now.]"
+      : "[Background only. The user turned off asking first for this call: new requests go to Hermes straight away again. Don't respond to this note now.]"
 
 export const modeAnswer = (on: boolean) =>
   on
@@ -156,7 +158,7 @@ export class AskFirst {
     this.lineOpen = true
     this.line += text
     this.lineAt = this.now()
-    if (this.on && saysSendToHermes(this.line, false)) this.sendNowAt = this.now()
+    if (this.on && saysSendToHermes(this.line, whole)) this.sendNowAt = this.now()
   }
 
   /** The model spoke: the user's next words start a new line. */
@@ -165,18 +167,19 @@ export class AskFirst {
   }
 
   /** Switches it for this call; switched off, a held request is let go. */
-  set(on: boolean): void {
+  set(on: boolean): boolean {
+    const dropped = !on && this.draft !== null
     this.on = on
     if (!on) this.draft = null
     this.sendNowAt = null
+    return dropped
   }
 
   /** The model's set_ask_first. */
   setMode(mode: string | undefined): Record<string, string> {
     const value = (mode ?? '').trim().toLowerCase()
     if (value !== 'on' && value !== 'off') return { error: 'mode must be on or off' }
-    const dropped = value === 'off' && this.draft !== null
-    this.set(value === 'on')
+    const dropped = this.set(value === 'on')
     const said = modeAnswer(value === 'on')
     return {
       status: value,
@@ -311,9 +314,11 @@ export class DelegatedAskFirst {
     }
   }
 
-  set(on: boolean): void {
+  set(on: boolean): boolean {
+    const dropped = !on && this.draft !== null
     this.on = on
     if (!on) this.draft = null
+    return dropped
   }
 
   /** The model finished a turn: with a request held, it has asked. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AskFirst, DelegatedAskFirst, DROPPED, HELD_FOR_OK, NOTHING_WAITING, WAITING_FOR_ANSWER, adding, modeMarker } from '../src/renderer/src/state/askFirst'
+import { AskFirst, DelegatedAskFirst, DROPPED, HELD_FOR_OK, NOTHING_WAITING, WAITING_FOR_ANSWER, adding, modeMarker, switchedNote } from '../src/renderer/src/state/askFirst'
 import { briefing } from '../src/renderer/src/state/gptLive'
 import { liveInstructions } from '../src/renderer/src/state/liveCall'
 
@@ -52,6 +52,25 @@ describe('asking first, tool modes', () => {
     expect(ask.draft).toBeNull()
     expect(ask.setMode('off').message).not.toContain("wasn't sent")
     expect(ask.setMode('maybe')).toEqual({ error: 'mode must be on or off' })
+  })
+
+  it("the call's switch says when it let a waiting request go", () => {
+    const ask = new AskFirst(true)
+    ask.hold('ask_thread', 'Check my calendar')
+    const dropped = ask.set(false)
+    expect(dropped).toBe(true)
+    expect(switchedNote(false, dropped)).toContain("wasn't sent")
+    expect(ask.set(false)).toBe(false)
+    expect(switchedNote(false)).not.toContain("wasn't sent")
+  })
+
+  it('a whole transcript reads "Send Hermes" as finished; pieces wait for "to Hermes"', () => {
+    const whole = new AskFirst(true)
+    whole.heard('Check my calendar. Send Hermes.', true)
+    expect(whole.hold('ask_thread', 'Check my calendar')).toBeNull()
+    const pieces = new AskFirst(true)
+    pieces.heard('Check my calendar. Send Hermes.')
+    expect(pieces.hold('ask_thread', 'Check my calendar')).not.toBeNull()
   })
 
   it('tells the models how it works and where the call starts', () => {

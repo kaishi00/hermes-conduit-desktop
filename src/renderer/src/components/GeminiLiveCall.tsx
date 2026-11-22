@@ -591,6 +591,8 @@ export function GeminiLiveCall({
       }, START_TIMEOUT_MS)
     }
     let toldWith: Parameters<typeof instructions>[0] = {}
+    // Each connection is told asking first as the call's switch is now, a reconnect included.
+    const toldNow = () => (Object.keys(toldWith).length === 0 ? told : instructions({ ...toldWith, search, asksFirst: askFirst.current.on }))
     let startedOpen = false
     // A single-use credential per connection, minted by the host and kept in the main process.
     // `asHandoff`: Gemini's next connection after a GoAway, set up while the current one keeps serving.
@@ -685,7 +687,7 @@ export function GeminiLiveCall({
     }
     const stopListening = window.conduit.onLive(event => {
       if (handoff.current.id && event.id === handoff.current.id) {
-        if (event.type === 'open') window.conduit.liveSend(event.id, JSON.stringify(setupMessage(model, told, voice, recall, search, { handle: resumeHandle.current })))
+        if (event.type === 'open') window.conduit.liveSend(event.id, JSON.stringify(setupMessage(model, toldNow(), voice, recall, search, { handle: resumeHandle.current })))
         else if (event.type === 'message') {
           for (const decoded of decode(event.data)) {
             if (decoded.type === 'resumption' && decoded.resumable && decoded.handle) resumeHandle.current = decoded.handle
@@ -713,7 +715,7 @@ export function GeminiLiveCall({
       if (event.id !== socket.current) return
       if (event.type === 'open') {
         trace.current?.step('Socket open, setup sent')
-        send(setupMessage(model, told, voice, recall, search, qwen ? undefined : { handle: resumeHandle.current }))
+        send(setupMessage(model, toldNow(), voice, recall, search, qwen ? undefined : { handle: resumeHandle.current }))
       } else if (event.type === 'message') {
         let frame: string | null = event.data
         // Qwen's turn steps, from its own frames before they're made Gemini's.
@@ -938,9 +940,9 @@ export function GeminiLiveCall({
             on={asking}
             onToggle={() => {
               const on = !askFirst.current.on
-              askFirst.current.set(on)
+              const dropped = askFirst.current.set(on)
               setAsking(on)
-              updates.current.push(switchedNote(on))
+              updates.current.push(switchedNote(on, dropped))
             }}
           />
           {phase === 'failed' ? (

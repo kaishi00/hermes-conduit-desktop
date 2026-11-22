@@ -98,6 +98,7 @@ export function instructions(options: {
   asked?: string
   chat?: string
   search?: Search
+  asksFirst?: boolean
 }): string {
   return liveInstructions({
     ...options,

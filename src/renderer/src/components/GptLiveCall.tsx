@@ -693,9 +693,9 @@ export function GptLiveCall({
             on={asking}
             onToggle={() => {
               const on = !askFirst.current.on
-              askFirst.current.set(on)
+              const dropped = askFirst.current.set(on)
               setAsking(on)
-              append(switchedNote(on), 'commentary', null)
+              append(switchedNote(on, dropped), 'commentary', null)
             }}
           />
           {phase === 'failed' ? (

@@ -543,14 +543,15 @@ export function GrokLiveCall({
   useEffect(() => {
     stopReading()
     let startTimer = 0
-    let told = ''
+    let toldWith: Parameters<typeof instructions>[0] | null = null
     let recall = false
     const stopListening = window.conduit.onLive(event => {
       if (event.id !== socket.current) return
       // The relay passes frames on once xAI's socket is up.
       if (event.type === 'open') {
         trace.current?.step('Socket open, setup sent')
-        send(sessionUpdate(told, undefined, recall))
+        // Told asking first as the call's switch is now, a reconnect included.
+        send(sessionUpdate(toldWith ? instructions({ ...toldWith, asksFirst: askFirst.current.on }) : '', undefined, recall))
       } else if (event.type === 'message') {
         const decoded = decode(event.data)
         if (decoded) handle(decoded)
@@ -633,7 +634,7 @@ export function GrokLiveCall({
         const asked = await askedQuestionsForCall(profile)
         if (ended.current) return
         recall = memory.recall
-        told = instructions({ language: language(), persona, memory: memory.text, recall, asked, chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current) })
+        toldWith = { language: language(), persona, memory: memory.text, recall, asked, chat: chatContext(resumed.current?.turns ?? turns, !!resumed.current) }
         if (!(await openSocket())) return
         // The microphone, as 24 kHz PCM, while the call listens.
         const source = ctx.createMediaStreamSource(stream)
@@ -754,9 +755,9 @@ export function GrokLiveCall({
             on={asking}
             onToggle={() => {
               const on = !askFirst.current.on
-              askFirst.current.set(on)
+              const dropped = askFirst.current.set(on)
               setAsking(on)
-              updates.current.push(switchedNote(on))
+              updates.current.push(switchedNote(on, dropped))
             }}
           />
           {phase === 'failed' ? (
