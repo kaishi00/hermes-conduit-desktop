@@ -208,7 +208,7 @@ import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
 import { ask, askText, tell } from './state/dialogs'
 import { Select } from './components/Select'
 import { KeptPane } from './components/KeptPane'
-import { DockedChatPane, type DockedChat } from './components/DockedChat'
+import { DockedChatPane, tellDockedShown, type DockedChat, type DockedFrame } from './components/DockedChat'
 import { DockedPulseFrame } from './components/DockedPulse'
 import { botSideScroll } from './state/keptScroll'
 
@@ -397,6 +397,15 @@ function Shell({
   const dockedChat = docked && docked.over === selected ? docked.chat : null
   const dockedRef = useRef(dockedChat)
   dockedRef.current = dockedChat
+  // The docked chat's frame, told from here when Chats shows or goes: the pane sits in Chats' KeptPane, which
+  // doesn't render it again while another section shows, so it couldn't tell the frame itself.
+  const dockedFrame = useRef<DockedFrame | null>(null)
+  const dockedShown = useRef(true)
+  dockedShown.current = section === 'chats'
+  const dockedHost = dockedChat?.host
+  useEffect(() => {
+    if (dockedHost) tellDockedShown(dockedFrame.current, section === 'chats')
+  }, [section, dockedHost])
   const [projectsOpen, setProjectsOpen] = useState(false)
   const list = useChatList(connected, status.url ?? '')
   const {
@@ -1603,7 +1612,9 @@ function Shell({
   const pickPulseHost = useCallback((url: string) => setPulseHost(url === statusUrlRef.current ? null : url), [])
   const pulseHostChips = useMemo(() => {
     const shown = shownPulseHost ?? status.url ?? ''
-    return pulseChips(savedHosts ?? [], status.url ?? '', pulseUnseen, keptPulse, hostName).map(chip => ({ ...chip, current: chip.url === shown }))
+    // The shown feed keeps its chip through a failed read, so the row back to this dashboard's feed stays.
+    const counts = shownPulseHost && !keptPulse.has(shownPulseHost) ? new Map([...keptPulse, [shownPulseHost, 0]]) : keptPulse
+    return pulseChips(savedHosts ?? [], status.url ?? '', pulseUnseen, counts, hostName).map(chip => ({ ...chip, current: chip.url === shown }))
   }, [savedHosts, status.url, pulseUnseen, keptPulse, shownPulseHost])
   const needsCount = requests.length + waitingRows.length + otherWaiting.length
   const openRequests = useMemo(() => requests.filter(r => r.sessionId && r.sessionId === chat.liveId), [requests, chat.liveId])
@@ -2343,7 +2354,7 @@ function Shell({
                 onCollapse={() => hideList(true)}
               />
             )}
-            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} shown={section === 'chats'} /> : null}
+            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} frame={dockedFrame} shown={dockedShown} /> : null}
             {/* Kept while another dashboard's chat is docked over it, so coming back to it doesn't open it again. */}
             <main className="chat" ref={chatPane} style={dockedChat ? { display: 'none' } : undefined}>
               <div className="chat-head soft">

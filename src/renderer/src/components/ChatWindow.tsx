@@ -142,6 +142,12 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   )
   // A docked Pulse card's Do it leaves its words in the message box.
   const [quote, setQuote] = useState<QuoteRequest | null>(() => (request.draft ? quoteRequest({ draft: request.draft }) : null))
+  // Another card's Do it on the same docked chat points the page here again with new words, so they replace the box's.
+  const firstRequest = useRef(request)
+  useEffect(() => {
+    if (request === firstRequest.current || !request.draft) return
+    setQuote(quoteRequest({ draft: request.draft }))
+  }, [request])
   const [sendNow, setSendNow] = useState(0)
   const [modelOpen, setModelOpen] = useState(false)
   const [contextOpen, setContextOpen] = useState(false)
