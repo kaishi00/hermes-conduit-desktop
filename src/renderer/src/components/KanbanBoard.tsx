@@ -428,7 +428,7 @@ export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, s
   )
 }
 
-function TaskPanel({
+export function TaskPanel({
   id,
   task,
   assignees,
