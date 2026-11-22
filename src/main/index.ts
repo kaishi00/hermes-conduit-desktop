@@ -47,7 +47,7 @@ import { createFileStore } from './store'
 import { QUICK_ASK_ACCELERATOR, QuickAsk } from './quickAsk'
 import { ChatWindowSet, chatWindowFor } from './chatWindowSet'
 import { createChatWindow } from './chatWindows'
-import { dockedChatRequest } from '../shared/chatWindows'
+import { dockedFrameHost } from '../shared/chatWindows'
 import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
 import { releaseScreen } from '../shared/screenWindows'
@@ -137,8 +137,9 @@ let isWakeListener: (window: BrowserWindow) => boolean = () => false
  */
 const chatWindowHosts = new Map<number, string>()
 /**
- * The main window's docked chats (another combined dashboard's chat opened in
- * place, in its chat pane), by their frames' webContents ids. Each reads
+ * The main window's docked frames (another combined dashboard's chat opened in
+ * place, in its chat pane, or its Pulse feed on the Pulse page), by their
+ * frames' webContents ids. Each reads
  * through its own dashboard's kept connection, as a chat window on it does,
  * and never through the one on screen.
  */
@@ -158,21 +159,21 @@ function farHost(contentsId: number): string | null {
 function dockedHost(contentsId: number): string {
   const page = webContents.fromId(contentsId)
   if (!page || page.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return ''
-  return dockedChatRequest(page.getURL(), mainWindow.webContents.getURL())?.host ?? ''
+  return dockedFrameHost(page.getURL(), mainWindow.webContents.getURL()) ?? ''
 }
 /** The docked chats' frames, which BrowserWindow.getAllWindows() leaves out. */
 function dockedPages(): Electron.WebContents[] {
   return [...dockedChats].map(id => webContents.fromId(id)).filter((page): page is Electron.WebContents => !!page && !page.isDestroyed())
 }
 /**
- * The main window's frames: only a docked chat, at the main window's own page,
+ * The main window's frames: only a docked chat or Pulse feed, at the main window's own page,
  * on a combined dashboard kept beside the one on screen, with the preload and
  * the sandbox every window has. Its calls go to the dashboard its address names.
  */
 function watchDockedChats(window: BrowserWindow): void {
   window.webContents.on('will-attach-webview', (event, preferences, params) => {
-    const chat = dockedChatRequest(params.src, window.webContents.getURL())
-    if (!chat || chat.host === shownHost || !chatWindowDashboards().includes(chat.host)) {
+    const host = dockedFrameHost(params.src, window.webContents.getURL())
+    if (!host || host === shownHost || !chatWindowDashboards().includes(host)) {
       event.preventDefault()
       return
     }

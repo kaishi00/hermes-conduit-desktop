@@ -29,7 +29,9 @@ export function chatWindowRequest(hash: string): ChatWindowRequest | null {
       author: typeof raw.author === 'string' ? raw.author : undefined,
       ...(raw.botChat === true ? { botChat: true } : {}),
       ...(typeof raw.host === 'string' && raw.host ? { host: raw.host } : {}),
-      ...(raw.docked === true ? { docked: true } : {})
+      ...(raw.docked === true ? { docked: true } : {}),
+      ...(typeof raw.draft === 'string' && raw.draft ? { draft: raw.draft } : {}),
+      ...(raw.fresh === true ? { fresh: true } : {})
     }
   } catch {
     return null
@@ -54,4 +56,35 @@ export function dockedChatRequest(src: string, base: string): (ChatWindowRequest
   if (!page || pageBase(src) !== page) return null
   const chat = chatWindowRequest(src.slice(page.length))
   return chat?.docked && chat.host ? { ...chat, host: chat.host } : null
+}
+
+/**
+ * Another combined dashboard's Pulse feed, shown in the main window's Pulse
+ * page when its chip is picked (Pulse keeps a feed per dashboard): the feed's
+ * page in a frame of its own, on that dashboard's kept connection, as a docked
+ * chat is.
+ */
+export function dockedPulseUrl(base: string, host: string): string {
+  return `${pageBase(base)}#pulse=${encodeURIComponent(JSON.stringify({ host, docked: true }))}`
+}
+
+/** The docked Pulse feed a page's hash asks for; null for any other page. */
+export function pulseFrameRequest(hash: string): { host: string } | null {
+  const match = /^#pulse=(.+)$/.exec(hash)
+  if (!match) return null
+  try {
+    const raw = JSON.parse(decodeURIComponent(match[1]!)) as { host?: unknown; docked?: unknown } | null
+    return raw && raw.docked === true && typeof raw.host === 'string' && raw.host ? { host: raw.host } : null
+  } catch {
+    return null
+  }
+}
+
+/** The dashboard a main window's frame is on, a docked chat or Pulse feed at the main window's own page; null for anything else. */
+export function dockedFrameHost(src: string, base: string): string | null {
+  const chat = dockedChatRequest(src, base)
+  if (chat) return chat.host
+  const page = pageBase(base)
+  if (!page || pageBase(src) !== page) return null
+  return pulseFrameRequest(src.slice(page.length))?.host ?? null
 }

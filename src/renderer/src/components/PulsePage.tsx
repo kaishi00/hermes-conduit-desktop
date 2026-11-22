@@ -44,9 +44,9 @@ interface Props {
   pulse: PulseState
   /** Opens a card's chat; with `draft`, left in its composer. A card from no chat gets a new chat in Pulse's profile. */
   onOpenChat: (target: { id: string | null; profile: string; title?: string }, draft?: string) => void
-  /** Opens Tasks > Board, for a card from a Kanban task's worker. */
-  onOpenBoard: () => void
-  /** Combined dashboards: a chip per host, the one on screen picked; another switches there, since a card's steps are its own host's. */
+  /** Opens Tasks > Board, for a card from a Kanban task's worker; none for another dashboard's feed, whose board isn't drawn here. */
+  onOpenBoard?: () => void
+  /** Combined dashboards: a chip per host, the one shown picked; another shows that host's feed in place (a docked frame on its kept connection). */
   chips?: PulseChip[]
   onPickHost?: (url: string) => void
 }
@@ -208,7 +208,7 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
             <Icon name="chats" />
             <span>{card.chatTitle || t('Open the chat')}</span>
           </button>
-        ) : card.kanbanTask !== undefined ? (
+        ) : card.kanbanTask !== undefined && onOpenBoard ? (
           <button className="pulse-source" onClick={onOpenBoard}>
             <Icon name="tasks" />
             <span>{card.kanbanTask ? t('Kanban task {task}', { task: card.kanbanTask }) : t('Tasks')}</span>
@@ -438,23 +438,7 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
         </div>
       ) : (
         <div className="needs-inner">
-          {chips.length ? (
-            <div className="pulse-hosts" role="tablist" aria-label={t('Combine Dashboards')}>
-              {chips.map(chip => (
-                <button
-                  key={chip.url}
-                  role="tab"
-                  aria-selected={chip.current}
-                  className={chip.current ? 'on' : undefined}
-                  onClick={() => !chip.current && onPickHost?.(chip.url)}
-                >
-                  <HostBadgeMark badge={chip.badge} />
-                  {chip.badge.name}
-                  {chip.count ? <span className="pulse-host-count">{chip.count > 99 ? "99+" : chip.count}</span> : null}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <PulseHostChips chips={chips} onPick={onPickHost} />
           <div className="pulse-head">
             <h1>{t('Pulse')}</h1>
             <span className="spacer" />
@@ -577,5 +561,27 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
         </div>
       ) : null}
     </main>
+  )
+}
+
+/** Pulse's chip per combined host, the one shown picked; on the feed's page, and over another host's docked feed. */
+export function PulseHostChips({ chips, onPick }: { chips: readonly PulseChip[]; onPick?: (url: string) => void }) {
+  if (!chips.length) return null
+  return (
+    <div className="pulse-hosts" role="tablist" aria-label={t('Combine Dashboards')}>
+      {chips.map(chip => (
+        <button
+          key={chip.url}
+          role="tab"
+          aria-selected={chip.current}
+          className={chip.current ? 'on' : undefined}
+          onClick={() => !chip.current && onPick?.(chip.url)}
+        >
+          <HostBadgeMark badge={chip.badge} />
+          {chip.badge.name}
+          {chip.count ? <span className="pulse-host-count">{chip.count > 99 ? '99+' : chip.count}</span> : null}
+        </button>
+      ))}
+    </div>
   )
 }

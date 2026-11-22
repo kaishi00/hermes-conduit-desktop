@@ -12168,3 +12168,13 @@ button.ghost:disabled {
   height: 100%;
   border: 0;
 }
+
+/* Another combined dashboard's Pulse feed: the chips over its docked frame, which fills the page. */
+.docked-pulse {
+  display: flex;
+  flex-direction: column;
+}
+.docked-pulse .docked-pulse-chips {
+  flex: none;
+  padding-bottom: 0;
+}

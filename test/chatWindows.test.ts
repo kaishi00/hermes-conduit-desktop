@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_WINDOW_LIMIT, ChatWindowSet } from '../src/main/chatWindowSet'
-import { chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl } from '../src/shared/chatWindows'
+import { chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, pulseFrameRequest } from '../src/shared/chatWindows'
 
 function harness() {
   const made: { id: string; focused: number; closed: boolean; onClosed: () => void }[] = []
@@ -102,6 +102,22 @@ describe('chat windows of their own', () => {
     expect(dockedChatRequest(src, '')).toBeNull()
     // A dev server's page works the same.
     expect(dockedChatRequest(dockedChatUrl('http://localhost:5173/', chat), 'http://localhost:5173/')).toEqual({ ...chat, docked: true })
+  })
+
+  it('docks another dashboard’s Pulse feed the same way, and reads a docked chat’s words and new chat', () => {
+    const main = 'file:///app/out/renderer/index.html'
+    const src = dockedPulseUrl(main, 'https://b.example')
+    expect(pulseFrameRequest(src.slice(main.length))).toEqual({ host: 'https://b.example' })
+    expect(dockedFrameHost(src, main)).toBe('https://b.example')
+    expect(dockedFrameHost(dockedChatUrl(main, { id: 's1', host: 'https://c.example' }), main)).toBe('https://c.example')
+    // Another page, or a feed that isn't docked or names no dashboard, isn't let in.
+    expect(dockedFrameHost(src.replace('/app/', '/elsewhere/'), main)).toBeNull()
+    expect(pulseFrameRequest(`#pulse=${encodeURIComponent(JSON.stringify({ host: 'https://b.example' }))}`)).toBeNull()
+    expect(pulseFrameRequest(`#pulse=${encodeURIComponent(JSON.stringify({ docked: true }))}`)).toBeNull()
+    expect(pulseFrameRequest('#pulse=%zz')).toBeNull()
+    // A Pulse card's Do it carries its words; one from no chat asks for a new chat.
+    const chat = { id: 'new-1', host: 'https://b.example', profile: 'ops', draft: 'Book it', fresh: true }
+    expect(dockedChatRequest(dockedChatUrl(main, chat), main)).toEqual({ ...chat, docked: true })
   })
 
   it('titles a window by its chat, then its bot', () => {

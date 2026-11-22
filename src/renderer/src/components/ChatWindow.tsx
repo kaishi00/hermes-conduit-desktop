@@ -26,7 +26,7 @@ import { CHAT_WINDOW_LIMIT, chatWindowTitle } from '@shared/chatWindows'
 import { Composer } from './Composer'
 import { ModelPicker } from './ModelPicker'
 import { ContextPanel } from './ContextPanel'
-import { LiveTranscript, prefillRequest } from './Transcript'
+import { LiveTranscript, prefillRequest, quoteRequest } from './Transcript'
 import { useTranscriptValue } from '../state/transcriptStore'
 import type { QuoteRequest } from '../state/quote'
 import { PlanDock } from './PlanDock'
@@ -112,7 +112,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     discardLost,
     resendLost,
     react
-  } = useChat(request.id, profile, status.sessionAuthority === true, connected, botChat, undefined, host)
+  } = useChat(request.fresh ? null : request.id, profile, status.sessionAuthority === true, connected, botChat, undefined, host)
   // The transcript is drawn by LiveTranscript, so a streaming reply runs that, not this window, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
   const plan = useTranscriptValue(transcriptStore, state => state.plan)
@@ -140,7 +140,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
     [respondConnection, reissueConnection, wakeConnection]
   )
-  const [quote, setQuote] = useState<QuoteRequest | null>(null)
+  // A docked Pulse card's Do it leaves its words in the message box.
+  const [quote, setQuote] = useState<QuoteRequest | null>(() => (request.draft ? quoteRequest({ draft: request.draft }) : null))
   const [sendNow, setSendNow] = useState(0)
   const [modelOpen, setModelOpen] = useState(false)
   const [contextOpen, setContextOpen] = useState(false)
@@ -171,11 +172,14 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       n.onclick = () => {
         const live = chatRef.current.liveId
         // Docked: the main window comes back with this chat docked again, wherever it was since.
-        if (docked) window.conduit.openChat({ storedId: chatRef.current.storedId ?? request.id, profile, title: chatRef.current.title, host, ...(botChat ? { botChat: true } : {}) })
+        if (docked) {
+          const storedId = chatRef.current.storedId ?? (request.fresh ? '' : request.id)
+          window.conduit.openChat({ storedId, profile, title: chatRef.current.title, host, ...(botChat ? { botChat: true } : {}), ...(storedId ? {} : { fresh: true }) })
+        }
         else if (live) void window.conduit.chatWindowOf(live, true)
       }
     },
-    [docked, request.id, profile, host, botChat]
+    [docked, request.id, request.fresh, profile, host, botChat]
   )
   useEffect(
     () =>
@@ -204,8 +208,11 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   }, [openRequests, notify])
 
   // Docked: the chat moves to a window of its own, and the main window, seeing it there, closes this pane.
+  // A new chat has a window of its own once Hermes has stored it.
+  const windowId = request.fresh ? chat.storedId : (chat.storedId ?? request.id)
   const openInWindow = useCallback(async () => {
-    const opened = await window.conduit.openChatWindow({ id: request.id, profile, title, author: botTitle, host, ...(botChat ? { botChat: true } : {}) })
+    if (!windowId) return
+    const opened = await window.conduit.openChatWindow({ id: windowId, profile, title, author: botTitle, host, ...(botChat ? { botChat: true } : {}) })
     if (opened) return
     const open = await window.conduit.chatWindows()
     notice(
@@ -214,7 +221,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
         : t('The chat didn’t open. Try again.'),
       'error'
     )
-  }, [request.id, profile, title, botTitle, host, botChat, notice])
+  }, [windowId, profile, title, botTitle, host, botChat, notice])
   const openInMain = useCallback(() => {
     window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
@@ -259,7 +266,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             {botChat ? null : <div className="chat-window-bot">{botTitle}</div>}
           </div>
           <div className="chat-head-actions">
-            {docked ? (
+            {docked && !windowId ? null : docked ? (
               <button className="link" onClick={() => void openInWindow()} title={t('Moves this chat to a window of its own.')}>
                 {t('Open in New Window')}
               </button>

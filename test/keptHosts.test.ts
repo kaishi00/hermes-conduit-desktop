@@ -14,8 +14,6 @@ import {
   openBotAfterSwitch,
   showProfileAfterSwitch,
   takeProfileAfterSwitch,
-  openPageAfterSwitch,
-  takePageAfterSwitch,
   otherHostsChats,
   keptChatsPath,
   mergeKeptChats,
@@ -552,11 +550,3 @@ describe("other hosts' bots' work (desktop#231)", () => {
   })
 })
 
-describe('a page picked on another host', () => {
-  it('opens there once, and only on that host', () => {
-    openPageAfterSwitch('https://b.example', 'pulse')
-    expect(takePageAfterSwitch('https://a.example')).toBeNull()
-    expect(takePageAfterSwitch('https://b.example')).toBe('pulse')
-    expect(takePageAfterSwitch('https://b.example')).toBeNull()
-  })
-})

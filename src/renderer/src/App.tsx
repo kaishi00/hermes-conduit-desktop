@@ -19,7 +19,7 @@ import { ModelPicker } from './components/ModelPicker'
 import { ContextPanel } from './components/ContextPanel'
 import { RoomView } from './components/RoomView'
 import { Tasks } from './components/Tasks'
-import { PulsePage } from './components/PulsePage'
+import { PulseHostChips, PulsePage } from './components/PulsePage'
 import { FilesPanel } from './components/FilesPanel'
 import { ColumnDivider } from './components/ColumnDivider'
 import { LastCallTrace } from './components/LastCallTrace'
@@ -138,7 +138,6 @@ import {
   showProfileAfterSwitch,
   type HostBadge,
   openRoomAfterSwitch,
-  openPageAfterSwitch,
   newBotAfterSwitch,
   takeNewBotAfterSwitch,
   type NewBotCarry,
@@ -148,7 +147,6 @@ import {
   takeProfileAfterSwitch,
   keptWorkKey,
   takeRoomAfterSwitch,
-  takePageAfterSwitch,
   useKeptBots,
   useKeptWork,
   useKeptRooms,
@@ -211,6 +209,7 @@ import { ask, askText, tell } from './state/dialogs'
 import { Select } from './components/Select'
 import { KeptPane } from './components/KeptPane'
 import { DockedChatPane, type DockedChat } from './components/DockedChat'
+import { DockedPulseFrame } from './components/DockedPulse'
 import { botSideScroll } from './state/keptScroll'
 
 /** A call's transcript while no call reads it. */
@@ -335,11 +334,9 @@ function reopenSettings(): void {
 }
 
 /**
- * Settings after a language change reloads the window; Pulse when its chip switched here (from the first
- * render, or Bots' open-a-bot would take the window first); else the first tab the phone's layout shows.
+ * Settings after a language change reloads the window; else the first tab the phone's layout shows.
  */
 function reopenedSection(host: string): Section {
-  if (takePageAfterSwitch(host) === 'pulse') return 'pulse'
   try {
     const saved = sessionStorage.getItem(REOPEN_SECTION)
     sessionStorage.removeItem(REOPEN_SECTION)
@@ -511,9 +508,18 @@ function Shell({
   useEffect(() => {
     const offMenu = window.conduit.onMenu(action => runShortcut.current(action))
     const offOpen = window.conduit.onOpenChat(ref => {
-      // Another combined dashboard's chat, back from its window: a switch to it opens it.
+      // Another combined dashboard's chat (back from its window, a docked chat's notification, a docked Pulse card) docks here.
       if (ref.host && ref.host !== statusUrlRef.current) {
-        openDockedRef.current({ host: ref.host, id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
+        const fresh = ref.fresh === true || !ref.storedId
+        openDockedRef.current({
+          host: ref.host,
+          id: fresh ? `new-${Date.now()}` : ref.storedId,
+          profile: ref.profile,
+          title: ref.title,
+          ...(ref.botChat ? { botChat: true } : {}),
+          ...(ref.draft ? { draft: ref.draft } : {}),
+          ...(fresh ? { fresh: true } : {})
+        })
         return
       }
       setSelected({ id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
@@ -1588,10 +1594,17 @@ function Shell({
   // ...and a Pulse chip each, with how many cards are new there.
   const keptPulse = useKeptPulse(keptHosts, section === 'pulse')
   const pulseUnseen = pulse.feed?.unseen ?? 0
-  const pulseHostChips = useMemo(
-    () => pulseChips(savedHosts ?? [], status.url ?? '', pulseUnseen, keptPulse, hostName),
-    [savedHosts, status.url, pulseUnseen, keptPulse]
-  )
+  /**
+   * Another combined dashboard whose Pulse feed the page shows, in a docked frame on its kept connection, with
+   * no switch (Pulse keeps a feed per dashboard); null for this one's. Only while that dashboard is kept.
+   */
+  const [pulseHost, setPulseHost] = useState<string | null>(null)
+  const shownPulseHost = pulseHost && keptHosts.some(h => h.url === pulseHost) ? pulseHost : null
+  const pickPulseHost = useCallback((url: string) => setPulseHost(url === statusUrlRef.current ? null : url), [])
+  const pulseHostChips = useMemo(() => {
+    const shown = shownPulseHost ?? status.url ?? ''
+    return pulseChips(savedHosts ?? [], status.url ?? '', pulseUnseen, keptPulse, hostName).map(chip => ({ ...chip, current: chip.url === shown }))
+  }, [savedHosts, status.url, pulseUnseen, keptPulse, shownPulseHost])
   const needsCount = requests.length + waitingRows.length + otherWaiting.length
   const openRequests = useMemo(() => requests.filter(r => r.sessionId && r.sessionId === chat.liveId), [requests, chat.liveId])
   const expiredQuestions = useExpiredQuestions(chat.liveId)
@@ -2782,6 +2795,13 @@ function Shell({
               />
             </div>
           </main>
+        ) : section === 'pulse' && shownPulseHost ? (
+          <main className="needs pulse-page docked-pulse">
+            <div className="needs-inner docked-pulse-chips">
+              <PulseHostChips chips={pulseHostChips} onPick={pickPulseHost} />
+            </div>
+            <DockedPulseFrame key={shownPulseHost} host={shownPulseHost} />
+          </main>
         ) : section === 'pulse' ? (
           <PulsePage
             pulse={pulse}
@@ -2792,11 +2812,7 @@ function Shell({
             }}
             onOpenBoard={() => setSection('tasks')}
             chips={pulseHostChips}
-            onPickHost={async url => {
-              if (!(await switchEndingCall(hostName(url)))) return
-              openPageAfterSwitch(url, 'pulse')
-              void window.conduit.switchHost(url)
-            }}
+            onPickHost={pickPulseHost}
           />
         ) : section === 'room' && shownCopy && shownCopyRoom ? (
           <RoomView

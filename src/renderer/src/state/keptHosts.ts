@@ -771,20 +771,6 @@ export function pulseChips(hosts: readonly HostSummary[], current: string, curre
   return chips.length > 1 ? chips : []
 }
 
-/** A page picked on another host (Pulse's chip): the new host's window opens on it. */
-let pendingPage: { host: string; page: string } | null = null
-
-export function openPageAfterSwitch(host: string, page: string): void {
-  pendingPage = { host, page }
-}
-
-export function takePageAfterSwitch(host: string): string | null {
-  if (!pendingPage || pendingPage.host !== host) return null
-  const page = pendingPage.page
-  pendingPage = null
-  return page
-}
-
 /** An artifact from another combined host: its rows open and copy there; Save and Show in Chat stay with that host. */
 export type KeptArtifact = ArtifactItem & { dashboard: string; dashboardProfile?: string }
 
