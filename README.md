@@ -46,8 +46,25 @@ for a dashboard that asks for a sign-in).
     pnpm package
 
 builds an installer for the platform you're on, in `release/`. CI builds the
-Windows installer and the Mac dmg for every pull request (unsigned for now;
-Windows will be signed by the Microsoft Store, the Mac notarized).
+Windows installer and the Mac dmg, unsigned, for every pull request.
+
+## Releases and updates
+
+A `v*` tag matching `package.json`'s version (`v1.0.0` for `1.0.0`) runs
+`.github/workflows/release.yml`: it builds the Mac dmg and zip (signed with
+the Developer ID and notarized), the Windows installer (unsigned) and the
+Linux AppImage onto a draft GitHub release, and the Microsoft Store package
+as a workflow artifact to upload to Partner Center, which signs it.
+Publishing the draft releases it. A manual run of the workflow from main
+with publish checked does the same without a tag (GitHub makes the tag when
+the draft is published); mark a beta's release as a pre-release.
+
+Installed copies update themselves from the newest published release
+(`src/main/updates.ts`, electron-updater): they check at launch and every
+four hours, download in the background and install when Conduit quits, or
+at once with Restart to Update in Settings or the tray. A beta gets newer
+betas and releases; a release only releases. The Store's copy is updated
+by the Store.
 
 ## How it's put together
 

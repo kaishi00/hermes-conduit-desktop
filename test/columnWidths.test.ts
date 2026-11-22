@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LIST_COLUMN, PANEL_COLUMN, besideChatFits, shownListWidth, shownPanelWidth, snapsShut, storedAfterDrag, storedAfterStep } from '../src/renderer/src/state/columnWidths'
+import { LIST_COLUMN, PANEL_COLUMN, besideChatFits, shownListWidth, shownPanelWidth, shownWindowPanelWidth, snapsShut, storedAfterDrag, storedAfterStep } from '../src/renderer/src/state/columnWidths'
 
 describe('column widths', () => {
   it('drags within the column bounds, and a press that barely moves stores nothing', () => {
@@ -47,5 +47,12 @@ describe('hiding the chat list by its line', () => {
     expect(snapsShut(300, -141, 1, LIST_COLUMN)).toBe(true)
     // Widening never hides it.
     expect(snapsShut(300, 200, 1, LIST_COLUMN)).toBe(false)
+  })
+
+  it("gives a chat's own page (a window, or a far chat docked in the pane) its panel short of the chat's least width", () => {
+    expect(shownWindowPanelWidth(null, 1200)).toBeNull()
+    expect(shownWindowPanelWidth(400, 1200)).toBe(400)
+    expect(shownWindowPanelWidth(700, 1000)).toBe(1000 - 430)
+    expect(shownWindowPanelWidth(500, 600)).toBe(PANEL_COLUMN.min)
   })
 })

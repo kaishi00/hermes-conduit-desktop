@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ScreenWindowSet } from '../src/main/screenWindowSet'
-import { releaseScreen, screenWindowHash, screenWindowRequest } from '../src/shared/screenWindows'
+import { parseScreenKey, releaseScreen, screenKey, screenWindowHash, screenWindowRequest } from '../src/shared/screenWindows'
 import type { ScreenWindowRequest } from '../src/shared/ipc'
 
 function harness() {
@@ -34,6 +34,32 @@ function harness() {
 }
 
 describe("bots' screens in windows of their own", () => {
+  it("keeps two dashboards' bots of one name apart, by their dashboards", () => {
+    const { set, made, released } = harness()
+    set.show({ profile: 'default', botName: 'Furina', host: 'https://a.example' })
+    set.show({ profile: 'default', botName: 'Conduit', host: 'https://b.example' })
+    set.show({ profile: 'default', botName: 'Conduit', host: 'https://b.example' })
+    expect(made).toHaveLength(2)
+    expect(made[1]!.focused).toBe(1)
+    expect(made[1]!.screen.host).toBe('https://b.example')
+    const far = screenKey('https://b.example', 'default')
+    expect(set.profiles()).toEqual([screenKey('https://a.example', 'default'), far])
+    expect(parseScreenKey(far)).toEqual({ host: 'https://b.example', profile: 'default' })
+    expect(parseScreenKey('mira')).toEqual({ profile: 'mira' })
+    // The far dashboard leaves the group: its window closes and hands back its hold; the other stays.
+    set.note(far, 'v2', true)
+    set.closeWhere(key => parseScreenKey(key).host === 'https://b.example')
+    expect(made[1]!.closed).toBe(true)
+    expect(made[0]!.closed).toBe(false)
+    expect(released).toEqual([[far, 'v2']])
+    expect(set.profiles()).toEqual([screenKey('https://a.example', 'default')])
+  })
+
+  it("carries a far bot's dashboard in its page's hash", () => {
+    const screen = { profile: 'default', botName: 'Conduit', host: 'https://b.example' }
+    expect(screenWindowRequest(screenWindowHash(screen))).toEqual(screen)
+  })
+
   it('opens one window per bot and focuses its own again', () => {
     const { set, made, changes } = harness()
     set.show({ profile: 'mira', botName: 'Mira' })

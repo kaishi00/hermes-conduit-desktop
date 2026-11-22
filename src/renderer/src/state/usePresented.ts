@@ -11,7 +11,7 @@ export interface WaitingConfirm {
 }
 
 const store = localResults()
-const device = () => ({ installationId: installationId(), name: navigator.platform?.startsWith('Mac') ? 'Conduit for Mac' : navigator.platform?.startsWith('Win') ? 'Conduit for Windows' : 'Conduit for desktop', version: '0.1.0' })
+const device = () => ({ installationId: installationId(), name: navigator.platform?.startsWith('Mac') ? 'Conduit for Mac' : navigator.platform?.startsWith('Win') ? 'Conduit for Windows' : 'Conduit for desktop', version: __APP_VERSION__ })
 /** How often what waits is read while the window shows: a room's ask waits 30 s for an answer before the agent moves on. */
 const EXCHANGE_MS = 15_000
 

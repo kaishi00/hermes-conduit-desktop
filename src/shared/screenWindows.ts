@@ -1,5 +1,20 @@
 import type { ScreenWindowRequest } from './ipc'
 
+/**
+ * A screen window's bot: its profile on the dashboard on screen, or that
+ * profile on another combined dashboard (its host before the profile), so
+ * two dashboards' bots of one name each have their own window.
+ */
+export function screenKey(host: string | undefined, profile: string): string {
+  return host ? `${host}\u001f${profile}` : profile
+}
+
+/** A screen key's dashboard (none for the one on screen) and profile. */
+export function parseScreenKey(key: string): { host?: string; profile: string } {
+  const at = key.lastIndexOf('\u001f')
+  return at < 0 ? { profile: key } : { host: key.slice(0, at), profile: key.slice(at + 1) }
+}
+
 /** The page hash a bot's screen window opens on. */
 export function screenWindowHash(screen: ScreenWindowRequest): string {
   return `#screen=${encodeURIComponent(JSON.stringify(screen))}`
@@ -15,7 +30,8 @@ export function screenWindowRequest(hash: string): ScreenWindowRequest | null {
     return {
       profile: raw.profile,
       botName: typeof raw.botName === 'string' && raw.botName ? raw.botName : raw.profile,
-      viewerId: typeof raw.viewerId === 'string' && raw.viewerId ? raw.viewerId : undefined
+      viewerId: typeof raw.viewerId === 'string' && raw.viewerId ? raw.viewerId : undefined,
+      ...(typeof raw.host === 'string' && raw.host ? { host: raw.host } : {})
     }
   } catch {
     return null

@@ -31,6 +31,7 @@ export function ScreenWindow({ screen }: { screen: ScreenWindowRequest }) {
           profile={screen.profile}
           botName={screen.botName}
           viewerId={screen.viewerId}
+          host={screen.host}
           onViewer={viewerId => {
             if (screenWindowRequest(window.location.hash)?.viewerId !== viewerId)
               window.history.replaceState(null, '', screenWindowHash({ ...screen, viewerId }))

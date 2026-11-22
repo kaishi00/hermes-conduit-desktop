@@ -12263,3 +12263,11 @@ button.ghost:disabled {
   border-radius: 10px;
   user-select: text;
 }
+
+/* Settings > App > Updates: the button and What's New on one line. */
+.updates-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}

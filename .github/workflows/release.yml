@@ -1,0 +1,154 @@
+name: Release
+
+# Builds Conduit for the Mac, Windows and Linux from a v* tag and leaves the
+# packages on a draft GitHub release named by package.json's version. A person
+# publishes the draft; the website's download links and the updater then serve
+# it. A manual run (workflow_dispatch) builds the same packages as workflow
+# artifacts without touching any release, unless it's from main with publish. Each part signs only when its secrets are set, so a release before
+# them is unsigned, like CI's packages.
+#
+# Mac (Developer ID + notarization), secrets:
+#   CSC_LINK, CSC_KEY_PASSWORD        the Developer ID Application .p12 (base64) and its password
+#   APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER   an App Store Connect API key
+#     (APPLE_API_KEY_P8 is the .p8 file's text as downloaded, not base64)
+# Windows: the installer is unsigned (Eric, 2026-11-22: the Microsoft Store is
+# the signed Windows channel). The Store package (appx, identity in
+# electron-builder.yml) is kept as a workflow artifact to upload to Partner
+# Center, which signs it.
+
+on:
+  push:
+    tags: ['v*']
+  # Cloud sessions can't push tags, so a run from main can publish too: the
+  # draft release names the tag, which GitHub makes when the draft is published.
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload to the draft release for package.json's version (from main only)
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Version, typecheck, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      # The tag must name the version the packages will carry.
+      - name: Tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json's version $version (expected v$version)."
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  package:
+    name: Package (${{ matrix.platform }})
+    needs: check
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: mac
+            os: macos-latest
+          - platform: win
+            os: windows-latest
+          - platform: linux
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Package and upload to the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLATFORM: ${{ matrix.platform }}
+          # A tag publishes, and a manual run from main with publish; any other run keeps its packages as artifacts.
+          PUBLISH: ${{ (startsWith(github.ref, 'refs/tags/') || (inputs.publish && github.ref == 'refs/heads/main')) && 'always' || 'never' }}
+          # Mac
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          args=()
+          # electron-builder signs Windows with CSC_LINK too: the Apple
+          # certificate and key are for the Mac job only.
+          if [ "$PLATFORM" != mac ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER
+          fi
+          if [ "$PLATFORM" = mac ]; then
+            if [ -n "$CSC_LINK" ]; then
+              echo "Signing with the Developer ID certificate."
+            else
+              echo "::warning::No CSC_LINK secret: the Mac app is unsigned and won't update itself."
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+            fi
+            if [ -n "$CSC_LINK" ] && [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY_ID" ] && [ -n "$APPLE_API_ISSUER" ]; then
+              # notarytool reads the API key from a file.
+              key="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+              printf '%s' "$APPLE_API_KEY_P8" > "$key"
+              export APPLE_API_KEY="$key"
+              args+=(-c.mac.notarize=true)
+            else
+              echo "::warning::APPLE_API_KEY_P8, APPLE_API_KEY_ID and APPLE_API_ISSUER aren't all set: the Mac app isn't notarized."
+            fi
+          fi
+          pnpm exec electron-builder --"$PLATFORM" --publish "$PUBLISH" "${args[@]}"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !(startsWith(github.ref, 'refs/tags/') || (inputs.publish && github.ref == 'refs/heads/main')) }}
+        with:
+          name: conduit-${{ matrix.platform }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+      # The Store package, for Partner Center, not the release: it can't be
+      # installed until the Store signs it.
+      - name: Store package
+        if: matrix.platform == 'win'
+        shell: bash
+        run: pnpm exec electron-builder --win appx --x64 --arm64 --publish never
+      - uses: actions/upload-artifact@v4
+        if: matrix.platform == 'win'
+        with:
+          name: conduit-store-appx
+          path: release/*.appx
+          if-no-files-found: error
+          retention-days: 30

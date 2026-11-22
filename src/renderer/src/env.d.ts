@@ -16,3 +16,6 @@ declare module '@novnc/novnc' {
     clipboardPasteFrom(text: string): void
   }
 }
+
+/** package.json's version, set at build time (electron.vite.config.mts). */
+declare const __APP_VERSION__: string

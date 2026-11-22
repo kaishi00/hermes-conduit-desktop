@@ -5,6 +5,7 @@
  */
 import type { Language } from './i18n'
 import type { DeviceReport } from './deviceReports'
+import type { UpdateState } from './updates'
 
 /** How a dashboard lets us in, from its public `/api/status`. */
 export type SignInMethod = 'password' | 'token' | 'open'
@@ -238,6 +239,16 @@ export interface ConduitApi {
   /** Not now: Conduit doesn't ask about them again. */
   declineDeviceReports(ids: string[]): Promise<void>
   onDeviceReports(listener: () => void): () => void
+  /** Conduit's own updates (shared/updates.ts). */
+  updates: {
+    state(): Promise<UpdateState>
+    check(): Promise<UpdateState>
+    download(): Promise<void>
+    /** Restart to Update: quits, installs and opens Conduit again. */
+    install(): void
+    setAuto(on: boolean): Promise<UpdateState>
+    onState(listener: (state: UpdateState) => void): () => void
+  }
   /** `headers` are for a proxy in front of the dashboard (Cloudflare Access and the like). */
   probe(url: string, headers?: Record<string, string>): Promise<HostProbe>
   /** Reads the root certificate the server at `url` sends, trusting it for nothing. */
@@ -341,9 +352,9 @@ export interface ConduitApi {
   /**
    * A docked page tells the main window's pane, straight through its frame: 'moved' when its chat opened in
    * a window of its own, 'closed' when its room copy was deleted (either closes the pane), 'ask' for whether
-   * Chats is on screen.
+   * Chats is on screen, 'calling' and 'call-ended' as a call starts and ends in its chat.
    */
-  dockedToPane(message: 'moved' | 'closed' | 'ask'): void
+  dockedToPane(message: 'moved' | 'closed' | 'ask' | 'calling' | 'call-ended'): void
   /** Closes these chats' windows, or every chat window. */
   closeChatWindows(ids?: string[]): void
   /** The chats that have a window of their own, now and whenever that changes. */
@@ -351,13 +362,13 @@ export interface ConduitApi {
   onChatWindows(listener: (ids: string[]) => void): () => void
   /** A docked chat's page hears whether its pane is on screen (the main window's Chats), from the main window's frame. */
   onDockedShown(listener: (shown: boolean) => void): () => void
-  /** Opens a bot's screen in a window of its own, or focuses the one it has. */
-  openScreenWindow(screen: { profile: string; botName: string }): void
-  /** The bots whose screen has a window open, now and whenever that changes. */
+  /** Opens a bot's screen in a window of its own, or focuses the one it has; `host` is its dashboard, the one on screen when left out. */
+  openScreenWindow(screen: { profile: string; botName: string; host?: string }): void
+  /** The bots whose screen has a window open (their screen keys, shared/screenWindows.ts), now and whenever that changes. */
   screenWindows(): Promise<string[]>
   onScreenWindows(listener: (profiles: string[]) => void): () => void
   /** A screen window's viewer id and whether it holds the screen, so closing the window hands back for it. */
-  noteScreenViewer(profile: string, viewerId: string, holds: boolean): void
+  noteScreenViewer(key: string, viewerId: string, holds: boolean): void
   /** The quick ask window was just shown: focus its field. */
   onQuickAskShown(listener: () => void): () => void
   /** Sizes the quick ask window: true for a reply, false for the field alone, or the px the field and its staged files need. */
@@ -415,6 +426,8 @@ export interface OpenChatRequest {
   draft?: string
   /** A new chat in its profile, for a docked Pulse card from no chat; `storedId` is left empty. */
   fresh?: boolean
+  /** From the chat's own window (its Open in Main Window), which closes once the main window has it; any other open focuses a chat's window when it has one. */
+  fromWindow?: boolean
 }
 
 /** A bot's screen for a window of its own; the viewer id it had before, if it did. */
@@ -422,6 +435,8 @@ export interface ScreenWindowRequest {
   profile: string
   botName: string
   viewerId?: string
+  /** The bot's dashboard: the one on screen, or another combined one, whose screen is watched through its kept connection. */
+  host?: string
 }
 
 /** A chat for a window of its own. */
@@ -529,6 +544,12 @@ export const IPC = {
   sendDeviceReports: 'conduit:send-device-reports',
   declineDeviceReports: 'conduit:decline-device-reports',
   deviceReportsChanged: 'conduit:device-reports-changed',
+  updateState: 'conduit:update-state',
+  checkForUpdates: 'conduit:check-for-updates',
+  downloadUpdate: 'conduit:download-update',
+  installUpdate: 'conduit:install-update',
+  setAutoUpdate: 'conduit:set-auto-update',
+  updateStateChanged: 'conduit:update-state-changed',
   pluginRelease: 'conduit:plugin-release',
   liveOpen: 'conduit:live-open',
   liveOpenMinted: 'conduit:live-open-minted',

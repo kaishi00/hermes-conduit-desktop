@@ -24,8 +24,9 @@ import { FilesPanel } from './components/FilesPanel'
 import { ColumnDivider } from './components/ColumnDivider'
 import { LastCallTrace } from './components/LastCallTrace'
 import { CrashReportBanner, DeviceReportsSetting } from './components/DeviceReports'
+import { UpdatesSetting } from './components/UpdatesSetting'
 import { GlowContext, useGlowColors } from './components/GlowColors'
-import { archiveClassicChat, tagVoiceSession, useVoiceList, withVoice } from './state/voiceList'
+import { useVoiceList, withVoice } from './state/voiceList'
 import { setCatalogHost } from './state/modelCatalog'
 import { setTurnSurfaceHost } from './state/turnSurface'
 import { useDashboardProfiles } from './state/useDashboardProfiles'
@@ -49,7 +50,6 @@ import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './c
 import { useTranscriptValue } from './state/transcriptStore'
 import { lastReplyOf } from './state/transcriptReads'
 import { useRevealRow } from './state/revealRow'
-import type { TranscriptItem } from './state/transcript'
 import { forgetSummaries } from './state/stepSummaries'
 import { WAKE_EVENT, wakeBindings, wakeChat, wakeProfiles, type WakeBinding } from './state/wakeSettings'
 import { forgetChatLists } from './state/savedChatList'
@@ -169,23 +169,16 @@ import { advancedSections, chatSections, workspaceSections } from './state/profi
 import { canDelete, duplicateBot, writeMeta } from './state/botActions'
 import { AskedQuestionBar, WorkPanel } from './components/WorkPanel'
 import { PanelTabs, workCount, type PanelTab } from './components/PanelTabs'
+import { ChatHeader } from './components/ChatHeader'
+import { useChatCall } from './components/ChatCall'
+import { screenKey } from '@shared/screenWindows'
 import { useWork, useWorkSessions } from './state/useWork'
-import { shownTitle, statusText, workTone, type WorkItem } from './state/work'
-import { VoiceCall } from './components/VoiceCall'
-import { VoiceModeCapsule } from './components/VoiceModeCapsule'
-import { CallPictureControls } from './components/CallPictureControls'
-import { dataUrlBlob, type CallPicture, type PictureKind, type PictureNote } from './state/callPicture'
-import { modelFrame, stageFile } from './state/picture'
-import { GptLiveCall } from './components/GptLiveCall'
-import { GrokLiveCall } from './components/GrokLiveCall'
-import { LocalLiveCall } from './components/LocalLiveCall'
-import { GeminiLiveCall } from './components/GeminiLiveCall'
+import { shownTitle, type WorkItem } from './state/work'
 import { HermesCallSettings } from './components/HermesCallSettings'
 import { WakePhraseSettings } from './components/WakePhraseSettings'
 import { IncomingCall } from './components/IncomingCall'
-import { declineOnHost, useCallPresence, useRings, type Ring } from './state/rings'
+import { declineOnHost, useRings, type Ring } from './state/rings'
 import { VoiceModeSettings } from './components/VoiceModeSettings'
-import { VOICE_MODE_EVENT, VOICE_MODES, setVoiceMode, voiceMode, voiceModeTitle, type VoiceMode } from './state/gptLive'
 import { readAloud, readsRepliesAloud, setReadsRepliesAloud } from './state/readAloud'
 import { useCommands } from './state/useCommands'
 import { authorityMutation, moveChat, mutateSession } from './state/chatActions'
@@ -204,10 +197,7 @@ import { muteOf, readMuted, useChatMute } from './state/chatMute'
 import { GO_TO, SCALES, applyScale, glyphs, nextScale, readScale, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
-import { ProviderConsentSheet } from './components/ProviderConsent'
-import { consented, isLive } from './state/consent'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
-import type { CallResume } from './state/voiceSave'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
 import { ask, askText, tell } from './state/dialogs'
 import { Select } from './components/Select'
@@ -217,7 +207,6 @@ import { DockedPulseFrame } from './components/DockedPulse'
 import { botSideScroll, ScrollPane, useBackScroll, useShownAgain } from './state/keptScroll'
 
 /** A call's transcript while no call reads it. */
-const NO_ITEMS: TranscriptItem[] = []
 
 /** The host's synced preferences, for the bots' order. */
 const prefsHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gateway.http(method, path, body)
@@ -406,6 +395,8 @@ function Shell({
   const dockedFrame = useRef<DockedFrame | null>(null)
   const dockedShown = useRef(true)
   const closeDocked = useCallback(() => setDocked(null), [])
+  // A call in the docked chat, which runs it in its page on its own dashboard (Eric, 2026-11-22).
+  const [dockedCalling, setDockedCalling] = useState(false)
   dockedShown.current = section === 'chats'
   const dockedHost = dockedChat?.host
   useEffect(() => {
@@ -533,7 +524,7 @@ function Shell({
           ...(ref.botChat ? { botChat: true } : {}),
           ...(ref.draft ? { draft: ref.draft } : {}),
           ...(fresh ? { fresh: true } : {})
-        }, true)
+        }, ref.fromWindow === true)
         return
       }
       setSelected({ id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
@@ -619,116 +610,33 @@ function Shell({
   )
   // Each reply's end reads the open folders again: the agent may have changed files.
   const [turnsDone, setTurnsDone] = useState(0)
-  const [calling, setCalling] = useState(false)
-  // A dashboard switch ends the call, so a pick asks first (state/callSwitch.ts).
+  // The chat's call (components/ChatCall.tsx), drawn over the chat below.
+  const chatCall = useChatCall({
+    profile: selected.profile,
+    chatId: selected.id,
+    liveId: chat.liveId,
+    connected,
+    store: transcriptStore,
+    running,
+    turnsDone,
+    onStop: () => void stop(),
+    onCorrected: noteCorrection,
+    tell: message => void tell(message)
+  })
+  const calling = chatCall.calling
+  const endCall = chatCall.end
+  // A dashboard switch ends the call, so a pick asks first (state/callSwitch.ts); the docked chat's ends as its pane closes.
   useEffect(() => {
-    if (!calling) return
-    setRunningCall(() => setCalling(false))
+    if (!calling && !dockedCalling) return
+    setRunningCall(calling ? endCall : closeDocked)
     return () => setRunningCall(null)
-  }, [calling])
-  // The call's mode, read as it starts: Settings > Voice, or Classic after a GPT-Live call failed.
-  const [callMode, setCallMode] = useState<VoiceMode>('classic')
-  // A live mode asks once before sending the call to its company; Allow redraws with the call.
-  const [, setConsentGiven] = useState(0)
-  const asksConsent = calling && isLive(callMode) && !consented(callMode)
-  // The mode is set with the call, never a render later: a Classic call drawn first would open the microphone.
-  const toggleCall = () => {
-    if (!calling) setCallMode(voiceMode())
-    setResume(null)
-    setCalling(!calling)
-  }
+  }, [calling, dockedCalling, endCall, closeDocked])
+  const nextMode = chatCall.nextMode
   // Resume call, from a saved call's card: a live call in its chat that continues it, on the mode picked now.
-  const [resume, setResume] = useState<CallResume | null>(null)
-  useEffect(() => {
-    if (!calling) setResume(null)
-  }, [calling])
-  const resumeCall = (callId: string, call: CallTranscript) => {
+  const resumeCall = (callId: string, saved: CallTranscript) => {
     setOpenCall(null)
-    setResume({ callId, turns: call.turns, from: call.count })
-    setCallMode(voiceMode())
-    setCalling(true)
+    chatCall.resume(callId, saved)
   }
-  // A call's mode menu, or the picker beside the call button during a call: Voice settings keep the
-  // mode picked, and the call ends and starts again in it, in the same chat. Its own mode leaves it be.
-  const switchCallMode = (mode: VoiceMode) => {
-    setVoiceMode(mode)
-    if (!calling || mode === callMode) return
-    setResume(null)
-    setCallMode(mode)
-  }
-  const modeMenu = <VoiceModeCapsule mode={callMode} onPick={switchCallMode} />
-  // Show a picture on a call: it waits on the call's chat for the next request, and the call hears of it.
-  const [callPicture, setCallPicture] = useState<CallPicture | null>(null)
-  const [pictureNote, setPictureNote] = useState<PictureNote | null>(null)
-  const [pictureBusy, setPictureBusy] = useState(false)
-  const pictureIds = useRef(0)
-  const waitingPicture = useRef<CallPicture | null>(null)
-  waitingPicture.current = callPicture
-  useEffect(() => {
-    if (calling) return
-    setCallPicture(null)
-    setPictureNote(null)
-  }, [calling])
-  const showPicture = async (file: Blob & { name?: string }, kind: PictureKind) => {
-    setPictureBusy(true)
-    try {
-      const id = ++pictureIds.current
-      const named = file instanceof File ? file : new File([file], kind === 'screenshot' ? 'Screenshot.png' : 'Picture.png', { type: file.type || 'image/png' })
-      const [attachment, frame] = await Promise.all([stageFile(named, `call-picture-${id}`), modelFrame(named)])
-      if (attachment.kind !== 'image') {
-        void tell(t('That file isn’t a picture Conduit can show.'))
-        return
-      }
-      setCallPicture({ id, kind, attachment, frame })
-      setPictureNote({ id, kind, change: 'shown', frame })
-    } finally {
-      setPictureBusy(false)
-    }
-  }
-  const screenshotForCall = async () => {
-    setPictureBusy(true)
-    const shot = await window.conduit.screenshot().catch(() => null)
-    setPictureBusy(false)
-    if (!shot) {
-      void tell(t('Conduit couldn’t capture the screen. On a Mac, allow Screen Recording for Conduit in System Settings, then try again.'))
-      return
-    }
-    await showPicture(dataUrlBlob(shot), 'screenshot')
-  }
-  const removeCallPicture = () => {
-    const picture = waitingPicture.current
-    if (!picture) return
-    setCallPicture(null)
-    setPictureNote({ id: ++pictureIds.current, kind: picture.kind, change: 'removed', frame: null })
-  }
-  /** A call's request to Hermes: the waiting picture goes with it, once. */
-  const callSay = (words: string) => {
-    const picture = waitingPicture.current
-    if (picture) {
-      waitingPicture.current = null
-      setCallPicture(null)
-    }
-    void onSend(words, picture ? [picture.attachment] : [], { takeOver: true, spoken: true }).then(sent => {
-      // The chat didn't open, or was left while it opened: the call says the words didn't go.
-      if (sent === false) void tell(t('That didn’t reach the chat. Try again.'))
-    })
-  }
-  const pictureControls = (
-    <CallPictureControls
-      waiting={callPicture}
-      busy={pictureBusy}
-      onPick={file => void showPicture(file, 'picture')}
-      onScreenshot={() => void screenshotForCall()}
-      onRemove={removeCallPicture}
-    />
-  )
-  // The mode the next call takes, picked beside the call button or in Settings > Voice.
-  const [nextMode, setNextMode] = useState<VoiceMode>(voiceMode)
-  useEffect(() => {
-    const changed = () => setNextMode(voiceMode())
-    window.addEventListener(VOICE_MODE_EVENT, changed)
-    return () => window.removeEventListener(VOICE_MODE_EVENT, changed)
-  }, [])
   // The open chat's saved voice calls, read again once a call here ends (its save lands a moment later).
   const [chatCallList, setChatCallList] = useState<ChatCall[]>([])
   const [openCall, setOpenCall] = useState<string | null>(null)
@@ -761,32 +669,15 @@ function Shell({
   useEffect(() => {
     const was = callChat.current
     callChat.current = selected.id
-    if (was !== null && was !== selected.id) setCalling(false)
+    if (was !== null && was !== selected.id) endCall()
   }, [selected.id])
-  useEffect(() => setCalling(false), [selected.profile, section])
-  // A chat a Classic call made (started with no chat open) is filed under Voice, and archived when the
-  // call ends so Hermes Desktop's list keeps the chats people work in; this list shows it still.
-  const classicFresh = useRef<{ fresh: boolean; chat: { id: string; profile?: string } | null }>({ fresh: false, chat: null })
-  useEffect(() => {
-    const kept = classicFresh.current
-    if (calling && callMode === 'classic') {
-      if (!kept.fresh && !kept.chat && !selected.id) kept.fresh = true
-      if (kept.fresh && !kept.chat && selected.id) {
-        kept.chat = { id: selected.id, profile: selected.profile }
-        void tagVoiceSession(selected.profile, selected.id, 'classic').catch(() => undefined)
-      }
-      return
-    }
-    if (kept.chat) void archiveClassicChat(kept.chat.profile, kept.chat.id).catch(() => undefined)
-    classicFresh.current = { fresh: false, chat: null }
-  }, [calling, callMode, selected.id, selected.profile])
+  useEffect(() => endCall(), [selected.profile, section])
   // A call from Hermes answered here: its chat opens, then the call starts in it (after the resets above).
   const answeredCall = useRef<string | null>(null)
   useEffect(() => {
     if (!answeredCall.current || answeredCall.current !== selected.id || section !== 'chats') return
     answeredCall.current = null
-    setCallMode(voiceMode())
-    setCalling(true)
+    chatCall.start()
   }, [selected.id, selected.profile, section])
   // Edit Bot closes when another section opens.
   /** Edit profile from Settings or the profile strip: the section to go back to, and a switch to Bots that keeps the editor. */
@@ -832,9 +723,6 @@ function Shell({
     const reply = lastReplyOf(transcriptStore.get().items)
     if (!calling && readsRepliesAloud() && reply && document.hasFocus()) void readAloud(`turn-${turnsDone}`, reply, selected.profile).catch(() => undefined)
   }, [turnsDone])
-  // A call's transcript and last reply: a call draws them as they stream, so only a call reads them every frame.
-  const callItems = useTranscriptValue(transcriptStore, state => (calling ? state.items : null)) ?? NO_ITEMS
-  const lastReply = useTranscriptValue(transcriptStore, state => (calling ? lastReplyOf(state.items) : null))
   const wasRunning = useRef(false)
   useEffect(() => {
     if (wasRunning.current && !running) setTurnsDone(n => n + 1)
@@ -929,7 +817,7 @@ function Shell({
     void window.conduit.screenWindows().then(setScreenWindows)
     return off
   }, [])
-  const screenOpen = screenWindows.includes(screenProfile)
+  const screenOpen = screenWindows.includes(screenKey(status.url ?? undefined, screenProfile))
   const [screenHosts, setScreenHosts] = useState<Record<string, boolean>>({})
   useEffect(() => setScreenHosts({}), [status.url])
   useEffect(() => {
@@ -1774,13 +1662,16 @@ function Shell({
    */
   const openDocked = useCallback(
     (chat: DockedChat, fromWindow = false) => {
-      // A chat that has a window of its own brings it to the front, as its row does (Open in Main Window excepted).
-      if (!fromWindow && chatWindowIdsRef.current.includes(chat.id)) {
+      // A chat that has a window of its own brings it to the front, as its row does (Open in Main Window excepted, and
+      // words for its message box, which a window can't take, dock it here).
+      if (!fromWindow && !chat.draft && chatWindowIdsRef.current.includes(chat.id)) {
         void window.conduit.openChatWindow(chat)
         return
       }
-      // During a call the chat on screen keeps the call's controls, so another dashboard's chat opens in a window of its own.
-      if (calling) {
+      // During a call the chat on screen keeps the call's controls, so another dashboard's chat opens in a window of its own;
+      // so does any other during a call in the docked chat.
+      const callingHere = calling || (dockedCalling && !(docked && docked.chat.host === chat.host && docked.chat.id === chat.id))
+      if (callingHere) {
         void window.conduit.openChatWindow(chat).then(opened => {
           if (opened) return
           if (chatWindowIdsRef.current.length >= CHAT_WINDOW_LIMIT) void tell(t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT }))
@@ -1792,7 +1683,7 @@ function Shell({
       setBotsSide(chat.botChat === true)
       setSection('chats')
     },
-    [selected, calling]
+    [selected, calling, dockedCalling, docked]
   )
   const openDockedRef = useRef(openDocked)
   openDockedRef.current = openDocked
@@ -1983,7 +1874,6 @@ function Shell({
 
   // Calls from Hermes ring here too.
   const rings = useRings(connected, profiles)
-  useCallPresence(connected && calling, selected.profile)
   const ring = rings.ringing.at(-1)
   // The wake phrase: heard offline while Conduit is connected and showing, never during a call or a ring.
   const [wakeRevision, setWakeRevision] = useState(0)
@@ -2004,7 +1894,7 @@ function Shell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [status.url, glowBots, wakeRevision]
   )
-  const wakePhrases = connected && showing && !calling && !ring && wakeList.length ? JSON.stringify(wakeList.map(b => b.phrase)) : ''
+  const wakePhrases = connected && showing && !calling && !dockedCalling && !ring && wakeList.length ? JSON.stringify(wakeList.map(b => b.phrase)) : ''
   useEffect(() => window.conduit.wake.listen(wakePhrases ? (JSON.parse(wakePhrases) as string[]) : null), [wakePhrases])
   useEffect(() => () => window.conduit.wake.listen(null), [])
   // A phrase heard: voice on its profile, in a new chat or the one it continues, once that chat is open.
@@ -2014,16 +1904,14 @@ function Shell({
     const pending = wakeCall.current
     if (!pending || section !== 'chats' || selected.id !== pending.id || !sameProfile(selected.profile, pending.profile)) return
     wakeCall.current = null
-    setCallMode(voiceMode())
-    setCalling(true)
+    chatCall.start()
   }, [selected.id, selected.profile, section])
   const heardWake = useRef<(binding: WakeBinding) => void>(() => undefined)
   heardWake.current = binding => {
-    if (calling) return
+    if (calling || dockedCalling) return
     const id = binding.fresh ? null : wakeChat(binding.profile, selected, list.rows)
     if (section === 'chats' && selected.id === id && sameProfile(selected.profile, binding.profile)) {
-      setCallMode(voiceMode())
-      setCalling(true)
+      chatCall.start()
       return
     }
     wakeCall.current = { id, profile: binding.profile }
@@ -2050,8 +1938,7 @@ function Shell({
     const profile = known?.profile ?? call.profile
     if (selected.id === id && section === 'chats' && (selected.profile ?? '') === (profile ?? '')) {
       if (!calling) {
-        setCallMode(voiceMode())
-        setCalling(true)
+        chatCall.start()
       }
       return
     }
@@ -2455,104 +2342,57 @@ function Shell({
                 onCollapse={() => hideList(true)}
               />
             )}
-            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} frame={dockedFrame} shown={dockedShown} onMoved={closeDocked} /> : null}
+            {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} frame={dockedFrame} shown={dockedShown} onMoved={closeDocked} onCall={setDockedCalling} /> : null}
             {/* Kept while another dashboard's chat is docked over it, so coming back to it doesn't open it again. */}
             <main className="chat" ref={chatPane} style={dockedChat ? { display: 'none' } : undefined}>
-              <div className="chat-head soft">
-                <div className="chat-titles">
-                  <div className="chat-title-line">
-                    {title ? <div className="chat-title">{title}</div> : null}
-                    {workItem ? (
-                      <span className={`status-chip tone-${workTone(workItem)}`} title={statusText(workItem)}>
-                        <span className="status-chip-text">{statusText(workItem)}</span>
-                      </span>
-                    ) : null}
-                  </div>
-                  {/* A Bot Chat's work is counted on the Work tab and the panel button (Eric, 2026-11-20), not again under its name. */}
-                  {workItem && workBot ? (
-                    <button
-                      className="chat-subtitle"
-                      title={t('Back to {bot}', { bot: workBot.title })}
-                      onClick={() => {
-                        if (workBot.botChatId) openBot(workBot)
-                      }}
-                    >
-                      {t('{bot}’s work · {ref}', { bot: workBot.title, ref: workItem.ref })}
-                    </button>
-                  ) : null}
-                </div>
-                <div className="chat-head-actions">
-                  {/* Call and its voice mode, one pill (option C, softer). */}
-                  <div className={`call-pill${calling ? ' on' : ''}`}>
-                    <button
-                      className="call-pill-call"
-                      aria-label={calling ? t('End call') : t('Voice call in {mode}', { mode: voiceModeTitle(nextMode) })}
-                      title={calling ? t('End call') : t('Voice call in {mode}', { mode: voiceModeTitle(nextMode) })}
-                      disabled={!connected && !calling}
-                      onClick={toggleCall}
-                    >
-                      <Icon name={calling ? 'phoneDown' : 'phone'} />
-                      <span>{calling ? t('End call') : t('Call')}</span>
-                    </button>
-                    <span className="call-pill-line" aria-hidden="true" />
-                    <span className="call-pill-mode">
-                      <Select
-                        aria-label={t('Voice mode')}
-                        title={t('Voice mode')}
-                        value={calling ? callMode : nextMode}
-                        onChange={picked => switchCallMode(picked as VoiceMode)}
-                      >
-                        {VOICE_MODES.map(mode => (
-                          <option key={mode} value={mode}>
-                            {voiceModeTitle(mode)}
-                          </option>
-                        ))}
-                      </Select>
-                    </span>
-                  </div>
-                  {selected.id && section === 'chats' ? (
-                    <button
-                      className="chat-head-toggle"
-                      aria-label={t('Open in New Window')}
-                      title={calling ? t('End the call to move this chat to a window of its own') : `${t('Open in New Window')}: ${t('Moves this chat to a window of its own.')}`}
-                      disabled={calling}
-                      onClick={() =>
-                        void popOut({
-                          id: chat.storedId ?? selected.id!,
-                          profile: selected.profile,
-                          title: title || undefined,
-                          botChat: selected.botChat === true
-                        })
+              <ChatHeader
+                title={title}
+                workItem={workItem}
+                // A Bot Chat's work is counted on the Work tab and the panel button (Eric, 2026-11-20), not again under its name.
+                subtitle={
+                  workItem && workBot
+                    ? {
+                        text: t('{bot}’s work · {ref}', { bot: workBot.title, ref: workItem.ref }),
+                        title: t('Back to {bot}', { bot: workBot.title }),
+                        onClick: () => {
+                          if (workBot.botChatId) openBot(workBot)
+                        }
                       }
-                    >
-                      <Icon name="window" />
-                    </button>
-                  ) : null}
-                  {screenHosts[screenProfile] ? (
-                    <button
-                      className={`chat-head-toggle${screenOpen ? ' on' : ''}`}
-                      aria-label={t("Bot's Screen")}
-                      aria-pressed={screenOpen}
-                      title={t("Bot's Screen")}
-                      onClick={() => window.conduit.openScreenWindow({ profile: screenProfile, botName: botTitle })}
-                    >
-                      <Icon name="screen" />
-                    </button>
-                  ) : null}
-                  {panelTabs.length ? (
-                    <button
-                      className={`chat-head-toggle${shownTab ? ' on' : ''}`}
-                      aria-label={shownTab ? t('Hide side panel') : t('Show side panel')}
-                      aria-pressed={!!shownTab}
-                      title={shownTab ? t('Hide side panel') : t('Show side panel')}
-                      onClick={() => openTab(shownTab ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0])}
-                    >
-                      <Icon name="sidePanel" />
-                      {workDot && shownTab !== 'work' ? <span className={`chat-head-dot ${workDot.tone}`} aria-label={workDot.label} /> : null}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+                    : undefined
+                }
+                call={chatCall.header}
+                newWindow={
+                  selected.id && section === 'chats'
+                    ? {
+                        label: t('Open in New Window'),
+                        title: calling ? t('End the call to move this chat to a window of its own') : `${t('Open in New Window')}: ${t('Moves this chat to a window of its own.')}`,
+                        disabled: calling,
+                        onClick: () =>
+                          void popOut({
+                            id: chat.storedId ?? selected.id!,
+                            profile: selected.profile,
+                            title: title || undefined,
+                            botChat: selected.botChat === true
+                          })
+                      }
+                    : undefined
+                }
+                screen={
+                  screenHosts[screenProfile]
+                    ? { label: t("Bot's Screen"), on: screenOpen, onClick: () => window.conduit.openScreenWindow({ profile: screenProfile, botName: botTitle, ...(status.url ? { host: status.url } : {}) }) }
+                    : undefined
+                }
+                panel={
+                  panelTabs.length
+                    ? {
+                        label: shownTab ? t('Hide side panel') : t('Show side panel'),
+                        on: !!shownTab,
+                        onClick: () => openTab(shownTab ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0]),
+                        dot: workDot && shownTab !== 'work' ? workDot : null
+                      }
+                    : undefined
+                }
+              />
               {/* A question the bot asked here that waits past its turn. */}
               <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} />
               <FileLinks.Provider value={openPath}>
@@ -2624,97 +2464,7 @@ function Shell({
                   setYolo={setYolo}
                 />
               ) : null}
-              {asksConsent && isLive(callMode) ? (
-                <ProviderConsentSheet mode={callMode} onAllow={() => setConsentGiven(n => n + 1)} onCancel={() => setCalling(false)} />
-              ) : calling && callMode === 'gpt' ? (
-                <GptLiveCall
-                  key={callMode}
-                  modeMenu={modeMenu}
-                  pictureControls={pictureControls}
-                  pictureNote={pictureNote}
-                  profile={selected.profile}
-                  chatId={selected.id}
-                  items={callItems}
-                  onSay={callSay}
-                  running={running}
-                  turnsDone={turnsDone}
-                  lastReply={lastReply}
-                  onEnd={() => setCalling(false)}
-                  onClassic={() => setCallMode('classic')}
-                  requests={openRequests}
-                  resume={resume ?? undefined}
-                />
-              ) : calling && (callMode === 'gemini' || callMode === 'qwen') ? (
-                <GeminiLiveCall
-                  key={callMode}
-                  modeMenu={modeMenu}
-                  pictureControls={pictureControls}
-                  pictureNote={pictureNote}
-                  provider={callMode}
-                  profile={selected.profile}
-                  chatId={selected.id}
-                  items={callItems}
-                  onSay={callSay}
-                  running={running}
-                  turnsDone={turnsDone}
-                  lastReply={lastReply}
-                  onEnd={() => setCalling(false)}
-                  onClassic={() => setCallMode('classic')}
-                  requests={openRequests}
-                  resume={resume ?? undefined}
-                />
-              ) : calling && callMode === 'grok' ? (
-                <GrokLiveCall
-                  key={callMode}
-                  modeMenu={modeMenu}
-                  pictureControls={pictureControls}
-                  pictureNote={pictureNote}
-                  profile={selected.profile}
-                  chatId={selected.id}
-                  items={callItems}
-                  onSay={callSay}
-                  running={running}
-                  turnsDone={turnsDone}
-                  lastReply={lastReply}
-                  onEnd={() => setCalling(false)}
-                  onClassic={() => setCallMode('classic')}
-                  requests={openRequests}
-                  resume={resume ?? undefined}
-                />
-              ) : calling && callMode === 'local' ? (
-                <LocalLiveCall
-                  key={callMode}
-                  modeMenu={modeMenu}
-                  pictureControls={pictureControls}
-                  pictureNote={pictureNote}
-                  profile={selected.profile}
-                  chatId={selected.id}
-                  liveId={chat.liveId}
-                  onCorrected={noteCorrection}
-                  items={callItems}
-                  onSay={callSay}
-                  running={running}
-                  turnsDone={turnsDone}
-                  lastReply={lastReply}
-                  onEnd={() => setCalling(false)}
-                  onClassic={() => setCallMode('classic')}
-                  requests={openRequests}
-                  resume={resume ?? undefined}
-                />
-              ) : calling ? (
-                <VoiceCall
-                  key={callMode}
-                  modeMenu={modeMenu}
-                  pictureControls={pictureControls}
-                  profile={selected.profile}
-                  onSay={callSay}
-                  running={running}
-                  turnsDone={turnsDone}
-                  lastReply={lastReply}
-                  onStop={() => void stop()}
-                  onEnd={() => setCalling(false)}
-                />
-              ) : null}
+              {chatCall.view({ requests: openRequests, onSend })}
               <ControlDock liveId={chat.liveId} profile={selected.profile} connected={connected} pulse={controlPulse} />
               <AgentsDock
                 agents={delegates.agents}
@@ -3580,6 +3330,7 @@ function Settings({
           <AppLockSetting />
           <AskDashboardSetting hosts={status.hosts?.length ?? 0} />
           <CombineDashboardsSetting hosts={status.hosts ?? []} />
+          <UpdatesSetting />
         </dl>
       </section>
       <section className="settings-group">

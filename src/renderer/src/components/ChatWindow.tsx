@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { t } from '@shared/i18n'
 import type { ChatWindowRequest, ConnectionStatus } from '@shared/ipc'
 import { useChatDisplay } from '../state/display'
@@ -35,7 +35,22 @@ import { ControlDock } from './ControlDock'
 import { ChatQueueDock } from './ChatQueueDock'
 import { ConnectionActionsContext } from './ConnectionCardView'
 import { useReplyFace } from './BotsHome'
-import { AskedQuestionBar } from './WorkPanel'
+import { AskedQuestionBar, WorkPanel } from './WorkPanel'
+import { useChatCall } from './ChatCall'
+import { ChatHeader } from './ChatHeader'
+import { PanelTabs, workCount, type PanelTab } from './PanelTabs'
+import { ArtifactsPanel } from './ArtifactsPanel'
+import { FilesPanel } from './FilesPanel'
+import { ColumnDivider } from './ColumnDivider'
+import { FileLinks } from './Markdown'
+import { WorkLinks, type WorkLinkActions } from './WorkLinkCard'
+import { revealMessage } from './Transcript'
+import { useWork } from '../state/useWork'
+import { shownTitle, type WorkItem } from '../state/work'
+import { absolutePath, pathForDraft } from '../state/workspace'
+import { useRevealRow } from '../state/revealRow'
+import { PANEL_COLUMN, readWidth, shownWindowPanelWidth, writeWidth } from '../state/columnWidths'
+import { screenKey } from '@shared/screenWindows'
 
 const muteHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gateway.http(method, path, body)
 
@@ -44,8 +59,8 @@ const muteHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gatewa
  * for its own bot, beside the main window and any other chat windows. Its
  * rows with their cards, approvals and questions, the composer with
  * attachments, slash commands, the model and context panels, Stop, the
- * queue, the agents and the plan. Calls stay in the main window, which owns
- * the microphone. Open in Main Window opens the chat there and closes this
+ * queue, the agents and the plan. A window's chat has no call: calls stay in
+ * the main window, which owns the microphone. Open in Main Window opens the chat there and closes this
  * window. The window's title follows the chat's and the bot's names as they
  * change. Its chat can be on another combined dashboard, which its calls go
  * to (the main process routes them), and a switch between combined
@@ -55,7 +70,17 @@ const muteHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gatewa
  * Docked, the same page is another combined dashboard's chat opened in the
  * main window's chat pane, with no switch (the phone's no-switch open,
  * stage 2): Open in New Window moves it to a window of its own, and the main
- * window closes it when its dashboard goes.
+ * window closes it when its dashboard goes. Being in the main window, it
+ * offers Call too: the call runs in this page, so it reads and sends through
+ * the chat's own dashboard (Eric, 2026-11-22), and the main window hears it
+ * start and end, to ask before a switch and to keep wake phrases quiet. Like
+ * the main window's, it ends when another chat opens here or Chats goes.
+ *
+ * Either way its header is the main window's (ChatHeader, Eric, 2026-11-22):
+ * a workstream's status and its way back to its bot, the bot's screen, and
+ * the side panel with the bot's Work, In This Chat and the chat's Files, all
+ * read from the chat's own dashboard; a reply's work cards and file paths
+ * open there too.
  */
 export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
   const [status, setStatus] = useState<ConnectionStatus | null>(null)
@@ -112,7 +137,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     sendQueuedNow,
     discardLost,
     resendLost,
-    react
+    react,
+    noteCorrection
   } = useChat(request.fresh ? null : request.id, profile, status.sessionAuthority === true, connected, botChat, undefined, host)
   // The transcript is drawn by LiveTranscript, so a streaming reply runs that, not this window, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
@@ -135,7 +161,6 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   )
   const commands = useCommands(profile, connected)
   const delegates = useAgents(chat.liveId, connected, running)
-  const predictions = usePredictions(transcriptStore, connected ? (chat.liveId ?? undefined) : undefined)
   const mentionBots = useMemo(() => mentionCandidates(roster.bots ?? [], '', profile ?? 'default'), [roster.bots, profile])
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
@@ -162,6 +187,147 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   }, [running])
   const outputs = useTranscriptValue(transcriptStore, state => state.items.filter(item => item.kind === 'output').length)
 
+  // The chat's id on its dashboard: a new chat's once Hermes has stored it.
+  const chatId = request.fresh ? (chat.storedId ?? null) : (chat.storedId ?? request.id)
+  // The side panel, as the main window's (Eric, 2026-11-20, option C, softer): the bot's Work, In This Chat and the
+  // chat's Files, where the chat has them, one open at a time.
+  const [panelOpen, setPanelOpen] = useState<PanelTab | null>(null)
+  const lastTab = useRef<PanelTab>('work')
+  // The bot's work: a Bot Chat offers it, and a workstream's chat shows its status and its way back to the bot.
+  const work = useWork(profile, connected, botChat || panelOpen === 'work')
+  const openWorkItem = chatId ? work.snapshot?.items.find(item => item.kind === 'workstream' && item.sessionId === chatId) : undefined
+  const workItem: WorkItem | undefined = openWorkItem ?? (chatId ? work.resolved?.find(item => item.kind === 'workstream' && item.sessionId === chatId) : undefined)
+  const readResolvedWork = work.readResolved
+  // A Bot Chat names resolved work too, and a workstream's chat may be resolved: the Resolved page has them.
+  useEffect(() => {
+    if (botChat || (chatId && work.snapshot && !openWorkItem)) readResolvedWork()
+  }, [botChat, chatId, work.snapshot, openWorkItem, readResolvedWork])
+  const workHere = botChat || !!workItem
+  const panelTabs: PanelTab[] = [
+    ...(workHere && (work.snapshot || work.error) ? (['work'] as const) : []),
+    ...(chatId ? (['chat'] as const) : []),
+    ...(chat.cwd ? (['files'] as const) : [])
+  ]
+  const shownTab = panelOpen && panelTabs.includes(panelOpen) ? panelOpen : null
+  const openTab = useCallback((tab: PanelTab | null) => {
+    if (tab) lastTab.current = tab
+    setPanelOpen(tab)
+  }, [])
+  const workDot = workHere ? workCount(work.snapshot) : null
+  const panelTabBar = shownTab && panelTabs.length > 1 ? <PanelTabs tabs={panelTabs} shown={shownTab} onPick={openTab} work={work.snapshot} /> : null
+  // The panel's width, dragged by the line beside it and kept on this device, as the main window's.
+  const [panelStored, setPanelStored] = useState(() => readWidth(PANEL_COLUMN))
+  const [panelLive, setPanelLive] = useState<number | null>(null)
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth)
+  useEffect(() => {
+    const resized = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', resized)
+    return () => window.removeEventListener('resize', resized)
+  }, [])
+  const panelWidth = shownWindowPanelWidth(panelLive ?? panelStored, windowWidth)
+  // A file path in a reply opens in the Files tab.
+  const [reveal, setReveal] = useState<{ path: string; id: number } | null>(null)
+  const cwd = chat.cwd
+  const openPath = useMemo(
+    () =>
+      cwd
+        ? (path: string) => {
+            setReveal(current => ({ path: absolutePath(path, cwd), id: (current?.id ?? 0) + 1 }))
+            openTab('files')
+          }
+        : null,
+    [cwd, openTab]
+  )
+  // An artifact's Show in Chat: its message, here.
+  const showInChat = useRevealRow(transcriptStore, chatId, chat.storedId, key => requestAnimationFrame(() => revealMessage(pane.current, key)))
+  // Docked, the chat's call (components/ChatCall.tsx), running here on the chat's own dashboard.
+  const endCallRef = useRef<() => void>(() => undefined)
+  const chatCall = useChatCall({
+    profile,
+    chatId,
+    liveId: chat.liveId,
+    connected,
+    store: transcriptStore,
+    running,
+    turnsDone,
+    onStop: () => void stop(),
+    onCorrected: noteCorrection,
+    tell: message => notice(message, 'error')
+  })
+  const calling = docked && chatCall.calling
+  const endCall = chatCall.end
+  endCallRef.current = endCall
+  // Replies predicted for the box wait while a call speaks.
+  const predictions = usePredictions(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined)
+  // The main window hears the call start and end.
+  useEffect(() => {
+    if (!docked || !calling) return
+    window.conduit.dockedToPane('calling')
+    return () => window.conduit.dockedToPane('call-ended')
+  }, [docked, calling])
+  // Another chat pointed here ends the call, as another chat opened in the main window does.
+  const callChatKey = `${profile ?? ''}\u001f${request.fresh ? '' : request.id}`
+  const callChat = useRef(callChatKey)
+  useEffect(() => {
+    if (callChat.current !== callChatKey) endCall()
+    callChat.current = callChatKey
+  }, [callChatKey, endCall])
+  // The bot's screen, offered where its dashboard can have one, in a window of its own.
+  const screenProfile = profile ?? 'default'
+  const [screenSupported, setScreenSupported] = useState(false)
+  useEffect(() => {
+    setScreenSupported(false)
+    if (!connected) return
+    let live = true
+    gateway
+      .rpc<{ supported?: unknown }>('display.status', { profile: screenProfile })
+      .then(answer => live && setScreenSupported(answer?.supported === true))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [connected, screenProfile])
+  const [screenWindows, setScreenWindows] = useState<string[]>([])
+  useEffect(() => {
+    const off = window.conduit.onScreenWindows(setScreenWindows)
+    void window.conduit.screenWindows().then(setScreenWindows)
+    return off
+  }, [])
+  const screenOpen = screenWindows.includes(screenKey(host || undefined, screenProfile))
+  /** Another chat on the chat's dashboard: the main window docks it (or shows it, on the dashboard on screen). */
+  const openOther = useCallback(
+    (sessionId: string, title?: string, other?: { botChat?: boolean; profile?: string }) =>
+      window.conduit.openChat({ storedId: sessionId, profile: other?.profile ?? profile, title, ...(other?.botChat ? { botChat: true } : {}), ...(host ? { host } : {}) }),
+    [profile, host]
+  )
+  // A reply's links to its work and to other chats: a card or a link opens the chat, as in the main window.
+  const workSnapshot = work.snapshot
+  const workResolved = work.resolved
+  const workLinkActions = useMemo<WorkLinkActions>(() => {
+    // The open list first, then the Resolved page, as the phone's cards read them.
+    const known = [...(workSnapshot?.items ?? []), ...(workResolved ?? [])]
+    const workstream = (ref: string) => known.find(item => item.kind === 'workstream' && item.ref === ref && !!item.sessionId)
+    const ofSession = (sessionId: string) => known.find(i => i.sessionId === sessionId)
+    return {
+      open: (sessionId, linkProfile) => {
+        const item = ofSession(sessionId)
+        openOther(sessionId, item ? shownTitle(item) : undefined, { profile: linkProfile ?? profile })
+      },
+      item: workstream,
+      missing: readResolvedWork,
+      chatOf: botChat
+        ? ref => {
+            const item = workstream(ref)
+            return item ? { sessionId: item.sessionId, profile } : undefined
+          }
+        : undefined,
+      titleOf: sessionId => {
+        const item = ofSession(sessionId)
+        return item ? shownTitle(item) : undefined
+      }
+    }
+  }, [workSnapshot, workResolved, readResolvedWork, botChat, profile, openOther])
+
   /**
    * This window's own notifications: a reply finished or a question waiting
    * while it isn't in front. The main window leaves a chat with a window to
@@ -171,7 +337,11 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const paneShown = useRef(true)
   useEffect(() => {
     if (!docked) return
-    const off = window.conduit.onDockedShown(shown => (paneShown.current = shown))
+    const off = window.conduit.onDockedShown(shown => {
+      paneShown.current = shown
+      // Chats went (another section): the call ends, as the main window's does.
+      if (!shown) endCallRef.current()
+    })
     // A tell sent before this listened is asked for again.
     window.conduit.dockedToPane('ask')
     return off
@@ -227,7 +397,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
 
   // Docked: the chat moves to a window of its own, and the main window, seeing it there, closes this pane.
   // A new chat has a window of its own once Hermes has stored it.
-  const windowId = request.fresh ? chat.storedId : (chat.storedId ?? request.id)
+  const windowId = chatId
   const openInWindow = useCallback(async () => {
     if (!windowId) return
     const opened = await window.conduit.openChatWindow({ id: windowId, profile, title, author: botTitle, host, ...(botChat ? { botChat: true } : {}) })
@@ -243,7 +413,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     )
   }, [windowId, profile, title, botTitle, host, botChat, notice, docked])
   const openInMain = useCallback(() => {
-    window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
+    window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, fromWindow: true, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
   }, [chat.storedId, request.id, title, profile, botChat, host])
 
@@ -276,45 +446,80 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   )
 
   return (
-    <div className="chat-window-page">
+    <div className="chat-window-page" style={panelWidth !== null ? ({ '--panel-width': `${panelWidth}px` } as CSSProperties) : undefined}>
       <main className="chat chat-window-chat" ref={pane} aria-label={title}>
-        <div className="chat-head soft">
-          <div className="chat-titles">
-            <div className="chat-title-line">
-              <div className="chat-title">{title}</div>
-              {running ? <span className="beside-working">{t('Working…')}</span> : null}
-            </div>
-            {botChat ? null : <div className="chat-window-bot">{botTitle}</div>}
-          </div>
-          <div className="chat-head-actions">
-            {docked && !windowId ? null : docked ? (
-              <button className="link" onClick={() => void openInWindow()} title={t('Moves this chat to a window of its own.')}>
-                {t('Open in New Window')}
-              </button>
-            ) : (
+        <ChatHeader
+          title={title}
+          working={running}
+          workItem={workItem}
+          subtitle={
+            workItem
+              ? {
+                  text: t('{bot}’s work · {ref}', { bot: botTitle, ref: workItem.ref }),
+                  title: t('Back to {bot}', { bot: botTitle }),
+                  onClick: () => {
+                    if (bot?.botChatId) openOther(bot.botChatId, botTitle, { botChat: true })
+                  }
+                }
+              : botChat
+                ? undefined
+                : { text: botTitle }
+          }
+          call={docked ? chatCall.header : undefined}
+          newWindow={
+            docked && windowId
+              ? {
+                  label: t('Open in New Window'),
+                  title: calling ? t('End the call to move this chat to a window of its own') : `${t('Open in New Window')}: ${t('Moves this chat to a window of its own.')}`,
+                  disabled: calling,
+                  onClick: () => void openInWindow()
+                }
+              : undefined
+          }
+          screen={
+            screenSupported
+              ? { label: t("Bot's Screen"), on: screenOpen, onClick: () => window.conduit.openScreenWindow({ profile: screenProfile, botName: botTitle, ...(host ? { host } : {}) }) }
+              : undefined
+          }
+          panel={
+            panelTabs.length
+              ? {
+                  label: shownTab ? t('Hide side panel') : t('Show side panel'),
+                  on: !!shownTab,
+                  onClick: () => openTab(shownTab ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0]!),
+                  dot: workDot && shownTab !== 'work' ? workDot : null
+                }
+              : undefined
+          }
+          trailing={
+            docked ? null : (
               <button className="link" onClick={openInMain} title={t('Opens this chat in the main window and closes this one.')}>
                 {t('Open in Main Window')}
               </button>
-            )}
-          </div>
-        </div>
+            )
+          }
+        />
         <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} />
-        <ConnectionActionsContext.Provider value={connectionActions}>
-          <LiveTranscript
-            store={transcriptStore}
-            loading={loading}
-            error={error}
-            requests={openRequests}
-            profile={profile}
-            author={botTitle}
-            face={face}
-            onQuote={setQuote}
-            onCommand={text => void onSend(text)}
-            display={display}
-            sessionId={chat.liveId ?? undefined}
-            onReact={chat.liveId ? react : undefined}
-          />
-        </ConnectionActionsContext.Provider>
+        <FileLinks.Provider value={openPath}>
+          <WorkLinks.Provider value={workLinkActions}>
+            <ConnectionActionsContext.Provider value={connectionActions}>
+              <LiveTranscript
+                store={transcriptStore}
+                loading={loading}
+                error={error}
+                requests={openRequests}
+                profile={profile}
+                author={botTitle}
+                face={face}
+                onQuote={setQuote}
+                onCommand={text => void onSend(text)}
+                display={display}
+                sessionId={chat.liveId ?? undefined}
+                onReact={chat.liveId ? react : undefined}
+              />
+            </ConnectionActionsContext.Provider>
+          </WorkLinks.Provider>
+        </FileLinks.Provider>
         {contextOpen && chat.liveId ? (
           <ContextPanel
             chat={chat}
@@ -335,6 +540,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             setYolo={setYolo}
           />
         ) : null}
+        {docked ? chatCall.view({ requests: openRequests, onSend }) : null}
         <ControlDock liveId={chat.liveId} profile={profile} connected={connected} pulse={turnsDone + outputs} />
         <AgentsDock
           agents={delegates.agents}
@@ -406,10 +612,59 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           draftKey={chatDraft(profile, request.id)}
           canAttach
           dropZone={pane}
-          voice={{ profile }}
+          voice={calling ? undefined : { profile }}
           mentionBots={mentionBots}
         />
       </main>
+      {shownTab ? (
+        <ColumnDivider
+          label={t('Side panel width')}
+          bounds={PANEL_COLUMN}
+          sign={-1}
+          width={panelWidth}
+          onLive={setPanelLive}
+          onCommit={width => {
+            setPanelLive(null)
+            setPanelStored(width)
+            writeWidth(PANEL_COLUMN, width)
+          }}
+        />
+      ) : null}
+      {shownTab === 'chat' && chatId ? (
+        <ArtifactsPanel
+          profile={profile}
+          sessionIds={[chatId]}
+          refreshKey={turnsDone}
+          folder={chat.cwd}
+          onShowInFolder={path => openPath?.(path)}
+          onOpenChat={item => (item.sessionId === chatId ? showInChat(item.sessionId, item.messageId) : openOther(item.sessionId))}
+          onClose={() => openTab(null)}
+          tabs={panelTabBar}
+        />
+      ) : shownTab === 'work' ? (
+        <WorkPanel
+          key={profile ?? 'default'}
+          profile={profile}
+          botName={botTitle}
+          snapshot={work.snapshot}
+          error={work.error}
+          onReload={() => void work.reload()}
+          onAnswered={() => void waiting.refresh()}
+          onOpenChat={item => openOther(item.sessionId, shownTitle(item))}
+          onClose={() => openTab(null)}
+          tabs={panelTabBar}
+        />
+      ) : shownTab === 'files' && chat.cwd ? (
+        <FilesPanel
+          root={chat.cwd}
+          profile={profile}
+          refreshKey={turnsDone}
+          reveal={reveal}
+          onInsertPath={path => setQuote(quoteRequest({ insert: pathForDraft(path) }))}
+          onClose={() => openTab(null)}
+          tabs={panelTabBar}
+        />
+      ) : null}
     </div>
   )
 }

@@ -14,6 +14,7 @@ export interface TrayDeps {
   command: (action: MenuAction) => void
   quit: () => void
   quickAsk: () => void
+  installUpdate: () => void
 }
 
 export function trayIconPath(file: string): string {
@@ -33,6 +34,8 @@ export const trayFile = (icon: AppIconChoice) => (icon === 'light' ? 'tray-light
 export class ConduitTray {
   private tray: Tray | null = null
   private waiting = 0
+  /** A downloaded update's version: the menu offers Restart to Update. */
+  private update: string | null = null
 
   constructor(private readonly deps: TrayDeps) {}
 
@@ -60,6 +63,12 @@ export class ConduitTray {
   setAppIcon(icon: AppIconChoice): void {
     if (!this.tray || process.platform === 'darwin') return
     this.tray.setImage(nativeImage.createFromPath(trayIconPath(trayFile(icon))))
+  }
+
+  setUpdate(version: string | null): void {
+    if (version === this.update) return
+    this.update = version
+    this.render()
   }
 
   /** Builds the menu again, in a new language. */
@@ -98,6 +107,7 @@ export class ConduitTray {
           }
         },
         { type: 'separator' },
+        ...(this.update ? [{ label: t('Restart to Update to {version}', { version: this.update }), click: () => this.deps.installUpdate() }] : []),
         { label: t('Quit Conduit'), click: () => this.deps.quit() }
       ])
     )

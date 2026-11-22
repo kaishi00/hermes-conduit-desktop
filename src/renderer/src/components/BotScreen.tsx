@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { screenKey } from '@shared/screenWindows'
 import RFB from '@novnc/novnc'
 import { t } from '@shared/i18n'
 import type { LiveSocketEvent } from '@shared/ipc'
@@ -81,12 +82,15 @@ export function BotScreen({
   profile,
   botName,
   viewerId,
+  host,
   onViewer,
   onClose
 }: {
   profile: string
   botName: string
   viewerId?: string
+  /** Another combined dashboard's bot, which the main process keeps its hold under. */
+  host?: string
   /** The viewer id Hermes gave this page, so a reload watches as the same viewer. */
   onViewer?: (viewerId: string) => void
   onClose: () => void
@@ -302,9 +306,9 @@ export function BotScreen({
   onViewerRef.current = onViewer
   useEffect(() => {
     if (!hash || !viewer.current) return
-    window.conduit.noteScreenViewer(profile, viewer.current, iHold)
+    window.conduit.noteScreenViewer(screenKey(host, profile), viewer.current, iHold)
     onViewerRef.current?.(viewer.current)
-  }, [profile, hash, iHold])
+  }, [profile, host, hash, iHold])
   useEffect(() => () => detach(), [detach])
 
   async function perform(work: () => Promise<void>) {
