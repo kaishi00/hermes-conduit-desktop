@@ -351,13 +351,13 @@ export interface ConduitApi {
   onChatWindows(listener: (ids: string[]) => void): () => void
   /** A docked chat's page hears whether its pane is on screen (the main window's Chats), from the main window's frame. */
   onDockedShown(listener: (shown: boolean) => void): () => void
-  /** Opens a bot's screen in a window of its own, or focuses the one it has. */
-  openScreenWindow(screen: { profile: string; botName: string }): void
-  /** The bots whose screen has a window open, now and whenever that changes. */
+  /** Opens a bot's screen in a window of its own, or focuses the one it has; `host` is its dashboard, the one on screen when left out. */
+  openScreenWindow(screen: { profile: string; botName: string; host?: string }): void
+  /** The bots whose screen has a window open (their screen keys, shared/screenWindows.ts), now and whenever that changes. */
   screenWindows(): Promise<string[]>
   onScreenWindows(listener: (profiles: string[]) => void): () => void
   /** A screen window's viewer id and whether it holds the screen, so closing the window hands back for it. */
-  noteScreenViewer(profile: string, viewerId: string, holds: boolean): void
+  noteScreenViewer(key: string, viewerId: string, holds: boolean): void
   /** The quick ask window was just shown: focus its field. */
   onQuickAskShown(listener: () => void): () => void
   /** Sizes the quick ask window: true for a reply, false for the field alone, or the px the field and its staged files need. */
@@ -422,6 +422,8 @@ export interface ScreenWindowRequest {
   profile: string
   botName: string
   viewerId?: string
+  /** The bot's dashboard: the one on screen, or another combined one, whose screen is watched through its kept connection. */
+  host?: string
 }
 
 /** A chat for a window of its own. */

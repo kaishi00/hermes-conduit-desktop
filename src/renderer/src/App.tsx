@@ -169,8 +169,10 @@ import { advancedSections, chatSections, workspaceSections } from './state/profi
 import { canDelete, duplicateBot, writeMeta } from './state/botActions'
 import { AskedQuestionBar, WorkPanel } from './components/WorkPanel'
 import { PanelTabs, workCount, type PanelTab } from './components/PanelTabs'
+import { ChatHeader } from './components/ChatHeader'
+import { screenKey } from '@shared/screenWindows'
 import { useWork, useWorkSessions } from './state/useWork'
-import { shownTitle, statusText, workTone, type WorkItem } from './state/work'
+import { shownTitle, type WorkItem } from './state/work'
 import { VoiceCall } from './components/VoiceCall'
 import { VoiceModeCapsule } from './components/VoiceModeCapsule'
 import { CallPictureControls } from './components/CallPictureControls'
@@ -185,7 +187,7 @@ import { WakePhraseSettings } from './components/WakePhraseSettings'
 import { IncomingCall } from './components/IncomingCall'
 import { declineOnHost, useCallPresence, useRings, type Ring } from './state/rings'
 import { VoiceModeSettings } from './components/VoiceModeSettings'
-import { VOICE_MODE_EVENT, VOICE_MODES, setVoiceMode, voiceMode, voiceModeTitle, type VoiceMode } from './state/gptLive'
+import { VOICE_MODE_EVENT, setVoiceMode, voiceMode, type VoiceMode } from './state/gptLive'
 import { readAloud, readsRepliesAloud, setReadsRepliesAloud } from './state/readAloud'
 import { useCommands } from './state/useCommands'
 import { authorityMutation, moveChat, mutateSession } from './state/chatActions'
@@ -929,7 +931,7 @@ function Shell({
     void window.conduit.screenWindows().then(setScreenWindows)
     return off
   }, [])
-  const screenOpen = screenWindows.includes(screenProfile)
+  const screenOpen = screenWindows.includes(screenKey(status.url ?? undefined, screenProfile))
   const [screenHosts, setScreenHosts] = useState<Record<string, boolean>>({})
   useEffect(() => setScreenHosts({}), [status.url])
   useEffect(() => {
@@ -2458,101 +2460,54 @@ function Shell({
             {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} frame={dockedFrame} shown={dockedShown} onMoved={closeDocked} /> : null}
             {/* Kept while another dashboard's chat is docked over it, so coming back to it doesn't open it again. */}
             <main className="chat" ref={chatPane} style={dockedChat ? { display: 'none' } : undefined}>
-              <div className="chat-head soft">
-                <div className="chat-titles">
-                  <div className="chat-title-line">
-                    {title ? <div className="chat-title">{title}</div> : null}
-                    {workItem ? (
-                      <span className={`status-chip tone-${workTone(workItem)}`} title={statusText(workItem)}>
-                        <span className="status-chip-text">{statusText(workItem)}</span>
-                      </span>
-                    ) : null}
-                  </div>
-                  {/* A Bot Chat's work is counted on the Work tab and the panel button (Eric, 2026-11-20), not again under its name. */}
-                  {workItem && workBot ? (
-                    <button
-                      className="chat-subtitle"
-                      title={t('Back to {bot}', { bot: workBot.title })}
-                      onClick={() => {
-                        if (workBot.botChatId) openBot(workBot)
-                      }}
-                    >
-                      {t('{bot}’s work · {ref}', { bot: workBot.title, ref: workItem.ref })}
-                    </button>
-                  ) : null}
-                </div>
-                <div className="chat-head-actions">
-                  {/* Call and its voice mode, one pill (option C, softer). */}
-                  <div className={`call-pill${calling ? ' on' : ''}`}>
-                    <button
-                      className="call-pill-call"
-                      aria-label={calling ? t('End call') : t('Voice call in {mode}', { mode: voiceModeTitle(nextMode) })}
-                      title={calling ? t('End call') : t('Voice call in {mode}', { mode: voiceModeTitle(nextMode) })}
-                      disabled={!connected && !calling}
-                      onClick={toggleCall}
-                    >
-                      <Icon name={calling ? 'phoneDown' : 'phone'} />
-                      <span>{calling ? t('End call') : t('Call')}</span>
-                    </button>
-                    <span className="call-pill-line" aria-hidden="true" />
-                    <span className="call-pill-mode">
-                      <Select
-                        aria-label={t('Voice mode')}
-                        title={t('Voice mode')}
-                        value={calling ? callMode : nextMode}
-                        onChange={picked => switchCallMode(picked as VoiceMode)}
-                      >
-                        {VOICE_MODES.map(mode => (
-                          <option key={mode} value={mode}>
-                            {voiceModeTitle(mode)}
-                          </option>
-                        ))}
-                      </Select>
-                    </span>
-                  </div>
-                  {selected.id && section === 'chats' ? (
-                    <button
-                      className="chat-head-toggle"
-                      aria-label={t('Open in New Window')}
-                      title={calling ? t('End the call to move this chat to a window of its own') : `${t('Open in New Window')}: ${t('Moves this chat to a window of its own.')}`}
-                      disabled={calling}
-                      onClick={() =>
-                        void popOut({
-                          id: chat.storedId ?? selected.id!,
-                          profile: selected.profile,
-                          title: title || undefined,
-                          botChat: selected.botChat === true
-                        })
+              <ChatHeader
+                title={title}
+                workItem={workItem}
+                // A Bot Chat's work is counted on the Work tab and the panel button (Eric, 2026-11-20), not again under its name.
+                subtitle={
+                  workItem && workBot
+                    ? {
+                        text: t('{bot}’s work · {ref}', { bot: workBot.title, ref: workItem.ref }),
+                        title: t('Back to {bot}', { bot: workBot.title }),
+                        onClick: () => {
+                          if (workBot.botChatId) openBot(workBot)
+                        }
                       }
-                    >
-                      <Icon name="window" />
-                    </button>
-                  ) : null}
-                  {screenHosts[screenProfile] ? (
-                    <button
-                      className={`chat-head-toggle${screenOpen ? ' on' : ''}`}
-                      aria-label={t("Bot's Screen")}
-                      aria-pressed={screenOpen}
-                      title={t("Bot's Screen")}
-                      onClick={() => window.conduit.openScreenWindow({ profile: screenProfile, botName: botTitle })}
-                    >
-                      <Icon name="screen" />
-                    </button>
-                  ) : null}
-                  {panelTabs.length ? (
-                    <button
-                      className={`chat-head-toggle${shownTab ? ' on' : ''}`}
-                      aria-label={shownTab ? t('Hide side panel') : t('Show side panel')}
-                      aria-pressed={!!shownTab}
-                      title={shownTab ? t('Hide side panel') : t('Show side panel')}
-                      onClick={() => openTab(shownTab ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0])}
-                    >
-                      <Icon name="sidePanel" />
-                      {workDot && shownTab !== 'work' ? <span className={`chat-head-dot ${workDot.tone}`} aria-label={workDot.label} /> : null}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+                    : undefined
+                }
+                call={{ calling, mode: calling ? callMode : nextMode, disabled: !connected, onToggle: toggleCall, onMode: switchCallMode }}
+                newWindow={
+                  selected.id && section === 'chats'
+                    ? {
+                        label: t('Open in New Window'),
+                        title: calling ? t('End the call to move this chat to a window of its own') : `${t('Open in New Window')}: ${t('Moves this chat to a window of its own.')}`,
+                        disabled: calling,
+                        onClick: () =>
+                          void popOut({
+                            id: chat.storedId ?? selected.id!,
+                            profile: selected.profile,
+                            title: title || undefined,
+                            botChat: selected.botChat === true
+                          })
+                      }
+                    : undefined
+                }
+                screen={
+                  screenHosts[screenProfile]
+                    ? { label: t("Bot's Screen"), on: screenOpen, onClick: () => window.conduit.openScreenWindow({ profile: screenProfile, botName: botTitle, ...(status.url ? { host: status.url } : {}) }) }
+                    : undefined
+                }
+                panel={
+                  panelTabs.length
+                    ? {
+                        label: shownTab ? t('Hide side panel') : t('Show side panel'),
+                        on: !!shownTab,
+                        onClick: () => openTab(shownTab ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0]),
+                        dot: workDot && shownTab !== 'work' ? workDot : null
+                      }
+                    : undefined
+                }
+              />
               {/* A question the bot asked here that waits past its turn. */}
               <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} />
               <FileLinks.Provider value={openPath}>

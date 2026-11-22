@@ -50,7 +50,7 @@ import { createChatWindow } from './chatWindows'
 import { dockedFrameHost } from '../shared/chatWindows'
 import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
-import { releaseScreen } from '../shared/screenWindows'
+import { parseScreenKey, releaseScreen } from '../shared/screenWindows'
 import { ConduitTray } from './tray'
 import { applyAppIcon, watchNewWindows } from './appIcon'
 import { watchEditMenu } from './editMenu'
@@ -130,12 +130,12 @@ const eventRouter = new EventRouter()
 let isWakeListener: (window: BrowserWindow) => boolean = () => false
 
 /**
- * The dashboard each chat window's chat is on, by its webContents id. A chat
+ * The dashboard each window's chat or bot's screen is on, by its webContents id, when it's another combined one. A
  * window on another combined dashboard reads through that host's kept
  * connection whole (its calls, events, requests and status); every other
  * window reads through the one on screen.
  */
-const chatWindowHosts = new Map<number, string>()
+const windowHosts = new Map<number, string>()
 /**
  * The main window's docked frames (another combined dashboard's chat opened in
  * place, in its chat pane, or its Pulse feed on the Pulse page), by their
@@ -148,7 +148,7 @@ const dockedChats = new Set<number>()
 let shownHost: string | null = null
 /** The other dashboard a window's chat is on; null for the one on screen. */
 function farHost(contentsId: number): string | null {
-  const host = dockedChats.has(contentsId) ? dockedHost(contentsId) : chatWindowHosts.get(contentsId)
+  const host = dockedChats.has(contentsId) ? dockedHost(contentsId) : windowHosts.get(contentsId)
   return host && host !== shownHost ? host : null
 }
 /**
@@ -231,7 +231,7 @@ app.on('browser-window-created', (_event, window) => {
   })
   window.on('closed', () => {
     eventRouter.forget(id)
-    chatWindowHosts.delete(id)
+    windowHosts.delete(id)
   })
 })
 
@@ -248,7 +248,7 @@ const chatWindows = new ChatWindowSet(
     window.on('closed', () => {
       if (chatBrowserById.get(chat.id) === window) chatBrowserById.delete(chat.id)
     })
-    if (chat.host) chatWindowHosts.set(window.webContents.id, chat.host)
+    if (chat.host) windowHosts.set(window.webContents.id, chat.host)
     return {
       focus: () => {
         if (window.isDestroyed()) return
@@ -264,9 +264,19 @@ const chatWindows = new ChatWindowSet(
   ids => send(IPC.chatWindowsChanged, ids)
 )
 const screenWindows = new ScreenWindowSet(
-  createScreenWindow,
+  (screen, onClosed) => {
+    const window = createScreenWindow(screen, onClosed)
+    // Another combined dashboard's bot: the window's calls go through that dashboard's kept connection, as a far chat window's do.
+    if (screen.host && screen.host !== shownHost) windowHosts.set(window.webContents.id, screen.host)
+    return window
+  },
   profiles => send(IPC.screenWindowsChanged, profiles),
-  (profile, viewerId, owed) => releaseScreen((method, params) => connection.rpc(method, params), profile, viewerId, owed)
+  (key, viewerId, owed) => {
+    const { host, profile } = parseScreenKey(key)
+    const through = host && host !== shownHost ? keptHosts.connection(host) : connection
+    if (!through) return
+    return releaseScreen((method, params) => through.rpc(method, params), profile, viewerId, owed)
+  }
 )
 /** The dashboards a chat window can be on: the one on screen and the combined ones kept beside it. */
 function chatWindowDashboards(): string[] {
@@ -276,6 +286,11 @@ function chatWindowDashboards(): string[] {
 function closeStrandedChatWindows(): void {
   const open = chatWindowDashboards()
   chatWindows.closeWhere(chat => !open.includes(chat.host ?? ''))
+  // Another combined dashboard's bot's screen goes with its dashboard too.
+  screenWindows.closeWhere(key => {
+    const { host } = parseScreenKey(key)
+    return !!host && !open.includes(host)
+  })
 }
 /** The connection a window's calls go through: a kept host's for a chat window on it, else the one on screen. */
 function connectionOf(contentsId: number): Connection | null {
@@ -322,7 +337,7 @@ const connection = new Connection({
       // A switch keeps the chat windows on the combined dashboards (the one left becomes a kept one); any other closes them.
       closeStrandedChatWindows()
       screenWindows.close(true)
-      eventRouter.clear([...chatWindowHosts.keys()])
+      eventRouter.clear([...windowHosts.keys()])
       // The one left is dialed again beside the new one: its windows wait for it, and its kept connection tells them once it's open.
       if (before) sendToFarWindows(before, IPC.statusChanged, { phase: 'connecting', url: before } satisfies ConnectionStatus)
     }
@@ -531,9 +546,12 @@ function registerIpc(): void {
     return watching ? 'watching' : 'open'
   })
   ipcMain.on(IPC.openScreenWindow, (_event, screen: unknown) => {
-    const request = screen as { profile?: unknown; botName?: unknown } | null
+    const request = screen as { profile?: unknown; botName?: unknown; host?: unknown } | null
     if (!request || typeof request.profile !== 'string' || !request.profile) return
-    screenWindows.show({ profile: request.profile, botName: typeof request.botName === 'string' && request.botName ? request.botName : request.profile })
+    // The dashboard on screen's bot, or another combined dashboard's while it's kept beside it.
+    const host = typeof request.host === 'string' && request.host ? request.host : shownHost
+    if (!host || !chatWindowDashboards().includes(host)) return
+    screenWindows.show({ profile: request.profile, botName: typeof request.botName === 'string' && request.botName ? request.botName : request.profile, host })
   })
   ipcMain.handle(IPC.screenWindows, () => screenWindows.profiles())
   ipcMain.on(IPC.noteScreenViewer, (_event, profile: unknown, viewerId: unknown, holds: unknown) => {
@@ -835,7 +853,10 @@ function registerIpc(): void {
   ipcMain.handle(IPC.screenOpen, async (event, path: unknown, ticket: unknown) => {
     if (path !== DISPLAY_SOCKET_PATH || typeof ticket !== 'string' || !ticket) return { ok: false, error: 'Not a screen stream.' }
     try {
-      const socket = await connection.openSocket(path, { display_ticket: ticket })
+      // A far bot's screen window streams from its own dashboard.
+      const through = connectionOf(event.sender.id)
+      if (!through) throw new Error('Not connected to that Hermes.')
+      const socket = await through.openSocket(path, { display_ticket: ticket })
       socket.binaryType = 'arraybuffer'
       return { ok: true, id: keepLive(event.sender, socket, true) }
     } catch (error) {

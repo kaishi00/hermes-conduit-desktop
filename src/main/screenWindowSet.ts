@@ -8,8 +8,12 @@
  * hand back a takeover, so the page tells this set its viewer id and whether
  * it holds the screen, and the set hands back for it. The viewer id is kept
  * per bot, so a reopened window watches as the same viewer.
+ *
+ * A bot is its screen key (shared/screenWindows.ts): its profile, with its
+ * dashboard before it when that's another combined one.
  */
 import type { ScreenWindowRequest } from '../shared/ipc'
+import { screenKey } from '../shared/screenWindows'
 
 /** What a window needs of Electron: focus it, close it. */
 export interface ScreenWindowHandle {
@@ -40,21 +44,33 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
 
   /** The bot's screen window: its own if it has one, else a new one. */
   show(screen: Omit<ScreenWindowRequest, 'viewerId'>): void {
-    const had = this.open.get(screen.profile)
+    const key = screenKey(screen.host, screen.profile)
+    const had = this.open.get(key)
     if (had) return had.focus()
     // A hand back still being tried stops, and stays owed: the new window's page settles it, or its close sends it again.
-    if (this.pending.delete(screen.profile)) {
-      this.cancelHandBack(screen.profile)
-      this.holding.add(screen.profile)
+    if (this.pending.delete(key)) {
+      this.cancelHandBack(key)
+      this.holding.add(key)
     }
-    const window = this.create({ ...screen, viewerId: this.viewers.get(screen.profile) }, () => {
-      if (this.open.get(screen.profile) !== window) return
-      this.open.delete(screen.profile)
-      this.handBack(screen.profile)
+    const window = this.create({ ...screen, viewerId: this.viewers.get(key) }, () => {
+      if (this.open.get(key) !== window) return
+      this.open.delete(key)
+      this.handBack(key)
       this.changed(this.profiles())
     })
-    this.open.set(screen.profile, window)
+    this.open.set(key, window)
     this.changed(this.profiles())
+  }
+
+  /** Closes the screen windows whose bot `test` picks (another combined dashboard's that left the group), handing back for each. */
+  closeWhere(test: (key: string) => boolean): void {
+    const windows = [...this.open].filter(([key]) => test(key))
+    for (const [key, window] of windows) {
+      this.open.delete(key)
+      this.handBack(key)
+      window.close()
+    }
+    if (windows.length) this.changed(this.profiles())
   }
 
   /** The page's viewer id for its bot, and whether it holds the screen now. */

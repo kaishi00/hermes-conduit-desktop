@@ -87,6 +87,12 @@ export function shownPanelWidth(stored: number | null, windowWidth: number, list
   return Math.max(PANEL_COLUMN.min, Math.min(stored, room))
 }
 
+/** The panel's width in a chat's own page (a chat window, or another dashboard's chat docked in the chat pane), which has no rail or list. */
+export function shownWindowPanelWidth(stored: number | null, pageWidth: number): number | null {
+  if (stored === null) return null
+  return Math.max(PANEL_COLUMN.min, Math.min(stored, pageWidth - CHAT_LEAST))
+}
+
 export function readWidth(bounds: ColumnBounds): number | null {
   try {
     const value = Number(localStorage.getItem(bounds.key))
