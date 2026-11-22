@@ -1,4 +1,4 @@
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction } from "react";
 import type { BotWork } from "../state/useWork";
 import { timeLabel } from "../state/chats";
 import { keptColor, type Bot } from "../state/bots";
@@ -220,6 +220,12 @@ interface Props {
   side: { openProfile?: string; openRoomId?: string; openHost?: string };
   /** Hides the list beside the chat: the « at its top. */
   onHide?: () => void;
+  /**
+   * The group chat being started, kept by the window so it outlives this list (leaving Bots for
+   * Chats and coming back keeps its picked bots and name, desktop#336). Without it, the list keeps its own.
+   */
+  draft?: BotsDraft | null;
+  onDraft?: Dispatch<SetStateAction<BotsDraft | null>>;
 }
 
 /** A bot's pill: what needs you first, then what's working, else nothing. */
@@ -238,7 +244,8 @@ interface FarMember {
   far: OwnHermesBot;
 }
 
-interface Draft {
+/** A group chat being started from the bots: who's picked, its name, and whether it's being made. */
+export interface BotsDraft {
   roomId: string;
   members: string[];
   /** Another dashboard's bots, brought over your own Link to it (a room's draft, not a room). */
@@ -297,6 +304,8 @@ export function BotsHome({
   onCreateFarDraft,
   side,
   onHide,
+  draft: keptDraft,
+  onDraft,
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -351,7 +360,9 @@ export function BotsHome({
   const [dragging, setDragging] = useState<string | null>(null);
   const [moveTarget, setMoveTarget] = useState<string | null>(null);
   const ownBadge = hostUrl && badgeFor ? badgeFor(hostUrl) : null;
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [ownDraft, setOwnDraft] = useState<BotsDraft | null>(null);
+  const draft = onDraft ? (keptDraft ?? null) : ownDraft;
+  const setDraft = onDraft ?? setOwnDraft;
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const canDrag = canStartRooms && (bots?.length ?? 0) >= ROOM_MIN_MEMBERS;
 

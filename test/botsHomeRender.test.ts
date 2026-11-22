@@ -65,4 +65,17 @@ describe("Bots' group chats in a combined group (desktop#231)", () => {
     expect(renderToStaticMarkup(createElement(BotsHome as never, { ...props, onHide: () => {} } as never))).toContain('hide-list')
     expect(renderToStaticMarkup(createElement(BotsHome as never, props as never))).not.toContain('hide-list')
   })
+
+  it("draws the window's kept group chat draft, so leaving Bots and coming back keeps it (desktop#336)", async () => {
+    const path = '../src/renderer/src/components/BotsHome.tsx'
+    const { BotsHome } = (await import(/* @vite-ignore */ path)) as { BotsHome: unknown }
+    const props = { bots: [bot('nahida'), bot('furina')], error: null, runningProfiles: new Set(), rooms: [], canStartRooms: true, onOpen: () => {}, onOpenRoom: () => {}, onCreateRoom: async () => ({}), side: {} }
+    const draft = { roomId: 'r1', members: ['nahida'], name: 'Trip planning', busy: false }
+    const kept = renderToStaticMarkup(createElement(BotsHome as never, { ...props, draft, onDraft: () => {} } as never))
+    expect(kept).toContain('room-draft')
+    expect(kept).toContain('Trip planning')
+    // No draft kept: none drawn, and without the window's, the list starts with none of its own.
+    expect(renderToStaticMarkup(createElement(BotsHome as never, { ...props, draft: null, onDraft: () => {} } as never))).not.toContain('room-draft')
+    expect(renderToStaticMarkup(createElement(BotsHome as never, props as never))).not.toContain('room-draft')
+  })
 })

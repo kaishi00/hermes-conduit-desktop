@@ -19,7 +19,7 @@ describe("a live call's transcript", () => {
     const tops = new WeakMap<Element, number>()
     Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
       configurable: true,
-      get(this: Element) { return tops.get(this) ?? 0 },
+      get(this: Element) { return Math.max(0, Math.min(tops.get(this) ?? 0, height - 100)) },
       set(this: Element, v: number) { tops.set(this, Math.max(0, Math.min(v, height - 100))) }
     })
     const scrollTo = (el: HTMLElement, top: number) => {
@@ -65,6 +65,18 @@ describe("a live call's transcript", () => {
     act(() => void list.dispatchEvent(new Event('scroll')))
     show([...lines.slice(-3), line(8, 'See you.')])
     expect(list.scrollTop).toBe(60)
+
+    // Scrolled up a little, then lines leave the front until the browser
+    // clamps the list to its new end: it's at the end, so it follows again (desktop#337).
+    const kept = [line(10, 'One.'), line(11, 'Two.'), line(12, 'Three.'), line(13, 'Four.'), line(14, 'Five.')]
+    show(kept)
+    expect(list.scrollTop).toBe(100)
+    scrollTo(list, 80)
+    show(kept.slice(-4))
+    expect(list.scrollTop).toBe(60)
+    act(() => void list.dispatchEvent(new Event('scroll')))
+    show([...kept.slice(-4), line(15, 'Six.')])
+    expect(list.scrollTop).toBe(100)
     act(() => root.unmount())
   })
 })

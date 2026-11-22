@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { t } from '@shared/i18n'
 import type { PluginRelease } from '@shared/ipc'
 import {
@@ -20,7 +20,7 @@ import {
 } from '../state/plugin'
 import { Icon } from './icons'
 import { useMouseBack } from '../state/mouseBack'
-import { currentUpdate, guardUpdateRow, readStatus, runUpdate, setUpdate, subscribeUpdate, updateStartedAt } from '../state/pluginUpdate'
+import { readStatus, runUpdate, setUpdate, updateStartedAt, useUpdateRow } from '../state/pluginUpdate'
 
 function featureTitle(id: string): string {
   switch (id) {
@@ -98,16 +98,13 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   const [confirming, setConfirming] = useState(false)
   const [showsCommands, setShowsCommands] = useState(false)
   const [, tick] = useState(0)
-  const current = useSyncExternalStore(subscribeUpdate, currentUpdate)
+  // A row from another dashboard, or a held scan whose job moved on, goes (desktop#289, #318).
+  const current = useUpdateRow()
 
   const refresh = useCallback(async () => {
     setChecking(true)
     setStatus(await readStatus())
     setChecking(false)
-  }, [])
-  useEffect(() => {
-    // A row from another dashboard, or a held scan whose job moved on, goes (desktop#289).
-    void guardUpdateRow()
   }, [])
   useEffect(() => {
     void refresh()

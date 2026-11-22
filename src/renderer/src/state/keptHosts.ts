@@ -506,8 +506,15 @@ export function combinedRooms(
   return { copies, before, after }
 }
 
-/** How long a group chat opened on another host waits for the new host to list it. */
-export const ROOM_AFTER_SWITCH_MS = 30_000
+/**
+ * How long anything carried over a switch (a group chat, a bot, a profile, a
+ * New Bot sheet) waits for the switch to land. A switch that never lands (the
+ * host is down) doesn't carry it to a much later visit.
+ */
+export const AFTER_SWITCH_MS = 30_000
+
+/** A carry-over that's past `AFTER_SWITCH_MS`. */
+const expired = (carry: { at: number } | null, now: number) => !!carry && now - carry.at > AFTER_SWITCH_MS
 
 /** A group chat opened on another host: the new host's window opens it once its rooms or copies are read. */
 let pendingRoom: { host: string; kind: 'room' | 'copy'; id: string; at: number } | null = null
@@ -520,7 +527,7 @@ export function openRoomAfterSwitch(other: OtherRoom, now = Date.now()): void {
  * The room or copy to open here, once this host's list holds it; it waits
  * while the list isn't read, and a copy for a list that holds it (its
  * plugin's routes are read before its copies, so an early list is empty),
- * both up to `ROOM_AFTER_SWITCH_MS`, so a switch that never settles doesn't
+ * both up to `AFTER_SWITCH_MS`, so a switch that never settles doesn't
  * open the room on a later visit.
  */
 export function takeRoomAfterSwitch(
@@ -530,7 +537,7 @@ export function takeRoomAfterSwitch(
   now = Date.now()
 ): { room: Room } | { copy: RoomCopy } | null {
   // An expired one goes at the next look, whichever host asks.
-  if (pendingRoom && now - pendingRoom.at > ROOM_AFTER_SWITCH_MS) pendingRoom = null
+  if (expired(pendingRoom, now)) pendingRoom = null
   if (!pendingRoom || pendingRoom.host !== host) return null
   const { kind, id } = pendingRoom
   if (kind === 'room') {
@@ -702,13 +709,14 @@ export function sameBotWork(a: ReadonlyMap<string, BotWork>, b: ReadonlyMap<stri
 }
 
 /** A bot opened on another host: the new host's window opens it once its bots are read. */
-let pendingBot: { host: string; name: string } | null = null
+let pendingBot: { host: string; name: string; at: number } | null = null
 
-export function openBotAfterSwitch(other: OtherBot): void {
-  pendingBot = { host: other.host, name: other.bot.name }
+export function openBotAfterSwitch(other: OtherBot, now = Date.now()): void {
+  pendingBot = { host: other.host, name: other.bot.name, at: now }
 }
 
-export function takeBotAfterSwitch(host: string, bots: readonly Bot[] | null): Bot | null {
+export function takeBotAfterSwitch(host: string, bots: readonly Bot[] | null, now = Date.now()): Bot | null {
+  if (expired(pendingBot, now)) pendingBot = null
   if (!pendingBot || pendingBot.host !== host || !bots) return null
   const name = pendingBot.name
   pendingBot = null
@@ -719,14 +727,18 @@ export function takeBotAfterSwitch(host: string, bots: readonly Bot[] | null): B
  * Another dashboard's face in the chat list's column: once its switch lands, the list shows that profile's
  * chats, as the phone's strip picks the profile on the dashboard it switched to.
  */
-let pendingProfile: { host: string; name: string } | null = null
+let pendingProfile: { host: string; name: string; at: number } | null = null
 
-export function showProfileAfterSwitch(other: OtherBot): void {
-  pendingProfile = { host: other.host, name: other.bot.name }
+export function showProfileAfterSwitch(other: OtherBot, now = Date.now()): void {
+  pendingProfile = { host: other.host, name: other.bot.name, at: now }
 }
 
-/** The profile to show on `host`, once its roster is read: one it no longer lists is forgotten. */
-export function takeProfileAfterSwitch(host: string, bots: readonly Bot[] | null | undefined): Bot | null {
+/**
+ * The profile to show on `host`, once its roster is read: one it no longer
+ * lists is forgotten, and so is one whose switch didn't land in `AFTER_SWITCH_MS`.
+ */
+export function takeProfileAfterSwitch(host: string, bots: readonly Bot[] | null | undefined, now = Date.now()): Bot | null {
+  if (expired(pendingProfile, now)) pendingProfile = null
   if (!pendingProfile || pendingProfile.host !== host || !bots) return null
   const name = pendingProfile.name.toLowerCase()
   pendingProfile = null
@@ -808,13 +820,15 @@ export interface NewBotCarry {
   shareAuth: boolean
 }
 
-let pendingNewBot: { host: string; bot: NewBotCarry } | null = null
+let pendingNewBot: { host: string; bot: NewBotCarry; at: number } | null = null
 
-export function newBotAfterSwitch(host: string, bot: NewBotCarry): void {
-  pendingNewBot = { host, bot }
+export function newBotAfterSwitch(host: string, bot: NewBotCarry, now = Date.now()): void {
+  pendingNewBot = { host, bot, at: now }
 }
 
-export function takeNewBotAfterSwitch(host: string): NewBotCarry | null {
+/** The New Bot sheet to reopen on `host`; one whose switch didn't land in `AFTER_SWITCH_MS` is dropped. */
+export function takeNewBotAfterSwitch(host: string, now = Date.now()): NewBotCarry | null {
+  if (expired(pendingNewBot, now)) pendingNewBot = null
   if (!pendingNewBot || pendingNewBot.host !== host) return null
   const bot = pendingNewBot.bot
   pendingNewBot = null

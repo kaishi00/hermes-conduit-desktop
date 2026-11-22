@@ -145,21 +145,42 @@ export function useCron(sources: readonly CronSource[], connected: boolean) {
     [load, ownerOf]
   )
 
-  /** A new job in `owner` on `host` (null: this dashboard); the job Hermes made, when it says. */
+  /**
+   * A new job in `owner` on `host` (null: this dashboard); the job Hermes made, when it says. It joins
+   * its source's list and last read at once, so a refresh after it that fails still lists it (desktop#348).
+   */
   const create = useCallback(
     async (body: Record<string, unknown>, owner: string | undefined, host: string | null = null): Promise<CronJob | null> => {
       const raw = (await dashboardHttp(host)('POST', cronPath('/api/cron/jobs', owner), body)) as Record<string, unknown> | null
+      const parsed = parseJob(raw?.job ?? raw)
+      const job = parsed ? { ...parsed, profile: parsed.profile ?? owner, ...(host ? { host } : {}) } : null
+      if (job) {
+        // The source that lists it: this host's, for its profile or every profile's.
+        const source = shown.find(s => s.host === host && (s.profile === null || s.profile === (job.profile ?? 'default')))
+        if (source) {
+          const at = sourcesKey([source])
+          const kept = lastRead.current.get(at)
+          if (kept && !kept.some(row => same(row, job))) lastRead.current.set(at, [...kept, job])
+          setJobs(list => (list && !list.some(row => same(row, job)) ? [...list, job] : list))
+        }
+      }
       void load()
-      const job = parseJob(raw?.job ?? raw)
-      return job ? { ...job, profile: job.profile ?? owner, ...(host ? { host } : {}) } : null
+      return job
     },
-    [load]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [load, shown]
   )
 
+  /** Changes only `updates`; the job Hermes answers with takes its row at once, so a refresh that fails can't bring the old one back (desktop#348). */
   const update = useCallback(
     async (job: CronJob, updates: Record<string, unknown>): Promise<void> => {
       if (!Object.keys(updates).length) return
-      await http(job)('PUT', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}`, ownerOf(job)), { updates })
+      const raw = (await http(job)('PUT', cronPath(`/api/cron/jobs/${encodeURIComponent(job.id)}`, ownerOf(job)), { updates })) as Record<string, unknown> | null
+      const parsed = parseJob(raw?.job ?? raw)
+      if (parsed && parsed.id === job.id) {
+        const updated: CronJob = { ...parsed, profile: parsed.profile ?? job.profile, ...(job.host ? { host: job.host } : {}) }
+        patch(list => list.map(row => (same(row, job) ? updated : row)))
+      }
       void load()
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

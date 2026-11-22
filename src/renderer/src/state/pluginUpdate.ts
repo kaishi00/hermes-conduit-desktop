@@ -4,6 +4,7 @@
  * job, and the guard that drops a row left from another dashboard (desktop#289).
  * The host is reached through an injected `http`, so tests can drive the run.
  */
+import { useEffect, useSyncExternalStore } from 'react'
 import { t } from '../../../shared/i18n'
 import { gateway } from '../gateway'
 import {
@@ -173,7 +174,20 @@ async function follow(
 }
 
 /**
- * Run when the page opens: a row left from another dashboard goes, whatever it says, except a run
+ * The update row for the page on screen. The guard runs when the page opens and again each time the
+ * row changes while it's open, so a run left on the old dashboard by a switch made just before the page
+ * opened (its `runningOnHost` row lands after the first guard) doesn't stay on this one (desktop#318).
+ */
+export function useUpdateRow(http: UpdateHttp = hostHttp): UpdateState {
+  const row = useSyncExternalStore(subscribeUpdate, currentUpdate)
+  useEffect(() => {
+    void guardUpdateRow(dashboardHost(), http)
+  }, [row, http])
+  return row
+}
+
+/**
+ * Run when the page opens, and when its row changes: a row left from another dashboard goes, whatever it says, except a run
  * still going (desktop#289), which stops by itself once the dashboard changes. A held scan's Update Anyway on this dashboard goes once the host says
  * its job moved on; a read that fails leaves it as it was.
  */

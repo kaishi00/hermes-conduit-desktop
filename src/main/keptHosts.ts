@@ -40,6 +40,8 @@ export function keptWritable(path: string): boolean {
   return KEPT_WRITE_PATHS.some(prefix => (prefix.endsWith('/') ? resolved.startsWith(prefix) : resolved === prefix || resolved.startsWith(`${prefix}/`)))
 }
 export const KEPT_BACKOFF = { baseDelayMs: 30_000, capMs: 300_000, jitter: false }
+/** The longest a stopped kept host's connection stays open for its `beforeStop` work (a screen's hand back tries for 13 s). */
+export const STOP_GRACE_MS = 15_000
 
 export interface KeptHostsDeps {
   fetch: Fetch
@@ -51,6 +53,12 @@ export interface KeptHostsDeps {
   onStatus?: (url: string, status: ConnectionStatus) => void
   onEvent?: (url: string, event: GatewayEventMessage) => void
   onRequests?: (url: string, requests: PendingRequest[]) => void
+  /**
+   * A kept host is about to stop (it left the group, or the one on screen signed out): what still has to go
+   * through its connection, such as handing back its bots' screens (desktop#351). The connection is still
+   * `connection(url)` while this runs, and closes once what it returns settles, or after `STOP_GRACE_MS`.
+   */
+  beforeStop?: (url: string) => Promise<unknown> | void
   setTimeout?: (fn: () => void, ms: number) => unknown
   clearTimeout?: (handle: unknown) => void
 }
@@ -179,8 +187,23 @@ export class KeptHosts {
   private stop(url: string): boolean {
     const kept = this.kept.get(url)
     if (!kept) return false
+    // Run while it's still kept, so what it sends finds the connection.
+    const last = this.deps.beforeStop?.(url)
     this.kept.delete(url)
-    kept.connection.close()
+    if (!last) {
+      kept.connection.close()
+      return true
+    }
+    // It says nothing more (it's no longer kept), and closes once that work is done.
+    let closed = false
+    const close = () => {
+      if (closed) return
+      closed = true
+      kept.connection.close()
+    }
+    const setTimer = this.deps.setTimeout ?? ((fn: () => void, ms: number) => setTimeout(fn, ms))
+    setTimer(close, STOP_GRACE_MS)
+    void Promise.resolve(last).then(close, close)
     return true
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Fetch } from '../src/main/auth'
 import { createHostList } from '../src/main/hosts'
-import { KEPT_BACKOFF, KEPT_RPC_METHODS, KeptHosts, MAX_KEPT } from '../src/main/keptHosts'
+import { KEPT_BACKOFF, KEPT_RPC_METHODS, KeptHosts, MAX_KEPT, STOP_GRACE_MS } from '../src/main/keptHosts'
 import { Connection, type SavedConnection } from '../src/main/connection'
 import type { ConnectionStatus, KeptHost } from '../src/shared/ipc'
 import type { WebSocketLike } from '../src/vendor/hermes-shared/json-rpc-gateway'
@@ -23,7 +23,7 @@ import {
   openRoomAfterSwitch,
   takeRoomAfterSwitch,
   sameBotWork,
-  ROOM_AFTER_SWITCH_MS,
+  AFTER_SWITCH_MS,
   KEPT_CHATS_PER_PROFILE,
   otherHostsWaiting,
   profileNames,
@@ -74,7 +74,7 @@ async function until(done: () => boolean) {
 const host = (url: string, extra: Partial<SavedConnection> = {}): SavedConnection => ({ url, method: 'token', token: 't', combined: true, ...extra })
 const open = (url: string): ConnectionStatus => ({ phase: 'open', url })
 
-function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: string[] } = {}) {
+function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: string[]; beforeStop?: (url: string) => Promise<unknown> | void } = {}) {
   const written: SavedConnection[][] = []
   const store = createHostList(list => written.push(list), { hosts, active: hosts[0]?.url ?? null })
   const sockets: FakeSocket[] = []
@@ -109,6 +109,7 @@ function harness(hosts: SavedConnection[], opts: { refuse?: string[]; down?: str
     onHermesName: (url, name) => hermesNames.push([url, name]),
     onStatus: (url, status) => statuses.push([url, status.phase]),
     onEvent: (url, event) => events.push([url, event.type]),
+    beforeStop: opts.beforeStop,
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
     clearTimeout: () => undefined
   })
@@ -200,6 +201,42 @@ describe('combined dashboards in the main process', () => {
     expect(socket.readyState).toBe(3)
     h.kept.sync(open('https://b.example'))
     expect(h.kept.list().map(k => k.url)).toEqual(['https://a.example'])
+  })
+
+  it("lets a stopping host's last work go through its connection before it closes (desktop#351)", async () => {
+    let finish = () => {}
+    const during: (Connection | null)[] = []
+    const h = harness([host('https://a.example'), host('https://b.example')], {
+      beforeStop: url => {
+        during.push(h.kept.connection(url))
+        return new Promise<void>(resolve => (finish = resolve))
+      }
+    })
+    h.kept.sync(open('https://a.example'))
+    await until(() => h.state('https://b.example') === 'live')
+    const socket = h.sockets[0]!
+    h.kept.sync({ phase: 'locked' })
+    // Its work found the connection, which stays open, though no longer kept, until that work is done.
+    expect(during).toHaveLength(1)
+    expect(during[0]).not.toBeNull()
+    expect(h.kept.list()).toEqual([])
+    expect(h.kept.connection('https://b.example')).toBeNull()
+    expect(socket.readyState).toBe(1)
+    finish()
+    await tick()
+    expect(socket.readyState).toBe(3)
+  })
+
+  it("closes a stopping host's connection after the grace even when its last work hangs", async () => {
+    const h = harness([host('https://a.example'), host('https://b.example')], { beforeStop: () => new Promise(() => {}) })
+    h.kept.sync(open('https://a.example'))
+    await until(() => h.state('https://b.example') === 'live')
+    const socket = h.sockets[0]!
+    h.kept.sync({ phase: 'locked' })
+    expect(socket.readyState).toBe(1)
+    const grace = h.timers.find(t => t.ms === STOP_GRACE_MS)!
+    grace.fn()
+    expect(socket.readyState).toBe(3)
   })
 
   it('lets everything go on sign-out, a lock, or the group dropping under two', async () => {
@@ -396,6 +433,19 @@ describe('combined dashboards in the window', () => {
     expect(takeProfileAfterSwitch('https://studio.example', [{ name: 'gone', title: 'Gone' } as never])).toBeNull()
   })
 
+  it('forgets a profile or bot whose switch never landed, whichever host asks next (#324)', () => {
+    const bot = { name: 'mira', title: 'Mira' } as never
+    const late = 1_000 + AFTER_SWITCH_MS + 1
+    showProfileAfterSwitch({ host: 'https://studio.example', bot }, 1_000)
+    expect(takeProfileAfterSwitch('https://home.example', [bot], late)).toBeNull()
+    expect(takeProfileAfterSwitch('https://studio.example', [bot], late + 1)).toBeNull()
+    openBotAfterSwitch({ host: 'https://studio.example', bot }, 1_000)
+    expect(takeBotAfterSwitch('https://studio.example', [bot], late)).toBeNull()
+    expect(takeBotAfterSwitch('https://studio.example', [bot], late + 1)).toBeNull()
+    showProfileAfterSwitch({ host: 'https://studio.example', bot }, 1_000)
+    expect(takeProfileAfterSwitch('https://studio.example', [bot], 1_000 + AFTER_SWITCH_MS)).toBe(bot)
+  })
+
   it('gives Pulse a chip per combined host that answers, only when another has one', () => {
     const counts = new Map([['https://studio.example', 3]])
     const chips = pulseChips(hosts, 'https://home.example', 1, counts, name)
@@ -518,15 +568,15 @@ describe('group chats in a combined group', () => {
     expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])], 1_400)).toBeNull()
     // ...but not forever: one its host no longer lists is dropped.
     openRoomAfterSwitch({ host: mac, kind: 'copy', copy: copy('zoo', ['sam']) }, 1_000)
-    expect(takeRoomAfterSwitch(mac, [], [], 1_000 + ROOM_AFTER_SWITCH_MS + 1)).toBeNull()
-    expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])], 1_000 + ROOM_AFTER_SWITCH_MS + 2)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [], [], 1_000 + AFTER_SWITCH_MS + 1)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [], [copy('zoo', ['sam'])], 1_000 + AFTER_SWITCH_MS + 2)).toBeNull()
     // A room from a switch that never settled doesn't open on a later visit.
     openRoomAfterSwitch({ host: mac, kind: 'room', room: room('trip', ['raiden']) }, 1_000)
-    expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null, 1_000 + ROOM_AFTER_SWITCH_MS + 1)).toBeNull()
-    expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null, 1_000 + ROOM_AFTER_SWITCH_MS + 2)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null, 1_000 + AFTER_SWITCH_MS + 1)).toBeNull()
+    expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null, 1_000 + AFTER_SWITCH_MS + 2)).toBeNull()
     // An expired one goes at the next look from any host, so it can't wait for its own (desktop#231).
     openRoomAfterSwitch({ host: mac, kind: 'room', room: room('trip', ['raiden']) }, 1_000)
-    expect(takeRoomAfterSwitch(vps, [], null, 1_000 + ROOM_AFTER_SWITCH_MS + 1)).toBeNull()
+    expect(takeRoomAfterSwitch(vps, [], null, 1_000 + AFTER_SWITCH_MS + 1)).toBeNull()
     expect(takeRoomAfterSwitch(mac, [room('trip', ['raiden'])], null, 1_000)).toBeNull()
   })
 })
@@ -539,6 +589,16 @@ describe('New Bot on another combined dashboard', () => {
     expect(takeNewBotAfterSwitch('https://a.example')).toBeNull()
     expect(takeNewBotAfterSwitch('https://b.example')).toEqual(bot)
     expect(takeNewBotAfterSwitch('https://b.example')).toBeNull()
+  })
+
+  it('drops the sheet when its switch never lands, so a much later visit doesn’t reopen it (#324)', async () => {
+    const { newBotAfterSwitch, takeNewBotAfterSwitch, AFTER_SWITCH_MS } = await import('../src/renderer/src/state/keptHosts')
+    const bot = { name: 'Scout', description: '', soul: '', face: 3, picture: null, shareAuth: true }
+    newBotAfterSwitch('https://b.example', bot, 1_000)
+    expect(takeNewBotAfterSwitch('https://a.example', 1_000 + AFTER_SWITCH_MS + 1)).toBeNull()
+    expect(takeNewBotAfterSwitch('https://b.example', 1_000 + AFTER_SWITCH_MS + 2)).toBeNull()
+    newBotAfterSwitch('https://b.example', bot, 1_000)
+    expect(takeNewBotAfterSwitch('https://b.example', 1_000 + AFTER_SWITCH_MS)).toEqual(bot)
   })
 })
 

@@ -85,9 +85,11 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [],
   /** Another dashboard's profile the list shows, picked by its face. */
   const [far, setFar] = useState<{ host: string; name: string } | null>(null)
   const farHosts = useMemo(() => [...new Set(tiles.filter(tile => !tile.own).map(tile => tile.host))], [tiles])
-  // A far face whose dashboard is gone from the column (left the group, or down while it reconnects)
-  // shows the list Chats' profile picks; the pick is kept, so a reconnect brings it back.
-  const shownFar = far && farHosts.includes(far.host) ? far : null
+  // A far face whose dashboard is gone from the column (left the group, or down while it reconnects),
+  // or whose profile that dashboard no longer lists (deleted or renamed meanwhile, desktop#348), shows
+  // the list Chats' profile picks; the pick is kept, so a reconnect brings it back.
+  const shownFar =
+    far && tiles.some(tile => !tile.own && tile.host === far.host && tile.bot.name.toLowerCase() === far.name.toLowerCase()) ? far : null
   // All lists every combined dashboard's jobs, as Chats' All lists their chats.
   const sources = useMemo<CronSource[]>(
     () =>

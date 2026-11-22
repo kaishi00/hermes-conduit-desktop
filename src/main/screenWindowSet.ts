@@ -62,15 +62,20 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
     this.changed(this.profiles())
   }
 
-  /** Closes the screen windows whose bot `test` picks (another combined dashboard's that left the group), handing back for each. */
-  closeWhere(test: (key: string) => boolean): void {
+  /**
+   * Closes the screen windows whose bot `test` picks (another combined dashboard's that left the group), handing back
+   * for each. Settles once those hand backs have, so the dashboard's connection can wait for them before it closes.
+   */
+  closeWhere(test: (key: string) => boolean): Promise<void> {
     const windows = [...this.open].filter(([key]) => test(key))
+    const handBacks: Promise<unknown>[] = []
     for (const [key, window] of windows) {
       this.open.delete(key)
-      this.handBack(key)
+      handBacks.push(this.handBack(key))
       window.close()
     }
     if (windows.length) this.changed(this.profiles())
+    return Promise.all(handBacks).then(() => undefined)
   }
 
   /** The page's viewer id for its bot (its screen key), and whether it holds the screen now. */
@@ -100,16 +105,17 @@ export class ScreenWindowSet<W extends ScreenWindowHandle = ScreenWindowHandle> 
     if (windows.length) this.changed(this.profiles())
   }
 
-  private handBack(key: string): void {
+  /** Hands back the bot's screen if this viewer holds it; settles once the hand back has (it never rejects). */
+  private handBack(key: string): Promise<void> {
     const viewer = this.viewers.get(key)
-    if (!this.holding.delete(key) || !viewer) return
+    if (!this.holding.delete(key) || !viewer) return Promise.resolve()
     const mine = this.cancelHandBack(key)
     const owed = () => this.handBacks.get(key) === mine
     this.pending.add(key)
     const settled = () => {
       if (owed()) this.pending.delete(key)
     }
-    void Promise.resolve(this.release(key, viewer, owed)).then(settled, settled)
+    return Promise.resolve(this.release(key, viewer, owed)).then(settled, settled)
   }
 
   private cancelHandBack(key: string): number {

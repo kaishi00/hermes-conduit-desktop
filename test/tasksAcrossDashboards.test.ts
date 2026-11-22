@@ -129,6 +129,85 @@ describe('Scheduled after a change', () => {
     hook.unmount()
   })
 
+  it('an edited far job keeps its edit when the refresh after it fails (desktop#348)', async () => {
+    const conduit = (window as unknown as { conduit: { keptHttp: (url: string, path: string, method?: string) => Promise<Outcome> } }).conduit
+    let up = true
+    conduit.keptHttp = async (url, path, method) => {
+      if (method === 'PUT') {
+        up = false
+        return { ok: true, result: { job: { ...job('far-1', 'nova'), name: 'Morning digest' } } }
+      }
+      return up ? answer(url, path) : { ok: false, error: 'down' }
+    }
+    const hook = renderHook(({ s }: { s: CronSource[] }) => useCron(s, true), { s: [{ host: null, profile: null }, { host: FAR, profile: null }] })
+    await settle()
+    await hook.result().update(hook.result().jobs!.find(j => j.id === 'far-1')!, { name: 'Morning digest' })
+    await settle()
+    expect(hook.result().jobs?.find(j => j.id === 'far-1')).toMatchObject({ name: 'Morning digest', host: FAR, profile: 'nova' })
+    hook.unmount()
+  })
+
+  it('a new far job is listed when the refresh after it fails (desktop#348)', async () => {
+    const conduit = (window as unknown as { conduit: { keptHttp: (url: string, path: string, method?: string) => Promise<Outcome> } }).conduit
+    let up = true
+    conduit.keptHttp = async (url, path, method) => {
+      if (method === 'POST') {
+        up = false
+        return { ok: true, result: { job: { id: 'far-3', name: 'far-3', enabled: true } } }
+      }
+      return up ? answer(url, path) : { ok: false, error: 'down' }
+    }
+    const hook = renderHook(({ s }: { s: CronSource[] }) => useCron(s, true), { s: [{ host: null, profile: null }, { host: FAR, profile: null }] })
+    await settle()
+    const made = await hook.result().create({ name: 'far-3' }, 'atlas', FAR)
+    expect(made).toMatchObject({ id: 'far-3', profile: 'atlas', host: FAR })
+    await settle()
+    expect(hook.result().jobs?.map(j => j.id)).toEqual(['own-1', 'own-2', 'far-1', 'far-2', 'far-3'])
+    hook.unmount()
+  })
+
+  it('a kept far pick shows again only while its dashboard lists that profile (desktop#348)', async () => {
+    const path = '../src/renderer/src/components/ScheduledJobs.tsx'
+    const { ScheduledJobs } = (await import(/* @vite-ignore */ path)) as { ScheduledJobs: unknown }
+    const bot = (name: string) => ({ name, title: name, pinned: false, hidden: false, isDefault: false })
+    const own = { key: 'own\tmira', host: 'https://own.example', bot: bot('mira'), own: true }
+    const nova = { key: `${FAR}\tnova`, host: FAR, bot: bot('nova'), own: false }
+    const box = document.createElement('div')
+    document.body.append(box)
+    const root = createRoot(box)
+    const draw = (tiles: unknown[]) =>
+      act(() =>
+        root.render(createElement(ScheduledJobs as never, { bots: [], connected: true, profile: 'mira', onProfile: () => {}, tiles, onOpenRun: () => {}, segment: null } as never))
+      )
+    const face = () => [...box.querySelectorAll<HTMLButtonElement>('button.profile-column-face')].find(b => b.getAttribute('aria-label')?.startsWith('nova'))
+    const readsMira = async (from: number) => {
+      await settle()
+      return calls.slice(from).some(c => c.host === null && c.path.includes('profile=mira'))
+    }
+    draw([own, nova])
+    await settle()
+    act(() => face()!.click())
+    await settle()
+    expect(face()!.getAttribute('aria-selected')).toBe('true')
+    // Its dashboard leaves the column: the list falls back to Chats' profile.
+    let before = calls.length
+    draw([own])
+    expect(await readsMira(before)).toBe(true)
+    // Back again: the far face is picked again and its profile is read there.
+    before = calls.length
+    draw([own, nova])
+    await settle()
+    expect(face()!.getAttribute('aria-selected')).toBe('true')
+    expect(calls.slice(before).some(c => c.host === FAR && c.path.includes('profile=nova'))).toBe(true)
+    // The dashboard is back but no longer lists that profile (renamed): Chats' profile, not a profile that's gone.
+    before = calls.length
+    draw([own, { ...nova, key: `${FAR}\tnova2`, bot: bot('nova2') }])
+    expect(await readsMira(before)).toBe(true)
+    expect(calls.slice(before).some(c => c.host === FAR && c.path.includes('profile=nova'))).toBe(false)
+    act(() => root.unmount())
+    box.remove()
+  })
+
   it("tapping the chosen far face again goes back to Chats' profile, not to All", async () => {
     const path = '../src/renderer/src/components/ScheduledJobs.tsx'
     const { ScheduledJobs } = (await import(/* @vite-ignore */ path)) as { ScheduledJobs: unknown }

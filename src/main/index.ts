@@ -277,7 +277,7 @@ const chatWindows = new ChatWindowSet(
   },
   ids => send(IPC.chatWindowsChanged, ids)
 )
-const screenWindows = new ScreenWindowSet(
+const screenWindows: ScreenWindowSet<BrowserWindow> = new ScreenWindowSet(
   (screen, onClosed) => {
     const window = createScreenWindow(screen, onClosed)
     // Its bot's dashboard: once that's another combined one (from the start, or after a switch), the window's calls go
@@ -321,7 +321,7 @@ const hostStore = createFileStore()
 const createSocket = (url: string, headers: Record<string, string>) => new WebSocket(url, { headers }) as unknown as WebSocketLike
 
 /** Combine Dashboards: the group's other hosts, connected beside the one on screen. */
-const keptHosts = new KeptHosts({
+const keptHosts: KeptHosts = new KeptHosts({
   fetch: globalThis.fetch.bind(globalThis),
   store: hostStore,
   createSocket,
@@ -336,7 +336,9 @@ const keptHosts = new KeptHosts({
     if (event.type === 'sessions.changed' && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.keptChatsChanged, url)
     sendToFarWindows(url, IPC.event, event, event.session_id)
   },
-  onRequests: (url, requests) => sendToFarWindows(url, IPC.requestsChanged, requests)
+  onRequests: (url, requests) => sendToFarWindows(url, IPC.requestsChanged, requests),
+  // Its bots' screens close and hand back their holds through its connection, before that closes (desktop#351).
+  beforeStop: (url: string): Promise<void> => screenWindows.closeWhere(key => parseScreenKey(key).host === url)
 })
 
 const connection = new Connection({

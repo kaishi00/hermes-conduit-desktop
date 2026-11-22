@@ -9,7 +9,7 @@ import { STATUS_PATH as PLUGIN_STATUS_PATH, pluginStatus } from './state/plugin'
 import { hostName, rememberHostNames } from './state/hostNames'
 import { HOST_NAME_MAX } from '@shared/hostNames'
 import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '@shared/ipc'
-import { BotsHome, useReplyFace, type BotAction } from './components/BotsHome'
+import { BotsHome, useReplyFace, type BotAction, type BotsDraft } from './components/BotsHome'
 import { ProjectsPane } from './components/ProjectsPane'
 import { ChatList, type MoveTarget } from './components/ChatList'
 import { PROFILE_COLUMN_WIDTH } from './components/ProfileColumn'
@@ -660,6 +660,8 @@ function Shell({
   /** Edit Bot, open over Bots home. */
   const [editingBot, setEditingBot] = useState<Bot | null>(null)
   const [newBot, setNewBot] = useState(false)
+  /** A group chat being started from the Bots list: kept here, so leaving Bots for another section and coming back keeps it (desktop#336). */
+  const [botsDraft, setBotsDraft] = useState<BotsDraft | null>(null)
   // New Bot made on another combined dashboard: the sheet's words, carried over the switch.
   const [carriedBot, setCarriedBot] = useState<NewBotCarry | null>(null)
   const [botNotice, setBotNotice] = useState<string | null>(null)
@@ -2080,6 +2082,9 @@ function Shell({
     openBot(same(lastBot.current) ?? [...here].sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0))[0])
   }, [section, newBot, editingBot, orderedRoster, roster.bots, openBot, chatWindowIds])
   const botsHomeProps: Omit<ComponentProps<typeof BotsHome>, 'side'> = {
+    // The group chat being started outlives the Bots list, which goes with its section (desktop#336).
+    draft: botsDraft,
+    onDraft: setBotsDraft,
     bots: orderedRoster,
     error: roster.error,
     runningProfiles: runningProfiles,

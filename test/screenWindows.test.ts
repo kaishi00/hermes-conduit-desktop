@@ -55,6 +55,25 @@ describe("bots' screens in windows of their own", () => {
     expect(set.profiles()).toEqual([screenKey('https://a.example', 'default')])
   })
 
+  it('settles closeWhere once its hand backs have, so the dashboard can close after them (desktop#351)', async () => {
+    let finish = () => {}
+    const set = new ScreenWindowSet(
+      () => ({ focus: () => undefined, close: () => undefined }),
+      () => undefined,
+      () => new Promise<void>(resolve => (finish = resolve))
+    )
+    const far = screenKey('https://b.example', 'mira')
+    set.show({ profile: 'mira', botName: 'Mira', host: 'https://b.example' })
+    set.note(far, 'v1', true)
+    let settled = false
+    void set.closeWhere(key => key === far).then(() => (settled = true))
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    finish()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(settled).toBe(true)
+  })
+
   it("carries a far bot's dashboard in its page's hash", () => {
     const screen = { profile: 'default', botName: 'Conduit', host: 'https://b.example' }
     expect(screenWindowRequest(screenWindowHash(screen))).toEqual(screen)
