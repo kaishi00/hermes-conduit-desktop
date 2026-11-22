@@ -19,8 +19,9 @@ export function AskFirstButton({ on, onToggle }: { on: boolean; onToggle: () => 
         aria-pressed={on}
         title={t('Ask before sending to Hermes')}
         onClick={() => {
+          const next = !on
           onToggle()
-          setCaption(on ? t('Sending straight to Hermes') : t('Asking before sending to Hermes'))
+          setCaption(next ? t('Asking before sending to Hermes') : t('Sending straight to Hermes'))
           window.clearTimeout(timer.current)
           timer.current = window.setTimeout(() => setCaption(null), 3000)
         }}

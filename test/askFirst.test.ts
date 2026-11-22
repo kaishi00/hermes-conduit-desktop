@@ -48,8 +48,9 @@ describe('asking first, tool modes', () => {
     ask.heard('Check my calendar and send it to Hermes')
     expect(ask.hold('ask_thread', 'Check my calendar')).toBeNull()
     ask.hold('ask_thread', 'Another one')
-    expect(ask.setMode('off')).toMatchObject({ status: 'off' })
+    expect(ask.setMode('off').message).toContain("wasn't sent")
     expect(ask.draft).toBeNull()
+    expect(ask.setMode('off').message).not.toContain("wasn't sent")
     expect(ask.setMode('maybe')).toEqual({ error: 'mode must be on or off' })
   })
 

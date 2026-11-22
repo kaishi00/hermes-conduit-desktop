@@ -175,8 +175,13 @@ export class AskFirst {
   setMode(mode: string | undefined): Record<string, string> {
     const value = (mode ?? '').trim().toLowerCase()
     if (value !== 'on' && value !== 'off') return { error: 'mode must be on or off' }
+    const dropped = value === 'off' && this.draft !== null
     this.set(value === 'on')
-    return { status: value, message: modeAnswer(value === 'on') }
+    const said = modeAnswer(value === 'on')
+    return {
+      status: value,
+      message: dropped ? `${said} The request that was waiting wasn't sent: if the user still wants it, ask for it again.` : said
+    }
   }
 
   /** Holds a new request while asking first is on, answered so the model asks; null sends it now. */
