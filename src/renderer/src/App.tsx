@@ -1819,6 +1819,12 @@ function Shell({
   }, [])
   const openOtherBot = useCallback((other: OtherBot) => {
     // Its Bot Chat opens in place; a bot with none yet starts one there, made on its own dashboard by the first send.
+    // A second click while that fresh one is shown keeps it, and what's typed in it.
+    const shown = dockedRef.current
+    if (!other.bot.botChatId && shown?.fresh && shown.botChat && shown.host === other.host && shown.profile === other.bot.name) {
+      setSection('chats')
+      return
+    }
     openDocked(
       other.bot.botChatId
         ? { host: other.host, id: other.bot.botChatId, profile: other.bot.name, title: other.bot.title, author: other.bot.title, botChat: true }
@@ -1842,6 +1848,8 @@ function Shell({
       const newest = otherChats.filter(r => r.host === tile.host && same(r.profile)).sort((a, b) => (b.activeAt ?? 0) - (a.activeAt ?? 0))[0]
       if (tile.bot.botChatId && (tile.bot.lastActive ?? 0) >= (newest?.activeAt ?? 0)) return openOtherBot({ host: tile.host, bot: tile.bot })
       if (newest) openDocked({ host: newest.host, id: newest.id, profile: newest.profile, title: newest.title })
+      // A bot with no chats there yet starts its Bot Chat in place, as its sidebar face does.
+      else openOtherBot({ host: tile.host, bot: tile.bot })
     },
     [otherChats, openOtherBot, openDocked]
   )
@@ -1849,6 +1857,11 @@ function Shell({
   useEffect(() => {
     if (chatProfile) setOtherProfile(null)
   }, [chatProfile])
+  // So does a chat of this dashboard's opening (New Chat, a Needs you row, a send making one), which the far
+  // filter would hide from the list.
+  useEffect(() => {
+    setOtherProfile(null)
+  }, [selected])
   // A far face stops showing when its dashboard is no longer kept.
   useEffect(() => {
     if (otherProfile && !keptHosts.some(h => h.url === otherProfile.host)) setOtherProfile(null)

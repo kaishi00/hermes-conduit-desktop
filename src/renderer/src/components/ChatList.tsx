@@ -331,8 +331,13 @@ export function ChatList({
   )
   // The chats the list shows before any filter: the profile chosen's, or All's.
   const inShown = useMemo(
-    () => (profile ? (rows ?? []).filter(r => sameProfile(r, profile)) : (rows ?? []).filter(r => shownInAll(r.profile, botNames, allLeftOut))),
-    [rows, profile, botNames, allLeftOut]
+    () =>
+      otherProfile
+        ? []
+        : profile
+          ? (rows ?? []).filter(r => sameProfile(r, profile))
+          : (rows ?? []).filter(r => shownInAll(r.profile, botNames, allLeftOut)),
+    [rows, profile, otherProfile, botNames, allLeftOut]
   )
   // The Sources the menu offers: the ones the chats shown come from, so none lists nothing.
   const shownSources = useMemo(() => sourcesIn(inShown), [inShown])
@@ -466,12 +471,15 @@ export function ChatList({
   const [dragging, setDragging] = useState<string | null>(null)
   const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null)
   // In messages: Hermes' full-text search, on the profile shown or every profile the list holds.
+  // Another dashboard's face searches none of this one's (its chats aren't searchable from here).
   const searchProfiles = useMemo(
     () =>
-      profile
+      otherProfile
+        ? []
+        : profile
         ? [profile]
         : [...new Set((rows ?? []).filter(r => shownInAll(r.profile, botNames, allLeftOut)).map(r => r.profile || 'default'))].sort().slice(0, MAX_SEARCH_PROFILES),
-    [rows, profile, botNames, allLeftOut]
+    [rows, profile, otherProfile, botNames, allLeftOut]
   )
   const content = useContentSearch(query, rows ? searchProfiles : [], searchScope, searchHttp)
   const contentMatches = useMemo(
