@@ -10,6 +10,12 @@ describe('notifications', () => {
     })
   })
 
+  it('titles a reply in an untitled chat by its bot, as the phone does', () => {
+    expect(turnNotification('l', { text: 'Done.', status: 'complete' }, { storedId: 's', bot: 'Kaleb' })).toMatchObject({ title: 'Kaleb', body: 'Done.' })
+    expect(turnNotification('l', { text: 'Done.', status: 'complete' }, { storedId: 's', title: 'Trip', bot: 'Kaleb' })).toMatchObject({ title: 'Trip' })
+    expect(turnNotification('l', { status: 'error', error: 'Model overloaded' }, { storedId: 's', bot: 'Kaleb' })).toMatchObject({ title: 'Kaleb' })
+  })
+
   it('says a failure, and stays quiet about a stop', () => {
     expect(turnNotification('l', { status: 'error', error: 'Model overloaded' }, undefined)).toMatchObject({ title: 'Hermes', body: 'Model overloaded' })
     expect(turnNotification('l', { status: 'interrupted' }, undefined)).toBeNull()

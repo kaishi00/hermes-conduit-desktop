@@ -15,6 +15,8 @@ export interface ChatRef {
   storedId: string | null
   profile?: string
   title?: string
+  /** The chat's bot as the window names it: a reply in an untitled chat is titled by it. */
+  bot?: string
 }
 
 export interface NotificationSpec {
@@ -42,11 +44,15 @@ export function setNotificationsEnabled(on: boolean): void {
   }
 }
 
-/** A finished turn's notification, or none (a stop needs no telling). */
+/**
+ * A finished turn's notification, or none (a stop needs no telling). It's
+ * titled by the chat, else by the bot that answered, as the phone's reply
+ * push is, never a line that says only that a reply came.
+ */
 export function turnNotification(sessionId: string, payload: unknown, chat: ChatRef | undefined): NotificationSpec | null {
   const p = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
   if (p.status === 'interrupted') return null
-  const title = chat?.title || 'Hermes'
+  const title = chat?.title || chat?.bot || 'Hermes'
   const tag = `turn-${sessionId}`
   if (p.status === 'error') {
     const reason = typeof p.error === 'string' ? p.error : t('The turn failed.')

@@ -154,8 +154,10 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
    * it, so a chat on another combined dashboard notifies too; a click brings
    * this window back.
    */
-  const chatRef = useRef({ liveId: chat.liveId, storedId: chat.storedId, profile, title })
-  chatRef.current = { liveId: chat.liveId, storedId: chat.storedId, profile, title }
+  // A notification takes the chat's own title, not the window's "Chat" for an untitled one, and else its bot.
+  const chatTitle = botChat ? botTitle : cleanTitle(chat.title || request.title || '') || undefined
+  const chatRef = useRef({ liveId: chat.liveId, storedId: chat.storedId, profile, title: chatTitle, bot: botTitle })
+  chatRef.current = { liveId: chat.liveId, storedId: chat.storedId, profile, title: chatTitle, bot: botTitle }
   const notify = useCallback((spec: NotificationSpec) => {
     if (!notificationsEnabled() || typeof Notification === 'undefined' || (document.hasFocus() && !document.hidden)) return
     const n = new Notification(spec.title, { body: spec.body, tag: spec.tag, silent: false })
