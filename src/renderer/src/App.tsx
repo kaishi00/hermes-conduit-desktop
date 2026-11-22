@@ -513,7 +513,7 @@ function Shell({
     const offOpen = window.conduit.onOpenChat(ref => {
       // Another combined dashboard's chat, back from its window: a switch to it opens it.
       if (ref.host && ref.host !== statusUrlRef.current) {
-        openOtherChatRef.current({ id: ref.storedId, profile: ref.profile, title: ref.title ?? '', pinned: false, host: ref.host })
+        openDockedRef.current({ host: ref.host, id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
         return
       }
       setSelected({ id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
@@ -1695,12 +1695,21 @@ function Shell({
    */
   const openDocked = useCallback(
     (chat: DockedChat) => {
+      // During a call the chat on screen keeps the call's controls, so another dashboard's chat opens in a window of its own.
+      if (calling) {
+        void window.conduit.openChatWindow(chat).then(opened => {
+          if (!opened) void tell(t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT }))
+        })
+        return
+      }
       setDocked({ chat, over: selected })
       setBotsSide(chat.botChat === true)
       setSection('chats')
     },
-    [selected]
+    [selected, calling]
   )
+  const openDockedRef = useRef(openDocked)
+  openDockedRef.current = openDocked
   const openOtherWaiting = useCallback(
     (row: KeptWaitingRow) => {
       // The chat as that dashboard's list names it, when it's listed.
@@ -1716,8 +1725,6 @@ function Shell({
     (row: OtherChatRow) => openDocked({ host: row.host, id: row.id, profile: row.profile, title: row.title }),
     [openDocked]
   )
-  const openOtherChatRef = useRef(openOtherChat)
-  openOtherChatRef.current = openOtherChat
   /** Another dashboard's row whose chat has a window of its own brings the window to the front, with no switch. */
   const selectOtherRow = useCallback(
     (row: OtherChatRow) => {
@@ -1749,7 +1756,7 @@ function Shell({
     if (!(await switchEndingCall(hostName(other.host)))) return
     openBotAfterSwitch(other)
     void window.conduit.switchHost(other.host)
-  }, [])
+  }, [openDocked])
   useEffect(() => {
     const bot = takeBotAfterSwitch(statusUrl, roster.bots)
     if (bot) openBot(bot)

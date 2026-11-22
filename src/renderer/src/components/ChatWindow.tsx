@@ -170,11 +170,12 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       const n = new Notification(spec.title, { body: spec.body, tag: spec.tag, silent: false })
       n.onclick = () => {
         const live = chatRef.current.liveId
-        if (docked) window.conduit.window.show()
+        // Docked: the main window comes back with this chat docked again, wherever it was since.
+        if (docked) window.conduit.openChat({ storedId: chatRef.current.storedId ?? request.id, profile, title: chatRef.current.title, host, ...(botChat ? { botChat: true } : {}) })
         else if (live) void window.conduit.chatWindowOf(live, true)
       }
     },
-    [docked]
+    [docked, request.id, profile, host, botChat]
   )
   useEffect(
     () =>
