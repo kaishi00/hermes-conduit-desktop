@@ -1,8 +1,8 @@
 # Packaging. Releases are built by .github/workflows/release.yml from a v* tag
 # and published to GitHub Releases, which the website's download page and the
-# updater read. Signing comes from that workflow's secrets: without them the
-# packages are unsigned, as in CI. The appx is for the Microsoft Store, which
-# signs it.
+# updater read. The Mac is signed and notarized from that workflow's secrets.
+# The Windows installer is unsigned: the Microsoft Store, which signs the appx,
+# is the signed Windows channel (Eric, 2026-11-22).
 # appId names the installed app: never change it after a public release.
 appId: dev.conduit.desktop
 productName: Conduit
@@ -59,7 +59,9 @@ nsis:
   perMachine: false
   # One installer for x64 and arm64, named without the version.
   artifactName: Conduit-Setup.${ext}
+# Partner Center's identity values replace these in the release workflow.
 appx:
+  artifactName: Conduit-Store-${arch}.${ext}
   identityName: Conduit
   displayName: Conduit
   publisherDisplayName: kaishi00
