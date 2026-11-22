@@ -145,6 +145,9 @@ describe('combined dashboards in the main process', () => {
     await expect(h.kept.http('https://b.example', '/api/sessions/s1', 'DELETE')).rejects.toThrow(/Only reads/)
     await expect(h.kept.http('https://b.example', '/api/cron/jobs/../../sessions/s1', 'DELETE')).rejects.toThrow(/Only reads/)
     await expect(h.kept.http('https://b.example', '/api/cron/jobsx', 'POST')).rejects.toThrow(/Only reads/)
+    // Dot segments the URL parser would resolve, percent-encoded or not, never get past the prefix.
+    for (const sneaky of ['/api/plugins/kanban/%2e%2e/%2e%2e/%2e%2e/api/sessions/s1', '/api/plugins/kanban/%2E%2E/x', '/api/cron/jobs/.%2e/x', '/api/cron/jobs/%2e./x'])
+      await expect(h.kept.http('https://b.example', sneaky, 'DELETE')).rejects.toThrow(/Only reads/)
     // Only reads go over a kept socket.
     await expect(h.kept.rpc('https://b.example', 'prompt.submit', {})).rejects.toThrow(/Only reads/)
     await expect(h.kept.rpc('https://b.example', 'profiles.set_asset', {})).rejects.toThrow(/Only reads/)

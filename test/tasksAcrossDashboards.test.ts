@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, settle } from './hookHarness'
 import { useCron, type CronSource } from '../src/renderer/src/state/useCron'
-import { useKanban } from '../src/renderer/src/state/useKanban'
+import { FAR_BOARDS_POLL_MS, useKanban } from '../src/renderer/src/state/useKanban'
 
 const FAR = 'https://far.example'
 type Outcome = { ok: true; result: unknown } | { ok: false; error: string }
@@ -71,7 +71,24 @@ describe('Scheduled across combined dashboards', () => {
   })
 })
 
+afterEach(() => vi.useRealTimers())
+
 describe("Board's boards across combined dashboards", () => {
+  it('a dashboard still connecting when Board opens lists its boards once it answers', async () => {
+    vi.useFakeTimers()
+    const conduit = (window as unknown as { conduit: { keptHttp: (url: string, path: string) => Promise<Outcome> } }).conduit
+    let up = false
+    conduit.keptHttp = async (url, path) => (up ? answer(url, path) : { ok: false, error: 'Not connected to that Hermes.' })
+    const hook = renderHook(({ far }: { far: string[] }) => useKanban(true, true, far), { far: [FAR] })
+    await settle()
+    expect(hook.result().lists.map(l => l.host)).toEqual([null])
+    up = true
+    await vi.advanceTimersByTimeAsync(FAR_BOARDS_POLL_MS)
+    await settle()
+    expect(hook.result().lists.map(l => l.host)).toEqual([null, FAR])
+    hook.unmount()
+  })
+
   it("lists each kept dashboard's boards, and a far pick is read there and kept for next time", async () => {
     const hook = renderHook(({ far }: { far: string[] }) => useKanban(true, true, far), { far: [FAR] })
     await settle()

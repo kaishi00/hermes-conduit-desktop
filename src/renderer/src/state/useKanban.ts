@@ -5,6 +5,8 @@ import { LIVE_BOARD_POLL_MS, startKanbanStream, windowSockets } from './kanbanEv
 import { boardPath, boardPollDelay, defaultAssignee, failedInTransit, FIRST_READ_RETRY_MS, parseBoard, parseBoards, parseTask, parseTaskDetail, type KanbanBoard, type KanbanBoardRow, type KanbanTask, type KanbanTaskDetail } from './kanban'
 
 const BOARD_KEY = 'conduit.kanbanBoard'
+/** Another dashboard's list of boards is read again this often while Board shows. */
+export const FAR_BOARDS_POLL_MS = 60_000
 /** A board on another combined dashboard, picked last: {"host", "slug"}. */
 const FAR_BOARD_KEY = 'conduit.kanbanFarBoard'
 
@@ -199,17 +201,22 @@ export function useKanban(connected: boolean, shown: boolean, farHosts: readonly
     setFarBoards(new Map(farLists))
     if (!connected || !shown || !hosts.length) return
     let live = true
-    void Promise.all(
-      hosts.map(async url => {
-        try {
-          farLists.set(url, parseBoards(await keptGateway(url).http('GET', boardPath('/boards', null))))
-        } catch {
-          farLists.delete(url)
-        }
-      })
-    ).then(() => live && setFarBoards(new Map(farLists)))
+    // A dashboard still connecting, or one that failed, keeps what it last listed and is read again on the minute.
+    const read = () =>
+      void Promise.all(
+        hosts.map(async url => {
+          try {
+            farLists.set(url, parseBoards(await keptGateway(url).http('GET', boardPath('/boards', null))))
+          } catch {
+            // Kept as it was.
+          }
+        })
+      ).then(() => live && setFarBoards(new Map(farLists)))
+    read()
+    const timer = setInterval(() => !document.hidden && read(), FAR_BOARDS_POLL_MS)
     return () => {
       live = false
+      clearInterval(timer)
     }
   }, [connected, shown, farKey])
   const lists = useMemo<BoardList[]>(

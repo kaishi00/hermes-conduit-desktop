@@ -25,7 +25,20 @@ export const KEPT_RPC_METHODS: readonly string[] = ['profiles.list', 'profiles.g
  */
 export const KEPT_WRITE_PATHS: readonly string[] = ['/api/cron/jobs', '/api/plugins/kanban/']
 const KEPT_WRITE_METHODS: readonly string[] = ['POST', 'PUT', 'PATCH', 'DELETE']
-const writable = (path: string) => !path.includes('..') && KEPT_WRITE_PATHS.some(prefix => path === prefix || path.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`) || path.startsWith(`${prefix}?`))
+/**
+ * Whether a change may go to `path` on another dashboard: under KEPT_WRITE_PATHS once the URL
+ * parser has resolved it, and with no dot segment, plain or percent-encoded, that it would resolve.
+ */
+export function keptWritable(path: string): boolean {
+  if (/\.\.|%2e/i.test(path)) return false
+  let resolved: string
+  try {
+    resolved = new URL(path, 'http://kept.invalid').pathname
+  } catch {
+    return false
+  }
+  return KEPT_WRITE_PATHS.some(prefix => (prefix.endsWith('/') ? resolved.startsWith(prefix) : resolved === prefix || resolved.startsWith(`${prefix}/`)))
+}
 export const KEPT_BACKOFF = { baseDelayMs: 30_000, capMs: 300_000, jitter: false }
 
 export interface KeptHostsDeps {
@@ -107,7 +120,7 @@ export class KeptHosts {
    * what Tasks changes in place there (KEPT_WRITE_PATHS); the rest opens through a switch.
    */
   async http<T>(url: string, path: string, method = 'GET', body?: unknown): Promise<T> {
-    if (method !== 'GET' && !(KEPT_WRITE_METHODS.includes(method) && writable(path))) throw new Error('Only reads can go to another dashboard.')
+    if (method !== 'GET' && !(KEPT_WRITE_METHODS.includes(method) && keptWritable(path))) throw new Error('Only reads can go to another dashboard.')
     const kept = this.kept.get(url)
     if (!kept || kept.state !== 'live') throw new Error('Not connected to that Hermes.')
     return method === 'GET' ? kept.connection.http<T>('GET', path, undefined, 6_000) : kept.connection.http<T>(method, path, body)
