@@ -655,7 +655,8 @@ function registerIpc(): void {
       if (!through) throw new Error(t("Couldn't open this file"))
       const response = await through.download(kanbanAttachmentPath(id, typeof board === 'string' && board ? board : null), stop.signal)
       // A dashboard that serves its page for a route it doesn't know has no attachment route: never save that page as the file.
-      if (/text\/html/i.test(response.headers.get('content-type') ?? '')) throw Object.assign(new Error('no attachment route'), { code: 404 })
+      // An attachment that is itself a page (report.html) is the file.
+      if (/text\/html/i.test(response.headers.get('content-type') ?? '') && !/\.html?$/i.test(name)) throw Object.assign(new Error('no attachment route'), { code: 404 })
       if (!response.body) throw new Error(t("Couldn't open this file"))
       await streamToFile(response.body as import('node:stream/web').ReadableStream, picked.filePath, () => stop.abort())
       return 'saved'
