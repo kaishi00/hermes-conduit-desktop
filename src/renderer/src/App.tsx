@@ -1391,8 +1391,9 @@ function Shell({
     setSection('chats')
     setBotsSide(true)
   }, [])
-  // Picking a bot on the strip opens its newest chat (its Bot Chat, which the list leaves out, when
-  // that's newer), or a new chat when it has none, so the open chat matches the list.
+  // Picking a bot on the strip opens its newest listed chat, or a new chat when it has none, so the open chat
+  // matches the list. Never its Bot Chat, which the list leaves out: that's the bots sidebar's, and opening it
+  // here took Chats over to Bots. Chats stays Chats, as the phone's chip only switches the profile the list shows.
   const chooseProfile = useCallback(
     (next: string | null) => {
       // Any change of profile closes the chat kept beside; chat windows stay, each a chat of its own bot (Eric, 2026-11-21).
@@ -1400,13 +1401,12 @@ function Shell({
       if (next) setBeside(current => (current && !sameProfileAs(current.profile, next) ? null : current))
       if (!next) return
       const same = (name: string | undefined) => (name ?? 'default').toLowerCase() === next.toLowerCase()
-      if (same(selected.profile)) return
+      if (same(selected.profile) && !selected.botChat) return
       const newest = (listedRows ?? []).filter(row => same(row.profile)).sort((a, b) => (b.activeAt ?? 0) - (a.activeAt ?? 0))[0]
-      const bot = roster.bots?.find(b => same(b.name))
-      if (bot?.botChatId && (bot.lastActive ?? 0) >= (newest?.activeAt ?? 0)) return openBot(bot)
+      setBotsSide(false)
       setSelected(newest ? { id: newest.id, profile: newest.profile, title: newest.title } : { id: null, profile: next })
     },
-    [selected.profile, listedRows, roster.bots, openBot, chatProfile]
+    [selected.profile, selected.botChat, listedRows]
   )
   // A bot row's menu: Pin, Duplicate, Hide, Show and Delete. Answers what went wrong, if anything.
   const botAction = useCallback(
@@ -1841,8 +1841,8 @@ function Shell({
   }, [statusUrl, roster.bots, openBot])
   /**
    * Another dashboard's face in the chat list's column: the list shows that profile's chats, read through its
-   * kept connection, with no switch, and its newest chat (its Bot Chat when that's newer) opens docked, as this
-   * dashboard's faces open theirs.
+   * kept connection, with no switch, and its newest listed chat opens docked, as this dashboard's faces open
+   * theirs; never its Bot Chat, which would take Chats over to Bots.
    */
   const showOtherProfile = useCallback(
     (tile: MixedTile) => {
@@ -1850,13 +1850,12 @@ function Shell({
       setChatProfile(null)
       setOtherProfile({ host: tile.host, name: tile.bot.name })
       const newest = otherChats.filter(r => r.host === tile.host && same(r.profile)).sort((a, b) => (b.activeAt ?? 0) - (a.activeAt ?? 0))[0]
-      if (tile.bot.botChatId && (tile.bot.lastActive ?? 0) >= (newest?.activeAt ?? 0)) return openOtherBot({ host: tile.host, bot: tile.bot })
       if (newest) openDocked({ host: newest.host, id: newest.id, profile: newest.profile, title: newest.title })
-      // A bot with no chats there yet starts its Bot Chat in place, as its sidebar face does; not before that
+      // A bot with no chats there yet starts a new chat in place, as this dashboard's faces do; not before that
       // dashboard's chats are first read, when it may have some.
-      else if (keptChatsRead.has(tile.host)) openOtherBot({ host: tile.host, bot: tile.bot })
+      else if (keptChatsRead.has(tile.host)) openDocked({ host: tile.host, id: `new-${Date.now()}`, fresh: true, profile: tile.bot.name })
     },
-    [otherChats, openOtherBot, openDocked]
+    [otherChats, openDocked]
   )
   // This dashboard's profile picked anywhere (a face, Settings' dropdown) stops showing the far one.
   useEffect(() => {
