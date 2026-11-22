@@ -436,6 +436,43 @@ describe('a send while the chat is still opening (desktop#298)', () => {
     expect(submitted).toEqual([])
   })
 
+  it('opens a chat whose open failed once more, and sends into it, not a new chat', async () => {
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const rpc = conduit.rpcOutcome
+    let failing = true
+    conduit.rpcOutcome = (method, params) =>
+      method === 'session.resume' && failing ? Promise.resolve({ ok: false, error: 'busy', code: 500 }) : rpc(method, params)
+    resumes.a = { messages: history('one') }
+    const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
+    await settle()
+    expect(hook.result().error).toBeTruthy()
+    failing = false
+    let created: unknown
+    await act(async () => {
+      created = await hook.result().send('hello')
+    })
+    expect(created).toBeNull()
+    expect(calls).not.toContain('session.create')
+    expect(submitted).toEqual(['live-a'])
+    expect(hook.result().error).toBeNull()
+    expect(words(hook.result().transcript)).toEqual(['one', 're: one', 'hello'])
+  })
+
+  it('gives a command back when the user moves to another chat while it waits', async () => {
+    holdResumes = true
+    const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
+    let outcome: unknown
+    const running = act(async () => {
+      outcome = await hook.result().command('/compress', [])
+    })
+    await settle()
+    hook.rerender({ storedId: 'b', connected: true, url: 'h1' })
+    await act(async () => pendingResumes.forEach(resume => resume()))
+    await running
+    expect(outcome).toEqual({ kind: 'unsent' })
+    expect(calls).not.toContain('session.create')
+  })
+
   it("doesn't leave a draft showing Loading after an abandoned open", async () => {
     holdResumes = true
     const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
@@ -455,5 +492,31 @@ describe('a chat picked while offline (desktop#283)', () => {
     hook.rerender({ storedId: 'b', connected: false, url: 'h1' })
     expect(hook.result().chat.storedId).toBe('b')
     expect(hook.result().transcript.items).toEqual([])
+  })
+})
+
+describe('tool answers on opening a chat again (desktop#293)', () => {
+  it.each([
+    ['fills them from the kept copy instead of reading the REST page again', true, 1, 'a'],
+    ['reads the REST page again for a call the kept copy has no arguments for', false, 2, 'c']
+  ])('%s', async (_label, withArgs, reads, id) => {
+    const paths: string[] = []
+    const conduit = (window as unknown as { conduit: { httpOutcome: unknown } }).conduit
+    conduit.httpOutcome = async (_method: string, path: string) => {
+      paths.push(path)
+      return { ok: true, result: { messages: [{ role: 'assistant', tool_calls: [{ id: 'c1', function: { name: 'terminal', arguments: withArgs ? '{"command":"ls"}' : undefined } }] }, { role: 'tool', tool_call_id: 'c1', content: 'a.txt' }] } }
+    }
+    resumes[id] = { messages: [{ role: 'user', content: 'list' }, { role: 'tool', tool_call_id: 'c1', name: 'terminal', content: '' }] }
+    const hook = mount(chatInApp, { storedId: id, connected: true, url: 'h1' })
+    await settle()
+    const tool = () => hook.result().transcript.items.find(i => i.kind === 'tool') as { result?: string } | undefined
+    expect(tool()?.result).toBe('a.txt')
+    expect(paths.filter(p => p.includes(`/api/sessions/${id}/messages`))).toHaveLength(1)
+    hook.rerender({ storedId: 'b', connected: true, url: 'h1' })
+    await settle()
+    hook.rerender({ storedId: id, connected: true, url: 'h1' })
+    await settle()
+    expect(tool()?.result).toBe('a.txt')
+    expect(paths.filter(p => p.includes(`/api/sessions/${id}/messages`))).toHaveLength(reads)
   })
 })

@@ -143,9 +143,11 @@ function QuickChat({ status, onNew }: { status: ConnectionStatus; onNew: () => v
         model={chat.model}
         onSend={(text, attachments) => {
           if (!looksLikeSlashCommand(text) || attachments.length) return send(text, attachments).then(went => went !== false)
-          void command(text, commands).then(outcome => {
+          // A command that never ran gives its words back to the field.
+          return command(text, commands).then(outcome => {
             if (outcome.kind === 'new') onNew()
             else if (outcome.kind === 'prefill') setQuote(prefillRequest(outcome.text, 'Hermes'))
+            return outcome.kind !== 'unsent'
           })
         }}
         commands={commands}

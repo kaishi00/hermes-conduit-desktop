@@ -41,23 +41,30 @@ import { languageName } from './stepSummaries'
 import { useTranscriptValue, type TranscriptStore } from './transcriptStore'
 
 // Whether this dashboard's plugin reports a capability: a definite answer (it listed it, or a
-// plugin too old to say) kept ten minutes for that dashboard; one that couldn't tell (a timeout,
-// a restart) counts as no for now and is asked again next time.
+// plugin too old to say) kept ten minutes from when it came for that dashboard; one that couldn't
+// tell (a timeout, a restart) or no plugin found (a 404, which is also a plugin being installed or
+// reloaded, as in rings.ts) counts as no for now and is asked again next time.
 const capabilityAnswers = new Map<string, { host: string; at: number; answer: Promise<boolean> }>()
 function capabilityServed(capability: string): Promise<boolean> {
   const host = dashboardHost()
   const kept = capabilityAnswers.get(capability)
   if (kept && kept.host === host && Date.now() - kept.at <= 600_000) return kept.answer
   const entry = { host, at: Date.now(), answer: Promise.resolve(false) }
-  entry.answer = askPluginStatus(() => gateway.http('GET', STATUS_PATH)).then(status => {
-    if (status === null) {
+  entry.answer = askPluginStatus(() => gateway.http('GET', STATUS_PATH, undefined, 8_000)).then(status => {
+    if (status === null || status.state === 'missing') {
       if (capabilityAnswers.get(capability) === entry) capabilityAnswers.delete(capability)
       return false
     }
+    entry.at = Date.now()
     return serves(status, [capability])
   })
   capabilityAnswers.set(capability, entry)
   return entry.answer
+}
+
+/** Drops what's kept: after a plugin update, the new plugin may say otherwise (desktop#274). */
+export function forgetCapabilityAnswers(): void {
+  capabilityAnswers.clear()
 }
 
 /** Whether this dashboard's plugin answers predictions. */

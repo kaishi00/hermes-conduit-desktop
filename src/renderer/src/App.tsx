@@ -707,7 +707,10 @@ function Shell({
       waitingPicture.current = null
       setCallPicture(null)
     }
-    void onSend(words, picture ? [picture.attachment] : [], { takeOver: true, spoken: true })
+    void onSend(words, picture ? [picture.attachment] : [], { takeOver: true, spoken: true }).then(sent => {
+      // The chat didn't open, or was left while it opened: the call says the words didn't go.
+      if (sent === false) void tell(t('That didn’t reach the chat. Try again.'))
+    })
   }
   const pictureControls = (
     <CallPictureControls
@@ -1258,6 +1261,7 @@ function Shell({
       }
       if (looksLikeSlashCommand(text) && !attachments.length) {
         const outcome = await command(text, commands, { botChat })
+        if (outcome.kind === 'unsent') return false
         if (outcome.kind === 'new') return newChat()
         if (outcome.kind === 'model') setModelOpen(true)
         if (outcome.kind === 'prefill') setQuote(prefillRequest(withoutMentionNote(outcome.text), botTitle))

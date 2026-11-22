@@ -298,6 +298,30 @@ export function feedItems(stores: readonly FeedStore[]): ArtifactItem[] {
   return shown
 }
 
+/**
+ * A file row's mention (its path, chat and message). One Hermes saved at two
+ * addresses gives both the same; two Hermes don't, since a chat's id is its
+ * Hermes' own, as the Chats list relies on (otherHostsChats). Links have none:
+ * each host's link stays its own.
+ */
+export const mentionKey = (item: ArtifactItem): string | null => (item.path ? `${item.path}\u0000${item.sessionId}\u0000${item.messageId}` : null)
+
+/**
+ * The rows less other dashboards' copies of a file another listed row
+ * already stands for: this host's rows (`here`) first, then the first other
+ * dashboard's row of each mention (desktop#308).
+ */
+export function withoutCopies(items: readonly ArtifactItem[], here: readonly ArtifactItem[], fromElsewhere: (item: ArtifactItem) => boolean): ArtifactItem[] {
+  const seen = new Set(here.flatMap(item => mentionKey(item) ?? []))
+  return items.filter(item => {
+    const key = fromElsewhere(item) ? mentionKey(item) : null
+    if (key === null) return true
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 /** The store to page next: the one still paging whose rows reach the least far back, one with none read first. Null once every store is read. */
 export function nextStore(stores: readonly FeedStore[]): number | null {
   let best: number | null = null

@@ -117,4 +117,15 @@ describe('saving the hosts file safely (desktop#297)', () => {
     expect(readdirSync(state.dir)).toEqual(['connection.json'])
     expect(readdirSync(blocked)).toEqual(['inside'])
   })
+
+  it('keeps a file this build can\'t read, and sweeps temporary files a crash left', () => {
+    const path = join(state.dir, 'connection.json')
+    writeFileSync(path, JSON.stringify({ version: 3, hosts: {} }))
+    writeFileSync(`${path}.0badf00d.tmp`, 'torn')
+    const store = createFileStore()
+    expect(store.list!()).toEqual([])
+    store.save({ url: 'http://two', method: 'open' })
+    expect(JSON.parse(readFileSync(`${path}.corrupt`, 'utf8'))).toMatchObject({ version: 3 })
+    expect(readdirSync(state.dir).sort()).toEqual(['connection.json', 'connection.json.corrupt'])
+  })
 })

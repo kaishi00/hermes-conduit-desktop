@@ -95,3 +95,22 @@ describe('Edit and models Hermes says cannot run', () => {
     expect(editorMatches([row], '')[0]!.models).toEqual(['a'])
   })
 })
+
+describe('a provider with nothing it can run (desktop#307)', () => {
+  const empty: ModelProviderRow = { slug: 'gone', name: 'Gone', models: ['x'], unavailable_models: ['x'] }
+
+  it("isn't in Edit, as it isn't in any other list", () => {
+    expect(editorMatches([empty, { slug: 'p', name: 'P', models: ['a'] }], '').map(m => m.provider.slug)).toEqual(['p'])
+    expect(editorMatches([empty], 'gone')).toEqual([])
+  })
+
+  it('shows "Nothing matches" only while searching', async () => {
+    const path = '../src/renderer/src/components/ModelVisibilityEditor.tsx'
+    const { createElement } = await import('react')
+    const { renderToStaticMarkup } = await import('react-dom/server')
+    const { ModelVisibilityEditor } = (await import(/* @vite-ignore */ path)) as { ModelVisibilityEditor: unknown }
+    const html = renderToStaticMarkup(createElement(ModelVisibilityEditor as never, { providers: [empty], onDone: () => {} } as never))
+    expect(html).not.toContain('Nothing matches')
+    expect(html).not.toContain('Gone')
+  })
+})

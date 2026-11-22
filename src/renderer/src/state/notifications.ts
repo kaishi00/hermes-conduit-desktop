@@ -45,6 +45,15 @@ export function setNotificationsEnabled(on: boolean): void {
 }
 
 /**
+ * A chat's title for its notifications: the list's "Untitled chat" label and a
+ * window's "Chat" are no title, so the bot's name stands in. Only notifications
+ * read it this way; reopening a chat keeps the label it had.
+ */
+export function untitledAsNone(title: string | undefined): string | undefined {
+  return title && title !== t('Untitled chat') && title !== t('Chat') ? title : undefined
+}
+
+/**
  * A finished turn's notification, or none (a stop needs no telling). It's
  * titled by the chat, else by the bot that answered, as the phone's reply
  * push is, never a line that says only that a reply came.
@@ -52,7 +61,7 @@ export function setNotificationsEnabled(on: boolean): void {
 export function turnNotification(sessionId: string, payload: unknown, chat: ChatRef | undefined): NotificationSpec | null {
   const p = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
   if (p.status === 'interrupted') return null
-  const title = chat?.title || chat?.bot || 'Hermes'
+  const title = untitledAsNone(chat?.title) || chat?.bot || 'Hermes'
   const tag = `turn-${sessionId}`
   if (p.status === 'error') {
     const reason = typeof p.error === 'string' ? p.error : t('The turn failed.')
@@ -63,7 +72,8 @@ export function turnNotification(sessionId: string, payload: unknown, chat: Chat
 }
 
 export function requestNotification(request: PendingRequest, chat: ChatRef | undefined): NotificationSpec {
-  const where = chat?.title ? ` · ${chat.title}` : ''
+  const named = untitledAsNone(chat?.title)
+  const where = named ? ` · ${named}` : ''
   if (request.method === 'approval') {
     const view = approvalView(request.params)
     return {

@@ -43783,5 +43783,20 @@
     "tr": "Yeni bir sohbeti sohbet listesinden başlatın. Bu sohbet açık kalır.",
     "zh-Hans": "请从聊天列表开始新聊天。此聊天保持打开。",
     "zh-Hant": "請從聊天列表開始新聊天。此聊天保持開啟。"
+  },
+  "That didn’t reach the chat. Try again.": {
+    "de": "Das hat den Chat nicht erreicht. Versuch es noch einmal.",
+    "es": "Eso no llegó al chat. Inténtalo de nuevo.",
+    "fr": "Ce message n’est pas arrivé dans la discussion. Réessayez.",
+    "id": "Itu tidak sampai ke chat. Coba lagi.",
+    "it": "Non è arrivato nella chat. Riprova.",
+    "ja": "チャットに届きませんでした。もう一度お試しください。",
+    "ko": "채팅에 전달되지 않았습니다. 다시 시도하세요.",
+    "pl": "To nie dotarło do czatu. Spróbuj ponownie.",
+    "pt-BR": "Isso não chegou ao chat. Tente de novo.",
+    "ru": "Это не дошло до чата. Попробуйте ещё раз.",
+    "tr": "Bu sohbete ulaşmadı. Tekrar deneyin.",
+    "zh-Hans": "没有送达聊天。请重试。",
+    "zh-Hant": "沒有送達聊天。請再試一次。"
   }
 }

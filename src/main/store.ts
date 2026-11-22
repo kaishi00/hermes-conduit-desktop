@@ -77,8 +77,9 @@ export function createFileStore(): ConnectionStore {
     let text: string
     try {
       text = readFileSync(path, 'utf8')
-    } catch {
-      // Nothing saved yet.
+    } catch (e) {
+      // Nothing saved yet, or there but not readable (kept beside it before a save replaces it).
+      if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') keepUnreadable(path)
       return { hosts: [], active: null }
     }
     try {
@@ -91,9 +92,10 @@ export function createFileStore(): ConnectionStore {
         return { hosts: raw.hosts.map(decode).filter((h): h is SavedConnection => h !== null), active: raw.active }
       }
     } catch {
-      // There but unreadable: kept beside it before a save replaces it.
-      keepUnreadable(path)
+      // Unreadable: kept below.
     }
+    // There but not a hosts file this build reads (torn, or from a newer build): kept beside it before a save replaces it.
+    keepUnreadable(path)
     return { hosts: [], active: null }
   }
 

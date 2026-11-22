@@ -9,6 +9,7 @@ import {
   includes,
   kindTitle,
   feedItems,
+  withoutCopies,
   listPath,
   matches,
   nextStore,
@@ -27,7 +28,7 @@ import { dataUrlPath, parsePreview, readTextPath, sizeText } from '../state/work
 import { PageFrame, pageAddress } from './PagePreview'
 import { GatewayPicture, PictureProfile } from './Picture'
 import { Icon, type IconName } from './icons'
-import { keptArtifactKey, profileNames, type HostBadge, type KeptArtifact } from '../state/keptHosts'
+import { KEPT_PROFILES_MAX_AGE_MS, keptArtifactKey, profileNames, type HostBadge, type KeptArtifact } from '../state/keptHosts'
 import type { KeptHost } from '@shared/ipc'
 import { HostBadgeMark } from './CombinedDashboards'
 
@@ -93,6 +94,17 @@ function readShowMissing(): boolean {
 /** Another host's rows, named by it: one path there is one artifact, whichever of its profiles lists it. */
 const fromHost = (items: ArtifactItem[], dashboard: string, profile?: string): KeptArtifact[] =>
   items.map(item => ({ ...item, id: keptArtifactKey(dashboard, item.id), dashboard, dashboardProfile: profile }))
+
+/** Other dashboards' profiles, read again after KEPT_PROFILES_MAX_AGE_MS as Needs you does, not on every reload (desktop#308). */
+const farProfileNames = new Map<string, { names: string[]; at: number }>()
+async function farProfiles(url: string): Promise<{ names: string[]; error: string | null }> {
+  const last = farProfileNames.get(url)
+  if (last && Date.now() - last.at <= KEPT_PROFILES_MAX_AGE_MS) return { names: last.names, error: null }
+  const listed = await window.conduit.keptHttp(url, '/api/profiles')
+  const read = listed.ok ? profileNames(listed.result) : null
+  if (read) farProfileNames.set(url, { names: read, at: Date.now() })
+  return { names: read ?? last?.names ?? ['default'], error: listed.ok ? null : listed.error }
+}
 
 /** `stores` with `store` in its key's place, else after them. */
 const put = (stores: Store[], store: Store) =>
@@ -188,10 +200,9 @@ export function ArtifactsPanel({ profile, sessionIds, refreshKey, folder, onShow
         )
     for (const url of urls)
       void (async () => {
-        const listed = await window.conduit.keptHttp(url, '/api/profiles')
-        const names = (listed.ok ? profileNames(listed.result) : null) ?? ['default']
+        const { names, error: why0 } = await farProfiles(url)
         let read = 0
-        let why: string | null = listed.ok ? null : listed.error
+        let why: string | null = why0
         await Promise.all(
           names.map(async name => {
             const other = name === 'default' ? undefined : name
@@ -497,10 +508,9 @@ export function ArtifactsPanel({ profile, sessionIds, refreshKey, folder, onShow
         )
       return grouped(shown, item => item.savedAt ?? item.at)
     }
-    // One Hermes saved at two addresses: its files here stand for the copy's (one host path is one artifact).
-    // A link is each host's own: two Hermes can share an address.
-    const herePaths = new Set(feed.stores.find(s => s.key === 'here')?.read.flatMap(item => (item.path ? [item.path] : [])))
-    const items = feedItems(feed.stores).filter(item => includes(filter, item.kind) && (!elsewhere(item) || !item.path || !herePaths.has(item.path)))
+    // One Hermes saved at two or more addresses lists each file once, this host's row first (desktop#308).
+    const hereRows = feed.stores.find(s => s.key === 'here')?.read ?? []
+    const items = withoutCopies(feedItems(feed.stores), hereRows, item => !!elsewhere(item)).filter(item => includes(filter, item.kind))
     const reading = feed.pending > 0 || next !== null
     const hiddenNote = showMissing ? null : (
       <p className="meta">

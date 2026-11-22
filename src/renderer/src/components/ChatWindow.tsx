@@ -176,7 +176,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     window.conduit.dockedToPane('ask')
     return off
   }, [docked])
-  // A notification takes the chat's own title, not the window's "Chat" for an untitled one, and else its bot.
+  // The chat's title as stored (kept for reopening); the notification builders read "Chat" and
+  // "Untitled chat" as no title, so the bot's name stands in.
   const chatTitle = botChat ? botTitle : cleanTitle(chat.title || request.title || '') || undefined
   const chatRef = useRef({ liveId: chat.liveId, storedId: chat.storedId, profile, title: chatTitle, bot: botTitle })
   chatRef.current = { liveId: chat.liveId, storedId: chat.storedId, profile, title: chatTitle, bot: botTitle }
@@ -255,6 +256,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       }
       if (looksLikeSlashCommand(text) && !attachments.length) {
         const outcome = await command(text, commands, { botChat })
+        if (outcome.kind === 'unsent') return false
         // A new chat starts in the main window; this one keeps its chat.
         if (outcome.kind === 'new') {
           notice(docked ? t('Start a new chat from the chat list. This chat stays open.') : t('Start a new chat in the main window. This window keeps its chat.'), 'info')

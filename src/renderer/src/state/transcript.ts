@@ -699,6 +699,34 @@ export function attachBoards(state: TranscriptState, answers: Map<string, string
   return changed ? { ...state, items } : state
 }
 
+/**
+ * The tool details a kept copy of the chat already had (boards, results,
+ * arguments), filled into a fresh resume's rows by tool call id, so opening
+ * the chat again doesn't read the REST page for answers that never change
+ * (desktop#293). Only blanks are filled, as in attachBoards.
+ */
+export function withKeptDetails(state: TranscriptState, kept: TranscriptState | null | undefined): TranscriptState {
+  if (!kept) return state
+  const details = new Map<string, ToolItem>()
+  // Only a kept row with its arguments stands in: one without them (a live board's answer carries none)
+  // leaves the row to the REST page, the only place they come from.
+  for (const item of kept.items) if (item.kind === 'tool' && item.args !== undefined && (item.board || item.result !== undefined)) details.set(item.toolId, item)
+  if (!details.size) return state
+  let changed = false
+  const items = state.items.map(item => {
+    if (item.kind !== 'tool') return item
+    const known = details.get(item.toolId)
+    if (!known || known.name !== item.name) return item
+    const board = item.board ?? known.board
+    const result = item.result ?? known.result
+    const args = item.args ?? known.args
+    if (board === item.board && result === item.result && args === item.args) return item
+    changed = true
+    return { ...item, ...(board ? { board } : {}), result, args }
+  })
+  return changed ? { ...state, items } : state
+}
+
 /** Each call's arguments in a page of `/api/sessions/{id}/messages`, from the assistant rows' tool_calls, by call id. */
 export function toolArgs(raw: unknown): Map<string, string> {
   const args = new Map<string, string>()

@@ -62,12 +62,17 @@ export function typedModelProviders(providers: ModelProviderRow[], id: string, p
   return first ? [first, ...offered.filter(provider => provider !== first)] : offered
 }
 
+/** A provider's models less the ones Hermes lists as unavailable: the only ones any list shows. */
+export function runnableModels(provider: ModelProviderRow): string[] {
+  const unavailable = new Set(provider.unavailable_models ?? [])
+  return (provider.models ?? []).filter(model => !unavailable.has(model))
+}
+
 export function groupModels(providers: ModelProviderRow[], query: string): { slug: string; name: string; models: string[] }[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   const groups: { slug: string; name: string; models: string[] }[] = []
   for (const provider of providers) {
-    const unavailable = new Set(provider.unavailable_models ?? [])
-    const models = (provider.models ?? []).filter(m => !unavailable.has(m))
+    const models = runnableModels(provider)
     const label = `${provider.name} ${provider.slug}`.toLowerCase()
     const matches = words.length ? models.filter(m => words.every(w => label.includes(w) || m.toLowerCase().includes(w))) : models
     if (matches.length) groups.push({ slug: provider.slug, name: provider.name || provider.slug, models: matches })

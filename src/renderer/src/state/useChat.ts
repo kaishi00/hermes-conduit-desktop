@@ -29,6 +29,7 @@ import {
   releaseHeld,
   reholdEdited,
   attachBoards,
+  withKeptDetails,
   emptyTranscript,
   failPendingUser,
   withdrawPendingUser,
@@ -245,6 +246,8 @@ export type CommandOutcome =
   | { kind: 'new' }
   | { kind: 'prefill'; text: string; created: string | null }
   | { kind: 'done'; created: string | null }
+  /** Never ran: the chat it was typed in didn't open, or was left while it opened. Its words go back to the composer. */
+  | { kind: 'unsent' }
   /** `/model` alone: the Model panel. */
   | { kind: 'model'; created: string | null }
 
@@ -371,7 +374,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           title: result.info?.title,
           ...chatSettings(result.info)
         })
-        let state = resumedTranscript(result, rows)
+        // The tool answers the kept copy had come along, so only new ones are read (desktop#293).
+        let state = withKeptDetails(resumedTranscript(result, rows), cached)
         if (result.running && result.inflight?.assistant) {
           state = applyEvent(state, { type: 'message.delta', payload: { text: result.inflight.assistant } })
         }
@@ -462,26 +466,6 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     return { sid, storedId }
   }, [profile, sessionAuthority, botChat, folder])
 
-  /** Waits out the open chat's resume, if one runs; throws when the chat moved on or didn't open. */
-  const openSettled = useCallback(async () => {
-    const open = openingChat.current
-    if (liveId.current || !open || !chatRef.current.storedId) return
-    const ticket = request.current
-    await open
-    if (request.current !== ticket) throw new ChatMovedOn()
-    if (!liveId.current) throw new Error(t('The chat didn’t open. Try again.'))
-  }, [])
-
-  /**
-   * The session a send or command goes to. A stored chat still opening is waited for, so the words reach it,
-   * not a new chat made over its resume (desktop#298); only a draft gets a new session.
-   */
-  const sessionFor = useCallback(async (): Promise<{ sid: string; storedId: string | null }> => {
-    await openSettled()
-    if (liveId.current) return { sid: liveId.current, storedId: null }
-    return createSession()
-  }, [openSettled, createSession])
-
   /** The chat's history read again, after a command changed it (/undo, /retry, /compress). */
   const reloadHistory = useCallback(async () => {
     const stored = chatRef.current.storedId
@@ -495,6 +479,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       if (ticket !== request.current) return
       liveId.current = result.session_id
       setChat(c => ({ ...c, liveId: result.session_id, title: result.info?.title ?? c.title }))
+      setError(null)
       const state = withPendingConnection(resumedTranscript(result, rows), result)
       dispatch({ type: 'reset', state })
       setQueue(queueFrom(result.pending) ?? [])
@@ -503,6 +488,36 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       // The chat as drawn stays; the next open reads it.
     }
   }, [profile, sessionAuthority])
+
+  /**
+   * Waits out the open chat's resume, if one runs. A stored chat whose open failed is opened once more, so
+   * the words still reach it and never a new chat; throws when the chat was left meanwhile or still didn't open.
+   */
+  const openSettled = useCallback(async () => {
+    if (liveId.current || !chatRef.current.storedId) return
+    const open = openingChat.current
+    if (open) {
+      const ticket = request.current
+      await open
+      if (request.current !== ticket) throw new ChatMovedOn()
+    }
+    if (!liveId.current) {
+      const ticket = request.current + 1
+      await reloadHistory()
+      if (request.current !== ticket) throw new ChatMovedOn()
+    }
+    if (!liveId.current) throw new Error(t('The chat didn’t open. Try again.'))
+  }, [reloadHistory])
+
+  /**
+   * The session a send or command goes to. A stored chat still opening is waited for, so the words reach it,
+   * not a new chat made over its resume (desktop#298); only a draft gets a new session.
+   */
+  const sessionFor = useCallback(async (): Promise<{ sid: string; storedId: string | null }> => {
+    await openSettled()
+    if (liveId.current) return { sid: liveId.current, storedId: null }
+    return createSession()
+  }, [openSettled, createSession])
 
   /** The connection card's answers: rows approved or skipped, or Continue without what isn't connected. */
   const respondConnection = useCallback(
@@ -766,7 +781,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         }
       } catch (e) {
         if (!(e instanceof ChatMovedOn)) failed(e)
-        return done
+        return { kind: 'unsent' }
       }
       const scoped = (params: Record<string, unknown>) => (profile ? { ...params, profile } : params)
 

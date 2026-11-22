@@ -138,3 +138,76 @@ describe('the Artifacts page across combined dashboards', () => {
     act(() => root.unmount())
   })
 })
+
+describe('the Artifacts page: #304 review leftovers (desktop#308)', () => {
+  const PANEL = '../src/renderer/src/components/ArtifactsPanel.tsx'
+  const render = async (props: Record<string, unknown>) => {
+    const { ArtifactsPanel } = (await import(/* @vite-ignore */ PANEL)) as { ArtifactsPanel: unknown }
+    const host = document.createElement('div')
+    const root = createRoot(host)
+    const draw = (next: Record<string, unknown>) => act(() => root.render(createElement(ArtifactsPanel as never, { page: true, sessionIds: [], ...next } as never)))
+    draw(props)
+    await settle()
+    return { host, root, draw }
+  }
+  const names = (host: HTMLElement) => [...host.querySelectorAll('.artifact-name')].map(n => n.textContent)
+  const asks = (paths: string[]) => paths.filter(p => p === '/api/profiles').length
+
+  it('lists a file once when one other Hermes is saved at two addresses, and keeps a different Hermes\'s file at the same path', async () => {
+    const [A, B] = ['https://a.example', 'https://a-too.example']
+    http.mockImplementation(async () => ({ ok: true, items: [{ ...row('/shared/plan.png', 5_000), session_id: 'here-chat' }], next_before: null }))
+    ;(window as unknown as { conduit: unknown }).conduit = {
+      keptHttp: async (_url: string, path: string) =>
+        path === '/api/profiles'
+          ? { ok: true, result: { profiles: [{ name: 'default' }] } }
+          : { ok: true, result: { ok: true, items: [{ ...row('/shared/plan.png', 1_000), session_id: 'far-chat' }], next_before: null } }
+    }
+    const kept = [A, B].map(url => ({ url, state: 'live' }))
+    const dashboards = [{ url: 'https://here.example', name: 'Here', badge: null }, ...[A, B].map(url => ({ url, name: url, badge: null }))]
+    const { host, root } = await render({ kept, dashboards })
+    // This host's file and the other Hermes's, once though it's saved at two addresses.
+    expect(names(host)).toEqual(['plan.png', 'plan.png'])
+    act(() => root.unmount())
+  })
+
+  it('stops narrowing to a dashboard whose chip left with it', async () => {
+    const C = 'https://c.example'
+    http.mockImplementation(async () => ({ ok: true, items: [row('/here/new.png', 5_000)], next_before: null }))
+    const kept = [{ url: C, state: 'live' }]
+    const both = [{ url: 'https://here.example', name: 'Here', badge: null }, { url: C, name: 'Far C', badge: null }]
+    const { host, root, draw } = await render({ kept, dashboards: both })
+    act(() => [...host.querySelectorAll('button')].find(b => b.textContent === 'Far C')!.click())
+    await settle()
+    expect(names(host)).toEqual(['old.png'])
+    draw({ kept: [], dashboards: both.slice(0, 1) })
+    await settle()
+    expect(names(host)).toEqual(['new.png'])
+    act(() => root.unmount())
+  })
+
+  it("reads another dashboard's profiles once, not on every reload", async () => {
+    const D = 'https://d.example'
+    http.mockImplementation(async () => ({ ok: true, items: [], next_before: null }))
+    const props = { kept: [{ url: D, state: 'live' }], dashboards: [{ url: 'https://here.example', name: 'Here', badge: null }, { url: D, name: 'D', badge: null }] }
+    const first = await render(props)
+    act(() => first.root.unmount())
+    const second = await render(props)
+    expect(asks(farPaths)).toBe(1)
+    act(() => second.root.unmount())
+  })
+
+  it('frees Show More when the filter changes while a page is out', async () => {
+    http.mockImplementation((_method: string, path: string) =>
+      path.includes('before=30') ? new Promise(() => {}) : Promise.resolve({ ok: true, items: [row('/here/new.png', 5_000)], next_before: 30 })
+    )
+    const { host, root } = await render({})
+    const end = () => host.querySelector('.artifact-more')
+    act(() => (end() as HTMLButtonElement).click())
+    await settle()
+    expect(end()?.textContent).toBe('Loading…')
+    act(() => [...host.querySelectorAll('button')].find(b => b.textContent === 'Images')!.click())
+    await settle()
+    expect(end()?.textContent).toBe('Show More')
+    act(() => root.unmount())
+  })
+})

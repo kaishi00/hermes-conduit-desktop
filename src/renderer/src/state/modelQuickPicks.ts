@@ -4,7 +4,7 @@
  * rarely needs the full list of providers. Kept on this computer, per host,
  * and shared by every model setting's list.
  */
-import type { ModelProviderRow } from './models'
+import { runnableModels, type ModelProviderRow } from './models'
 
 /** A model under the provider that serves it: the same model from two providers is two picks. */
 export interface ModelPick {
@@ -46,7 +46,7 @@ function listed(picks: ModelPick[], providers: ModelProviderRow[]): ModelPick[] 
   const seen = new Set<string>()
   return picks.filter(pick => {
     const provider = providers.find(p => p.slug === pick.provider)
-    if (!provider?.models?.includes(pick.model) || provider.unavailable_models?.includes(pick.model)) return false
+    if (!provider || !runnableModels(provider).includes(pick.model)) return false
     const key = `${pick.provider}\n${pick.model}`
     if (seen.has(key)) return false
     seen.add(key)
