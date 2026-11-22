@@ -417,12 +417,12 @@ function createWindow(): void {
   }
 }
 
-/** What a host file's save says when it fails: the file gone from Hermes, or try again. */
 /** The Kanban plugin's download route for an attachment, naming the board when one is picked. */
 function kanbanAttachmentPath(id: string, board: string | null): string {
   return `/api/plugins/kanban/attachments/${encodeURIComponent(id)}${board ? `?board=${encodeURIComponent(board)}` : ''}`
 }
 
+/** What a host file's save says when it fails: the file gone from Hermes, or try again. */
 function saveFailure(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code
   return code === 404 || code === 410 ? t('This file is no longer on your Hermes host.') : t("Couldn't save the file. Try again.")
@@ -654,6 +654,8 @@ function registerIpc(): void {
       const through = connectionOf(event.sender.id)
       if (!through) throw new Error(t("Couldn't open this file"))
       const response = await through.download(kanbanAttachmentPath(id, typeof board === 'string' && board ? board : null), stop.signal)
+      // A dashboard that serves its page for a route it doesn't know has no attachment route: never save that page as the file.
+      if (/text\/html/i.test(response.headers.get('content-type') ?? '')) throw Object.assign(new Error('no attachment route'), { code: 404 })
       if (!response.body) throw new Error(t("Couldn't open this file"))
       await streamToFile(response.body as import('node:stream/web').ReadableStream, picked.filePath, () => stop.abort())
       return 'saved'

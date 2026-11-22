@@ -399,7 +399,12 @@ function TaskPanel({
   const [saving, setSaving] = useState<string | null>(null)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const shown = task ?? detail?.task ?? null
-  const touchedHere = touched.ids.has(id) || Boolean(detail?.children.some(child => touched.ids.has(child.id))) ? touched.revision : 0
+  // The last live batch that touched this task or a child; an unrelated batch keeps it, so it reads nothing again.
+  const lastTouched = useRef(0)
+  if (touched.revision !== lastTouched.current && (touched.ids.has(id) || Boolean(detail?.children.some(child => touched.ids.has(child.id))))) {
+    lastTouched.current = touched.revision
+  }
+  const touchedHere = lastTouched.current
 
   async function saveAttachment(attachment: KanbanAttachment) {
     if (saving) return
