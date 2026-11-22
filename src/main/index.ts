@@ -271,8 +271,9 @@ const chatWindows = new ChatWindowSet(
 const screenWindows = new ScreenWindowSet(
   (screen, onClosed) => {
     const window = createScreenWindow(screen, onClosed)
-    // Another combined dashboard's bot: the window's calls go through that dashboard's kept connection, as a far chat window's do.
-    if (screen.host && screen.host !== shownHost) windowHosts.set(window.webContents.id, screen.host)
+    // Its bot's dashboard: once that's another combined one (from the start, or after a switch), the window's calls go
+    // through its kept connection, as a far chat window's do.
+    if (screen.host) windowHosts.set(window.webContents.id, screen.host)
     return window
   },
   profiles => sendWithDocked(IPC.screenWindowsChanged, profiles),
@@ -339,9 +340,8 @@ const connection = new Connection({
     sendStatus(status)
     keptHosts.sync(status)
     if (shownHost !== before) {
-      // A switch keeps the chat windows on the combined dashboards (the one left becomes a kept one); any other closes them.
+      // A switch keeps the chat and screen windows on the combined dashboards (the one left becomes a kept one); any other closes them.
       closeStrandedChatWindows()
-      screenWindows.close(true)
       eventRouter.clear([...windowHosts.keys()])
       // The one left is dialed again beside the new one: its windows wait for it, and its kept connection tells them once it's open.
       if (before) sendToFarWindows(before, IPC.statusChanged, { phase: 'connecting', url: before } satisfies ConnectionStatus)
