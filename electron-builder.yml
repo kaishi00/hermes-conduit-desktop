@@ -61,12 +61,15 @@ nsis:
   # One installer for x64 and arm64 (NSIS packs every arch the win target
   # lists into a single installer), named without the version.
   artifactName: Conduit-Setup.${ext}
-# Partner Center's identity values replace these in the release workflow.
+# The Store's identity for the app, from Partner Center > Product identity
+# (not secret: it ships inside the package). DisplayName must be the name
+# reserved in the Store.
 appx:
   artifactName: Conduit-Store-${arch}.${ext}
-  identityName: Conduit
-  displayName: Conduit
-  publisherDisplayName: kaishi00
+  identityName: Milim.HermesConduit
+  publisher: CN=92D09677-83F4-4D47-B55F-22F31F2EF929
+  publisherDisplayName: Milim
+  displayName: Hermes Conduit
 linux:
   target: [AppImage]
   artifactName: Conduit-linux-${arch}.${ext}
