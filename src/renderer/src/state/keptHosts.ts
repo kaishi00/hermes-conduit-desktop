@@ -321,6 +321,8 @@ export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatR
       document.removeEventListener('visibilitychange', onVisible)
       offChanged()
       for (const wait of changed.values()) clearTimeout(wait)
+      // Its rows go with this hook (a switch remounts it), so what it read does too: the next one reads again first.
+      for (const url of urls) keptChatsRead.delete(url)
     }
   }, [live])
 

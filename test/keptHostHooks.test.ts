@@ -3,7 +3,7 @@ import { act, createElement, useLayoutEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, settle } from './hookHarness'
-import { KEPT_CHATS_CHANGE_WAIT_MS, keptWorkKey, useKeptChats, useKeptRooms, useKeptWork, type OtherBot } from '../src/renderer/src/state/keptHosts'
+import { KEPT_CHATS_CHANGE_WAIT_MS, keptChatsRead, keptWorkKey, useKeptChats, useKeptRooms, useKeptWork, type OtherBot } from '../src/renderer/src/state/keptHosts'
 import { COPIES_PATH } from '../src/renderer/src/state/roomCopies'
 import { PREFS_PATH } from '../src/renderer/src/state/pinnedOrder'
 import { useShownAgain } from '../src/renderer/src/state/keptScroll'
@@ -159,5 +159,31 @@ describe("a kept host's own chat changes", () => {
     expect(changed).toBeUndefined()
     await act(async () => vi.advanceTimersByTime(KEPT_CHATS_CHANGE_WAIT_MS))
     expect(chatReads()).toBe(2)
+  })
+})
+
+describe("a kept host's chats read", () => {
+  it('counts as read after a read that lists none, not after reads that all fail, and not past the hook', async () => {
+    const conduit = (window as unknown as { conduit: Record<string, unknown> }).conduit
+    let fail = true
+    conduit.onKeptChatsChanged = () => () => {}
+    conduit.keptHttp = async (_url: string, path: string): Promise<Outcome> => {
+      if (fail) return { ok: false, error: 'down' }
+      if (path === '/api/profiles') return { ok: true, result: { profiles: [{ name: 'default' }] } }
+      return { ok: true, result: { sessions: [] } }
+    }
+    const failed = renderHook(({ kept }: { kept: KeptHost[] }) => useKeptChats(kept, true), { kept: live })
+    await settle()
+    expect(keptChatsRead.has(HOST)).toBe(false)
+    failed.unmount()
+
+    fail = false
+    const hook = renderHook(({ kept }: { kept: KeptHost[] }) => useKeptChats(kept, true), { kept: live })
+    await settle()
+    expect(hook.result()).toEqual([])
+    expect(keptChatsRead.has(HOST)).toBe(true)
+    // A switch remounts the hook, whose rows start empty: nothing reads as read until it reads again.
+    hook.unmount()
+    expect(keptChatsRead.has(HOST)).toBe(false)
   })
 })
