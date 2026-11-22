@@ -7401,6 +7401,20 @@ button.cap-row-text {
 .plugin-scan-findings {
   white-space: pre-line;
 }
+/* Under "Letting running tasks finish…": what the restart waits on, and Restart Now. */
+.gateway-wait {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  margin-top: 4px;
+}
+.gateway-wait-lines {
+  display: grid;
+  gap: 2px;
+}
+.gateway-wait .plugin-degraded {
+  margin: 0;
+}
 .plugin-update.ok strong {
   color: var(--success, #2e9d5b);
 }

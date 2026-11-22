@@ -209,6 +209,21 @@
     "zh-Hans": "Hermes 终端仍在此对话中回复。请在回复结束后重试。",
     "zh-Hant": "Hermes 終端機仍在這個聊天中回覆。請等它完成後再試一次。"
   },
+  "A background task": {
+    "de": "Eine Hintergrundaufgabe",
+    "es": "Una tarea en segundo plano",
+    "fr": "Une tâche en arrière-plan",
+    "id": "Sebuah tugas latar belakang",
+    "it": "Un'attività in background",
+    "ja": "バックグラウンドのタスク",
+    "ko": "백그라운드 작업",
+    "pl": "Zadanie w tle",
+    "pt-BR": "Uma tarefa em segundo plano",
+    "ru": "Фоновая задача",
+    "tr": "Bir arka plan görevi",
+    "zh-Hans": "一个后台任务",
+    "zh-Hant": "一個背景工作"
+  },
   "A bot": {
     "de": "Ein Bot",
     "es": "Un bot",
@@ -3719,6 +3734,21 @@
     "zh-Hans": "按模型",
     "zh-Hant": "依模型"
   },
+  "Conduit can only force a restart for a gateway that systemd runs. Run hermes gateway stop, then hermes gateway start, on the host.": {
+    "de": "Conduit kann einen Neustart nur für ein Gateway erzwingen, das systemd ausführt. Führe auf dem Host hermes gateway stop und danach hermes gateway start aus.",
+    "es": "Conduit solo puede forzar un reinicio de un gateway que ejecuta systemd. Ejecuta hermes gateway stop y luego hermes gateway start en el host.",
+    "fr": "Conduit ne peut forcer le redémarrage que d’une passerelle gérée par systemd. Exécutez hermes gateway stop, puis hermes gateway start, sur l’hôte.",
+    "id": "Conduit hanya dapat memaksa mulai ulang gateway yang dijalankan systemd. Jalankan hermes gateway stop, lalu hermes gateway start, di host.",
+    "it": "Conduit può forzare il riavvio solo di un gateway gestito da systemd. Esegui hermes gateway stop e poi hermes gateway start sull’host.",
+    "ja": "Conduit が再起動を強制できるのは systemd で動作するゲートウェイだけです。ホストで hermes gateway stop を実行してから hermes gateway start を実行してください。",
+    "ko": "Conduit는 systemd가 실행하는 게이트웨이만 강제로 재시작할 수 있습니다. 호스트에서 hermes gateway stop을 실행한 다음 hermes gateway start를 실행하세요.",
+    "pl": "Conduit może wymusić ponowne uruchomienie tylko bramy uruchamianej przez systemd. Na hoście uruchom hermes gateway stop, a potem hermes gateway start.",
+    "pt-BR": "O Conduit só pode forçar a reinicialização de um gateway executado pelo systemd. Execute hermes gateway stop e depois hermes gateway start no host.",
+    "ru": "Conduit может принудительно перезапустить только шлюз, который запускает systemd. Выполните на хосте hermes gateway stop, а затем hermes gateway start.",
+    "tr": "Conduit yalnızca systemd'nin çalıştırdığı bir ağ geçidini zorla yeniden başlatabilir. Ana makinede hermes gateway stop, ardından hermes gateway start komutunu çalıştırın.",
+    "zh-Hans": "Conduit 只能强制重启由 systemd 运行的网关。请在主机上先运行 hermes gateway stop，再运行 hermes gateway start。",
+    "zh-Hant": "Conduit 只能強制重新啟動由 systemd 執行的閘道。請在主機上先執行 hermes gateway stop，再執行 hermes gateway start。"
+  },
   "Conduit reconnects when it's back.": {
     "de": "Conduit verbindet sich neu, sobald es zurück ist.",
     "es": "Conduit se vuelve a conectar cuando regrese.",
@@ -5878,6 +5908,21 @@
     "tr": "Hermes’e bağlan",
     "zh-Hans": "连接到 Hermes",
     "zh-Hant": "連線到 Hermes"
+  },
+  "Connect to this dashboard first.": {
+    "de": "Verbinde dich zuerst mit diesem Dashboard.",
+    "es": "Conéctate primero a este panel.",
+    "fr": "Connectez-vous d’abord à ce tableau de bord.",
+    "id": "Hubungkan ke dasbor ini terlebih dahulu.",
+    "it": "Connettiti prima a questa dashboard.",
+    "ja": "先にこのダッシュボードに接続してください。",
+    "ko": "먼저 이 대시보드에 연결하세요.",
+    "pl": "Najpierw połącz się z tym panelem.",
+    "pt-BR": "Conecte-se primeiro a este painel.",
+    "ru": "Сначала подключитесь к этому дашборду.",
+    "tr": "Önce bu panele bağlanın.",
+    "zh-Hans": "请先连接此仪表板。",
+    "zh-Hant": "請先連線到此儀表板。"
   },
   "Connect {app}": {
     "de": "{app} verbinden",
@@ -12433,6 +12478,21 @@
     "tr": "Grup adı",
     "zh-Hans": "群聊名称",
     "zh-Hant": "群組名稱"
+  },
+  "Hermes doesn't say what's running.": {
+    "de": "Hermes sagt nicht, was läuft.",
+    "es": "Hermes no dice qué se está ejecutando.",
+    "fr": "Hermes n'indique pas ce qui est en cours.",
+    "id": "Hermes tidak menyebutkan apa yang sedang berjalan.",
+    "it": "Hermes non dice cosa è in esecuzione.",
+    "ja": "Hermes は実行中の内容を示していません。",
+    "ko": "Hermes가 무엇이 실행 중인지 알려 주지 않습니다.",
+    "pl": "Hermes nie podaje, co jest uruchomione.",
+    "pt-BR": "O Hermes não diz o que está em execução.",
+    "ru": "Hermes не сообщает, что выполняется.",
+    "tr": "Hermes neyin çalıştığını söylemiyor.",
+    "zh-Hans": "Hermes 没有说明正在运行什么。",
+    "zh-Hant": "Hermes 沒有說明正在執行什麼。"
   },
   "Hermes hasn't come back after its update.": {
     "de": "Hermes ist nach dem Update nicht zurückgekommen.",
@@ -21074,6 +21134,36 @@
     "zh-Hans": "推荐",
     "zh-Hant": "推薦"
   },
+  "Restart Now": {
+    "de": "Jetzt neu starten",
+    "es": "Reiniciar ahora",
+    "fr": "Redémarrer maintenant",
+    "id": "Mulai Ulang Sekarang",
+    "it": "Riavvia ora",
+    "ja": "今すぐ再起動",
+    "ko": "지금 다시 시작",
+    "pl": "Uruchom ponownie teraz",
+    "pt-BR": "Reiniciar agora",
+    "ru": "Перезапустить сейчас",
+    "tr": "Şimdi Yeniden Başlat",
+    "zh-Hans": "立即重启",
+    "zh-Hant": "立即重新啟動"
+  },
+  "Restarts on its own by {time}": {
+    "de": "Startet spätestens um {time} von selbst neu",
+    "es": "Se reinicia solo a más tardar a las {time}",
+    "fr": "Redémarre de lui-même au plus tard à {time}",
+    "id": "Mulai ulang sendiri paling lambat pukul {time}",
+    "it": "Si riavvia da solo entro le {time}",
+    "ja": "{time} までに自動で再起動します",
+    "ko": "{time}까지 자동으로 다시 시작됩니다",
+    "pl": "Uruchomi się ponownie sam najpóźniej o {time}",
+    "pt-BR": "Reinicia sozinho até as {time}",
+    "ru": "Перезапустится сам не позднее {time}",
+    "tr": "En geç {time} itibarıyla kendiliğinden yeniden başlar",
+    "zh-Hans": "最迟 {time} 自行重启",
+    "zh-Hant": "最遲 {time} 自行重新啟動"
+  },
   "Runs when the memory or skill interval below is reached. Off, Hermes reviews a chat only when you ask with /refine.": {
     "de": "Läuft, sobald das Gedächtnis- oder Skill-Intervall unten erreicht ist. Aus prüft Hermes einen Chat nur, wenn du mit /refine darum bittest.",
     "es": "Se ejecuta cuando se alcanza el intervalo de memoria o de habilidades de abajo. Desactivada, Hermes revisa un chat solo cuando lo pides con /refine.",
@@ -21119,6 +21209,21 @@
     "zh-Hans": "你发送多少条消息后，Hermes 会查看有哪些关于你的内容值得记住。设为 0 则关闭记忆复盘。",
     "zh-Hant": "你傳送多少則訊息後，Hermes 會查看有哪些關於你的內容值得記住。設為 0 則關閉記憶複盤。"
   },
+  "Scheduled job {name}": {
+    "de": "Geplanter Job {name}",
+    "es": "Tarea programada {name}",
+    "fr": "Tâche planifiée {name}",
+    "id": "Tugas terjadwal {name}",
+    "it": "Attività pianificata {name}",
+    "ja": "スケジュールされたジョブ {name}",
+    "ko": "예약된 작업 {name}",
+    "pl": "Zaplanowane zadanie {name}",
+    "pt-BR": "Tarefa agendada {name}",
+    "ru": "Запланированное задание {name}",
+    "tr": "Zamanlanmış iş {name}",
+    "zh-Hans": "定时任务 {name}",
+    "zh-Hant": "排程工作 {name}"
+  },
   "Scroll to latest message": {
     "de": "Zur neuesten Nachricht scrollen",
     "es": "Desplazarse al último mensaje",
@@ -21148,6 +21253,36 @@
     "tr": "Konuşma sağlayıcıları, kimlik bilgileri ve cihaz katılımı",
     "zh-Hans": "语音提供方、凭据与设备端启用",
     "zh-Hant": "語音供應商、認證資訊與裝置啟用設定"
+  },
+  "Stopping running tasks…": {
+    "de": "Laufende Aufgaben werden gestoppt…",
+    "es": "Deteniendo las tareas en curso…",
+    "fr": "Arrêt des tâches en cours…",
+    "id": "Menghentikan tugas yang berjalan…",
+    "it": "Interruzione delle attività in corso…",
+    "ja": "実行中のタスクを停止しています…",
+    "ko": "실행 중인 작업을 중지하는 중…",
+    "pl": "Zatrzymywanie uruchomionych zadań…",
+    "pt-BR": "Parando as tarefas em execução…",
+    "ru": "Остановка выполняемых задач…",
+    "tr": "Çalışan görevler durduruluyor…",
+    "zh-Hans": "正在停止运行中的任务…",
+    "zh-Hant": "正在停止執行中的工作…"
+  },
+  "Stops the running tasks and restarts the gateway now.": {
+    "de": "Stoppt die laufenden Aufgaben und startet das Gateway jetzt neu.",
+    "es": "Detiene las tareas en curso y reinicia el gateway ahora.",
+    "fr": "Arrête les tâches en cours et redémarre la passerelle maintenant.",
+    "id": "Menghentikan tugas yang berjalan dan memulai ulang gateway sekarang.",
+    "it": "Interrompe le attività in corso e riavvia ora il gateway.",
+    "ja": "実行中のタスクを停止し、今すぐゲートウェイを再起動します。",
+    "ko": "실행 중인 작업을 중지하고 지금 게이트웨이를 다시 시작합니다.",
+    "pl": "Zatrzymuje uruchomione zadania i od razu uruchamia ponownie bramę.",
+    "pt-BR": "Para as tarefas em execução e reinicia o gateway agora.",
+    "ru": "Останавливает выполняемые задачи и сразу перезапускает шлюз.",
+    "tr": "Çalışan görevleri durdurur ve ağ geçidini şimdi yeniden başlatır.",
+    "zh-Hans": "停止运行中的任务并立即重启网关。",
+    "zh-Hant": "停止執行中的工作並立即重新啟動閘道。"
   },
   "Support": {
     "de": "Support",
@@ -36479,6 +36614,21 @@
     "zh-Hans": "语音回复",
     "zh-Hant": "語音回覆"
   },
+  "Wait for the Hermes update to finish.": {
+    "de": "Warte, bis das Hermes-Update abgeschlossen ist.",
+    "es": "Espera a que termine la actualización de Hermes.",
+    "fr": "Attendez la fin de la mise à jour de Hermes.",
+    "id": "Tunggu hingga pembaruan Hermes selesai.",
+    "it": "Attendi che l'aggiornamento di Hermes sia completato.",
+    "ja": "Hermes のアップデートが終わるまでお待ちください。",
+    "ko": "Hermes 업데이트가 끝날 때까지 기다리세요.",
+    "pl": "Poczekaj na zakończenie aktualizacji Hermesa.",
+    "pt-BR": "Aguarde a atualização do Hermes terminar.",
+    "ru": "Дождитесь завершения обновления Hermes.",
+    "tr": "Hermes güncellemesinin bitmesini bekleyin.",
+    "zh-Hans": "请等待 Hermes 更新完成。",
+    "zh-Hant": "請等候 Hermes 更新完成。"
+  },
   "Wait while I'm at a screen": {
     "de": "Warten, während ich am Bildschirm bin",
     "es": "Esperar mientras estoy ante una pantalla",
@@ -39599,6 +39749,36 @@
     "zh-Hans": "{bot} 不会给它发消息或停止它。你仍然可以。",
     "zh-Hant": "{bot} 不會給它傳訊息或停止它。你仍然可以。"
   },
+  "{bot}: a chat": {
+    "de": "{bot}: ein Chat",
+    "es": "{bot}: un chat",
+    "fr": "{bot} : une discussion",
+    "id": "{bot}: sebuah obrolan",
+    "it": "{bot}: una chat",
+    "ja": "{bot}: チャット",
+    "ko": "{bot}: 채팅",
+    "pl": "{bot}: czat",
+    "pt-BR": "{bot}: uma conversa",
+    "ru": "{bot}: чат",
+    "tr": "{bot}: bir sohbet",
+    "zh-Hans": "{bot}：一个聊天",
+    "zh-Hant": "{bot}：一個聊天"
+  },
+  "{bot}: {title}": {
+    "de": "{bot}: {title}",
+    "es": "{bot}: {title}",
+    "fr": "{bot} : {title}",
+    "id": "{bot}: {title}",
+    "it": "{bot}: {title}",
+    "ja": "{bot}：{title}",
+    "ko": "{bot}: {title}",
+    "pl": "{bot}: {title}",
+    "pt-BR": "{bot}: {title}",
+    "ru": "{bot}: {title}",
+    "tr": "{bot}: {title}",
+    "zh-Hans": "{bot}：{title}",
+    "zh-Hant": "{bot}：{title}"
+  },
   "{bot}’s work": {
     "de": "Arbeit von {bot}",
     "es": "Trabajo de {bot}",
@@ -40858,6 +41038,21 @@
     "tr": "{name} için seçenekler",
     "zh-Hans": "{name} 的设置",
     "zh-Hant": "{name} 的設定"
+  },
+  "{name}, running {duration}": {
+    "de": "{name}, läuft seit {duration}",
+    "es": "{name}, en curso desde hace {duration}",
+    "fr": "{name}, en cours depuis {duration}",
+    "id": "{name}, berjalan {duration}",
+    "it": "{name}, in corso da {duration}",
+    "ja": "{name}、{duration} 実行中",
+    "ko": "{name}, {duration}째 실행 중",
+    "pl": "{name}, trwa od {duration}",
+    "pt-BR": "{name}, em execução há {duration}",
+    "ru": "{name}, выполняется {duration}",
+    "tr": "{name}, {duration} süredir çalışıyor",
+    "zh-Hans": "{name}，已运行 {duration}",
+    "zh-Hant": "{name}，已執行 {duration}"
   },
   "{number} s": {
     "de": "{number} s",

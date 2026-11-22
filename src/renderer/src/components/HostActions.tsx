@@ -19,6 +19,7 @@ import {
   type UpdateStep
 } from '../state/hostActions'
 import { ask } from '../state/dialogs'
+import { GatewayWait } from './GatewayWait'
 
 // Hermes' update check probes its checkout's git remotes and can take most of a minute (40 s on a real host).
 const request = (method: 'GET' | 'POST', path: string) =>
@@ -210,6 +211,7 @@ export function HostActions({ host, connected }: { host: string; connected: bool
       <dt>{t('Gateway')}</dt>
       <dd className="host-actions">
         {restartShown ? <Status row={restartShown} onDismiss={() => dismissRestart(host)} /> : null}
+        {restart.kind === 'restarting' && restart.stage === 'draining' ? <GatewayWait /> : null}
         <div className="pset-actions">
           <button className="secondary" disabled={busy} onClick={confirmRestart}>
             {t('Restart Gateway')}

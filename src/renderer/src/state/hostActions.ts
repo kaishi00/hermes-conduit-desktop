@@ -383,6 +383,9 @@ export const hostActionsNow = (): HostActions => current
 /** Whether an update, check or restart is running on `host`: only one runs at a time. */
 export const hostBusy = (host: string) => current.host === host && (updateInProgress(current.update) || restartInProgress(current.restart))
 
+/** Whether Update Hermes is running on `host`: Restart Now waits for it. */
+export const hermesUpdateRunning = (host: string) => current.host === host && current.update.kind === 'updating'
+
 function runner(host: string, request: Runner['request']): Runner {
   const id = ++runs
   return {

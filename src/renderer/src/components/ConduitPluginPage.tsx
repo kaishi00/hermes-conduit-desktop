@@ -19,6 +19,7 @@ import {
   type UpdateStep
 } from '../state/plugin'
 import { Icon } from './icons'
+import { GatewayWait } from './GatewayWait'
 import { useMouseBack } from '../state/mouseBack'
 import { readStatus, runUpdate, setUpdate, updateStartedAt, useUpdateRow } from '../state/pluginUpdate'
 
@@ -241,6 +242,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
         ) : null}
         <UpdateRow
           state={current}
+          capabilities={status.state === 'reported' ? status.capabilities : null}
           onDismiss={() => setUpdate({ phase: 'idle' })}
           onAcceptScan={canUpdate ? () => void runUpdate(() => void refresh(), true, latest) : null}
         />
@@ -287,7 +289,18 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   )
 }
 
-function UpdateRow({ state, onDismiss, onAcceptScan }: { state: UpdateState; onDismiss: () => void; onAcceptScan: (() => void) | null }) {
+function UpdateRow({
+  state,
+  capabilities,
+  onDismiss,
+  onAcceptScan
+}: {
+  state: UpdateState
+  /** The plugin's, read when the page opened: the wait's list needs it to name the work (0.135+). */
+  capabilities: string[] | null
+  onDismiss: () => void
+  onAcceptScan: (() => void) | null
+}) {
   if (state.phase === 'idle') return null
   let title: string
   let detail: string | null = null
@@ -346,6 +359,7 @@ function UpdateRow({ state, onDismiss, onAcceptScan }: { state: UpdateState; onD
                 time: elapsed(Date.now() - updateStartedAt())
               })}
             </span>
+            {state.step === 'draining' ? <GatewayWait capabilities={capabilities} /> : null}
           </>
         ) : null}
         {detail ? <span className={state.phase === 'scanHeld' ? 'meta plugin-scan-findings' : 'meta'}>{detail}</span> : null}
