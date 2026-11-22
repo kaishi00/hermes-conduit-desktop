@@ -535,7 +535,7 @@ function Shell({
           ...(ref.botChat ? { botChat: true } : {}),
           ...(ref.draft ? { draft: ref.draft } : {}),
           ...(fresh ? { fresh: true } : {})
-        }, true)
+        }, ref.fromWindow === true)
         return
       }
       setSelected({ id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })

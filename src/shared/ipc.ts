@@ -415,6 +415,8 @@ export interface OpenChatRequest {
   draft?: string
   /** A new chat in its profile, for a docked Pulse card from no chat; `storedId` is left empty. */
   fresh?: boolean
+  /** From the chat's own window (its Open in Main Window), which closes once the main window has it; any other open focuses a chat's window when it has one. */
+  fromWindow?: boolean
 }
 
 /** A bot's screen for a window of its own; the viewer id it had before, if it did. */

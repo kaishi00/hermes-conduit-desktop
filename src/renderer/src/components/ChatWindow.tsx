@@ -372,7 +372,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     )
   }, [windowId, profile, title, botTitle, host, botChat, notice, docked])
   const openInMain = useCallback(() => {
-    window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
+    window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, fromWindow: true, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
   }, [chat.storedId, request.id, title, profile, botChat, host])
 

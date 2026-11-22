@@ -124,6 +124,11 @@ function send(channel: string, payload: unknown): void {
     if (!window.isDestroyed()) window.webContents.send(channel, payload)
   }
 }
+/** To every window and the main window's docked frames, which getAllWindows leaves out (a far chat's header reads which screens are open). */
+function sendWithDocked(channel: string, payload: unknown): void {
+  send(channel, payload)
+  for (const page of dockedPages()) page.send(channel, payload)
+}
 
 const eventRouter = new EventRouter()
 /** The wake-phrase listener's window, which runs no app and reads no gateway events. */
@@ -270,7 +275,7 @@ const screenWindows = new ScreenWindowSet(
     if (screen.host && screen.host !== shownHost) windowHosts.set(window.webContents.id, screen.host)
     return window
   },
-  profiles => send(IPC.screenWindowsChanged, profiles),
+  profiles => sendWithDocked(IPC.screenWindowsChanged, profiles),
   (key, viewerId, owed) => {
     const { host, profile } = parseScreenKey(key)
     const through = host && host !== shownHost ? keptHosts.connection(host) : connection
