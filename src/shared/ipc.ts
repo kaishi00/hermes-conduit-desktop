@@ -252,6 +252,11 @@ export interface ConduitApi {
   saveHostFile(path: string, profile?: string): Promise<string>
   /** Saves bytes already on hand (a picture's data) where the person picks; false when they didn't. */
   saveBytes(name: string, bytes: ArrayBuffer): Promise<boolean>
+  /**
+   * Saves a Kanban task's attachment where the person picks, streamed from
+   * the board's /attachments/{id}. 'saved', 'cancelled', or what went wrong.
+   */
+  saveKanbanAttachment(id: string, board: string | null, filename: string): Promise<string>
   signIn(request: SignInRequest): Promise<{ ok: true } | { ok: false; error: string }>
   /** Edit Connection: the open host signs in again at a new address or with a new sign-in, in its place. */
   editHost(from: string, request: SignInRequest): Promise<{ ok: true; url: string } | { ok: false; error: string; savedAs?: string }>
@@ -487,6 +492,7 @@ export const IPC = {
   saveCertificate: 'conduit:save-certificate',
   saveHostFile: 'conduit:save-host-file',
   saveBytes: 'conduit:save-bytes',
+  saveKanbanAttachment: 'conduit:save-kanban-attachment',
   keptRpc: 'conduit:kept-rpc',
   reconnect: 'conduit:reconnect',
   rpc: 'conduit:rpc',

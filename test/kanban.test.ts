@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ageText, boardPath, boardPollDelay, failedInTransit, columnTitle, defaultAssignee, matchesTask, parseBoard, parseBoards, parseTaskDetail, priorityTitle } from '../src/renderer/src/state/kanban'
+import { ageText, boardPath, boardPollDelay, failedInTransit, columnTitle, defaultAssignee, eventPayloadText, kanbanWord, matchesTask, parseBoard, parseBoards, parseTaskDetail, priorityTitle, sizeText } from '../src/renderer/src/state/kanban'
 
 describe('the task board', () => {
   it('reads the lanes in the phone’s order, a lane it doesn’t know last', () => {
@@ -41,6 +41,41 @@ describe('the task board', () => {
     expect(detail?.parents).toEqual([{ id: 't1', title: 'Parent', status: 'done' }])
     expect(detail?.children).toEqual([{ id: 't4', title: 't4', status: '', summary: 'Half done' }])
     expect(parseTaskDetail({})).toBeNull()
+  })
+
+  it('reads runs, event payloads and attachments whole', () => {
+    const summary = 'All five children complete. '.repeat(40)
+    const detail = parseTaskDetail({
+      task: { id: 't', title: 'T', status: 'review', priority: 0 },
+      runs: [{ id: 7, status: 'done', outcome: 'review_requested', profile: 'default', summary, metadata: { pr: 3100 }, started_at: 100, ended_at: 160 }],
+      events: [{ id: 1, kind: 'review_requested', payload: { summary, implementer: 'default', checks: ['ci'] } }],
+      attachments: [{ id: 3, filename: 'ROOT-HANDOFF.md', size: 2294, uploaded_by: 'worker', created_at: 200 }]
+    })
+    expect(detail?.runs[0]).toEqual({
+      id: '7', status: 'done', outcome: 'review_requested', profile: 'default', stepKey: undefined, summary, error: undefined,
+      metadata: { pr: 3100 }, startedAt: 100_000, endedAt: 160_000
+    })
+    expect(detail?.attachments).toEqual([{ id: '3', filename: 'ROOT-HANDOFF.md', size: 2294, uploadedBy: 'worker', createdAt: 200_000 }])
+    expect(eventPayloadText(detail?.events[0]?.payload)).toBe(`implementer: default\n\nsummary: ${summary}\n\nchecks:\n[\n  "ci"\n]`)
+    expect(eventPayloadText(undefined)).toBe('')
+    expect(parseTaskDetail({ task: { id: 't', title: 'T', status: 'todo', priority: 0 }, runs: [{ id: 1, status: 'running', metadata: {} }] })?.runs[0]?.metadata).toBeUndefined()
+    expect(sizeText(2294)).toBe('2.2 KB')
+    expect(kanbanWord('review_requested')).toBe('review requested')
+  })
+
+  it("takes a child's result over its latest run summary, as the phone does", () => {
+    const detail = parseTaskDetail({
+      task: { id: 'p', title: 'Parent', status: 'todo', priority: 0 },
+      links: { children: ['c'] },
+      child_results: [{ id: 'c', latest_summary: 'Run summary', result: 'Handed back' }]
+    })
+    expect(detail?.children[0]?.summary).toBe('Handed back')
+    const blank = parseTaskDetail({
+      task: { id: 'p', title: 'Parent', status: 'todo', priority: 0 },
+      links: { children: ['c'] },
+      child_results: [{ id: 'c', latest_summary: 'Run summary', result: '  ' }]
+    })
+    expect(blank?.children[0]?.summary).toBe('Run summary')
   })
 
   it('names the board only when one is picked', () => {

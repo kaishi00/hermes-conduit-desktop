@@ -12183,3 +12183,83 @@ button.ghost:disabled {
   flex: none;
   margin: 8px 16px 0;
 }
+
+/* A child's result under its Blocks row: indented past the lane dot. */
+.task-body.child-result {
+  margin: 2px 0 6px 16px;
+  font-size: 13px;
+}
+
+/* A Kanban task's runs, activity and attachments, each whole. */
+.task-run,
+.task-event,
+.task-attachment {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  margin-bottom: 6px;
+  font-size: 13px;
+  user-select: text;
+}
+
+.task-run-title {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.task-attachment {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-attachment-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.task-payload {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  user-select: text;
+}
+
+.task-activity > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+  list-style: revert;
+}
+
+.task-activity > summary h3 {
+  display: inline;
+}
+/* Live call style's "What Conduit sends" */
+.live-preview-open {
+  justify-self: start;
+}
+.live-preview {
+  width: min(680px, 100%);
+}
+.live-preview-text {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  user-select: text;
+}

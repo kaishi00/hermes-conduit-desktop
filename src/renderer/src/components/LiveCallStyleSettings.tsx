@@ -15,6 +15,8 @@ import {
 } from '../state/liveStyle'
 import { Select } from './Select'
 import { liveAsksFirst, setLiveAsksFirst } from '../state/askFirst'
+import type { VoiceMode } from '../state/gptLive'
+import { LivePreviewSheet } from './LivePreviewSheet'
 
 const toneLabel = (tone: LiveTone) => (tone === 'relaxed' ? t('Relaxed') : tone === 'neutral' ? t('Neutral') : t('Professional'))
 const lengthLabel = (length: AnswerLength) => (length === 'concise' ? t('Concise') : length === 'detailed' ? t('Detailed') : t('Default'))
@@ -22,13 +24,15 @@ const lengthLabel = (length: AnswerLength) => (length === 'concise' ? t('Concise
 /**
  * Settings > Voice's Live call style, after the phone's: the greeting, tone,
  * answer length, backchannels and the user's own instructions, for every live
- * mode. Kept on this computer, so it works with no iPhone.
+ * mode. Kept on this computer, so it works with no iPhone. "What Conduit sends"
+ * shows the next call's instructions in `mode`.
  */
-export function LiveCallStyleSettings() {
+export function LiveCallStyleSettings({ mode, profile }: { mode: VoiceMode; profile?: string }) {
   const [greeting, setGreeting] = useState<string | null>(liveGreeting)
   const [style, setStyle] = useState(liveStyle)
   const [instructions, setInstructions] = useState(() => style.extraInstructions ?? '')
   const [asksFirst, setAsksFirst] = useState(liveAsksFirst)
+  const [previewing, setPreviewing] = useState(false)
   return (
     <>
       <span className="meta">{t('Live call style')}</span>
@@ -160,6 +164,10 @@ export function LiveCallStyleSettings() {
           "Added to every live call after Conduit's own instructions: its personality, how it words things, or anything it should know about you. Conduit's instructions can't be shortened or replaced, because jobs, approvals and the call's tools depend on them, so where yours disagree, Conduit's come first. Applies to the next call."
         )}
       </p>
+      <button className="secondary live-preview-open" onClick={() => setPreviewing(true)}>
+        {t('What Conduit sends')}
+      </button>
+      {previewing ? <LivePreviewSheet mode={mode} profile={profile} onClose={() => setPreviewing(false)} /> : null}
     </>
   )
 }

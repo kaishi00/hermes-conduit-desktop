@@ -526,7 +526,7 @@ export function VoiceModeSettings({ profile }: { profile?: string }) {
               "Each call's transcript is saved to your Hermes server's history and shows under Voice in Sessions, where you can read it or resume the call. Needs an up-to-date Hermes notifier plugin. Shared by every live voice mode. Applies to the next conversation."
             )}
           </p>
-          <LiveCallStyleSettings />
+          <LiveCallStyleSettings mode={mode} profile={profile} />
         </>
       ) : null}
     </div>
