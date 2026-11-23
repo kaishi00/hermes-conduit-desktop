@@ -655,6 +655,23 @@ a:hover {
   overflow-x: auto;
 }
 
+/* A reply's code block, wherever a reply is drawn (chat, call cards): Copy sits in a
+   band above the code, fixed to the block, so it never covers a line however wide. */
+.code-block {
+  position: relative;
+}
+
+.code-block pre {
+  padding-top: 30px;
+}
+
+.code-copy {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  z-index: 1;
+}
+
 .assistant pre code {
   padding: 0;
   background: none;
