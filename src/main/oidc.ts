@@ -206,14 +206,29 @@ function callbackTarget(target: string, expectedState: string): Callback {
 }
 
 function reply(response: ServerResponse, status: number, message: string): void {
+  const safeMessage = message.replace(/[&<>"']/g, character =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!
+  )
   response.writeHead(status, {
-    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
     'Cache-Control': 'no-store',
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
     Connection: 'close'
   })
-  response.end(message)
+  response.end(`<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conduit</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #151418; color: #f5f3ef; }
+  body { min-height: 100vh; min-height: 100dvh; margin: 0; display: grid; place-items: center; }
+  main { box-sizing: border-box; width: min(90vw, 440px); padding: 40px; border: 1px solid #484038;
+    border-radius: 24px; background: #211e20; box-shadow: 0 20px 70px #0005; }
+  .mark { width: 40px; height: 4px; border-radius: 4px; background: #d9a944; }
+  h1 { margin: 24px 0 12px; font-size: 1.5rem; letter-spacing: -.02em; }
+  p { margin: 0; color: #c8c2ba; line-height: 1.6; }
+</style></head><body><main><div class="mark" aria-hidden="true"></div><h1>Conduit</h1><p>${safeMessage}</p></main></body></html>`)
 }
 
 /** The listener owns its deadline, browser failure, and every accepted socket. */
