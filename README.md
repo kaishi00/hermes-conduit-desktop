@@ -33,6 +33,7 @@ dashboard.
 | **Mac** (Apple silicon and Intel, macOS 12 or later) | [Conduit-mac.dmg](https://github.com/kaishi00/hermes-conduit-desktop/releases/latest/download/Conduit-mac.dmg) |
 | **Windows** (10 and 11, x64 and Arm) | [Conduit-Setup.exe](https://github.com/kaishi00/hermes-conduit-desktop/releases/latest/download/Conduit-Setup.exe) |
 | **Linux** (x64) | [Conduit-linux-x86_64.AppImage](https://github.com/kaishi00/hermes-conduit-desktop/releases/latest/download/Conduit-linux-x86_64.AppImage) |
+| **Linux** (Arm64) | [Conduit-linux-arm64.AppImage](https://github.com/kaishi00/hermes-conduit-desktop/releases/latest/download/Conduit-linux-arm64.AppImage) |
 
 Every release and what changed in it are on the
 [Releases page](https://github.com/kaishi00/hermes-conduit-desktop/releases).
@@ -49,8 +50,8 @@ isn't code-signed yet, so Windows may say "Windows protected your PC": click
 **More info**, then **Run anyway**. With Smart App Control turned on, Windows
 may block it outright; a signed copy from the Microsoft Store is on its way.
 
-**Linux.** Make the AppImage executable (`chmod +x Conduit-linux-x86_64.AppImage`)
-and run it.
+**Linux.** Make the AppImage executable (`chmod +x Conduit-linux-x86_64.AppImage`
+or `chmod +x Conduit-linux-arm64.AppImage`) and run it.
 
 ## Connect to your Hermes
 
@@ -132,7 +133,7 @@ account.
 A `v*` tag matching `package.json`'s version (`v1.0.0` for `1.0.0`) runs
 `.github/workflows/release.yml`: it builds the Mac dmg and zip (signed with
 the Developer ID and notarized), the Windows installer (unsigned) and the
-Linux AppImage onto a draft GitHub release, and the Microsoft Store package
+Linux AppImages (x64 and Arm64) onto a draft GitHub release, and the Microsoft Store package
 as a workflow artifact to upload to Partner Center, which signs it.
 Publishing the draft releases it. A manual run of the workflow from main
 with publish checked does the same without a tag (GitHub makes the tag when
