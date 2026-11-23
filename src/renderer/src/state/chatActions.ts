@@ -8,6 +8,16 @@
 type Http = <T = unknown>(method: 'GET' | 'PATCH' | 'DELETE', path: string, body?: unknown) => Promise<T>
 
 const UNRESERVED = /^[A-Za-z0-9\-._~]*$/
+/** A chat being started, answered or waiting for input must not be archived or deleted. */
+export function sessionIsBusy(response: unknown, id: string): boolean {
+  if (!response || typeof response !== 'object' || !('sessions' in response) || !Array.isArray(response.sessions)) return false
+  return response.sessions.some(row =>
+    row && typeof row === 'object' &&
+    ('id' in row && row.id === id || 'session_key' in row && row.session_key === id) &&
+    'status' in row && (row.status === 'starting' || row.status === 'working' || row.status === 'waiting')
+  )
+}
+
 
 export function sessionPath(id: string, profile?: string, suffix = ''): string {
   const path = `/api/sessions/${encodeURIComponent(id)}${suffix}`

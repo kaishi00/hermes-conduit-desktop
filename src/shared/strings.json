@@ -2114,6 +2114,21 @@
     "zh-Hans": "已归档",
     "zh-Hant": "已封存"
   },
+  "Archived chats": {
+    "de": "Archivierte Chats",
+    "es": "Chats archivados",
+    "fr": "Discussions archivées",
+    "id": "Chat yang diarsipkan",
+    "it": "Chat archiviate",
+    "ja": "アーカイブ済みのチャット",
+    "ko": "보관된 채팅",
+    "pl": "Zarchiwizowane czaty",
+    "pt-BR": "Conversas arquivadas",
+    "ru": "Архивные чаты",
+    "tr": "Arşivlenmiş sohbetler",
+    "zh-Hans": "已归档的聊天",
+    "zh-Hant": "已封存的聊天"
+  },
   "Artifacts": {
     "de": "Artefakte",
     "es": "Artefactos",
@@ -6569,6 +6584,21 @@
     "zh-Hans": "无法删除定时任务：{reason}",
     "zh-Hant": "無法刪除排程工作：{reason}"
   },
+  "Could not delete this chat.": {
+    "de": "Dieser Chat konnte nicht gelöscht werden.",
+    "es": "No se pudo eliminar este chat.",
+    "fr": "Impossible de supprimer cette discussion.",
+    "id": "Tidak dapat menghapus chat ini.",
+    "it": "Impossibile eliminare questa chat.",
+    "ja": "このチャットを削除できませんでした。",
+    "ko": "이 채팅을 삭제할 수 없어요.",
+    "pl": "Nie udało się usunąć tego czatu.",
+    "pt-BR": "Não foi possível excluir esta conversa.",
+    "ru": "Не удалось удалить этот чат.",
+    "tr": "Bu sohbet silinemedi.",
+    "zh-Hans": "无法删除此聊天。",
+    "zh-Hant": "無法刪除此聊天。"
+  },
   "Could not delete this room": {
     "de": "Raum konnte nicht gelöscht werden",
     "es": "No se pudo eliminar esta sala",
@@ -6643,6 +6673,21 @@
     "tr": "Bağlantı kurulamadı: {error}",
     "zh-Hans": "无法关联：{error}",
     "zh-Hant": "無法連結：{error}"
+  },
+  "Could not load archived chats.": {
+    "de": "Archivierte Chats konnten nicht geladen werden.",
+    "es": "No se pudieron cargar los chats archivados.",
+    "fr": "Impossible de charger les discussions archivées.",
+    "id": "Tidak dapat memuat chat yang diarsipkan.",
+    "it": "Impossibile caricare le chat archiviate.",
+    "ja": "アーカイブ済みのチャットを読み込めませんでした。",
+    "ko": "보관된 채팅을 불러올 수 없어요.",
+    "pl": "Nie udało się wczytać zarchiwizowanych czatów.",
+    "pt-BR": "Não foi possível carregar as conversas arquivadas.",
+    "ru": "Не удалось загрузить архивные чаты.",
+    "tr": "Arşivlenmiş sohbetler yüklenemedi.",
+    "zh-Hans": "无法加载已归档的聊天。",
+    "zh-Hant": "無法載入已封存的聊天。"
   },
   "Could not load fallback models.": {
     "de": "Ersatzmodelle konnten nicht geladen werden.",
@@ -6943,6 +6988,21 @@
     "tr": "Bağlantılarınız okunamadı: {error}",
     "zh-Hans": "无法读取你的关联：{error}",
     "zh-Hant": "無法讀取你的連結：{error}"
+  },
+  "Could not restore this chat.": {
+    "de": "Dieser Chat konnte nicht wiederhergestellt werden.",
+    "es": "No se pudo restaurar este chat.",
+    "fr": "Impossible de restaurer cette discussion.",
+    "id": "Tidak dapat memulihkan chat ini.",
+    "it": "Impossibile ripristinare questa chat.",
+    "ja": "このチャットを復元できませんでした。",
+    "ko": "이 채팅을 복원할 수 없어요.",
+    "pl": "Nie udało się przywrócić tego czatu.",
+    "pt-BR": "Não foi possível restaurar esta conversa.",
+    "ru": "Не удалось восстановить этот чат.",
+    "tr": "Bu sohbet geri yüklenemedi.",
+    "zh-Hans": "无法恢复此聊天。",
+    "zh-Hant": "無法還原此聊天。"
   },
   "Could not resume scheduled job: {reason}": {
     "de": "Der geplante Job konnte nicht fortgesetzt werden: {reason}",
@@ -19604,6 +19664,21 @@
     "zh-Hans": "没有列出的应用",
     "zh-Hant": "沒有列出的 App"
   },
+  "No archived chats.": {
+    "de": "Keine archivierten Chats.",
+    "es": "No hay chats archivados.",
+    "fr": "Aucune discussion archivée.",
+    "id": "Tidak ada chat yang diarsipkan.",
+    "it": "Nessuna chat archiviata.",
+    "ja": "アーカイブ済みのチャットはありません。",
+    "ko": "보관된 채팅이 없어요.",
+    "pl": "Brak zarchiwizowanych czatów.",
+    "pt-BR": "Nenhuma conversa arquivada.",
+    "ru": "Нет архивных чатов.",
+    "tr": "Arşivlenmiş sohbet yok.",
+    "zh-Hans": "没有已归档的聊天。",
+    "zh-Hant": "沒有已封存的聊天。"
+  },
   "No chat is waiting on your answer.": {
     "de": "Kein Chat wartet auf deine Antwort.",
     "es": "Ningún chat espera tu respuesta.",
@@ -25813,6 +25888,21 @@
     "tr": "Sonuçlar bittikçe",
     "zh-Hans": "完成一个返回一个",
     "zh-Hant": "完成一個回傳一個"
+  },
+  "Restore": {
+    "de": "Wiederherstellen",
+    "es": "Restaurar",
+    "fr": "Restaurer",
+    "id": "Pulihkan",
+    "it": "Ripristina",
+    "ja": "復元",
+    "ko": "복원",
+    "pl": "Przywróć",
+    "pt-BR": "Restaurar",
+    "ru": "Восстановить",
+    "tr": "Geri yükle",
+    "zh-Hans": "恢复",
+    "zh-Hant": "還原"
   },
   "Resume": {
     "de": "Fortsetzen",
@@ -36613,6 +36703,21 @@
     "tr": "Sesli yanıtlar",
     "zh-Hans": "语音回复",
     "zh-Hant": "語音回覆"
+  },
+  "Voice tags are unavailable. Restore and delete are disabled until they can be read.": {
+    "de": "Sprach-Tags sind nicht verfügbar. Wiederherstellen und Löschen sind deaktiviert, bis sie gelesen werden können.",
+    "es": "Las etiquetas de voz no están disponibles. No se puede restaurar ni eliminar hasta que se puedan leer.",
+    "fr": "Les étiquettes vocales sont indisponibles. La restauration et la suppression sont désactivées jusqu'à ce qu'elles puissent être lues.",
+    "id": "Tag suara tidak tersedia. Pemulihan dan penghapusan dinonaktifkan sampai tag dapat dibaca.",
+    "it": "I tag vocali non sono disponibili. Il ripristino e l'eliminazione sono disattivati finché non possono essere letti.",
+    "ja": "音声タグを利用できません。タグを読み込めるまで、復元と削除はできません。",
+    "ko": "음성 태그를 사용할 수 없어요. 태그를 읽을 수 있을 때까지 복원과 삭제가 비활성화됩니다.",
+    "pl": "Tagi głosowe są niedostępne. Przywracanie i usuwanie są wyłączone, dopóki nie będzie można ich odczytać.",
+    "pt-BR": "As etiquetas de voz estão indisponíveis. Restaurar e excluir ficam desativados até que possam ser lidas.",
+    "ru": "Голосовые метки недоступны. Восстановление и удаление отключены, пока их нельзя прочитать.",
+    "tr": "Ses etiketleri kullanılamıyor. Etiketler okunabilene kadar geri yükleme ve silme devre dışıdır.",
+    "zh-Hans": "语音标签不可用。在能够读取标签之前，恢复和删除功能已禁用。",
+    "zh-Hant": "語音標籤無法使用。在能夠讀取標籤之前，還原和刪除功能已停用。"
   },
   "Wait for the Hermes update to finish.": {
     "de": "Warte, bis das Hermes-Update abgeschlossen ist.",

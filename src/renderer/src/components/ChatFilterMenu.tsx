@@ -26,8 +26,8 @@ export interface ProjectChoices {
  * each with its count. Filters combine, so the menu stays open while picking;
  * All, which clears them, closes it. Needs you leads it, every profile's
  * waits; Projects opens a page of the profile's projects to untick, which
- * All leaves as they are. Group by profile sits at its foot while the list
- * shows every profile.
+ * All leaves as they are. Archived opens the manually archived chats, and
+ * Group by profile sits at its foot while the list shows every profile.
  */
 export function ChatFilterMenu({
   selection,
@@ -44,6 +44,7 @@ export function ChatFilterMenu({
   open,
   onOpen,
   onNeedsYou,
+  onArchived,
   projects
 }: {
   selection: readonly ChatFilterKey[]
@@ -65,6 +66,8 @@ export function ChatFilterMenu({
   onOpen: (open: boolean) => void
   /** Needs you: every profile's waiting chats, where the list is served. */
   onNeedsYou?: () => void
+  /** Archived: this dashboard's manually archived chats. */
+  onArchived?: () => void
   /** Offered once the profile has a project besides Home, never in All. */
   projects?: ProjectChoices
 }) {
@@ -207,6 +210,22 @@ export function ChatFilterMenu({
                 <span className="filter-check" aria-hidden="true" />
                 <span className="filter-label">{t('Projects')}</span>
                 <span className="filter-count">›</span>
+              </button>
+            </>
+          ) : null}
+          {onArchived ? (
+            <>
+              <hr />
+              <button
+                role="menuitem"
+                className="filter-item"
+                onClick={() => {
+                  onOpen(false)
+                  onArchived()
+                }}
+              >
+                <span className="filter-check" aria-hidden="true" />
+                <span className="filter-label">{t('Archived')}</span>
               </button>
             </>
           ) : null}

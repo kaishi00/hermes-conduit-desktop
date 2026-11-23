@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { identityFields, moveChat, mutateSession, sessionPath, warrantsRetry, withQuery } from '../src/renderer/src/state/chatActions'
+import { identityFields, moveChat, mutateSession, sessionIsBusy, sessionPath, warrantsRetry, withQuery } from '../src/renderer/src/state/chatActions'
 import { httpErrorText } from '../src/main/connection'
 
 describe('a chat row’s Pin, Rename and Delete', () => {
@@ -13,6 +13,20 @@ describe('a chat row’s Pin, Rename and Delete', () => {
     expect(identityFields({ runtime_revision: -1 }, 'r')).toBeNull()
     expect(identityFields(null, 'r')).toBeNull()
     expect(withQuery('/api/sessions/s1?profile=w', { request_id: 'r-1', expected_revision: 4 })).toBe('/api/sessions/s1?profile=w&expected_revision=4&request_id=r-1')
+  })
+
+  it('recognizes starting, working and waiting sessions by stored or live id', () => {
+    const response = { sessions: [
+      { id: 'live', session_key: 'stored', status: 'starting' },
+      { id: 'running', status: 'working' },
+      { id: 'approval', status: 'waiting' },
+      { id: 'done', status: 'idle' }
+    ] }
+    expect(sessionIsBusy(response, 'stored')).toBe(true)
+    expect(sessionIsBusy(response, 'running')).toBe(true)
+    expect(sessionIsBusy(response, 'approval')).toBe(true)
+    expect(sessionIsBusy(response, 'done')).toBe(false)
+    expect(sessionIsBusy(response, 'another')).toBe(false)
   })
 
   it('try once more when the chat moved on in between', async () => {
@@ -33,6 +47,24 @@ describe('a chat row’s Pin, Rename and Delete', () => {
     expect(calls[1]![0]).toBe('DELETE')
     expect(calls[1]![1]).toMatch(/^\/api\/sessions\/s1\?expected_revision=1&request_id=/)
   })
+  it('archives and restores a chat under its own profile with a fresh revision', async () => {
+    const calls: [string, string, unknown][] = []
+    const http = async <T,>(method: string, path: string, body?: unknown): Promise<T> => {
+      calls.push([method, path, body])
+      return (method === 'GET' ? { runtime_revision: 7, runtime_generation: 2 } : {}) as T
+    }
+    await mutateSession(http, 'chat/one', 'writer', { archived: true })
+    await mutateSession(http, 'chat/one', 'writer', { archived: false })
+    expect(calls.map(([method, path]) => [method, path])).toEqual([
+      ['GET', '/api/sessions/chat%2Fone/mutation-snapshot?profile=writer'],
+      ['PATCH', '/api/sessions/chat%2Fone?profile=writer'],
+      ['GET', '/api/sessions/chat%2Fone/mutation-snapshot?profile=writer'],
+      ['PATCH', '/api/sessions/chat%2Fone?profile=writer']
+    ])
+    expect(calls[1]![2]).toMatchObject({ archived: true, profile: 'writer', expected_revision: 7, expected_generation: 2 })
+    expect(calls[3]![2]).toMatchObject({ archived: false, profile: 'writer', expected_revision: 7, expected_generation: 2 })
+  })
+
 
   it('write without a revision on a host that has no snapshot', async () => {
     const calls: string[] = []

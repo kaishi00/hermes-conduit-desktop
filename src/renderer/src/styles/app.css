@@ -12333,3 +12333,45 @@ main.docked-pulse.pulse-page {
   gap: 12px;
   flex-wrap: wrap;
 }
+
+/* Archived chats */
+.archived-chats {
+  width: min(600px, 100%);
+}
+
+.archived-chats-search {
+  margin: 14px 0 6px;
+}
+
+.shortcuts-sheet .archived-chats-list li {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.archived-chats-details {
+  display: flex;
+  flex: 1 1 140px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.archived-chats .link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.archived-chats-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 10px 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.archived-chats-more {
+  margin-top: 12px;
+}

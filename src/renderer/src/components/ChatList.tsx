@@ -117,9 +117,10 @@ interface Props {
   onOtherProfile?: (tile: MixedTile) => void
   /** Another dashboard's profile the list shows, from its face; this dashboard's `profile` is null then. */
   otherProfile?: { host: string; name: string } | null
-  /** A row's menu (right-click or ⋯): Pin or Unpin, Rename, Delete. */
+  /** A row's menu (right-click or ⋯): Pin or Unpin, Rename, Archive, Delete. */
   onPin?: (row: ChatRow) => void
   onRename?: (row: ChatRow, title: string) => void
+  onArchive?: (row: ChatRow) => Promise<boolean>
   onDelete?: (row: ChatRow) => void
   /** Stars and read state, kept on this computer; the filter chips use them. */
   marks?: ChatMarks
@@ -142,6 +143,8 @@ interface Props {
   projects?: { profile: string; list: Project[] | null }
   /** Filter › Needs you: every profile's waiting chats, where the list is served. */
   onNeedsYou?: () => void
+  /** Filter › Archived: this dashboard's manually archived chats. */
+  onArchived?: () => void
   /** The host, so a Hermes without message search isn't asked again. */
   searchScope?: string
   /** Opens every pinned reply; left out while there are none. */
@@ -216,6 +219,7 @@ export function ChatList({
   otherProfile = null,
   onPin,
   onRename,
+  onArchive,
   onDelete,
   marks,
   onStar,
@@ -227,6 +231,7 @@ export function ChatList({
   onProjects,
   projects: projectTree,
   onNeedsYou,
+  onArchived,
   onPinnedReplies,
   searchScope = '',
   moveTargets,
@@ -243,7 +248,7 @@ export function ChatList({
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState<{ row: ChatRow; x: number; y: number } | null>(null)
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null)
-  const hasActions = !!(onPin || onRename || onDelete || onStar)
+  const hasActions = !!(onPin || onRename || onArchive || onDelete || onStar)
   // Move to Project's targets: null while they're read.
   const [moving, setMoving] = useState<MoveTarget[] | null | false>(false)
   const canMove = !!onMove && !!moveTargets
@@ -558,8 +563,8 @@ export function ChatList({
   }, [present, selectedId])
 
   // What a row's handlers read, so they keep one identity and memoized rows skip a redraw (desktop#199).
-  const latest = useRef({ onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename })
-  latest.current = { onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename }
+  const latest = useRef({ onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope })
+  latest.current = { onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope }
   const rowHandlers = useMemo<RowHandlers>(
     () => ({
       select: row => latest.current.onSelect(row),
@@ -684,6 +689,7 @@ export function ChatList({
             open={filterOpen}
             onOpen={setFilterOpen}
             onNeedsYou={onNeedsYou}
+            onArchived={onArchived}
             projects={projectChoices}
           />
         ) : null}
@@ -946,6 +952,22 @@ export function ChatList({
               {onOpenInWindow ? (
                 <button role="menuitem" onClick={() => onOpenInWindow(menu.row)}>
                   {windowIds?.includes(menu.row.id) ? t('Show Window') : t('Open in New Window')}
+                </button>
+              ) : null}
+              {onArchive ? (
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    const row = menu.row
+                    const scope = searchScope
+                    setMenu(null)
+                    void onArchive(row).then(archived => {
+                      // Another pin may have moved while the request was in flight.
+                      if (archived && row.pinned && latest.current.searchScope === scope) latest.current.dropPin(row)
+                    })
+                  }}
+                >
+                  {t('Archive')}
                 </button>
               ) : null}
               {onPin ? (

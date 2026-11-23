@@ -22,6 +22,9 @@ side by side. Close the window and Conduit stays in the tray (the menu bar
 on the Mac), so approvals and finished replies still reach you as
 notifications. It speaks the iPhone app's thirteen languages.
 
+Right-click a chat to archive it; open **Filter > Archived** to search,
+restore or permanently delete archived chats.
+
 It works on its own: you don't need the iPhone app. Your chats live in your
 Hermes, so they're the same on the phone, the desktop and Hermes' own
 dashboard.

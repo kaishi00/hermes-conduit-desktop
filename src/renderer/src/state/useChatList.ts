@@ -223,5 +223,5 @@ export function useChatList(connected: boolean, host = '') {
     saveChatList(host, next)
   }, [host])
 
-  return { rows, archived, error, updating, ownProfileOnly, unread, refresh: refreshSoon, patchRow }
+  return { rows, archived, error, updating, ownProfileOnly, unread, refresh: refreshSoon, reload: load, patchRow }
 }
