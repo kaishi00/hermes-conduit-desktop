@@ -302,6 +302,7 @@ export interface HistoryRow {
   row_id?: number | null
   display_kind?: string | null
   name?: string | null
+  tool_name?: string | null
   context?: string | null
   reasoning?: string | null
   tool_call_id?: string | null
@@ -682,14 +683,22 @@ export function missingDetails(state: TranscriptState): boolean {
 
 /**
  * The boards of conduit_show rows and every row's arguments and result, from
- * their answers by tool call id (the REST transcript has them).
+ * their answers by tool call id (the REST transcript has them). A call made
+ * through the deferred `tool_call` wrapper resumes under that name, while its
+ * answer's row names the tool that ran (`conduit_show`), so the board is read
+ * from the answer's tool name when the page has one (desktop#389).
  */
-export function attachBoards(state: TranscriptState, answers: Map<string, string>, args: Map<string, string> = new Map()): TranscriptState {
+export function attachBoards(
+  state: TranscriptState,
+  answers: Map<string, string>,
+  args: Map<string, string> = new Map(),
+  names: Map<string, string> = new Map()
+): TranscriptState {
   let changed = false
   const items = state.items.map(item => {
     if (item.kind !== 'tool') return item
     const answer = answers.get(item.toolId)
-    const board = item.board ?? (answer === undefined ? null : boardFrom(item.name, answer, undefined))
+    const board = item.board ?? (answer === undefined ? null : boardFrom(names.get(item.toolId) ?? item.name, answer, undefined))
     const result = item.result ?? (answer === undefined ? undefined : toolDetail(answer))
     const given = item.args ?? (args.has(item.toolId) ? toolDetail(args.get(item.toolId)) : undefined)
     if (board === (item.board ?? null) && result === item.result && given === item.args) return item
@@ -748,6 +757,21 @@ export function toolAnswers(raw: unknown): Map<string, string> {
     if (row.role === 'tool' && typeof row.tool_call_id === 'string') answers.set(row.tool_call_id, rowText(row))
   }
   return answers
+}
+
+/**
+ * Each tool row's tool name in that page, by tool call id: the tool that ran,
+ * which a wrapped call's resume row doesn't name. The REST rows carry it as
+ * `tool_name`; `name` is the field the desktop's resume events use.
+ */
+export function toolNames(raw: unknown): Map<string, string> {
+  const names = new Map<string, string>()
+  const messages = (raw as { messages?: unknown } | null)?.messages
+  for (const row of Array.isArray(messages) ? (messages as HistoryRow[]) : []) {
+    const name = row.tool_name ?? row.name
+    if (row.role === 'tool' && typeof row.tool_call_id === 'string' && typeof name === 'string' && name) names.set(row.tool_call_id, name)
+  }
+  return names
 }
 
 /** A send the chat's queue took behind the running turn: its bubble waits in the dock, out of the transcript. */

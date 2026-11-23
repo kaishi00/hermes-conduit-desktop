@@ -61,6 +61,33 @@ describe('tool details from the REST transcript', () => {
   })
 })
 
+describe('boards from the REST transcript', () => {
+  it('restores a board whose call went through the tool_call wrapper', async () => {
+    const { attachBoards, toolAnswers, toolArgs, toolNames } = await import('../src/renderer/src/state/transcript')
+    const shown = JSON.stringify({ cards: [{ type: 'callout', title: 'Heads up', text: 'Hi' }] })
+    const page = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: '{"tool":"conduit_show"}' } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: shown },
+        { role: 'tool', tool_call_id: 'w2', tool_name: 'terminal', content: shown }
+      ]
+    }
+    const state = {
+      items: [
+        { kind: 'tool' as const, key: 'a', toolId: 'w1', name: 'tool_call', status: 'done' as const },
+        { kind: 'tool' as const, key: 'b', toolId: 'w2', name: 'tool_call', status: 'done' as const }
+      ],
+      running: false
+    }
+    expect(toolNames(page)).toEqual(new Map([['w1', 'conduit_show'], ['w2', 'terminal']]))
+    const next = attachBoards(state, toolAnswers(page), toolArgs(page), toolNames(page))
+    expect(next.items[0]).toMatchObject({ board: { cards: [{ type: 'callout', title: 'Heads up', text: 'Hi' }], tabs: false, next: [] } })
+    // Another tool's answer is no board, whatever its text says.
+    expect(next.items[1]).not.toHaveProperty('board')
+    expect(attachBoards(next, toolAnswers(page), toolArgs(page), toolNames(page))).toBe(next)
+  })
+})
+
 describe('self-improvement reviews', () => {
   it('reads a review row as the phone does', async () => {
     const { reviewFromText, fromHistory, applyEvent } = await import('../src/renderer/src/state/transcript')

@@ -39,6 +39,7 @@ import {
   missingDetails,
   toolArgs,
   toolAnswers,
+  toolNames,
   applyingReaction,
   reactionTarget,
   reactionsFrom,
@@ -61,7 +62,7 @@ import { isResumeTooLong, longChatItems, newestRows, rowsSince, settleRunning } 
 
 type Action =
   | { type: 'reset'; state: TranscriptState }
-  | { type: 'boards'; answers: Map<string, string>; args: Map<string, string> }
+  | { type: 'boards'; answers: Map<string, string>; args: Map<string, string>; names: Map<string, string> }
   | { type: 'event'; event: { type: string; payload?: unknown } }
   | { type: 'pending'; text: string; attachments?: Attachment[]; key?: string }
   /** The queue took a send behind the running turn, or a dock action settled one. */
@@ -82,7 +83,7 @@ async function loadBoards(state: TranscriptState, storedId: string, profile: str
   try {
     const page = await gateway.http('GET', path)
     const answers = toolAnswers(page)
-    if (current() && answers.size) dispatch({ type: 'boards', answers, args: toolArgs(page) })
+    if (current() && answers.size) dispatch({ type: 'boards', answers, args: toolArgs(page), names: toolNames(page) })
   } catch {
     // The rows stay as steps.
   }
@@ -129,7 +130,7 @@ function resumedTranscript(result: ResumeResult, rows: HistoryRow[] | null): Tra
     running: result.running === true,
     plan: parsePlan(result.todo_state)
   }
-  return rows ? attachBoards(state, toolAnswers({ messages: rows }), toolArgs({ messages: rows })) : state
+  return rows ? attachBoards(state, toolAnswers({ messages: rows }), toolArgs({ messages: rows }), toolNames({ messages: rows })) : state
 }
 
 function reducer(state: TranscriptState, action: Action): TranscriptState {
@@ -137,7 +138,7 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
     case 'reset':
       return action.state
     case 'boards':
-      return attachBoards(state, action.answers, action.args)
+      return attachBoards(state, action.answers, action.args, action.names)
     case 'event':
       return applyEvent(state, action.event)
     case 'pending':
