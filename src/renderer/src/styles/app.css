@@ -656,12 +656,20 @@ a:hover {
 }
 
 /* A reply's code block, wherever a reply is drawn (chat, call cards): Copy sits in a
-   band above the code, fixed to the block, so it never covers a line however wide. */
+   band above the code, fixed to the block, so it never covers a line however wide.
+   The wrapper carries the block's margins, the pre's own by default, so the
+   :first-child and :last-child resets of whatever holds the reply still reach them. */
 .code-block {
   position: relative;
+  margin: 1em 0;
+}
+
+.assistant .code-block {
+  margin: 0 0 10px;
 }
 
 .code-block pre {
+  margin: 0;
   padding-top: 30px;
 }
 
@@ -714,7 +722,9 @@ a:hover {
   font-weight: 600;
 }
 
-.assistant.streaming > :last-child::after {
+/* The caret after the last line; in a code block, inside its pre rather than below it. */
+.assistant.streaming > :last-child:not(.code-block)::after,
+.assistant.streaming > .code-block:last-child > pre::after {
   content: '';
   display: inline-block;
   width: 8px;
@@ -2898,6 +2908,10 @@ html[data-window='quick'] body {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-3);
+}
+
+.command-output .code-block {
+  margin: 0;
 }
 
 .command-output pre {

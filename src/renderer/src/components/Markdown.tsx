@@ -1,4 +1,4 @@
-import { createContext, isValidElement, memo, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
@@ -55,14 +55,17 @@ export function codeToCopy(children: ReactNode): string {
 
 /** A code block with a Copy button that is always shown, so a draft or a command can be taken in one tap. */
 function Pre({ children }: { children?: ReactNode }) {
-  // Counts copies, so a second click restarts the 1.5 s "Copied" rather than ending the first one's.
-  const [copied, setCopied] = useState(0)
+  const code = useMemo(() => codeToCopy(children), [children])
+  // The code copied, and a count, so a second click restarts the 1.5 s "Copied"
+  // rather than ending the first one's. "Copied" shows only while the block still
+  // holds that code: a surface that swaps one text for another in place reuses
+  // this block, and its new code hasn't been copied.
+  const [copied, setCopied] = useState<{ code: string; n: number } | null>(null)
   useEffect(() => {
     if (!copied) return
-    const timer = setTimeout(() => setCopied(0), 1500)
+    const timer = setTimeout(() => setCopied(null), 1500)
     return () => clearTimeout(timer)
   }, [copied])
-  const code = codeToCopy(children)
   return (
     <div className="code-block">
       <button
@@ -71,12 +74,12 @@ function Pre({ children }: { children?: ReactNode }) {
         aria-live="polite"
         onClick={() =>
           void navigator.clipboard.writeText(code).then(
-            () => setCopied(n => n + 1),
+            () => setCopied(c => ({ code, n: (c?.n ?? 0) + 1 })),
             () => undefined
           )
         }
       >
-        {copied ? t('Copied') : t('Copy')}
+        {copied?.code === code ? t('Copied') : t('Copy')}
       </button>
       <pre>{children}</pre>
     </div>
