@@ -110,6 +110,8 @@ Search for **Conduit** in the application menu. The launcher uses this
 checkout's built app and Electron, so keep the checkout and its dependencies
 where they are, and run `pnpm build` after changing the source. This is
 separate from `pnpm dev`, which runs the development server.
+Both use the same Conduit app data and single-instance lock: if one is
+already running, launching the other brings that window forward instead.
 
 The launcher is installed under `$XDG_DATA_HOME/applications` (normally
 `~/.local/share/applications`). It refuses to replace or shadow another
