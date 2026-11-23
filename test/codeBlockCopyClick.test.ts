@@ -5,6 +5,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { settle } from './hookHarness'
 
 const copies: string[] = []
+const rest = { icon: 'copy', label: 'Copy', announced: '' }
+const done = { icon: 'check', label: 'Copy', announced: 'Copied' }
 
 beforeAll(() => {
   Object.assign(window, {
@@ -35,30 +37,36 @@ async function mount(text: string) {
   act(() => root.render(createElement(Markdown, { text })))
   return {
     button: () => host.querySelector('.code-copy') as HTMLButtonElement,
+    // What shows (the icon) and what a screen reader hears announced.
+    state: () => ({
+      icon: host.querySelector('.code-copy svg')?.getAttribute('data-icon'),
+      label: host.querySelector('.code-copy')?.getAttribute('aria-label'),
+      announced: host.querySelector('.code-block [aria-live]')?.textContent
+    }),
     render: (next: string) => act(() => root.render(createElement(Markdown, { text: next }))),
     unmount: () => act(() => root.unmount())
   }
 }
 
 describe("a code block's Copy button", () => {
-  it('copies the code, reads Copied for 1.5 s, and a second click restarts that', async () => {
+  it('copies the code, shows the check and announces Copied for 1.5 s, and a second click restarts that', async () => {
     const view = await mount('Send this:\n\n```\nHi Tom,\n\nThanks\n```')
-    expect(view.button().textContent).toBe('Copy')
+    expect(view.state()).toEqual(rest)
 
     act(() => view.button().click())
     await settle()
     expect(copies).toEqual(['Hi Tom,\n\nThanks'])
-    expect(view.button().textContent).toBe('Copied')
+    expect(view.state()).toEqual(done)
 
     act(() => vi.advanceTimersByTime(1000))
     act(() => view.button().click())
     await settle()
     act(() => vi.advanceTimersByTime(1000))
     // 2 s after the first click, but only 1 s after the second.
-    expect(view.button().textContent).toBe('Copied')
+    expect(view.state()).toEqual(done)
 
     act(() => vi.advanceTimersByTime(500))
-    expect(view.button().textContent).toBe('Copy')
+    expect(view.state()).toEqual(rest)
     expect(copies).toHaveLength(2)
     view.unmount()
   })
@@ -67,15 +75,15 @@ describe("a code block's Copy button", () => {
     const view = await mount('```\nfirst card\n```')
     act(() => view.button().click())
     await settle()
-    expect(view.button().textContent).toBe('Copied')
+    expect(view.state()).toEqual(done)
 
     // More of the reply arrives after the block: the block, and its Copied, stay.
     view.render('```\nfirst card\n```\n\nAnd more.')
-    expect(view.button().textContent).toBe('Copied')
+    expect(view.state()).toEqual(done)
 
     // The surface now shows another card's text in the same place: nothing there was copied.
     view.render('```\nsecond card\n```')
-    expect(view.button().textContent).toBe('Copy')
+    expect(view.state()).toEqual(rest)
     view.unmount()
   })
 })

@@ -21,7 +21,10 @@ describe('a code block in a reply', () => {
     const html = renderToStaticMarkup(createElement(Markdown as never, { text: 'Send this:\n\n```\nHi Tom,\n\nThanks,\nTalon\n```\n\nDone.' }))
     expect(html).toContain('class="code-block"')
     expect(html).toContain('code-copy')
-    expect(html).toContain('>Copy</button>')
+    // An icon on screen; its words are for screen readers.
+    expect(html).toContain('aria-label="Copy"')
+    expect(html).toContain('data-icon="copy"')
+    expect(html).not.toContain('>Copy<')
     expect(html.indexOf('code-copy')).toBeLessThan(html.indexOf('<pre>'))
     expect(html).toContain('Hi Tom,')
   })

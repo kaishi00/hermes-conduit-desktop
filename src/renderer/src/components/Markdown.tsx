@@ -6,6 +6,7 @@ import { looksLikePath } from '../state/workspace'
 import { remarkDesktopCards } from '../state/desktopCards'
 import { markdownBlocks } from '../state/markdownBlocks'
 import { DesktopCard } from './DesktopCard'
+import { Icon } from './icons'
 import { SESSION_LINK, sessionInLink } from '../state/workLinks'
 import { WorkLinks } from './WorkLinkCard'
 import { t } from '@shared/i18n'
@@ -66,12 +67,16 @@ function Pre({ children }: { children?: ReactNode }) {
     const timer = setTimeout(() => setCopied(null), 1500)
     return () => clearTimeout(timer)
   }, [copied])
+  const shown = copied?.code === code
+  // An icon on screen, so the button doesn't compete with the code; its words are
+  // for screen readers: the label, and "Copied" announced while the check shows.
   return (
     <div className="code-block">
       <button
         type="button"
-        className="link code-copy"
-        aria-live="polite"
+        className={shown ? 'code-copy copied' : 'code-copy'}
+        aria-label={t('Copy')}
+        title={t('Copy')}
         onClick={() =>
           void navigator.clipboard.writeText(code).then(
             () => setCopied(c => ({ code, n: (c?.n ?? 0) + 1 })),
@@ -79,8 +84,11 @@ function Pre({ children }: { children?: ReactNode }) {
           )
         }
       >
-        {copied?.code === code ? t('Copied') : t('Copy')}
+        <Icon name={shown ? 'check' : 'copy'} />
       </button>
+      <span className="sr-only" aria-live="polite">
+        {shown ? t('Copied') : ''}
+      </span>
       <pre>{children}</pre>
     </div>
   )

@@ -668,6 +668,11 @@ a:hover {
   margin: 0 0 10px;
 }
 
+/* As .assistant > :last-child, which the rule above outranks by coming later. */
+.assistant > .code-block:last-child {
+  margin-bottom: 0;
+}
+
 .code-block pre {
   margin: 0;
   padding-top: 30px;
@@ -678,6 +683,30 @@ a:hover {
   top: 5px;
   right: 8px;
   z-index: 1;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.code-copy:hover {
+  color: var(--text);
+}
+
+.code-copy.copied {
+  color: var(--success);
+}
+
+.code-copy svg {
+  width: 14px;
+  height: 14px;
 }
 
 .assistant pre code {
