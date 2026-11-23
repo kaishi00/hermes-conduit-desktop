@@ -44369,20 +44369,20 @@
     "zh-Hans": "语音模型会先告诉你要发送的内容，等你确认后 Hermes 才开始处理。说“send it to Hermes”可跳过确认。通话中可用通话界面的按钮或直接说出来切换。下次通话生效。",
     "zh-Hant": "語音模型會先告訴你要傳送的內容，等你同意後 Hermes 才開始處理。說「send it to Hermes」即可略過詢問。通話中可用通話畫面上的按鈕或直接開口要求來切換。下次通話起生效。"
   },
-  "The voice model greets you as soon as a call connects, so you know it's live. Leave the greeting empty for one in its own words. Applies to the next call.": {
-    "de": "Das Sprachmodell begrüßt dich, sobald ein Anruf verbunden ist, damit du weißt, dass er live ist. Lass die Begrüßung leer, damit es eigene Worte wählt. Gilt ab dem nächsten Anruf.",
-    "es": "El modelo de voz te saluda en cuanto se conecta una llamada, para que sepas que está activa. Deja el saludo vacío para que use sus propias palabras. Se aplica a la próxima llamada.",
-    "fr": "Le modèle vocal vous salue dès qu'un appel se connecte, pour que vous sachiez qu'il est en direct. Laissez la salutation vide pour qu'il la formule lui-même. S'applique au prochain appel.",
-    "id": "Model suara menyapa Anda begitu panggilan terhubung, sehingga Anda tahu panggilan sudah aktif. Kosongkan sapaan agar model menyapa dengan kata-katanya sendiri. Berlaku mulai panggilan berikutnya.",
-    "it": "Il modello vocale ti saluta appena si connette una chiamata, così sai che è attiva. Lascia vuoto il saluto per uno con parole sue. Vale dalla prossima chiamata.",
-    "ja": "通話がつながるとすぐに音声モデルがあいさつするので、通話が始まったことがわかります。あいさつを空欄にすると、モデルが自分の言葉であいさつします。次の通話から適用されます。",
-    "ko": "통화가 연결되자마자 음성 모델이 인사하므로 통화가 시작된 것을 알 수 있어요. 인사말을 비워 두면 모델이 직접 인사해요. 다음 통화부터 적용돼요.",
-    "pl": "Model głosowy wita Cię zaraz po nawiązaniu połączenia, więc wiesz, że już działa. Pozostaw powitanie puste, aby model przywitał się własnymi słowami. Obowiązuje od następnego połączenia.",
-    "pt-BR": "O modelo de voz cumprimenta você assim que a chamada conecta, para você saber que ela está ativa. Deixe a saudação vazia para que ele use as próprias palavras. Vale a partir da próxima chamada.",
-    "ru": "Голосовая модель приветствует вас, как только звонок подключится, — так вы поймёте, что связь установлена. Оставьте приветствие пустым, чтобы модель поздоровалась своими словами. Действует со следующего звонка.",
-    "tr": "Ses modeli, arama bağlanır bağlanmaz sizi selamlar; böylece aramanın canlı olduğunu anlarsınız. Kendi sözleriyle selamlaması için selamlamayı boş bırakın. Sonraki aramada geçerli olur.",
-    "zh-Hans": "通话一接通，语音模型就会向你问候，让你知道已经连上。问候语留空则由模型用自己的话问候。下次通话生效。",
-    "zh-Hant": "通話一接通，語音模型就會向你打招呼，讓你知道已經連上。問候語留空，模型就會用自己的話問候。下次通話起生效。"
+  "The voice model greets you as soon as a call connects, so you know it's live. Leave the greeting empty for one in its own words. Local Live says a short fixed line instead. Applies to the next call.": {
+    "de": "Das Sprachmodell begrüßt dich, sobald ein Anruf verbunden ist, damit du weißt, dass er live ist. Lass die Begrüßung leer, damit es eigene Worte wählt. Local Live sagt stattdessen einen kurzen festen Satz. Gilt ab dem nächsten Anruf.",
+    "es": "El modelo de voz te saluda en cuanto se conecta una llamada, para que sepas que está activa. Deja el saludo vacío para que use sus propias palabras. Local Live dice en su lugar una frase fija y corta. Se aplica a la próxima llamada.",
+    "fr": "Le modèle vocal vous salue dès qu'un appel se connecte, pour que vous sachiez qu'il est en direct. Laissez la salutation vide pour qu'il la formule lui-même. Local Live dit plutôt une courte phrase fixe. S'applique au prochain appel.",
+    "id": "Model suara menyapa Anda begitu panggilan terhubung, sehingga Anda tahu panggilan sudah aktif. Kosongkan sapaan agar model menyapa dengan kata-katanya sendiri. Local Live mengucapkan kalimat singkat yang tetap sebagai gantinya. Berlaku mulai panggilan berikutnya.",
+    "it": "Il modello vocale ti saluta appena si connette una chiamata, così sai che è attiva. Lascia vuoto il saluto per uno con parole sue. Local Live dice invece una breve frase fissa. Vale dalla prossima chiamata.",
+    "ja": "通話がつながるとすぐに音声モデルがあいさつするので、通話が始まったことがわかります。あいさつを空欄にすると、モデルが自分の言葉であいさつします。Local Liveでは、代わりに短い決まったあいさつを言います。次の通話から適用されます。",
+    "ko": "통화가 연결되자마자 음성 모델이 인사하므로 통화가 시작된 것을 알 수 있어요. 인사말을 비워 두면 모델이 직접 인사해요. Local Live는 대신 짧은 고정 인사말을 말해요. 다음 통화부터 적용돼요.",
+    "pl": "Model głosowy wita Cię zaraz po nawiązaniu połączenia, więc wiesz, że już działa. Pozostaw powitanie puste, aby model przywitał się własnymi słowami. Local Live mówi zamiast tego krótkie, stałe zdanie. Obowiązuje od następnego połączenia.",
+    "pt-BR": "O modelo de voz cumprimenta você assim que a chamada conecta, para você saber que ela está ativa. Deixe a saudação vazia para que ele use as próprias palavras. O Local Live diz uma frase curta e fixa no lugar. Vale a partir da próxima chamada.",
+    "ru": "Голосовая модель приветствует вас, как только звонок подключится, — так вы поймёте, что связь установлена. Оставьте приветствие пустым, чтобы модель поздоровалась своими словами. Local Live вместо этого произносит короткую фиксированную фразу. Действует со следующего звонка.",
+    "tr": "Ses modeli, arama bağlanır bağlanmaz sizi selamlar; böylece aramanın canlı olduğunu anlarsınız. Kendi sözleriyle selamlaması için selamlamayı boş bırakın. Local Live bunun yerine kısa, sabit bir cümle söyler. Sonraki aramada geçerli olur.",
+    "zh-Hans": "通话一接通，语音模型就会向你问候，让你知道已经连上。问候语留空则由模型用自己的话问候。Local Live 则会说一句简短的固定问候语。下次通话生效。",
+    "zh-Hant": "通話一接通，語音模型就會向你打招呼，讓你知道已經連上。問候語留空，模型就會用自己的話問候。Local Live 則會說一句簡短的固定問候語。下次通話起生效。"
   },
   "What Conduit sends": {
     "de": "Was Conduit sendet",

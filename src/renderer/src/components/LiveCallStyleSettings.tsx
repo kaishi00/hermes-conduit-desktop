@@ -69,7 +69,7 @@ export function LiveCallStyleSettings({ mode, profile }: { mode: VoiceMode; prof
       ) : null}
       <p className="meta settings-caption">
         {t(
-          "The voice model greets you as soon as a call connects, so you know it's live. Leave the greeting empty for one in its own words. Applies to the next call."
+          "The voice model greets you as soon as a call connects, so you know it's live. Leave the greeting empty for one in its own words. Local Live says a short fixed line instead. Applies to the next call."
         )}
       </p>
       <label className="voice-mode-pick">
