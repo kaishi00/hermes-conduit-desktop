@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import type { HostSummary, SignInMethod, TroubleshootingTopic } from '@shared/ipc'
 import { t } from '@shared/i18n'
 import { ServerCertificate } from './ServerCertificate'
@@ -26,6 +26,7 @@ export function parseHeaderLines(text: string): { ok: true; headers: Record<stri
 
 const methodLabels = (): Record<SignInMethod, string> => ({
   password: t('User name and password'),
+  oidc: t('Browser'),
   token: t('Session token'),
   open: t('No sign-in')
 })
@@ -51,7 +52,6 @@ export function SignIn({
   repairing?: boolean
   onDone?: () => void
 }) {
-  useMouseBack(onCancel)
   const [address, setAddress] = useState(editing?.url ?? '')
   const [url, setUrl] = useState<string | null>(null)
   const [methods, setMethods] = useState<SignInMethod[]>([])
@@ -60,6 +60,8 @@ export function SignIn({
   const [password, setPassword] = useState('')
   const [token, setToken] = useState('')
   const [busy, setBusy] = useState(false)
+  const attempt = useRef(0)
+  useMouseBack(busy ? undefined : onCancel)
   const [error, setError] = useState<string | null>(notice ?? null)
   /** Repair's address saved as another dashboard: Switch goes there. */
   const [savedAs, setSavedAs] = useState<string | null>(null)
@@ -117,6 +119,7 @@ export function SignIn({
   }
 
   async function signIn(target: string, chosen: SignInMethod) {
+    const currentAttempt = ++attempt.current
     setBusy(true)
     setError(null)
     setSavedAs(null)
@@ -126,6 +129,10 @@ export function SignIn({
       // What this computer keeps for the host goes to its new address before that window opens.
       const copied = copyHostData(editing.url, target)
       const result = await window.conduit.editHost(editing.url, { url: target, method: chosen, username, password, token, headers })
+      if (currentAttempt !== attempt.current) {
+        undoHostCopy(copied)
+        return
+      }
       setBusy(false)
       if (!result.ok) {
         undoHostCopy(copied)
@@ -141,6 +148,7 @@ export function SignIn({
       return
     }
     const result = await window.conduit.signIn({ url: target, method: chosen, username, password, token, headers })
+    if (currentAttempt !== attempt.current) return
     setBusy(false)
     if (!result.ok) setError(result.error)
   }
@@ -263,7 +271,7 @@ export function SignIn({
           {methods.length > 1 ? (
             <div className="segmented" role="group" aria-label={t('Sign-in method')}>
               {methods.map(m => (
-                <button key={m} type="button" aria-pressed={m === method} onClick={() => setMethod(m)}>
+                <button key={m} type="button" disabled={busy} aria-pressed={m === method} onClick={() => setMethod(m)}>
                   {methodLabels()[m]}
                 </button>
               ))}
@@ -288,15 +296,21 @@ export function SignIn({
             </label>
           ) : null}
           {method === 'open' ? <p>{t('This dashboard doesn’t ask for a sign-in.')}</p> : null}
+          {method === 'oidc' ? <p>{t('This will open your browser to sign in.')}</p> : null}
           {error ? <div className="error-text" role="alert">{error}</div> : null}
           {switchToSaved}
           <button className="primary" type="submit" disabled={busy}>
-            {busy ? t('Signing in…') : t('Sign in')}
+            {busy ? t('Signing in…') : method === 'oidc' ? t('Sign in with browser') : t('Sign in')}
           </button>
           <button
             className="link-button"
             type="button"
             onClick={() => {
+              if (busy && method === 'oidc') {
+                attempt.current++
+                void window.conduit.cancelSignIn()
+                setBusy(false)
+              }
               setUrl(null)
               setError(null)
               setSavedAs(null)

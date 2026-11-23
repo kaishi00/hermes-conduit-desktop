@@ -57,10 +57,127 @@ describe('sign-in methods', () => {
     expect(signInMethods({ auth_required: true, auth_providers: ['github'] })).toEqual(['password'])
   })
 
-  it('probes /api/status', async () => {
+  it('falls back to /api/status on an older dashboard without provider discovery', async () => {
     const { fetchImpl, calls } = dashboard({ '/api/status': () => json({ version: '0.22.5', auth_required: true, auth_providers: ['basic'] }) })
     expect(await probeHost('example.com', fetchImpl)).toEqual({ ok: true, url: 'https://example.com', methods: ['password'], version: '0.22.5' })
-    expect(calls[0]?.url).toBe('https://example.com/api/status')
+    expect(calls.map(call => call.url)).toEqual(['https://example.com/api/auth/providers', 'https://example.com/api/status'])
+  })
+
+  it('accepts an explicit legacy basic provider when older metadata has no password flag', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json({ providers: [{ name: 'basic' }] }),
+      '/api/status': () => json({ auth_required: true, auth_providers: ['basic'] })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toMatchObject({ ok: true, methods: ['password'] })
+  })
+
+  it('discovers native PKCE before an edge that denies anonymous status', async () => {
+    const { fetchImpl, calls } = dashboard({
+      '/api/auth/providers': () => json({ providers: [{ name: 'self-hosted', supports_password: false }], auth_flows: ['cookie', 'native_pkce'] }),
+      '/api/status': () => json({ error: 'authentication_required' }, { status: 401 })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toEqual({ ok: true, url: 'https://example.com', methods: ['oidc'], version: undefined })
+    expect(calls.map(call => new URL(call.url).pathname)).toEqual(['/api/auth/providers', '/api/status'])
+  })
+
+  it('keeps explicitly advertised mixed methods when status is private', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json({
+        providers: [
+          { name: 'self-hosted', supports_password: false },
+          { name: 'basic', supports_password: true },
+          { name: 'session-token', supports_password: false }
+        ],
+        auth_flows: ['native_pkce']
+      }),
+      '/api/status': () => new Response(null, { status: 401 })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toMatchObject({ ok: true, methods: ['oidc', 'password', 'token'] })
+  })
+
+  it('uses provider flows without requiring status to list auth_providers', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json({ providers: [{ name: 'self-hosted', supports_password: false }], auth_flows: ['native_pkce'] }),
+      '/api/status': () => json({ version: '1.0', auth_required: true })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toEqual({ ok: true, url: 'https://example.com', methods: ['oidc'], version: '1.0' })
+  })
+
+  it('falls back to status flows when provider discovery omits them', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json({ providers: [{ name: 'self-hosted', supports_password: false }] }),
+      '/api/status': () => json({ status: 'ok', auth_flows: ['cookie', 'native_pkce'] })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toMatchObject({ ok: true, methods: ['oidc'] })
+  })
+
+  it('offers all supported methods on a mixed dashboard', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json({
+        providers: [{ name: 'basic', supports_password: true }, { name: 'self-hosted', supports_password: false }],
+        auth_flows: ['cookie', 'native_pkce']
+      }),
+      '/api/status': () => json({ auth_required: true, auth_providers: ['basic', 'session-token'] })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toMatchObject({ ok: true, methods: ['oidc', 'password', 'token'] })
+  })
+
+  it('does not offer password when provider metadata says it is unavailable', async () => {
+    const providers = { providers: [{ name: 'self-hosted', supports_password: false }] }
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json(providers),
+      '/api/status': () => json({ auth_required: true, auth_providers: ['basic'] })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toEqual({ ok: false, error: 'This dashboard has no sign-in method supported by Conduit.' })
+    expect(signInMethods({ auth_required: true, auth_providers: ['session-token'] }, providers)).toEqual(['token'])
+  })
+
+  it('treats provider flows as authoritative over stale status flows', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json({ providers: [{ name: 'basic', supports_password: true }], auth_flows: ['cookie'] }),
+      '/api/status': () => json({ auth_required: true, auth_flows: ['native_pkce'] })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toMatchObject({ ok: true, methods: ['password'] })
+  })
+
+  it('rejects malformed capability metadata instead of silently downgrading', async () => {
+    for (const auth_flows of ['native_pkce', ['cookie', 1]]) {
+      const { fetchImpl, calls } = dashboard({
+        '/api/auth/providers': () => json({ providers: [], auth_flows }),
+        '/api/status': () => json({ auth_required: true, auth_providers: ['basic'] })
+      })
+      expect(await probeHost('example.com', fetchImpl)).toEqual({ ok: false, error: 'This isn’t answering like a Hermes dashboard.' })
+      expect(calls).toHaveLength(1)
+    }
+  })
+
+  it('keeps a discovered native flow when status cannot be reached', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json({ providers: [{ name: 'self-hosted', supports_password: false }], auth_flows: ['native_pkce'] }),
+      '/api/status': () => { throw new TypeError('fetch failed') }
+    })
+    expect(await probeHost('example.com', fetchImpl)).toMatchObject({ ok: true, methods: ['oidc'] })
+  })
+
+  it('does not follow discovery redirects to a different origin with proxy headers', async () => {
+    const { fetchImpl, calls } = dashboard({
+      '/hermes/api/auth/providers': () => json({ providers: [{ name: 'self-hosted', supports_password: false }], auth_flows: ['native_pkce'] }),
+      '/hermes/api/status': () => new Response(null, { status: 302, headers: { Location: 'https://login.example.org/' } })
+    })
+    expect(await probeHost('https://example.com/hermes', fetchImpl, { 'X-Proxy-Token': 'secret' })).toMatchObject({ ok: true, methods: ['oidc'] })
+    expect(calls.map(call => call.url)).toEqual(['https://example.com/hermes/api/auth/providers', 'https://example.com/hermes/api/status'])
+    for (const call of calls) {
+      expect(new Headers(call.init.headers).get('X-Proxy-Token')).toBe('secret')
+      expect(call.init.redirect).toBe('manual')
+    }
+  })
+
+  it('keeps an ungated dashboard open even if a native flow is advertised', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => json({ providers: [{ name: 'self-hosted', supports_password: false }], auth_flows: ['native_pkce'] }),
+      '/api/status': () => json({ auth_required: false })
+    })
+    expect(await probeHost('example.com', fetchImpl)).toMatchObject({ ok: true, methods: ['open'] })
   })
 
   it('says when something else answers', async () => {
@@ -197,6 +314,9 @@ describe('a dashboard behind Cloudflare Access', () => {
       { 'CF-Access-Client-Id': 'id.access', 'CF-Access-Client-Secret': 'shh' }
     )
     expect(passes).toMatchObject({ ok: true, url: 'https://hermes.example.com' })
-    expect(seen).toEqual([['https://hermes.example.com/api/status', 'id.access']])
+    expect(seen).toEqual([
+      ['https://hermes.example.com/api/auth/providers', 'id.access'],
+      ['https://hermes.example.com/api/status', 'id.access']
+    ])
   })
 })

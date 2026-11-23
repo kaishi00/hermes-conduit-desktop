@@ -155,6 +155,7 @@ export class KeptHosts {
     const connection: Connection = new Connection({
       fetch: this.deps.fetch,
       store: pinned,
+      oidcStore: store,
       createSocket: this.deps.createSocket,
       onStatus: status => {
         const kept = this.kept.get(url)

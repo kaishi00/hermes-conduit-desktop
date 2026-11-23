@@ -65,9 +65,14 @@ install.
    Tailscale name, an address on your Wi-Fi such as `192.168.1.20:9119`, or
    your own domain.
 2. Sign in the way your dashboard asks: user name and password, a session
-   token, or nothing for a dashboard without its sign-in gate. For a
-   dashboard behind Cloudflare Access or another proxy, enter its service
-   token or headers under **Behind Cloudflare Access or another proxy?**
+   token, browser sign-in for a dashboard offering native PKCE (including
+   Pocket ID passkeys), or nothing for a dashboard without its sign-in gate.
+   Browser sign-in opens the system browser and returns to Conduit via a
+   temporary loopback address. It requires HTTPS except for a local dashboard.
+   Proxy headers cannot be sent by the browser: its sign-in page must be
+   accessible without them.
+   For other sign-in methods behind Cloudflare Access or another proxy,
+   enter its service token or headers under **Behind Cloudflare Access or another proxy?**
 3. Already signed in on the iPhone? Choose **Pair with your iPhone** instead,
    then in Conduit on the phone open Settings > Connection > Pair a Computer
    and scan the code.

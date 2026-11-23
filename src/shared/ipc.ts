@@ -7,8 +7,8 @@ import type { Language } from './i18n'
 import type { DeviceReport } from './deviceReports'
 import type { UpdateState } from './updates'
 
-/** How a dashboard lets us in, from its public `/api/status`. */
-export type SignInMethod = 'password' | 'token' | 'open'
+/** How a dashboard lets us in, from its public sign-in discovery and status. */
+export type SignInMethod = 'password' | 'token' | 'open' | 'oidc'
 
 export type HostProbe =
   | {
@@ -269,6 +269,7 @@ export interface ConduitApi {
    */
   saveKanbanAttachment(id: string, board: string | null, filename: string): Promise<string>
   signIn(request: SignInRequest): Promise<{ ok: true } | { ok: false; error: string }>
+  cancelSignIn(): Promise<void>
   /** Edit Connection: the open host signs in again at a new address or with a new sign-in, in its place. */
   editHost(from: string, request: SignInRequest): Promise<{ ok: true; url: string } | { ok: false; error: string; savedAs?: string }>
   signOut(): Promise<void>
@@ -488,6 +489,7 @@ export const IPC = {
   windowShow: 'conduit:window-show',
   probe: 'conduit:probe',
   signIn: 'conduit:sign-in',
+  cancelSignIn: 'conduit:cancel-sign-in',
   editHost: 'conduit:edit-host',
   signOut: 'conduit:sign-out',
   switchHost: 'conduit:switch-host',

@@ -102,6 +102,164 @@ function harness(opts: { ticketsBeforeExpiry?: number; hosts?: boolean } = {}) {
 }
 
 describe('the connection', () => {
+  it('restores an OIDC host, rotates an expired grant once, and uses the new bearer for tickets and requests', async () => {
+    const url = 'https://hermes.example.com'
+    const old = { access_token: 'old-access', refresh_token: 'old-refresh', expires_at: 1, provider: 'self-hosted' }
+    const next = { access_token: 'new-access', refresh_token: 'new-refresh', expires_at: Math.floor(Date.now() / 1000) + 3600, provider: 'self-hosted' }
+    const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }], active: url })
+    const requests: { path: string; authorization: string | null }[] = []
+    let refreshes = 0
+    let socketHeaders: Record<string, string> = {}
+    const fetchImpl: Fetch = async (input, init = {}) => {
+      const path = new URL(String(input)).pathname
+      requests.push({ path, authorization: new Headers(init.headers).get('authorization') })
+      if (path === '/auth/native/refresh') {
+        refreshes++
+        return json(next)
+      }
+      if (path === '/api/auth/ws-ticket') return json({ ticket: 'ticket' })
+      return json({ ok: true })
+    }
+    const connection = new Connection({
+      fetch: fetchImpl,
+      store,
+      createSocket: (socketUrl, headers) => {
+        socketHeaders = headers
+        return new FakeSocket(socketUrl, headers) as unknown as WebSocketLike
+      },
+      onStatus: () => {},
+      onEvent: () => {}
+    })
+    await connection.restore()
+    await Promise.all([connection.http('GET', '/api/a'), connection.http('GET', '/api/b')])
+    expect(refreshes).toBe(1)
+    expect(store.get?.(url)?.oidc).toEqual(next)
+    expect(requests.filter(r => r.path.startsWith('/api/')).every(r => r.authorization === 'Bearer new-access')).toBe(true)
+    expect(socketHeaders.Authorization).toBe('Bearer new-access')
+  })
+  it('shares a refresh between active and kept connections and persists the rotated grant', async () => {
+    const url = 'https://hermes.example.com'
+    const old = { access_token: 'old', refresh_token: 'old-refresh', expires_at: 1, provider: 'self-hosted' }
+    const next = { ...old, access_token: 'new', refresh_token: 'new-refresh', expires_at: Date.now() / 1000 + 3600 }
+    const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }], active: url })
+    const pinned = { load: () => store.get?.(url) ?? null, save: (s: SavedConnection) => store.update?.(s), clear: () => {} }
+    let refreshes = 0
+    const response = Promise.withResolvers<Response>()
+    const fetchImpl: Fetch = async input => {
+      if (new URL(String(input)).pathname === '/auth/native/refresh') {
+        refreshes++
+        return response.promise
+      }
+      return json({ ticket: 'ticket' })
+    }
+    const deps = {
+      fetch: fetchImpl,
+      createSocket: (address: string, headers: Record<string, string>) => new FakeSocket(address, headers) as unknown as WebSocketLike,
+      onStatus: () => {},
+      onEvent: () => {}
+    }
+    const active = new Connection({ ...deps, store })
+    const kept = new Connection({ ...deps, store: pinned, oidcStore: store })
+    const both = Promise.all([active.restore(), kept.restore()])
+    expect(refreshes).toBe(1)
+    response.resolve(json(next))
+    await both
+    expect(store.get?.(url)?.oidc).toEqual(next)
+  })
+
+  it('revokes a rotated grant that arrives after sign-out', async () => {
+    const url = 'https://hermes.example.com'
+    const old = { access_token: 'old', refresh_token: 'old-refresh', expires_at: 1, provider: 'self-hosted' }
+    const next = { ...old, access_token: 'new', refresh_token: 'new-refresh', expires_at: Date.now() / 1000 + 3600 }
+    const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }], active: url })
+    const response = Promise.withResolvers<Response>()
+    const revoked: string[] = []
+    const fetchImpl: Fetch = async (input, init) => {
+      const path = new URL(String(input)).pathname
+      if (path === '/auth/native/refresh') return response.promise
+      if (path === '/auth/native/revoke') revoked.push(JSON.parse(String(init?.body)).refresh_token)
+      return json({})
+    }
+    const connection = new Connection({
+      fetch: fetchImpl, store,
+      createSocket: (address, headers) => new FakeSocket(address, headers) as unknown as WebSocketLike,
+      onStatus: () => {}, onEvent: () => {}
+    })
+    const restoring = connection.restore()
+    connection.signOut()
+    response.resolve(json(next))
+    await restoring
+    await until(() => revoked.includes('new-refresh'))
+    expect(revoked).toEqual(expect.arrayContaining(['old-refresh', 'new-refresh']))
+    expect(store.get?.(url)).toBeNull()
+  })
+  it('uses the newly authenticated account rather than the saved account when signing in again', async () => {
+    const url = 'https://hermes.example.com'
+    const old = { access_token: 'old', refresh_token: 'old-refresh', expires_at: Date.now() / 1000 + 3600, provider: 'self-hosted' }
+    const next = { ...old, access_token: 'new', refresh_token: 'new-refresh' }
+    const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }], active: url })
+    let ticketBearer: string | null = null
+    const connection = new Connection({
+      store,
+      fetch: async (input, init) => {
+        const path = new URL(String(input)).pathname
+        if (path === '/auth/native/token') return json(next)
+        if (path === '/api/auth/ws-ticket') ticketBearer = new Headers(init?.headers).get('authorization')
+        return json({ ticket: 'ticket' })
+      },
+      openExternal: async address => {
+        const authorize = new URL(address)
+        const callback = new URL(authorize.searchParams.get('redirect_uri')!)
+        callback.searchParams.set('state', authorize.searchParams.get('state')!)
+        callback.searchParams.set('code', 'new-code')
+        await fetch(callback)
+      },
+      createSocket: (address, headers) => new FakeSocket(address, headers) as unknown as WebSocketLike,
+      onStatus: () => {}, onEvent: () => {}
+    })
+    expect(await connection.signIn({ url, method: 'oidc' })).toEqual({ ok: true })
+    expect(ticketBearer).toBe('Bearer new')
+    expect(store.get?.(url)?.oidc).toEqual(next)
+  })
+  it('cancels after token exchange while the initial ticket is pending and revokes the new grant', async () => {
+    const url = 'https://hermes.example.com'
+    const grant = { access_token: 'new', refresh_token: 'new-refresh', expires_at: Date.now() / 1000 + 3600, provider: 'self-hosted' }
+    const store = createHostList(() => {}, { hosts: [], active: null })
+    const ticket = Promise.withResolvers<Response>()
+    const started = Promise.withResolvers<void>()
+    const revoked: string[] = []
+    const connection = new Connection({
+      store,
+      fetch: async (input, init) => {
+        const path = new URL(String(input)).pathname
+        if (path === '/auth/native/token') return json(grant)
+        if (path === '/api/auth/ws-ticket') { started.resolve(); return ticket.promise }
+        if (path === '/auth/native/revoke') revoked.push(JSON.parse(String(init?.body)).refresh_token)
+        return json({})
+      },
+      openExternal: async address => {
+        const authorize = new URL(address)
+        const callback = new URL(authorize.searchParams.get('redirect_uri')!)
+        callback.searchParams.set('state', authorize.searchParams.get('state')!)
+        callback.searchParams.set('code', 'code')
+        await fetch(callback)
+      },
+      createSocket: (address, headers) => new FakeSocket(address, headers) as unknown as WebSocketLike,
+      onStatus: () => {}, onEvent: () => {}
+    })
+    const signingIn = connection.signIn({ url, method: 'oidc' })
+    await started.promise
+    connection.cancelSignIn()
+    ticket.resolve(json({ ticket: 'ticket' }))
+    expect(await signingIn).toMatchObject({ ok: false })
+    await until(() => revoked.includes('new-refresh'))
+    expect(revoked).toContain('new-refresh')
+    expect(store.get?.(url)).toBeNull()
+  })
+
+
+
+
   it('signs in with a password and opens the socket with a ticket and the cookie', async () => {
     const h = harness()
     const result = await h.connection.signIn({ url: 'https://hermes.example.com/', method: 'password', username: 'eric', password: 'pw' })

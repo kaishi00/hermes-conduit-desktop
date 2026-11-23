@@ -3198,7 +3198,7 @@ function Settings({
         />
       </SettingsPane>
     )
-  const methods = { password: t('User name and password'), token: t('Session token'), open: t('No sign-in') }
+  const methods = { password: t('User name and password'), token: t('Session token'), open: t('No sign-in'), oidc: t('Browser') }
   const settingsBadge = (url: string) => hostBadge(status.hosts ?? [], url, hostName)
   return (
     <SettingsPane pane={pane}>

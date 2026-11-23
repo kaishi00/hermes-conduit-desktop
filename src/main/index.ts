@@ -344,6 +344,7 @@ const keptHosts: KeptHosts = new KeptHosts({
 const connection = new Connection({
   fetch: globalThis.fetch.bind(globalThis),
   store: hostStore,
+  openExternal: url => shell.openExternal(url),
   createSocket,
   onStatus: status => {
     const before = shownHost
@@ -597,6 +598,7 @@ function registerIpc(): void {
     return probeHost(url, globalThis.fetch.bind(globalThis), cleaned.headers)
   })
   ipcMain.handle(IPC.signIn, (_event, request: SignInRequest) => connection.signIn(request))
+  ipcMain.handle(IPC.cancelSignIn, () => connection.cancelSignIn())
   ipcMain.handle(IPC.editHost, (_event, from: unknown, request: SignInRequest) =>
     typeof from === 'string' && request && typeof request.url === 'string' ? connection.editHost(from, request) : { ok: false, error: t('Bad request.') }
   )

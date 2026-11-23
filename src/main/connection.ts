@@ -34,6 +34,17 @@ import { cleanHeaders, httpsIssue, proxyFetch, withProxyHeaders, type ProxyHeade
 import { t } from '../shared/i18n'
 import { addressNamesNothing } from '../shared/hostNames'
 import { describeConnectionFailure } from './connectionFailure'
+import { OidcError, oidcLogin, refreshOidc, revokeOidc, type OidcGrant } from './oidc'
+
+// One rotation per store and host, including a host kept open in another window.
+const oidcRefreshes = new WeakMap<ConnectionStore, Map<string, Promise<OidcGrant>>>()
+const oidcEpochs = new WeakMap<ConnectionStore, Map<string, number>>()
+
+function invalidateOidc(store: ConnectionStore, url: string): void {
+  let epochs = oidcEpochs.get(store)
+  if (!epochs) oidcEpochs.set(store, epochs = new Map())
+  epochs.set(url, (epochs.get(url) ?? 0) + 1)
+}
 
 /** What we keep between launches. Secrets are encrypted by the store. */
 /** How a launch opens the saved hosts. */
@@ -48,6 +59,7 @@ export interface SavedConnection {
   username?: string
   password?: string
   token?: string
+  oidc?: OidcGrant
   cookies?: CookieJar
   /** For a proxy in front of the dashboard (Cloudflare Access, Pangolin…); sent over HTTPS only. */
   headers?: ProxyHeaders
@@ -94,6 +106,10 @@ export type SocketFactory = (url: string, headers: Record<string, string>) => We
 export interface ConnectionDeps {
   fetch: Fetch
   store: ConnectionStore
+  /** Opens the system browser for passkeys, not an embedded browser. */
+  openExternal?: (url: string) => Promise<void>
+  /** Authoritative store shared by the open and kept connections. */
+  oidcStore?: ConnectionStore
   createSocket: SocketFactory
   onStatus: (status: ConnectionStatus) => void
   onEvent: (event: GatewayEventMessage) => void
@@ -136,6 +152,8 @@ export class Connection {
   /** Approvals and questions waiting on an answer from this window, by request id. */
   private readonly pending = new Map<string, { request: ServerRequest; entry: PendingRequest }>()
   private readonly setTimer: (fn: () => void, ms: number) => unknown
+  private readonly newOidc = new WeakSet<SavedConnection>()
+  private browserSignIn: AbortController | null = null
   private readonly clearTimer: (handle: unknown) => void
 
   constructor(private readonly deps: ConnectionDeps) {
@@ -204,6 +222,17 @@ export class Connection {
     await this.dial(generation)
   }
 
+  cancelSignIn(): void {
+    if (!this.browserSignIn) return
+    this.generation++
+    this.browserSignIn.abort()
+    if (this.saved && this.newOidc.has(this.saved)) {
+      this.teardown()
+      this.saved = null
+    }
+    this.browserSignIn = null
+  }
+
   async signIn(request: SignInRequest): Promise<{ ok: true } | { ok: false; error: string }> {
     if (this.locked) return { ok: false, error: t('Unlock Conduit first.') }
     const previous = this.saved
@@ -257,6 +286,7 @@ export class Connection {
     const insecure = httpsIssue(url, cleaned.headers)
     if (insecure) return { ok: false, error: insecure }
     const saved: SavedConnection = { url, method: request.method, headers: cleaned.headers }
+    let browserAttempt: AbortController | null = null
     try {
       if (request.method === 'password') {
         const username = request.username?.trim() ?? ''
@@ -268,15 +298,39 @@ export class Connection {
         const token = request.token?.trim() ?? ''
         if (!token) return { ok: false, error: t('Paste the dashboard’s session token.') }
         saved.token = token
+      } else if (request.method === 'oidc') {
+        const target = new URL(url)
+        if (target.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(target.hostname)) {
+          throw new Error(t('Browser sign-in requires HTTPS, except on this computer.'))
+        }
+        if (saved.headers) {
+          throw new Error(t('Browser sign-in cannot send proxy headers. Make the sign-in page accessible in your browser without those headers.'))
+        }
+        if (!this.deps.openExternal) throw new Error(t('Browser sign-in is unavailable.'))
+        browserAttempt = new AbortController()
+        this.browserSignIn?.abort()
+        this.browserSignIn = browserAttempt
+        saved.oidc = await oidcLogin(url, this.fetchFor(saved), this.deps.openExternal, browserAttempt.signal)
+        this.newOidc.add(saved)
       }
     } catch (error) {
+      if (this.browserSignIn === browserAttempt) this.browserSignIn = null
       return { ok: false, error: (error as Error).message }
     }
-    if (generation !== this.generation) return { ok: false, error: t('Cancelled.') }
+    if (generation !== this.generation) {
+      if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
+      return { ok: false, error: t('Cancelled.') }
+    }
     this.saved = saved
     this.setStatus({ ...this.identity(), phase: 'connecting' })
     const error = await this.dial(generation)
+    if (this.browserSignIn === browserAttempt) this.browserSignIn = null
+    if (generation !== this.generation) {
+      if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
+      return { ok: false, error: t('Cancelled.') }
+    }
     if (error) {
+      if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
       this.saved = null
       this.teardown()
       this.setStatus({ phase: 'signed-out', hosts: this.hosts() })
@@ -284,6 +338,7 @@ export class Connection {
     }
     if (replacing && this.deps.store.replace) this.deps.store.replace(replacing, saved)
     else this.deps.store.save(saved)
+    this.newOidc.delete(saved)
     // The host list now holds it, and its name.
     this.setStatus({ ...this.status, hosts: this.hosts(), hostLabel: this.identityOf(saved).hostLabel })
     return { ok: true }
@@ -292,6 +347,8 @@ export class Connection {
   /** Signs out of the open host; the next saved one, if any, opens. */
   signOut(): void {
     if (this.locked) return
+    const previous = this.saved
+    if (previous?.method === 'oidc' && previous.oidc) this.forgetOidc(previous)
     this.generation++
     this.teardown()
     this.saved = null
@@ -370,6 +427,8 @@ export class Connection {
   removeHost(url: string): void {
     if (this.locked) return
     if (this.saved?.url === url) return this.signOut()
+    const removed = this.deps.store.get?.(url)
+    if (removed?.method === 'oidc' && removed.oidc) this.forgetOidc(removed)
     this.deps.store.remove?.(url)
     this.setStatus({ ...this.identity(), phase: this.status.phase, error: this.status.error, retryInSeconds: this.status.retryInSeconds })
   }
@@ -464,6 +523,7 @@ export class Connection {
       const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit' }
       if (body !== undefined) headers['Content-Type'] = 'application/json'
       if (saved.method === 'password' && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
+      if (saved.method === 'oidc') headers.Authorization = `Bearer ${await this.oidcAccess(saved)}`
       if (saved.method === 'token' && saved.token) headers[SESSION_TOKEN_HEADER] = saved.token
       if (saved.method === 'open') {
         this.openToken ??= await readOpenSessionToken(saved.url, this.fetchFor(saved))
@@ -472,6 +532,7 @@ export class Connection {
       return this.fetchFor(saved)(endpoint(saved.url, path), {
         method,
         headers,
+        redirect: saved.method === 'oidc' ? 'manual' : 'follow',
         body: body === undefined ? undefined : JSON.stringify(body),
         signal
       })
@@ -479,6 +540,9 @@ export class Connection {
     let response = await send()
     if (response.status === 401 && saved.method === 'password' && saved.username && saved.password) {
       this.keepCookies(saved, await passwordLogin(saved.url, saved.username, saved.password, this.fetchFor(saved)))
+      response = await send()
+    } else if (response.status === 401 && saved.method === 'oidc' && (method === 'GET' || method === 'HEAD')) {
+      await this.oidcAccess(saved, true)
       response = await send()
     } else if (response.status === 401 && saved.method === 'open') {
       this.openToken = null
@@ -501,6 +565,7 @@ export class Connection {
     for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value)
     const headers: Record<string, string> = { [CONDUIT_CLIENT_HEADER]: 'conduit' }
     if (saved.method === 'password' && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
+    if (saved.method === 'oidc') headers.Authorization = `Bearer ${await this.oidcAccess(saved)}`
     return this.deps.createSocket(url.toString(), withProxyHeaders(headers, url.toString(), saved.url, saved.headers))
   }
 
@@ -536,6 +601,14 @@ export class Connection {
 
     const headers: Record<string, string> = { [CONDUIT_CLIENT_HEADER]: 'conduit' }
     if (saved.method === 'password' && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
+    if (saved.method === 'oidc') {
+      try {
+        headers.Authorization = `Bearer ${await this.oidcAccess(saved)}`
+      } catch (error) {
+        if (generation !== this.generation) return t('Cancelled.')
+        return this.failed(generation, error)
+      }
+    }
     const client = new JsonRpcGatewayClient({
       socketFactory: url => this.deps.createSocket(url, withProxyHeaders(headers, url, saved.url, saved.headers)),
       requestIdPrefix: 'c'
@@ -676,6 +749,24 @@ export class Connection {
         return webSocketUrl(saved.url, { token: this.openToken }, path)
       case 'token':
         return webSocketUrl(saved.url, { token: saved.token ?? '' }, path)
+      case 'oidc': {
+        const send = async () => {
+          const token = await this.oidcAccess(saved)
+          const fetch: Fetch = (input, init = {}) => this.fetchFor(saved)(input, {
+            ...init,
+            headers: { ...Object.fromEntries(new Headers(init.headers)), Authorization: `Bearer ${token}` },
+            redirect: 'manual'
+          })
+          return mintTicket(saved.url, {}, fetch)
+        }
+        try {
+          return webSocketUrl(saved.url, { ticket: (await send()).ticket }, path)
+        } catch (error) {
+          if (!(error instanceof AuthError && error.signedOut)) throw error
+          await this.oidcAccess(saved, true)
+          return webSocketUrl(saved.url, { ticket: (await send()).ticket }, path)
+        }
+      }
       case 'password': {
         let jar = saved.cookies ?? {}
         try {
@@ -693,6 +784,66 @@ export class Connection {
         }
       }
     }
+  }
+
+  private forgetOidc(saved: SavedConnection): void {
+    const store = this.deps.oidcStore ?? this.deps.store
+    const current = this.newOidc.has(saved) ? undefined : store.get?.(saved.url)?.oidc
+    invalidateOidc(store, saved.url)
+    if (saved.oidc) void revokeOidc(saved.url, saved.oidc, this.fetchFor(saved)).catch(() => {})
+    if (current && current.refresh_token !== saved.oidc?.refresh_token) {
+      void revokeOidc(saved.url, current, this.fetchFor(saved)).catch(() => {})
+    }
+  }
+
+  /** Rotate once across concurrent requests and kept windows; persist before exposing the new token. */
+  private async oidcAccess(saved: SavedConnection, force = false): Promise<string> {
+    const target = new URL(saved.url)
+    if (target.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(target.hostname)) {
+      throw new AuthError(t('Browser sign-in requires HTTPS, except on this computer.'))
+    }
+    let grant = saved.oidc
+    if (!grant) throw new AuthError(t('Your browser sign-in has expired. Sign in again.'), 401)
+    const store = this.deps.oidcStore ?? this.deps.store
+    const latest = this.newOidc.has(saved) ? undefined : store.get?.(saved.url)?.oidc
+    if (latest && latest.refresh_token !== grant.refresh_token) {
+      saved.oidc = grant = latest
+      force = false
+    }
+    if (!force && grant.expires_at * 1000 > Date.now() + 60_000) return grant.access_token
+    let pendingByHost = oidcRefreshes.get(store)
+    if (!pendingByHost) {
+      pendingByHost = new Map()
+      oidcRefreshes.set(store, pendingByHost)
+    }
+    const key = `${saved.url}\0${grant.refresh_token}`
+    let pending = pendingByHost.get(key)
+    if (!pending) {
+      const current = grant
+      const epoch = oidcEpochs.get(store)?.get(saved.url) ?? 0
+      pending = refreshOidc(saved.url, current, this.fetchFor(saved)).then(next => {
+        if ((oidcEpochs.get(store)?.get(saved.url) ?? 0) !== epoch) {
+          void revokeOidc(saved.url, next, this.fetchFor(saved)).catch(() => {})
+          throw new AuthError(t('Sign-in was cancelled.'), 401)
+        }
+        const stored = store.get?.(saved.url)
+        if (!this.newOidc.has(saved) && stored?.oidc?.refresh_token === current.refresh_token) {
+          store.update?.({ ...stored, oidc: next })
+        }
+        return next
+      }).catch(error => {
+        if (!(error instanceof OidcError) || !error.isRejected) throw error
+        const stored = store.get?.(saved.url)
+        if (!this.newOidc.has(saved) && stored?.oidc?.refresh_token === current.refresh_token) {
+          store.update?.({ ...stored, oidc: undefined })
+        }
+        if (saved.oidc?.refresh_token === current.refresh_token) saved.oidc = undefined
+        throw new AuthError(t('Your browser sign-in has expired. Sign in again.'), 401)
+      }).finally(() => pendingByHost!.delete(key))
+      pendingByHost.set(key, pending)
+    }
+    saved.oidc = await pending
+    return saved.oidc.access_token
   }
 
   private keepCookies(saved: SavedConnection, jar: CookieJar): void {

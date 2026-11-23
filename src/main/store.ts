@@ -51,6 +51,7 @@ export function createFileStore(): ConnectionStore {
         saved.password = secrets.password
         saved.token = secrets.token
         saved.cookies = secrets.cookies
+        saved.oidc = secrets.oidc
         saved.headers = secrets.headers
       } catch {
         // Encrypted by another user or machine: sign in again.
@@ -67,7 +68,7 @@ export function createFileStore(): ConnectionStore {
     if (connection.method !== 'open' || connection.headers) {
       // Without the keychain the secrets stay in memory for this launch only.
       if (!safeStorage.isEncryptionAvailable()) return null
-      const secrets = { password: connection.password, token: connection.token, cookies: connection.cookies, headers: connection.headers }
+      const secrets = { password: connection.password, token: connection.token, cookies: connection.cookies, headers: connection.headers, oidc: connection.oidc }
       stored.secrets = safeStorage.encryptString(JSON.stringify(secrets)).toString('base64')
     }
     return stored

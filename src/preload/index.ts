@@ -100,6 +100,7 @@ const api: ConduitApi = {
   saveBytes: (name, bytes) => ipcRenderer.invoke(IPC.saveBytes, name, bytes),
   saveKanbanAttachment: (id, board, filename) => ipcRenderer.invoke(IPC.saveKanbanAttachment, id, board, filename),
   signIn: request => ipcRenderer.invoke(IPC.signIn, request),
+  cancelSignIn: () => ipcRenderer.invoke(IPC.cancelSignIn),
   editHost: (from, request) => ipcRenderer.invoke(IPC.editHost, from, request),
   signOut: () => ipcRenderer.invoke(IPC.signOut),
   switchHost: (url: string) => ipcRenderer.invoke(IPC.switchHost, url),

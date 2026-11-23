@@ -8,6 +8,8 @@
  *   single-use ticket (`POST /api/auth/ws-ticket`) for each socket.
  * - `token`: a gated dashboard that takes Hermes' session token as a sign-in
  *   (`HERMES_DASHBOARD_SESSION_TOKEN`); the socket takes it as `?token=`.
+ * - `oidc`: a native PKCE flow opens the system browser and exchanges its
+ *   one-time code for a dashboard grant.
  *
  * Everything here takes its `fetch` as an argument so the tests can stand in
  * for a dashboard.
@@ -119,7 +121,26 @@ async function errorDetail(response: Response): Promise<string> {
   return `HTTP ${response.status}`
 }
 
-/** Reads `/api/status` and says which sign-in methods the dashboard offers. */
+/** Fetch discovery without following a redirect off the dashboard with proxy headers. */
+async function discoveryFetch(fetchImpl: Fetch, url: string): Promise<Response> {
+  let current = url
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const response = await timedFetch(fetchImpl, current, { headers: { Accept: 'application/json' }, redirect: 'manual' })
+    const location = response.headers.get('location')
+    if (response.status < 300 || response.status >= 400 || !location) return response
+    const next = new URL(location, current)
+    if (next.origin !== new URL(url).origin) return response
+    current = next.toString()
+  }
+  throw new AuthError(t('The dashboard redirected too many times.'))
+}
+
+function malformedAuthFlows(body: Record<string, unknown>): boolean {
+  return Object.hasOwn(body, 'auth_flows') &&
+    (!Array.isArray(body.auth_flows) || body.auth_flows.some(flow => typeof flow !== 'string'))
+}
+
+/** Reads public provider discovery and status to find the dashboard's sign-in methods. */
 /** `headers`, for a proxy in front of the dashboard, go only to its own address over HTTPS. */
 export async function probeHost(input: string, fetchImpl: Fetch, headers?: ProxyHeaders): Promise<HostProbe> {
   let url: string
@@ -131,9 +152,41 @@ export async function probeHost(input: string, fetchImpl: Fetch, headers?: Proxy
   const insecure = httpsIssue(url, headers)
   if (insecure) return { ok: false, error: insecure }
   try {
-    const response = await timedFetch(proxyFetch(fetchImpl, url, headers), endpoint(url, '/api/status'), {
-      headers: { Accept: 'application/json' }
-    })
+    const scopedFetch = proxyFetch(fetchImpl, url, headers)
+    const discovery = await discoveryFetch(scopedFetch, endpoint(url, '/api/auth/providers'))
+    if (behindCloudflareAccess(discovery)) {
+      return {
+        ok: false,
+        help: 'cloudflare',
+        error: headers
+          ? t('Cloudflare Access turned this computer away. Check the service token under Proxy sign-in.')
+          : t('This dashboard is behind Cloudflare Access. Add its service token under Proxy sign-in.')
+      }
+    }
+    const discovered = discovery.ok ? await discovery.json().catch(() => null) : null
+    const metadata = discovered && typeof discovered === 'object' && !Array.isArray(discovered)
+      ? discovered as Record<string, unknown>
+      : null
+    if (metadata && malformedAuthFlows(metadata)) {
+      return { ok: false, error: t('This isn’t answering like a Hermes dashboard.') }
+    }
+    const native = Array.isArray(metadata?.auth_flows) && metadata.auth_flows.includes('native_pkce')
+    const result = (status: Record<string, unknown>): HostProbe => {
+      const methods = signInMethods(status, metadata)
+      return methods.length
+        ? { ok: true, url, methods, version: typeof status.version === 'string' ? status.version : undefined }
+        : { ok: false, error: t('This dashboard has no sign-in method supported by Conduit.') }
+    }
+
+    // Status also lists session-token, which is not in the provider list. A
+    // native-enabled edge can expose discovery while denying anonymous status.
+    let response: Response
+    try {
+      response = await discoveryFetch(scopedFetch, endpoint(url, '/api/status'))
+    } catch (error) {
+      if (native) return result({ auth_required: true })
+      throw error
+    }
     if (behindCloudflareAccess(response)) {
       return {
         ok: false,
@@ -143,16 +196,21 @@ export async function probeHost(input: string, fetchImpl: Fetch, headers?: Proxy
           : t('This dashboard is behind Cloudflare Access. Add its service token under Proxy sign-in.')
       }
     }
+    if (!response.ok && native) return result({ auth_required: true })
     // No credentials went with this read, so a 401 or 403 is something in front of the dashboard turning this computer away.
     if (response.status === 401 || response.status === 403) return { ok: false, error: accessDeniedMessage(), help: 'network' }
     if (!response.ok) {
       return { ok: false, error: t('This isn’t answering like a Hermes dashboard ({detail}).', { detail: await errorDetail(response) }) }
     }
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      if (native) return result({ auth_required: true })
       return { ok: false, error: t('This isn’t answering like a Hermes dashboard.') }
     }
-    return { ok: true, url, methods: signInMethods(body), version: typeof body.version === 'string' ? body.version : undefined }
+    if ((!metadata || !Object.hasOwn(metadata, 'auth_flows')) && malformedAuthFlows(body)) {
+      return { ok: false, error: t('This isn’t answering like a Hermes dashboard.') }
+    }
+    return result(body)
   } catch (error) {
     // A certificate this computer doesn't trust: offer to read and save its root.
     const kind = (error as { kind?: unknown }).kind
@@ -173,16 +231,25 @@ export function behindCloudflareAccess(response: Response): boolean {
   return /\.cloudflareaccess\.com\//.test(location) || (response.status === 403 && response.headers.has('cf-access-domain'))
 }
 
-export function signInMethods(status: Record<string, unknown>): SignInMethod[] {
-  if (status.auth_required !== true) return ['open']
+export function signInMethods(status: Record<string, unknown>, metadata?: Record<string, unknown> | null): SignInMethod[] {
+  // Provider discovery's flows are authoritative when present; stock Hermes
+  // advertises them on status instead.
+  const flows = Array.isArray(metadata?.auth_flows) ? metadata.auth_flows : status.auth_flows
+  const native = Array.isArray(flows) && flows.includes('native_pkce')
+  const discoveredProviders = Array.isArray(metadata?.providers) ? metadata.providers : null
+  if (status.auth_required === false || (status.auth_required !== true && !native && !discoveredProviders?.length)) return ['open']
   const providers = Array.isArray(status.auth_providers)
     ? status.auth_providers.filter((p): p is string => typeof p === 'string')
     : []
+  const passwordDeclared = discoveredProviders?.some(p => p && typeof p === 'object' && typeof p.supports_password === 'boolean')
+  const password = discoveredProviders?.some(p => p && typeof p === 'object' && p.supports_password === true) ||
+    (!passwordDeclared && providers.includes(PASSWORD_PROVIDER))
   const methods: SignInMethod[] = []
-  if (providers.includes(PASSWORD_PROVIDER)) methods.push('password')
-  if (providers.includes(SESSION_TOKEN_PROVIDER)) methods.push('token')
-  // A gated dashboard that names neither still has the password page.
-  if (methods.length === 0) methods.push('password')
+  if (native) methods.push('oidc')
+  if (password) methods.push('password')
+  if (providers.includes(SESSION_TOKEN_PROVIDER) || discoveredProviders?.some(p => p && typeof p === 'object' && p.name === SESSION_TOKEN_PROVIDER)) methods.push('token')
+  // Only old servers with no provider metadata get the historical password fallback.
+  if (methods.length === 0 && !discoveredProviders) methods.push('password')
   return methods
 }
 
