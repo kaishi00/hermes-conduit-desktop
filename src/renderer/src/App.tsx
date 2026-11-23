@@ -406,6 +406,9 @@ function Shell({
   }, [section, dockedHost])
   const [projectsOpen, setProjectsOpen] = useState(false)
   const [archivedOpen, setArchivedOpen] = useState(false)
+  useEffect(() => {
+    if (section !== 'chats' || !connected) setArchivedOpen(false)
+  }, [section, connected])
   const list = useChatList(connected, status.url ?? '')
   const {
     transcriptStore,
@@ -446,6 +449,7 @@ function Shell({
   const chatPane = useRef<HTMLElement>(null)
   chatProfileRef.current = chatProfile
   const newChat = useCallback(() => {
+    setArchivedOpen(false)
     setSection('chats')
     setSelected({ id: null, profile: chatProfileRef.current ?? undefined })
   }, [])
@@ -504,6 +508,7 @@ function Shell({
         hideList(false)
       }
     } else if (action === 'search') {
+      setArchivedOpen(false)
       setSection('chats')
       hideList(false)
       // The list mounts with Chats.
@@ -516,6 +521,7 @@ function Shell({
   useEffect(() => {
     const offMenu = window.conduit.onMenu(action => runShortcut.current(action))
     const offOpen = window.conduit.onOpenChat(ref => {
+      setArchivedOpen(false)
       // Another combined dashboard's chat (back from its window, a docked chat's notification, a docked Pulse card) docks here.
       if (ref.host && ref.host !== statusUrlRef.current) {
         const fresh = ref.fresh === true || !ref.storedId
@@ -739,10 +745,7 @@ function Shell({
   const botNames = useMemo(() => (roster.bots ?? []).map(bot => bot.name), [roster.bots])
   const { sessions: workSessions, byBot: workByBot } = useWorkSessions(botNames, connected)
   // Voice's rows: calls, Classic's chats and voice jobs under Voice, the plugin's archived ones listed again.
-  const voiceProfiles = useMemo(
-    () => [...new Set([...(list.rows ?? []).map(r => r.profile ?? ''), ...(archivedOpen ? (roster.bots ?? []).map(bot => bot.name) : [])])].sort(),
-    [list.rows, archivedOpen, roster.bots]
-  )
+  const voiceProfiles = useMemo(() => [...new Set((list.rows ?? []).map(r => r.profile ?? ''))].sort(), [list.rows])
   const voice = useVoiceList(connected, voiceProfiles, `${list.rows?.length ?? 0}\t${list.archived.length}\t${list.rows?.[0]?.activeAt ?? 0}`)
   const listedRows = useMemo(() => {
     const rows = list.rows ? withVoice(list.rows, list.archived, voice) : list.rows
@@ -1589,11 +1592,11 @@ function Shell({
       void tell(t('Not connected to Hermes.'))
       return false
     }
-    if (archived !== false && (liveStatus.has(row.id) || runningIds.has(row.id) || (calling && (selected.id === row.id || chat.storedId === row.id)))) {
+    if (archived !== false && (liveStatus.has(row.id) || runningIds.has(row.id) || waitingIds.has(row.id) || (calling && (selected.id === row.id || chat.storedId === row.id)))) {
       void tell(t('Hermes is still busy in this chat. Try again in a moment.'))
       return false
     }
-    const key = `${row.profile ?? 'default'}\0${row.id}`
+    const key = `${(row.profile ?? 'default').toLowerCase()}\0${row.id}`
     if (archiveMutations.current.has(key)) return false
     archiveMutations.current.add(key)
     try {
@@ -2362,17 +2365,6 @@ function Shell({
             {/* The side pane's Bots list opens at the spot it shares with a group chat page's, which may have moved it meanwhile (desktop#256). */}
             {/* Hidden, the list stays mounted, so its search and an open project are there when it comes back. */}
             <div className="list-keeper" hidden={listHidden}>
-              {archivedOpen ? (
-                <ArchivedChats
-                  host={status.url ?? ''}
-                  profile={chatProfile}
-                  visibleVoiceIds={archiveVisibleIds}
-                  onClose={() => setArchivedOpen(false)}
-                  onRestore={row => changeArchived(row, false)}
-                  onDelete={row => changeArchived(row, null)}
-                />
-              ) : null}
-              <div className="list-keeper" hidden={archivedOpen}>
               {projectsOpen ? (
                 <ProjectsPane
                   profile={chatProfile}
@@ -2445,7 +2437,6 @@ function Shell({
                   onHide={() => hideList(true)}
                 />
               )}
-              </div>
             </div>
             {listHidden ? null : (
               <ColumnDivider
@@ -2935,6 +2926,16 @@ function Shell({
         )}
       </div>
       {shortcutsOpen ? <ShortcutsSheet onClose={closeShortcuts} /> : null}
+      {archivedOpen && section === 'chats' && connected ? (
+        <ArchivedChats
+          host={status.url ?? ''}
+          profile={chatProfile}
+          visibleVoiceIds={archiveVisibleIds}
+          onClose={() => setArchivedOpen(false)}
+          onRestore={row => changeArchived(row, false)}
+          onDelete={row => changeArchived(row, null)}
+        />
+      ) : null}
       {shownInvite ? (
         <RoomInviteCard
           invite={shownInvite}

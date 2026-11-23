@@ -5,7 +5,6 @@ import {
   CHAT_LIST_MAX_PAGES,
   CHAT_LIST_PAGE,
   chatListPath,
-  responseCount,
   rowsFromResponse,
   unreadProfiles,
   type ChatRow,
@@ -75,25 +74,32 @@ const emptyView = (host: string): View => ({
   actionErrors: new Map()
 })
 
-/** Keep model names from the dashboard for search; the shared chat row doesn't otherwise need them. */
-function archivedRows(body: unknown): ArchivedRow[] {
+/** Keep model names from the dashboard for search and drop live pinned backfill rows (`archived: false`). */
+function archivedPage(body: unknown): { rows: ArchivedRow[]; rawCount: number } {
   const sessions = Array.isArray(body)
     ? body
     : body && typeof body === 'object' && 'sessions' in body && Array.isArray(body.sessions)
       ? body.sessions
       : []
+  const archived = sessions.filter((item): item is Record<string, unknown> => {
+    if (!item || typeof item !== 'object') return false
+    const flag = (item as { archived?: unknown }).archived
+    return flag === undefined || flag === true || flag === 1
+  })
   const models = new Map<string, string>()
-  for (const item of sessions) {
-    if (!item || typeof item !== 'object') continue
+  for (const item of archived) {
     const id = 'id' in item && typeof item.id === 'string' ? item.id : 'session_id' in item && typeof item.session_id === 'string' ? item.session_id : ''
     const model = 'model' in item && typeof item.model === 'string' ? item.model : 'model_id' in item && typeof item.model_id === 'string' ? item.model_id : ''
     const profile = 'profile' in item && typeof item.profile === 'string' && item.profile ? item.profile : 'default'
     if (id && model) models.set(`${profile.toLowerCase()}\0${id}`, model)
   }
-  return rowsFromResponse(body).map(row => {
-    const model = models.get(rowKey(row))
-    return model ? { ...row, model } : row
-  })
+  return {
+    rawCount: archived.length,
+    rows: rowsFromResponse({ sessions: archived }).map(row => {
+      const model = models.get(rowKey(row))
+      return model ? { ...row, model } : row
+    })
+  }
 }
 
 /** Offsets and totals can arrive as JSON numbers or numeric strings. */
@@ -147,8 +153,16 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
       const parsed = parseVoiceTags(answer)
       ticket.voice.tags.set(key, parsed.tags)
       ticket.voice.callChats.set(key, parsed.callChats)
-    } catch {
-      if (isCurrent(ticket) && ticket.voiceVersions.get(key) === version) ticket.voiceErrors.add(key)
+    } catch (error) {
+      if (isCurrent(ticket) && ticket.voiceVersions.get(key) === version) {
+        if ((error as { code?: unknown } | null)?.code === 404) {
+          // A host without the Conduit plugin has no plugin-archived voice rows; saved calls still match by endReason.
+          ticket.voice.tags.set(key, new Map())
+          ticket.voice.callChats.set(key, new Set())
+        } else {
+          ticket.voiceErrors.add(key)
+        }
+      }
     } finally {
       if (isCurrent(ticket) && ticket.voiceVersions.get(key) === version) {
         ticket.voiceLoading.delete(key)
@@ -182,13 +196,14 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
         const offset = ticket.offset
         const body = await gateway.http('GET', chatListPath(offset, 'only'))
         if (!isCurrent(ticket) || read !== ticket.read) return
-        const rows = archivedRows(body).filter(row => !ticket.removed.has(rowKey(row)))
+        const { rows: pageRows, rawCount } = archivedPage(body)
+        const rows = pageRows.filter(row => !ticket.removed.has(rowKey(row)))
         let voiceChanged = false
         for (const row of rows) {
           if (!row.autoArchived) continue
           const name = row.profile || 'default'
           const key = name.toLowerCase()
-          if (profiles.has(key)) continue
+          if (profiles.has(key) || ticket.voice.tags.has(key) || ticket.voiceLoading.has(key)) continue
           profiles.set(key, name)
           ticket.voiceVersions.set(key, (ticket.voiceVersions.get(key) ?? 0) + 1)
           ticket.voice.tags.delete(key)
@@ -199,7 +214,6 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
         }
         if (voiceChanged) publishVoice(ticket)
         const unread = unreadProfiles(body)
-        const count = responseCount(body)
         const metadata = body && typeof body === 'object' && !Array.isArray(body) ? body : {}
         const nextValue = ('next_offset' in metadata ? metadata.next_offset : undefined) ?? ('nextOffset' in metadata ? metadata.nextOffset : undefined)
         const moreValue = ('has_more' in metadata ? metadata.has_more : undefined) ?? ('hasMore' in metadata ? metadata.hasMore : undefined)
@@ -207,11 +221,14 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
         const nextOffset = paginationNumber(nextValue)
         const explicitMore = moreValue === true || (typeof moreValue === 'number' && moreValue !== 0) ||
           (typeof moreValue === 'string' && ['true', '1', 'yes'].includes(moreValue.toLowerCase()))
-        const next = nextOffset !== undefined && nextOffset > offset ? nextOffset : offset + count
+        const explicitNoMore = moreValue === false || moreValue === 0 ||
+          (typeof moreValue === 'string' && ['false', '0', 'no'].includes(moreValue.toLowerCase()))
+        const pageStep = Math.min(rawCount, CHAT_LIST_PAGE)
+        const next = nextOffset !== undefined && nextOffset > offset ? nextOffset : offset + pageStep
         ticket.offset = next
-        ticket.hasMore = count > 0 && Number.isSafeInteger(next) && next > offset && (
+        ticket.hasMore = !explicitNoMore && rawCount > 0 && Number.isSafeInteger(next) && next > offset && (
           explicitMore || (nextOffset !== undefined && nextOffset > offset) ||
-          (total !== undefined && offset + count < total) || count >= CHAT_LIST_PAGE
+          (total !== undefined ? offset + pageStep < total : pageStep >= CHAT_LIST_PAGE)
         )
         update(ticket, previous => {
           const seen = new Set(previous.rows.map(rowKey))

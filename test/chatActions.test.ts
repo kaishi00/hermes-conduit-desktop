@@ -15,16 +15,20 @@ describe('a chat row’s Pin, Rename and Delete', () => {
     expect(withQuery('/api/sessions/s1?profile=w', { request_id: 'r-1', expected_revision: 4 })).toBe('/api/sessions/s1?profile=w&expected_revision=4&request_id=r-1')
   })
 
-  it('recognizes starting, working and waiting sessions by stored or live id', () => {
+  it('recognizes active session statuses by stored or live id', () => {
     const response = { sessions: [
       { id: 'live', session_key: 'stored', status: 'starting' },
       { id: 'running', status: 'working' },
       { id: 'approval', status: 'waiting' },
+      { id: 'stream', status: 'streaming' },
+      { id: 'resume', status: 'resuming' },
       { id: 'done', status: 'idle' }
     ] }
     expect(sessionIsBusy(response, 'stored')).toBe(true)
     expect(sessionIsBusy(response, 'running')).toBe(true)
     expect(sessionIsBusy(response, 'approval')).toBe(true)
+    expect(sessionIsBusy(response, 'stream')).toBe(true)
+    expect(sessionIsBusy(response, 'resume')).toBe(true)
     expect(sessionIsBusy(response, 'done')).toBe(false)
     expect(sessionIsBusy(response, 'another')).toBe(false)
   })

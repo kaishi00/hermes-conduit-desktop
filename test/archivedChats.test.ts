@@ -411,4 +411,112 @@ describe('Archived chats', () => {
     await act(async () => { response.resolve({ sessions: excluded(CHAT_LIST_PAGE) }) })
     expect(http).toHaveBeenCalledTimes(1)
   })
+
+  it('drops live pinned backfill rows returned by archived=only', async () => {
+    http.mockResolvedValueOnce({
+      sessions: [
+        rawRow('live-pin', 'Live pinned chat', 'default', { archived: false, pinned: true }),
+        rawRow('live-pin-num', 'Live pinned numeric', 'default', { archived: 0, pinned: 1 })
+      ],
+      total: 0
+    })
+    const empty = render()
+    await settle()
+    expect(empty.host.textContent).not.toContain('Live pinned chat')
+    expect(empty.host.textContent).not.toContain('Live pinned numeric')
+    expect(empty.host.textContent).toContain('No archived chats.')
+    expect(http).toHaveBeenCalledTimes(1)
+
+    http.mockResolvedValueOnce({
+      sessions: [
+        rawRow('arch-1', 'Archived one', 'default', { archived: true }),
+        rawRow('live-pin', 'Live pinned chat', 'default', { archived: false, pinned: true })
+      ],
+      total: 1
+    })
+    const mixed = render({ host: 'https://second.example' })
+    await settle()
+    expect(mixed.host.textContent).toContain('Archived one')
+    expect(mixed.host.textContent).not.toContain('Live pinned chat')
+    expect(mixed.host.textContent).not.toContain('Show More')
+  })
+
+  it('paginates past pinned backfill without skipping archived rows or over-fetching', async () => {
+    const page0 = [
+      rawRow('first-arch', 'First archived', 'default', { archived: true }),
+      ...excluded(CHAT_LIST_PAGE - 1).map(row => ({ ...row, archived: true })),
+      rawRow('arch-pin', 'Archived pinned', 'default', { archived: true, pinned: true }),
+      rawRow('live-pin', 'Live pinned', 'default', { archived: false, pinned: true })
+    ]
+    const page1 = [
+      rawRow('second-arch', 'Page two archived', 'default', { archived: true }),
+      rawRow('live-pin', 'Live pinned', 'default', { archived: false, pinned: true })
+    ]
+    http
+      .mockResolvedValueOnce({ sessions: page0, total: CHAT_LIST_PAGE + 1 })
+      .mockResolvedValueOnce({ sessions: page1, total: CHAT_LIST_PAGE + 1 })
+    const { host } = render()
+    await settle()
+    expect(http.mock.calls.map(call => call[1])).toEqual([chatListPath(0, 'only'), chatListPath(CHAT_LIST_PAGE, 'only')])
+    expect(host.textContent).toContain('First archived')
+    expect(host.textContent).toContain('Archived pinned')
+    expect(host.textContent).toContain('Page two archived')
+    expect(host.textContent).not.toContain('Live pinned')
+  })
+
+  it('treats a 404 voice/tags response as no tags while keeping transient failures fenced', async () => {
+    http.mockImplementation(async (_method: string, path: string) => {
+      if (path === '/api/plugins/conduit_push/voice/tags?profile=no-plugin') {
+        throw Object.assign(new Error('Not Found'), { code: 404 })
+      }
+      if (path === '/api/plugins/conduit_push/voice/tags?profile=flaky') {
+        throw Object.assign(new Error('Service Unavailable'), { code: 503 })
+      }
+      return {
+        sessions: [
+          rawRow('swept-1', 'Auto swept', 'no-plugin', { archived: true, auto_archived: true }),
+          rawRow('call-1', 'Saved call', 'no-plugin', { archived: true, auto_archived: true, end_reason: 'conduit_voice' }),
+          rawRow('swept-2', 'Flaky auto', 'flaky', { archived: true, auto_archived: true })
+        ]
+      }
+    })
+    const { host } = render({ visibleVoiceIds: new Set(['call-1']) })
+    await settle()
+    expect(host.textContent).not.toContain('Saved call')
+    expect(button(host, 'Restore: Auto swept').disabled).toBe(false)
+    expect(button(host, 'Delete: Auto swept').disabled).toBe(false)
+    expect(button(host, 'Restore: Flaky auto').disabled).toBe(true)
+    expect(button(host, 'Delete: Flaky auto').disabled).toBe(true)
+    expect(host.textContent).toContain('Voice tags are unavailable.')
+  })
+
+  it('keeps already-classified profiles enabled across Show More batches', async () => {
+    let tagReads = 0
+    const page25 = Promise.withResolvers<unknown>()
+    const tail = excluded(CHAT_LIST_PAGE)
+    http.mockImplementation(async (_method: string, path: string) => {
+      if (path === '/api/plugins/conduit_push/voice/tags?profile=work') {
+        tagReads++
+        return { tags: {} }
+      }
+      const offset = Number(new URL(path, 'https://first.example').searchParams.get('offset'))
+      if (offset === 0) return { sessions: [rawRow('a1', 'Early auto', 'work', { auto_archived: true }), ...excluded(CHAT_LIST_PAGE - 1)] }
+      if (offset < CHAT_LIST_MAX_PAGES * CHAT_LIST_PAGE) return { sessions: tail }
+      return page25.promise
+    })
+    const { host } = render()
+    await act(async () => { for (let i = 0; i < 100; i++) await Promise.resolve() })
+    expect(tagReads).toBe(1)
+    expect(button(host, 'Restore: Early auto').disabled).toBe(false)
+
+    act(() => button(host, 'Show More').click())
+    await act(async () => {
+      page25.resolve({ sessions: [rawRow('a2', 'Later auto', 'work', { auto_archived: true })] })
+    })
+    await settle()
+    expect(tagReads).toBe(1)
+    expect(button(host, 'Restore: Early auto').disabled).toBe(false)
+    expect(button(host, 'Restore: Later auto').disabled).toBe(false)
+    expect(host.textContent).not.toContain('Voice tags are unavailable.')
+  })
 })

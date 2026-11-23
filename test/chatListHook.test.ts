@@ -310,5 +310,15 @@ describe('a chat list the dashboard could not answer (desktop#400)', () => {
     expect(calls.every).toBe(3)
     hook.unmount()
   })
+
+  it('drops removed rows from the auto-archived list immediately in patchRow', async () => {
+    dashboard([{ body: every }], undefined, { sessions: [{ id: 'v1', title: 'Voice call', auto_archived: true, last_active: 5 }] })
+    const hook = renderHook(() => useChatList(true, 'https://h'), {})
+    await settle()
+    expect(hook.result().archived.map(r => r.id)).toEqual(['v1'])
+    act(() => hook.result().patchRow('v1', null))
+    expect(hook.result().archived).toEqual([])
+    hook.unmount()
+  })
 })
 
