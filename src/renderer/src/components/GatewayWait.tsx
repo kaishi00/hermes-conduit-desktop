@@ -35,7 +35,9 @@ function connectionTo(host: string): RestartNowHost {
 /**
  * Under "Letting running tasks finish…" (Restart Gateway and the plugin update alike), after the
  * phone's GatewayWaitView: what the restart waits on, when it goes ahead anyway, and Restart Now.
- * Reads the plugin every few seconds while it shows; with a plugin that can't say, it shows nothing.
+ * Asks the plugin every few seconds until it answers: a drain-time 404 (the gateway has gone) is
+ * definitive, so it stops the asking like a reported answer does, and only an unreadable answer
+ * (`unknown`) asks again. With either "no", it shows nothing.
  */
 export function GatewayWait({ capabilities }: { capabilities?: string[] | null }) {
   const host = dashboardHost()
@@ -43,9 +45,16 @@ export function GatewayWait({ capabilities }: { capabilities?: string[] | null }
   const [asked, setAsked] = useState<string[] | null>(null)
   useEffect(() => {
     if (capabilities !== undefined || asked) return
-    // Asked again until it answers: one failed read mid-drain mustn't hide Restart Now for good.
+    // Asked again until the plugin answers: one failed read mid-drain mustn't hide Restart Now for
+    // good. A 404 (`missing`) is definitive mid-drain — the gateway has gone — so it stops the
+    // asking too; only an unreadable answer (`unknown`) asks again (desktop#378).
     let live = true
-    const ask = () => void readStatus().then(status => live && status.state === 'reported' && setAsked(status.capabilities))
+    const ask = () =>
+      void readStatus().then(status => {
+        if (!live) return
+        if (status.state === 'reported') setAsked(status.capabilities)
+        else if (status.state === 'missing') setAsked([])
+      })
     ask()
     const again = setInterval(ask, POLL_MS)
     return () => {
