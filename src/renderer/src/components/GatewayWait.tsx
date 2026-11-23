@@ -44,6 +44,8 @@ export function GatewayWait({ capabilities }: { capabilities?: string[] | null }
   // Restart Gateway's row has no plugin status of its own: it asks once.
   const [asked, setAsked] = useState<string[] | null>(null)
   useEffect(() => {
+    // undefined leaves the asking to this loop; a handed-down list, or an answer (reported or the
+    // definitive 404), ends it here.
     if (capabilities !== undefined || asked) return
     // Asked again until the plugin answers: one failed read mid-drain mustn't hide Restart Now for
     // good. A 404 (`missing`) is definitive mid-drain — the gateway has gone — so it stops the

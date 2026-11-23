@@ -40,11 +40,13 @@ async function mount(capabilities?: string[] | null) {
   }
   const host = document.createElement('div')
   const root = createRoot(host)
-  act(() => root.render(createElement(GatewayWait, capabilities === undefined ? {} : { capabilities })))
+  const render = (next?: string[] | null) =>
+    act(() => root.render(createElement(GatewayWait, next === undefined ? {} : { capabilities: next })))
+  render(capabilities)
   await act(async () => {
     await vi.advanceTimersByTimeAsync(0)
   })
-  return { host, root, button: () => host.querySelector('.gateway-restart-now') }
+  return { host, root, render, button: () => host.querySelector('.gateway-restart-now') }
 }
 
 /** Let the ask loop's promises settle through the next `advanceTimersByTimeAsync`. */
@@ -138,5 +140,33 @@ describe("Restart Gateway's GatewayWait (desktop#378)", () => {
     await flush(POLL_MS * 2)
     expect(http).toHaveBeenCalledTimes(2)
     act(() => root.unmount())
+  })
+
+  it('the ask loop stops on unmount: no ask waits out a pending answer', async () => {
+    http.mockImplementation(async () => deferred().promise)
+
+    const { root, button } = await mount()
+    expect(asks()).toBe(1)
+    act(() => root.unmount())
+
+    // Unmounted with the first ask still pending: three polls later the interval has added none.
+    await flush(POLL_MS * 3)
+    expect(asks()).toBe(1)
+    expect(button()).toBeNull()
+  })
+
+  it('capabilities handed down mid-drain end the asking', async () => {
+    http.mockImplementation(async () => deferred().promise)
+
+    const { render, button } = await mount()
+    expect(asks()).toBe(1)
+    expect(button()).toBeNull()
+
+    // The page learns the capabilities while the ask is still out: the loop cleans up and the
+    // capability comes from the prop now.
+    render([GATEWAY_WORK])
+    await flush(POLL_MS * 3)
+    expect(asks()).toBe(1)
+    expect(button()).not.toBeNull()
   })
 })
