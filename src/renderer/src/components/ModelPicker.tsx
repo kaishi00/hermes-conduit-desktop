@@ -15,6 +15,8 @@ import { ModelCard, PickRow, ProviderHeader, ReasoningBars, SwitchRow, TypedIdRo
 interface Props {
   chat: OpenChat
   profile?: string
+  /** The bot's configured default model to show on a new draft before a pick is made. */
+  defaultModel?: string
   onClose: () => void
   setModel: (model: string, provider: string, confirmed?: boolean) => Promise<ModelSwitch>
   setReasoning: (effort: string) => Promise<void>
@@ -34,7 +36,7 @@ interface Props {
  * they leave Quick picks, the matches and All providers, and the typed id
  * isn't offered on a hidden provider or as a hidden model.
  */
-export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, setSpeed, setYolo }: Props) {
+export function ModelPicker({ chat, profile, defaultModel, onClose, setModel, setReasoning, setSpeed, setYolo }: Props) {
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<{ text: string; tone: 'error' | 'info' } | null>(null)
@@ -164,7 +166,7 @@ export function ModelPicker({ chat, profile, onClose, setModel, setReasoning, se
   const reasoning = (chat.reasoning ?? '').toLowerCase()
   const card = (
     <ModelCard
-      model={chat.model || t('Model')}
+      model={chat.model || defaultModel || t('Model')}
       provider={chat.provider}
       providers={providers}
       busy={!!busy && busy.includes('/')}

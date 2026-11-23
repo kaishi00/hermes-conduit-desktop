@@ -883,9 +883,9 @@ export function Composer({
               <Icon name="mic" />
             </button>
           ) : null}
-          {model && onModel ? (
+          {onModel ? (
             <button className="chip chip-button" title={t('Model')} aria-haspopup="dialog" disabled={disabled} onClick={onModel}>
-              {model}
+              {model || t('Model')}
             </button>
           ) : model ? (
             <span className="chip" title={t('Model')}>

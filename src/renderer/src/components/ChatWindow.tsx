@@ -272,6 +272,12 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     if (callChat.current !== callChatKey) endCall()
     callChat.current = callChatKey
   }, [callChatKey, endCall])
+  useEffect(() => {
+    setModelOpen(false)
+    setContextOpen(false)
+  }, [callChatKey])
+  const canPickModel = connected && (!!chat.liveId || !chat.storedId)
+  const defaultModel = !chat.storedId ? bot?.model : undefined
   // The bot's screen, offered where its dashboard can have one, in a window of its own.
   const screenProfile = profile ?? 'default'
   const [screenSupported, setScreenSupported] = useState(false)
@@ -529,10 +535,11 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             onCompress={() => void onSend('/compress')}
           />
         ) : null}
-        {modelOpen && chat.liveId ? (
+        {modelOpen && canPickModel ? (
           <ModelPicker
             chat={chat}
             profile={profile}
+            defaultModel={defaultModel}
             onClose={() => setModelOpen(false)}
             setModel={setModel}
             setReasoning={setReasoning}
@@ -583,7 +590,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           quote={quote}
           commands={commands}
           onModel={
-            chat.liveId
+            canPickModel
               ? () => {
                   setContextOpen(false)
                   setModelOpen(open => !open)
@@ -601,7 +608,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           }
           running={running}
           disabled={!connected}
-          model={chat.model}
+          model={chat.model ?? defaultModel}
           cwd={chat.cwd}
           onSend={onSend}
           replies={predictions.replies}

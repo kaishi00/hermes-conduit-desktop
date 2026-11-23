@@ -309,6 +309,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const [error, setError] = useState<string | null>(null)
   const liveId = useRef<string | null>(null)
   const request = useRef(0)
+  /** Model and run settings chosen for a new draft chat before `session.create` runs. */
+  const draftOverrides = useRef<Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>>({})
   /** A chat this hook just created: selecting it in the list mustn't resume it over its first turn. */
   const created = useRef<string | null>(null)
   /** The open chat's resume while it runs (settles, never rejects): a send or command waits for it (desktop#298). */
@@ -317,6 +319,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const drawn = useRef<string | null>(storedId)
   const chatRef = useRef(chat)
   chatRef.current = chat
+  /** True only for a connected, unsaved new chat (never while an existing chat is still resuming). */
+  const isDraft = useCallback(() => connected && !liveId.current && !chatRef.current.storedId, [connected])
+  const pickDraft = useCallback((patch: Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>) => {
+    draftOverrides.current = { ...draftOverrides.current, ...patch }
+    setChat(c => ({ ...c, ...patch }))
+  }, [])
   /** Another app holds the chat and Take over automatically is off: the offer, naming who holds it. */
   const [takeover, setTakeover] = useState<{ surface?: string; busy: boolean } | null>(null)
   /** The open chat's queue on the Webapp; empty on `hermes dashboard`, which keeps none. */
@@ -338,6 +346,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     const ticket = ++request.current
     liveId.current = null
     openingChat.current = null
+    draftOverrides.current = {}
     // A resume this re-run abandons can't clear it any more: its finally is fenced by the ticket.
     setLoading(false)
     setTakeover(null)
@@ -451,10 +460,17 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (profile) params.profile = profile
     if (botChat) Object.assign(params, { title: 'Bot Chat', hidden: true, follow_profile_config: true })
     else if (folder) params.cwd = folder
+    const draft = { ...draftOverrides.current }
+    if (draft.model) params.model = draft.model
+    if (draft.provider) params.provider = draft.provider
+    if (draft.reasoning !== undefined) params[sessionAuthority ? 'reasoning' : 'reasoning_effort'] = draft.reasoning
+    if (draft.speed !== undefined) params.service_tier = draft.speed === 'normal' ? '' : draft.speed === 'fast' ? 'priority' : 'ultrafast'
+    if (draft.yolo !== undefined && sessionAuthority) params.yolo = draft.yolo
     const opening = request.current
     const made = await gateway.rpc<CreateResult>('session.create', params)
     // Another chat opened meanwhile: this chat isn't on screen any more, so nothing goes in it.
     if (request.current !== opening) throw new ChatMovedOn()
+    draftOverrides.current = {}
     const sid = made.session_id
     const storedId = made.stored_session_id ?? null
     liveId.current = sid
@@ -462,9 +478,27 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     request.current++ // a resume still in flight is stale now
     openingChat.current = null
     setLoading(false)
-    setChat(c => ({ ...c, liveId: sid, storedId: storedId ?? c.storedId, ...chatSettings(made.info) }))
+    const info = chatSettings(made.info)
+    setChat(c => ({ ...c, liveId: sid, storedId: storedId ?? c.storedId, ...info }))
+    if (!sessionAuthority && draft.yolo !== undefined && info.yolo !== draft.yolo) {
+      try {
+        const res = await gateway.rpc<{ info?: ChatInfo | null }>('config.set', {
+          key: 'yolo',
+          value: draft.yolo ? '1' : '0',
+          session_id: sid,
+          ...(profile ? { profile } : {})
+        })
+        if (liveId.current === sid && res?.info) setChat(c => ({ ...c, ...chatSettings(res.info) }))
+      } catch (e) {
+        if (liveId.current === sid) {
+          setChat(c => ({ ...c, yolo: info.yolo }))
+          dispatch({ type: 'notice', text: message(e), tone: 'error' })
+        }
+      }
+      if (liveId.current !== sid) throw new ChatMovedOn()
+    }
     return { sid, storedId }
-  }, [profile, sessionAuthority, botChat, folder])
+  }, [profile, sessionAuthority, botChat, folder, dispatch])
 
   /** The chat's history read again, after a command changed it (/undo, /retry, /compress). */
   const reloadHistory = useCallback(async () => {
@@ -769,6 +803,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           return { kind: 'done', created: null }
         }
       }
+      if (name === 'model' && !arg && isDraft()) return { kind: 'model', created: null }
       let sid = liveId.current
       let created: string | null = null
       const done: CommandOutcome = { kind: 'done', created: null }
@@ -855,7 +890,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           return done
       }
     },
-    [profile, sessionFor, reloadHistory, send, stop]
+    [profile, sessionFor, reloadHistory, send, stop, isDraft]
   )
 
   /** A line in the chat from Conduit itself (a refusal, say), as a command's notice shows. */
@@ -887,6 +922,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   /** Switches the chat's model; a pick Hermes guards (an expensive model) asks first. */
   const setModel = useCallback(
     async (model: string, provider: string, confirmed = false): Promise<ModelSwitch> => {
+      if (isDraft()) {
+        pickDraft({ model, provider })
+        return { kind: 'switched', deferred: false }
+      }
       // The session authority takes a model pick as a `model` mutation, and refuses `config.set model` by name.
       const pickOnAuthority = async (): Promise<ModelSwitch> => {
         const sid = liveId.current
@@ -926,31 +965,43 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         return { kind: 'failed', message: message(e) }
       }
     },
-    [configure, profile, sessionAuthority]
+    [configure, profile, sessionAuthority, isDraft, pickDraft]
   )
 
   const setReasoning = useCallback(
     async (effort: string) => {
+      if (isDraft()) {
+        pickDraft({ reasoning: effort })
+        return
+      }
       await configure('reasoning', effort)
       setChat(c => ({ ...c, reasoning: effort }))
     },
-    [configure]
+    [configure, isDraft, pickDraft]
   )
 
   const setSpeed = useCallback(
     async (speed: 'normal' | 'fast' | 'ultrafast') => {
+      if (isDraft()) {
+        pickDraft({ speed })
+        return
+      }
       await configure('fast', speed)
       setChat(c => ({ ...c, speed }))
     },
-    [configure]
+    [configure, isDraft, pickDraft]
   )
 
   const setYolo = useCallback(
     async (on: boolean) => {
+      if (isDraft()) {
+        pickDraft({ yolo: on })
+        return
+      }
       await configure('yolo', on ? '1' : '0')
       setChat(c => ({ ...c, yolo: on }))
     },
-    [configure]
+    [configure, isDraft, pickDraft]
   )
 
   /** Runs one of the queue dock's verbs on the open chat; Hermes' refusal is thrown for the dock to say. */

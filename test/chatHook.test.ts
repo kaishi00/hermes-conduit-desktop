@@ -52,10 +52,10 @@ afterEach(() => {
 })
 
 const words = (state: { items: { kind: string; text?: string }[] }) => state.items.map(i => i.text ?? i.kind)
-type Props = { storedId: string | null; connected: boolean; url?: string }
+type Props = { storedId: string | null; connected: boolean; url?: string; profile?: string; sessionAuthority?: boolean }
 // As App calls it: each dashboard keeps its own transcripts (desktop#233).
-const chatInApp = ({ storedId, connected, url }: Props) => {
-  const chat = useChat(storedId, undefined, false, connected, false, undefined, url)
+const chatInApp = ({ storedId, connected, url, profile, sessionAuthority }: Props) => {
+  const chat = useChat(storedId, profile, sessionAuthority ?? false, connected, false, undefined, url)
   return { ...chat, transcript: useTranscript(chat.transcriptStore) }
 }
 const mount: typeof renderHook = (hook, props) => {
@@ -518,5 +518,198 @@ describe('tool answers on opening a chat again (desktop#293)', () => {
     await settle()
     expect(tool()?.result).toBe('a.txt')
     expect(paths.filter(p => p.includes(`/api/sessions/${id}/messages`))).toHaveLength(reads)
+  })
+})
+
+describe("model and run settings before a new chat's first message", () => {
+  it('stores model, reasoning, speed and yolo on a draft without making RPC calls', async () => {
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1' })
+    let outcome: unknown
+    await act(async () => {
+      outcome = await hook.result().setModel('claude-opus-4-6', 'anthropic')
+      await hook.result().setReasoning('high')
+      await hook.result().setSpeed('fast')
+      await hook.result().setYolo(true)
+    })
+    expect(outcome).toEqual({ kind: 'switched', deferred: false })
+    expect(calls).toEqual([])
+    expect(hook.result().chat).toMatchObject({
+      storedId: null,
+      liveId: null,
+      model: 'claude-opus-4-6',
+      provider: 'anthropic',
+      reasoning: 'high',
+      speed: 'fast',
+      yolo: true
+    })
+  })
+
+  it('forwards draft picks to session.create and sets yolo via config.set on hermes dashboard', async () => {
+    const sentRpc: { method: string; params: Record<string, unknown> }[] = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const baseRpc = conduit.rpcOutcome
+    conduit.rpcOutcome = (method, params) => {
+      sentRpc.push({ method, params })
+      if (method === 'session.create') {
+        return Promise.resolve({
+          ok: true,
+          result: {
+            session_id: 'live-new',
+            stored_session_id: 'new',
+            info: { model: params.model, provider: params.provider, reasoning_effort: params.reasoning_effort, fast: true }
+          }
+        })
+      }
+      if (method === 'config.set') {
+        return Promise.resolve({ ok: true, result: { info: { yolo: true } } })
+      }
+      return baseRpc(method, params)
+    }
+
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', sessionAuthority: false })
+    await act(async () => {
+      await hook.result().setModel('claude-opus-4-6', 'anthropic')
+      await hook.result().setReasoning('high')
+      await hook.result().setSpeed('fast')
+      await hook.result().setYolo(true)
+      await hook.result().send('hello')
+    })
+
+    const createCall = sentRpc.find(c => c.method === 'session.create')
+    expect(createCall?.params).toMatchObject({
+      model: 'claude-opus-4-6',
+      provider: 'anthropic',
+      reasoning_effort: 'high',
+      service_tier: 'priority'
+    })
+    expect(createCall?.params.yolo).toBeUndefined()
+    const yoloIndex = sentRpc.findIndex(c => c.method === 'config.set' && c.params.key === 'yolo')
+    const submitIndex = sentRpc.findIndex(c => c.method === 'prompt.submit')
+    expect(yoloIndex).toBeGreaterThan(0)
+    expect(yoloIndex).toBeLessThan(submitIndex)
+    expect(sentRpc[yoloIndex]?.params).toMatchObject({ key: 'yolo', value: '1', session_id: 'live-new' })
+    expect(hook.result().chat.yolo).toBe(true)
+  })
+
+  it('forwards draft reasoning, ultrafast service_tier and yolo directly to session.create under sessionAuthority', async () => {
+    const sentRpc: { method: string; params: Record<string, unknown> }[] = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const baseRpc = conduit.rpcOutcome
+    conduit.rpcOutcome = (method, params) => {
+      sentRpc.push({ method, params })
+      if (method === 'session.create') {
+        return Promise.resolve({
+          ok: true,
+          result: {
+            session_id: 'live-auth',
+            stored_session_id: 'auth',
+            info: { model: params.model, provider: params.provider, reasoning_effort: params.reasoning, fast: true, service_tier: 'ultrafast', yolo: true }
+          }
+        })
+      }
+      return baseRpc(method, params)
+    }
+
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', sessionAuthority: true })
+    await act(async () => {
+      await hook.result().setModel('gpt-5.4', 'openai')
+      await hook.result().setReasoning('xhigh')
+      await hook.result().setSpeed('ultrafast')
+      await hook.result().setYolo(true)
+      await hook.result().send('hello')
+    })
+
+    const createCall = sentRpc.find(c => c.method === 'session.create')
+    expect(createCall?.params).toMatchObject({
+      model: 'gpt-5.4',
+      provider: 'openai',
+      reasoning: 'xhigh',
+      service_tier: 'ultrafast',
+      yolo: true
+    })
+    expect(sentRpc.some(c => c.method === 'config.set')).toBe(false)
+  })
+
+  it('clears draft overrides when switching profile or opening another chat', async () => {
+    const sentRpc: { method: string; params: Record<string, unknown> }[] = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const baseRpc = conduit.rpcOutcome
+    conduit.rpcOutcome = (method, params) => {
+      sentRpc.push({ method, params })
+      return baseRpc(method, params)
+    }
+
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', profile: 'default' })
+    await act(async () => {
+      await hook.result().setModel('claude-opus-4-6', 'anthropic')
+      await hook.result().setYolo(true)
+    })
+    hook.rerender({ storedId: null, connected: true, url: 'h1', profile: 'work' })
+    expect(hook.result().chat.model).toBeUndefined()
+    expect(hook.result().chat.yolo).toBeUndefined()
+
+    await act(async () => {
+      await hook.result().setModel('gpt-5.4', 'openai')
+    })
+    resumes.a = { messages: history('one') }
+    hook.rerender({ storedId: 'a', connected: true, url: 'h1', profile: 'work' })
+    await settle()
+    hook.rerender({ storedId: null, connected: true, url: 'h1', profile: 'work' })
+    await act(async () => {
+      await hook.result().send('fresh')
+    })
+
+    const createCall = sentRpc.find(c => c.method === 'session.create')
+    expect(createCall?.params.model).toBeUndefined()
+    expect(createCall?.params.provider).toBeUndefined()
+    expect(createCall?.params.yolo).toBeUndefined()
+  })
+
+  it('does not treat a stored chat still resuming as a draft in setModel', async () => {
+    holdResumes = true
+    const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
+    expect(hook.result().loading).toBe(true)
+    let outcome: unknown
+    await act(async () => {
+      outcome = await hook.result().setModel('claude-opus-4-6', 'anthropic')
+    })
+    expect(outcome).toMatchObject({ kind: 'failed' })
+    expect(hook.result().chat.model).toBeUndefined()
+    expect(calls).toEqual(['session.resume'])
+  })
+
+  it('opens the model panel on /model in a draft without creating a session', async () => {
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1' })
+    let outcome: unknown
+    await act(async () => {
+      outcome = await hook.result().command('/model', [])
+    })
+    expect(outcome).toEqual({ kind: 'model', created: null })
+    expect(calls).not.toContain('session.create')
+  })
+
+  it('reverts draft yolo and emits a notice if config.set fails, without aborting the first send', async () => {
+    const sentRpc: string[] = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const baseRpc = conduit.rpcOutcome
+    conduit.rpcOutcome = (method, params) => {
+      sentRpc.push(method)
+      if (method === 'config.set' && params.key === 'yolo') {
+        return Promise.resolve({ ok: false, error: 'yolo refused', code: 4001 })
+      }
+      return baseRpc(method, params)
+    }
+
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', sessionAuthority: false })
+    await act(async () => {
+      await hook.result().setYolo(true)
+      await hook.result().send('hello')
+    })
+
+    expect(sentRpc).toContain('session.create')
+    expect(sentRpc).toContain('config.set')
+    expect(sentRpc).toContain('prompt.submit')
+    expect(hook.result().chat.yolo).toBeUndefined()
+    expect(hook.result().transcript.items.some(i => i.kind === 'notice' && 'text' in i && i.text === 'yolo refused')).toBe(true)
   })
 })
