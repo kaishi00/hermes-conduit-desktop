@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arrangePinned, hostOrder, moved, ordered, pinIdOf, prefsPath, type PinnedOrders } from '../src/renderer/src/state/pinnedOrder'
+import { arrangePinned, EDGE_MAX_STEP, EDGE_ZONE, edgeScrollStep, hostOrder, moved, ordered, pinIdOf, prefsPath, type PinnedOrders } from '../src/renderer/src/state/pinnedOrder'
 import type { ChatRow } from '../src/renderer/src/state/chats'
 
 const row = (id: string, profile?: string, lineageRoot?: string): ChatRow => ({ id, title: id, pinned: true, profile, lineageRoot })
@@ -46,5 +46,23 @@ describe('pinned chats order', () => {
     expect(hostOrder(null)).toBeNull()
     expect(prefsPath('default')).toBe('/api/plugins/conduit_push/conduit-prefs')
     expect(prefsPath('Furina')).toBe('/api/plugins/conduit_push/conduit-prefs?profile=Furina')
+  })
+})
+
+describe('edge scrolling while dragging', () => {
+  it('scrolls toward the nearer edge, faster the closer, and not in the middle', () => {
+    expect(edgeScrollStep(300, 100, 500)).toBe(0)
+    expect(edgeScrollStep(100 + EDGE_ZONE, 100, 500)).toBe(0)
+    expect(edgeScrollStep(101, 100, 500)).toBeLessThan(0)
+    expect(edgeScrollStep(499, 100, 500)).toBeGreaterThan(0)
+    expect(Math.abs(edgeScrollStep(110, 100, 500))).toBeLessThan(Math.abs(edgeScrollStep(101, 100, 500)))
+  })
+  it('caps its speed past the edge and always moves inside the zone', () => {
+    expect(edgeScrollStep(0, 100, 500)).toBe(-EDGE_MAX_STEP)
+    expect(edgeScrollStep(900, 100, 500)).toBe(EDGE_MAX_STEP)
+    expect(edgeScrollStep(100 + EDGE_ZONE - 1, 100, 500)).toBe(-1)
+  })
+  it('does nothing in a list too short to have a middle', () => {
+    expect(edgeScrollStep(10, 0, 0)).toBe(0)
   })
 })

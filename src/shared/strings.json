@@ -18674,6 +18674,36 @@
     "zh-Hans": "前移",
     "zh-Hant": "前移"
   },
+  "Move to Top": {
+    "de": "Ganz nach oben",
+    "es": "Mover al principio",
+    "fr": "Placer en haut",
+    "id": "Pindahkan ke atas",
+    "it": "Sposta in cima",
+    "ja": "一番上へ移動",
+    "ko": "맨 위로 이동",
+    "pl": "Przenieś na górę",
+    "pt-BR": "Mover para o topo",
+    "ru": "Переместить наверх",
+    "tr": "En üste taşı",
+    "zh-Hans": "移到顶部",
+    "zh-Hant": "移到頂端"
+  },
+  "Move to Bottom": {
+    "de": "Ganz nach unten",
+    "es": "Mover al final",
+    "fr": "Placer en bas",
+    "id": "Pindahkan ke bawah",
+    "it": "Sposta in fondo",
+    "ja": "一番下へ移動",
+    "ko": "맨 아래로 이동",
+    "pl": "Przenieś na dół",
+    "pt-BR": "Mover para o fim",
+    "ru": "Переместить вниз",
+    "tr": "En alta taşı",
+    "zh-Hans": "移到底部",
+    "zh-Hant": "移到底端"
+  },
   "Move Later": {
     "de": "Nach hinten",
     "es": "Mover después",

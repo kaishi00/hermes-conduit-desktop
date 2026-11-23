@@ -214,3 +214,23 @@ export function usePinnedOrder(host: string, rows: ChatRow[] | null, http: Http)
   )
   return { orders, reorder, drop }
 }
+
+/** How close to the list's top or bottom edge (px) a dragged row starts scrolling it. */
+export const EDGE_ZONE = 56
+/** The fastest the list scrolls while dragging (px per frame). */
+export const EDGE_MAX_STEP = 18
+
+/**
+ * Pixels to scroll the list this frame for a drag at `y`, within a list whose
+ * visible box runs `top` to `bottom`: negative scrolls up, positive down, 0 when
+ * the pointer is away from both edges. Speed grows toward the edge, and holds
+ * at the maximum beyond it (issue 396).
+ */
+export function edgeScrollStep(y: number, top: number, bottom: number): number {
+  const zone = Math.min(EDGE_ZONE, (bottom - top) / 2)
+  if (zone <= 0) return 0
+  const speed = (depth: number) => Math.max(1, Math.round(Math.min(1, depth / zone) * EDGE_MAX_STEP))
+  if (y < top + zone) return -speed(top + zone - y)
+  if (y > bottom - zone) return speed(y - (bottom - zone))
+  return 0
+}

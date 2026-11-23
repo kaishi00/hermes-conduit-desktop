@@ -11,7 +11,7 @@ import { UpdatingCapsule } from './UpdatingCapsule'
 import { facetOf, isSourceKey, isStarred, isUnread, parseSelection, selectRows, settingFilter, type ChatFilterKey, type ChatMarks } from '../state/chatMarks'
 import { sourceName, sourcesIn, type ChatSource } from '../state/chatSources'
 import { contentRows, useContentSearch } from '../state/contentSearch'
-import { arrangePinned, moved, usePinnedOrder } from '../state/pinnedOrder'
+import { arrangePinned, edgeScrollStep, moved, usePinnedOrder } from '../state/pinnedOrder'
 import { gateway } from '../gateway'
 import type { HostBadge, OtherChatRow } from '../state/keptHosts'
 import { HostBadgeMark } from './CombinedDashboards'
@@ -550,6 +550,33 @@ export function ChatList({
   // from the composer shows up a moment after its first send.
   const scroller = useRef<HTMLDivElement>(null)
   const revealed = useRef<string | null>(null)
+  // Dragging a pinned chat near the list's top or bottom edge scrolls it, so a chat far down moves to the
+  // top in one drag (issue 396). dragover fires steadily while held, even still, so the loop runs while it does.
+  const edge = useRef<{ y: number; at: number; frame: number }>({ y: 0, at: 0, frame: 0 })
+  const stopEdgeScroll = () => {
+    cancelAnimationFrame(edge.current.frame)
+    edge.current.frame = 0
+  }
+  const edgeScroll = () => {
+    const box = scroller.current
+    const state = edge.current
+    state.frame = 0
+    if (!box || performance.now() - state.at > 200) return
+    const rect = box.getBoundingClientRect()
+    const step = edgeScrollStep(state.y, rect.top, rect.bottom)
+    if (step) box.scrollTop += step
+    state.frame = requestAnimationFrame(edgeScroll)
+  }
+  const dragOverList = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!dragging) return
+    edge.current.y = e.clientY
+    edge.current.at = performance.now()
+    if (!edge.current.frame) edge.current.frame = requestAnimationFrame(edgeScroll)
+  }
+  useEffect(() => {
+    if (!dragging) stopEdgeScroll()
+  }, [dragging])
+  useEffect(() => stopEdgeScroll, [])
   const present = !!selectedId && sections.some(s => s.rows.some(r => r.id === selectedId))
   useEffect(() => {
     if (!present || revealed.current === selectedId) return
@@ -706,7 +733,7 @@ export function ChatList({
           </button>
         </div>
       ) : null}
-      <div className="chatlist-scroll" ref={scroller}>
+      <div className="chatlist-scroll" ref={scroller} onDragOver={dragOverList}>
         {rows === null && !error ? <div className="empty">{t('Loading chats…')}</div> : null}
         {error ? <div className="empty">{t('Couldn’t load your chats: {error}', { error })}</div> : null}
         {othersMissing ? <div className="empty">{t('This version of Hermes lists the chats of one profile only. Update it on the host to see every profile’s chats.')}</div> : null}
@@ -965,6 +992,11 @@ export function ChatList({
                     const at = pins.findIndex(r => r.id === menu.row.id)
                     return (
                       <>
+                        {at > 1 ? (
+                          <button role="menuitem" onClick={() => movePinned(menu.row, 0)}>
+                            {t('Move to Top')}
+                          </button>
+                        ) : null}
                         {at > 0 ? (
                           <button role="menuitem" onClick={() => movePinned(menu.row, at - 1)}>
                             {t('Move Earlier')}
@@ -973,6 +1005,11 @@ export function ChatList({
                         {at >= 0 && at < pins.length - 1 ? (
                           <button role="menuitem" onClick={() => movePinned(menu.row, at + 1)}>
                             {t('Move Later')}
+                          </button>
+                        ) : null}
+                        {at >= 0 && at < pins.length - 2 ? (
+                          <button role="menuitem" onClick={() => movePinned(menu.row, pins.length - 1)}>
+                            {t('Move to Bottom')}
                           </button>
                         ) : null}
                       </>
