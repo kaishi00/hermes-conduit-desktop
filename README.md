@@ -102,6 +102,26 @@ You need Node 22 and pnpm 10.
     pnpm install
     pnpm dev
 
+On Linux, after `pnpm install`, install a launcher for this source checkout:
+
+    pnpm install:linux-desktop
+
+Search for **Conduit** in the application menu. The launcher uses this
+checkout's built app and Electron, so keep the checkout and its dependencies
+where they are, and run `pnpm build` after changing the source. This is
+separate from `pnpm dev`, which runs the development server.
+
+The launcher is installed under `$XDG_DATA_HOME/applications` (normally
+`~/.local/share/applications`). It refuses to replace or shadow another
+launcher with the same desktop ID, including one for a different checkout.
+If an update changes Conduit's desktop ID, remove the old source launcher
+and update its URI handler before running the installer again.
+
+The installer prints an optional `xdg-mime` command to make this source
+build the handler for `conduit://` links; the installer itself does not
+change the default handler. Electron may also register a handler when the
+app starts.
+
 ## Checks
 
     pnpm typecheck

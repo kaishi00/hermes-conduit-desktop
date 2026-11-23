@@ -15,6 +15,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "install:linux-desktop": "pnpm build && node scripts/install-linux-desktop.mjs",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",
