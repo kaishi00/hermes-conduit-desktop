@@ -74,3 +74,8 @@ linux:
   target: [AppImage]
   artifactName: Conduit-linux-${arch}.${ext}
   category: Utility
+  # Electron takes its Linux app_id (Wayland) and WM_CLASS (X11) from desktopName in
+  # package.json, and xdg-desktop-portal resolves that id to this .desktop file, so
+  # the name has to be the installed file's name: syncDesktopName names the file
+  # after desktopName and lines StartupWMClass up with it.
+  syncDesktopName: true
