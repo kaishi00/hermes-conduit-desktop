@@ -637,11 +637,20 @@ export function ChatList({
         {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
       <div className="chatlist-searchrow">
-        <label className="chatlist-search">
+        <div className="chatlist-search">
           <Icon name="search" />
-          <span className="sr-only">{t('Search chats')}</span>
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('Search chats')} />
-        </label>
+          <input
+            aria-label={t('Search chats')}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder={t('Search chats')}
+          />
+          {query ? (
+            <button className="chatlist-search-clear" aria-label={t('Clear search')} title={t('Clear search')} onClick={() => setQuery('')}>
+              <Icon name="close" />
+            </button>
+          ) : null}
+        </div>
         {/* Another dashboard's chats aren't filtered from here, so its face shows no Filter menu. */}
         {marks && !otherProfile ? (
           <ChatFilterMenu

@@ -293,6 +293,30 @@ a:hover {
   color: var(--text);
 }
 
+/* The field's clear control, in the phone's place: at its right end, only while there is a query. */
+.chatlist-search-clear {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-3);
+  display: grid;
+  place-items: center;
+}
+
+.chatlist-search-clear .ico {
+  width: 11px;
+  height: 11px;
+}
+
+.chatlist-search-clear:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
 .chatlist-scroll {
   flex: 1;
   overflow-y: auto;
