@@ -289,5 +289,34 @@ describe('a chat list with chats missing says why, where it would say the profil
     expect(html).toContain('Hermes couldn’t read atlas’s chats: database is locked')
     expect(html).toContain('Hermes couldn’t read furina’s chats: its chat history on the host is damaged.')
   })
+  it('folds a date group whose stable key is saved, while a search still lists its rows', async () => {
+    const path = '../src/renderer/src/components/ChatList.tsx'
+    const { ChatList } = (await import(/* @vite-ignore */ path)) as { ChatList: unknown }
+    const now = Date.now()
+    const rows = [
+      { id: 'pin', title: 'Pinned one', activeAt: now, pinned: true },
+      { id: 'today', title: 'Today one', activeAt: now - 1000, pinned: false },
+      { id: 'old', title: 'Older one', activeAt: now - 20 * 86_400_000, pinned: false }
+    ]
+    localStorage.setItem('conduit.allProfiles.closedSections', JSON.stringify(['date:today']))
+    const props = {
+      rows,
+      error: null,
+      selectedId: null,
+      runningIds: new Set<string>(),
+      onSelect: () => {},
+      onNewChat: () => {},
+      onPin: () => {}
+    }
+    const folded = renderToStaticMarkup(createElement(ChatList as never, props as never))
+    expect(folded).toContain('aria-expanded="false"')
+    expect(folded).toContain('Today')
+    expect(folded).not.toContain('Today one')
+    expect(folded).toContain('Pinned one')
+    expect(folded).toContain('Older one')
+
+    localStorage.removeItem('conduit.allProfiles.closedSections')
+  })
+
 })
 

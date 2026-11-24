@@ -2,7 +2,7 @@ import { searchFold } from '../state/searchFold'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { underSource } from '../state/voiceList'
 import { includedInAll, profileGroups, readClosedSections, readGroupByProfile, readLeftOut, shownInAll, writeClosedSections, writeGroupByProfile, writeLeftOut } from '../state/profileGroups'
-import { sectionRows, startOfDay, timeLabel, type ChatRow, type UnreadProfile } from '../state/chats'
+import { foldedKeyForSelection, sectionFolded, sectionRows, startOfDay, timeLabel, type ChatRow, type UnreadProfile } from '../state/chats'
 import type { Bot } from '../state/bots'
 import { BotAvatar } from './BotsHome'
 import { t } from '@shared/i18n'
@@ -75,6 +75,8 @@ function writeSelection(selection: readonly ChatFilterKey[]): void {
 interface ListSection {
   title: string
   rows: ChatRow[]
+  /** Stable id for folding: a date bucket's `date:` key, a profile's name, or a host's `host:<url>`. */
+  key: string
   profile?: string
   hidden?: number
   extra?: number
@@ -341,6 +343,7 @@ export function ChatList({
     setClosedSections(next)
     writeClosedSections(next)
   }
+  const sectionKey = (section: ListSection) => section.key
   const profileTitle = (p: string) => bots?.find(b => b.name.toLowerCase() === p)?.title ?? p
   // Show in All: the profiles All lists, kept by the names left out (the phone's sheet from the All chip).
   const [leftOut, setLeftOut] = useState<string[]>(readLeftOut)
@@ -379,6 +382,9 @@ export function ChatList({
   )
   // A status, Starred, In progress or Done is a lookup, not a browse: every match, flat; a source alone is still a browse.
   const looksUp = active.some(k => !isSourceKey(k))
+  // A search or a lookup lists every match flat: a folded group must never hide one.
+  const sectionClosed = (section: ListSection) =>
+    sectionFolded(section.key, closedSections, !!query.trim() || looksUp)
   // Pinned rows move while the list shows every pinned chat: not during a search or under a filter, nor grouped by profile.
   const canReorder = !query.trim() && !active.length
   // Only grouped by profile does the open chat change what's listed (its section keeps it past the cap), so a click elsewhere doesn't list again.
@@ -422,7 +428,7 @@ export function ChatList({
             openId: groupOpenId,
             pinnedOrder: list => arrangePinned(list, pinOrder.orders)
           }
-        ).map(group => ({ title: profileTitle(group.profile), rows: group.rows, profile: group.profile, hidden: group.hidden, extra: group.extra }))
+        ).map(group => ({ title: profileTitle(group.profile), rows: group.rows, key: group.profile, profile: group.profile, hidden: group.hidden, extra: group.extra }))
       : sections.map(section => (section.rows[0]?.pinned ? { ...section, rows: pinned.filter(r => shown.has(r.id)) } : section))
     if (grouped) {
       // A section per other host, after this host's profiles.
@@ -433,6 +439,7 @@ export function ChatList({
         arranged.push({
           title: badgeFor?.(host)?.name ?? host,
           rows: capped ? all.slice(0, OTHER_HOST_ROWS) : all,
+          key,
           profile: key,
           hidden: capped ? all.length - OTHER_HOST_ROWS : 0,
           extra: !capped && !q && all.length > OTHER_HOST_ROWS ? all.length - OTHER_HOST_ROWS : 0
@@ -604,6 +611,11 @@ export function ChatList({
     revealed.current = selectedId
     scroller.current?.querySelector('.row[aria-current="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [present, selectedId])
+  // A chat opened from a notification or a link must be visible, even when its group was folded.
+  useEffect(() => {
+    const key = foldedKeyForSelection(sections, selectedId)
+    if (key && closedSections.includes(key)) toggleSection(key)
+  }, [selectedId, sections])
 
   // What a row's handlers read, so they keep one identity and memoized rows skip a redraw (desktop#199).
   const latest = useRef({ onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope })
@@ -816,17 +828,18 @@ export function ChatList({
           </div>
         ) : null}
         {sections.map(section => (
-          <div key={section.profile ?? section.title} role="group" aria-label={section.title}>
-            {section.profile ? (
-              <button className="sect sect-profile" aria-expanded={!closedSections.includes(section.profile)} onClick={() => toggleSection(section.profile!)}>
-                <Icon name="chevronDown" className={closedSections.includes(section.profile) ? 'closed' : undefined} />
-                {section.profile.startsWith('host:') && badgeFor?.(section.profile.slice(5)) ? <HostBadgeMark badge={badgeFor(section.profile.slice(5))!} /> : null}
-                {section.title}
-              </button>
-            ) : (
-              <div className="sect">{section.title}</div>
-            )}
-            {withNests(section.profile && closedSections.includes(section.profile) ? [] : section.rows).map(item => {
+          <div key={sectionKey(section)} role="group" aria-label={section.title}>
+            {(() => {
+              const closed = sectionClosed(section)
+              return (
+                <button className="sect sect-profile" aria-expanded={!closed} onClick={() => toggleSection(sectionKey(section))}>
+                  <Icon name="chevronDown" className={closed ? 'closed' : undefined} />
+                  {section.profile?.startsWith('host:') && badgeFor?.(section.profile.slice(5)) ? <HostBadgeMark badge={badgeFor(section.profile.slice(5))!} /> : null}
+                  {section.title}
+                </button>
+              )
+            })()}
+            {withNests(sectionClosed(section) ? [] : section.rows).map(item => {
               if ('nest' in item) {
                 const below = descendants(nesting, item.nest)
                 const summary = nestSummary(
@@ -921,7 +934,7 @@ export function ChatList({
                 />
               )
             })}
-            {section.profile && !closedSections.includes(section.profile) && (section.hidden || section.extra) ? (
+            {!sectionClosed(section) && (section.hidden || section.extra) ? (
               <button
                 className="row show-more"
                 onClick={() =>

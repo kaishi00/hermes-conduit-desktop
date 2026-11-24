@@ -36,8 +36,25 @@ export interface ChatRow {
 }
 
 export interface ChatSection {
+  /** Stable bucket id, independent of the localized title. */
+  key: string
   title: string
   rows: ChatRow[]
+}
+
+/** A folded section stays hidden while browsing; a search lists every match flat. */
+export function sectionFolded(key: string, closed: string[], searching: boolean): boolean {
+  return !searching && closed.includes(key)
+}
+
+/** The group an opened chat belongs to, so a notification can unfold it. */
+export function foldedKeyForSelection(
+  sections: { key?: string; profile?: string; title: string; rows: { id: string }[] }[],
+  selectedId: string | null
+): string | null {
+  if (!selectedId) return null
+  const found = sections.find(section => section.rows.some(row => row.id === selectedId))
+  return found ? found.key ?? found.profile ?? found.title : null
 }
 
 /** Sessions that aren't chats, as the phone's list leaves them out (cron runs have their own list). */
@@ -239,9 +256,17 @@ export function sectionRows(rows: ChatRow[], now = Date.now()): ChatSection[] {
     'Previous 7 days': t('Previous 7 days'),
     Older: t('Older')
   }
+  // Stable ids for a folded section: the displayed titles are localized and must not be the key.
+  const keys: Record<string, string> = {
+    Pinned: 'date:pinned',
+    Today: 'date:today',
+    Yesterday: 'date:yesterday',
+    'Previous 7 days': 'date:week',
+    Older: 'date:older'
+  }
   return Object.entries(buckets)
     .filter(([, list]) => list.length > 0)
-    .map(([bucket, list]) => ({ title: titles[bucket]!, rows: list }))
+    .map(([bucket, list]) => ({ key: keys[bucket]!, title: titles[bucket]!, rows: list }))
 }
 
 /** 8:07 AM today, a weekday this week, else a short date. */
