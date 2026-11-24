@@ -1176,6 +1176,7 @@ export function Transcript({
   if (pinnedChat.current !== chatKey) {
     pinnedChat.current = chatKey
     pinned.current = true
+    jumpUntil.current = 0
   }
 
   // Follow the reply while the reader is at the bottom; leave them be once they scroll up.

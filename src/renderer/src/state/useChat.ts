@@ -1404,7 +1404,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     const found = wanted.current
     if (!found) return
     if (found(transcriptRef.current.items)) wanted.current = null
-    else if (olderNow.current && !olderNow.current.more) wanted.current = null
+    // No pages to read: the chat's first row is in, or it opened whole (or too long to page back).
+    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null) wanted.current = null
     else void loadOlder()
   }, [loadOlder, transcriptRef])
   const seekRow = useCallback(
