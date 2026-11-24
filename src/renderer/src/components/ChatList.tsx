@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { underSource } from '../state/voiceList'
 import { includedInAll, profileGroups, readClosedSections, readGroupByProfile, readLeftOut, shownInAll, writeClosedSections, writeGroupByProfile, writeLeftOut } from '../state/profileGroups'
 import { sectionRows, startOfDay, timeLabel, type ChatRow, type UnreadProfile } from '../state/chats'
@@ -257,6 +257,18 @@ export function ChatList({
   // Mute Notifications' durations, shown in place of the menu.
   const [muting, setMuting] = useState(false)
   useEffect(() => setMuting(false), [menu])
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuTop, setMenuTop] = useState<number | null>(null)
+  // The old clamp assumed a fixed menu height; a Move-to-Project or Mute submenu is taller and
+  // its last items fell past the window edge (issue 447). Measure the drawn menu instead.
+  useLayoutEffect(() => {
+    if (!menu) {
+      setMenuTop(null)
+      return
+    }
+    const height = menuRef.current?.offsetHeight ?? 220
+    setMenuTop(Math.max(8, Math.min(menu.y, window.innerHeight - height - 8)))
+  }, [menu, moving, muting])
   async function startMove(row: ChatRow) {
     setMoving(null)
     const targets = await moveTargets!(row).catch(() => [])
@@ -953,11 +965,12 @@ export function ChatList({
       <UpdatingCapsule shown={!!updating && sections.length > 0} />
       {menu ? (
         <div
+          ref={menuRef}
           className="host-menu row-menu"
           role="menu"
           style={{
             left: Math.min(menu.x, window.innerWidth - 220),
-            top: Math.max(8, Math.min(menu.y, window.innerHeight - (moving ? 52 + 34 * Math.max(1, moving.length) : 220)))
+            top: menuTop ?? Math.max(8, Math.min(menu.y, window.innerHeight - 220))
           }}
         >
           {isOther(menu.row) ? (
