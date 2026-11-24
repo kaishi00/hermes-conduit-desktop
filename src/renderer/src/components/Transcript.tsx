@@ -1130,9 +1130,10 @@ export function Transcript({
   const drawnWindow = rowWindow(rows.length, start)
   const drawn = drawnWindow.start > 0 ? rows.slice(drawnWindow.start, drawnWindow.end) : rows
   // What the scroll listener reads: the rows and the window as this frame has them.
-  const liveRows = useRef({ rows, start: drawnWindow.start, chat: firstKey })
+  const liveRows = useRef({ rows, start: drawnWindow.start, scrolledUp: start !== null, chat: firstKey })
   liveRows.current.rows = rows
   liveRows.current.start = drawnWindow.start
+  liveRows.current.scrolledUp = start !== null
   liveRows.current.chat = firstKey
   const followedUpKeySet = useMemo(() => followedUpKeys(state.items, followedUp), [state.items, followedUp])
   const repliesToTeammates = useMemo(() => teammateReplies(state.items), [state.items])
@@ -1150,9 +1151,11 @@ export function Transcript({
     if (!el) return
     const onScroll = () => {
       pinned.current = atEnd(el)
-      const { rows: thisFrame, start: from, chat } = liveRows.current
+      const { rows: thisFrame, start: from, scrolledUp, chat } = liveRows.current
       if (pinned.current) {
-        if (from !== null) setWindowed({ chat, start: null })
+        // Only a window the reader scrolled up gives rows back: at the bottom every
+        // scroll (a streaming reply's each frame) would otherwise draw the chat again.
+        if (scrolledUp) setWindowed({ chat, start: null })
       } else if (nearTop(el.scrollTop) && from !== 0) {
         grew.current = { start: from, height: el.scrollHeight }
         setWindowed({ chat, start: olderStart(from, thisFrame.length) })
