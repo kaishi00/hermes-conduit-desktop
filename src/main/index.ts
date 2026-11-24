@@ -978,7 +978,7 @@ if (!app.requestSingleInstanceLock()) {
 
 /**
  * The Mac's menu bar, after the phone's: Settings on ⌘,, File > New Chat
- * and Search, View with the chat's text size and ⌘1 to ⌘5, Chat > Stop, and
+ * and Search, View with the chat's text size and ⌘1 to ⌘6 in the rail's order, Chat > Stop, and
  * Help > Keyboard Shortcuts on ⌘/. Windows has no menu bar (the title bar
  * is ours), so the window takes Ctrl and the same keys itself there.
  */

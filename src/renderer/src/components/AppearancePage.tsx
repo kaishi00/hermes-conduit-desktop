@@ -17,6 +17,8 @@ import {
   type Accent,
   type ChatFontStyle
 } from '../state/appearance'
+import { sectionTitle } from '../state/shortcuts'
+import type { RailSection } from '@shared/ipc'
 import { LAUNCH_CHOICES, TABS_SYNC_KEY, keepTabs, keptTabs, launchPage, withFirstTab, type LaunchPage } from '../state/launchTab'
 import { DEVICE_NAME, PREFS_PATH, installationId } from '../state/pinnedOrder'
 import { gateway } from '../gateway'
@@ -64,12 +66,15 @@ const rgb = (hex: string): [number, number, number] => [1, 3, 5].map(i => parseI
 export function AppearancePage({
   host,
   onBack,
-  onOpensOn
+  onOpensOn,
+  opensHere
 }: {
   host: string
   onBack: () => void
   /** A page was chosen to open on: the window pins its section in the rail, where an unpinned one wouldn't open. */
   onOpensOn?: (page: LaunchPage) => void
+  /** The section a launch on `page` shows on this computer: another one when the rail has `page` unpinned. */
+  opensHere?: (page: LaunchPage) => LaunchPage | RailSection
 }) {
   useMouseBack(onBack)
   const [opensOn, setOpensOn] = useState<LaunchPage>(() => launchPage(host))
@@ -111,6 +116,14 @@ export function AppearancePage({
               </button>
             ))}
           </div>
+          {opensHere && opensOn !== 'settings' && opensHere(opensOn) !== opensOn ? (
+            <p className="meta">
+              {t('{page} is unpinned from the rail on this computer, so Conduit opens on {other} here.', {
+                page: pageTitle(opensOn),
+                other: sectionTitle(opensHere(opensOn) as RailSection)
+              })}
+            </p>
+          ) : null}
           {openFailed ? <p className="meta warns">{t('Kept on this computer. Hermes didn’t take it, so other devices still open where they did.')}</p> : null}
         </section>
       ) : null}

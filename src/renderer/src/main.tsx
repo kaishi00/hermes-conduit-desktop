@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { pinnedSections, readRailLayout } from './state/railSections'
 import { QuickAsk } from './components/QuickAsk'
 import { ChatWindow } from './components/ChatWindow'
 import type { ChatWindowRequest } from '@shared/ipc'
@@ -49,6 +50,9 @@ function ChatPage({ first }: { first: ChatWindowRequest }) {
   }, [])
   return <ChatWindow key={chat.id} chat={chat} />
 }
+
+// The Mac's View menu follows the rail kept on this computer from the start, before a dashboard is connected and the rail shows.
+window.conduit.setRailSections?.(pinnedSections(readRailLayout()))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

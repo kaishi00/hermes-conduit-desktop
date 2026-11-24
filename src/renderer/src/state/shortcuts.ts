@@ -1,6 +1,6 @@
 /**
  * Conduit's keyboard shortcuts, after the phone's catalog: ⌘N New Chat, ⌘F
- * Search, ⌘. Stop, ⌘, Settings, ⌘1 to ⌘5 the sections, ⌘+ ⌘− ⌘0 the chat's
+ * Search, ⌘. Stop, ⌘, Settings, ⌘1 to ⌘6 the sections, ⌘+ ⌘− ⌘0 the chat's
  * text size, ⌘\ the chat list and ⌘/ this list. The Mac's menu bar holds them there; Windows
  * has no menu bar, so the window reads Ctrl and the same key.
  */

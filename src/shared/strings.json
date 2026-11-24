@@ -45988,5 +45988,20 @@
     "tr": "Bölümleri sıfırla",
     "zh-Hans": "重置分区",
     "zh-Hant": "重設區段"
+  },
+  "{page} is unpinned from the rail on this computer, so Conduit opens on {other} here.": {
+    "de": "{page} ist auf diesem Computer aus der Leiste gelöst, daher öffnet Conduit hier mit {other}.",
+    "es": "{page} no está fijada en la barra de este ordenador, así que Conduit se abre aquí en {other}.",
+    "fr": "{page} n’est pas épinglée dans la barre sur cet ordinateur ; Conduit s’ouvre donc ici sur {other}.",
+    "id": "{page} tidak disematkan di bilah pada komputer ini, jadi Conduit terbuka di {other} di sini.",
+    "it": "{page} non è fissata nella barra su questo computer, quindi qui Conduit si apre su {other}.",
+    "ja": "このコンピュータでは{page}がレールに固定されていないため、ここでは{other}が開きます。",
+    "ko": "이 컴퓨터에서는 {page}이(가) 레일에 고정되어 있지 않아 여기서는 {other}에서 열립니다.",
+    "pl": "Sekcja {page} jest odpięta od paska na tym komputerze, więc tutaj Conduit otwiera się na {other}.",
+    "pt-BR": "{page} não está fixada na barra neste computador, então aqui o Conduit abre em {other}.",
+    "ru": "Раздел «{page}» откреплён от панели на этом компьютере, поэтому здесь Conduit открывается на «{other}».",
+    "tr": "{page} bu bilgisayarda raydan kaldırıldı, bu yüzden Conduit burada {other} ile açılır.",
+    "zh-Hans": "在这台电脑上，{page}未固定在侧栏中，因此 Conduit 在这里打开{other}。",
+    "zh-Hant": "在這台電腦上，{page}未釘選在側欄中，因此 Conduit 在這裡開啟{other}。"
   }
 }

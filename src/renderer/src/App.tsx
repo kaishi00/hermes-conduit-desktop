@@ -2882,6 +2882,7 @@ function Shell({
           />
         ) : (
           <Settings
+            opensHere={page => resolveInitialSection(page, railLayout)}
             onOpensOn={page => {
               // The page chosen to open on is pinned here too: an unpinned section opens the first pinned one instead.
               if (page !== 'settings' && railLayout.hidden.has(page)) changeRailLayout(setSectionPinned(railLayout, page, true))
@@ -3038,8 +3039,11 @@ function Settings({
   onLinkRequestTaken,
   personPicture,
   onNewChatWith,
-  onOpensOn
+  onOpensOn,
+  opensHere
 }: {
+  /** The section a launch on a page shows here: another one when the rail has it unpinned. */
+  opensHere: (page: LaunchPage) => LaunchPage | RailSection
   /** Settings > Appearance > Open on chose a page. */
   onOpensOn: (page: LaunchPage) => void
   status: ConnectionStatus
@@ -3208,7 +3212,7 @@ function Settings({
   if (page === 'appearance')
     return (
       <SettingsPane pane={pane}>
-        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} />
+        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} opensHere={opensHere} />
       </SettingsPane>
     )
   if (page === 'multiplayer' && status.url)
