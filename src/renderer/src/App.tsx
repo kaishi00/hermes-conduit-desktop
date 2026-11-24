@@ -2528,6 +2528,7 @@ function Shell({
                   <ConnectionActionsContext.Provider value={connectionActions}>
                     <LiveTranscript
                       store={transcriptStore}
+                      chatId={selected.id || undefined}
                       loading={loading}
                       error={error}
                       requests={openRequests}

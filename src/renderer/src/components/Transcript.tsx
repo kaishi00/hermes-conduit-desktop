@@ -1049,6 +1049,7 @@ export function Transcript({
   onCommand,
   display = DEFAULT_DISPLAY,
   sessionId,
+  chatId,
   calls,
   onOpenCall,
   followedUp,
@@ -1079,6 +1080,8 @@ export function Transcript({
   display?: ChatDisplay
   /** The chat's runtime session, which step summaries ask about. */
   sessionId?: string
+  /** The chat's own id where one pane draws chat after chat, so each opens at its newest rows. */
+  chatId?: string
   /** Voice calls saved with this chat, each drawn as a card where it started. */
   calls?: ChatCall[]
   onOpenCall?: (callId: string) => void
@@ -1123,7 +1126,9 @@ export function Transcript({
   // rows above them as the reader scrolls up (rowWindow.ts) — so a streaming reply
   // draws into its own row each frame instead of laying the whole history out again
   // (desktop#291).
-  const firstKey = state.items[0]?.key
+  // Which chat the window belongs to: its id, since every chat's history rows carry the
+  // same keys (row-0, row-1, …), and its first row's key where the pane has no id.
+  const firstKey = `${chatId ?? ''}\n${state.items[0]?.key ?? ''}`
   const [windowed, setWindowed] = useState<{ chat?: string; start: number | null }>({ start: null })
   // Another chat opened: its own newest rows, not the window the last one was left at.
   const start = windowed.chat === firstKey ? windowed.start : null
@@ -1234,7 +1239,12 @@ export function Transcript({
     () => ({
       jump: (quote: string) => {
         const target = latest.current.state.items.find(i => i.kind === 'assistant' && sameQuotedText(i.text, quote))
-        return target ? () => revealMessage(scroller.current, target.key) : undefined
+        if (!target) return undefined
+        return () => {
+          // As a pin's jump does: the window it opens isn't given back as the reader at the bottom's.
+          pinned.current = false
+          revealMessage(scroller.current, target.key)
+        }
       },
       quote: (request: QuoteRequest) => latest.current.onQuote?.(request),
       command: (text: string) => latest.current.onCommand?.(text),

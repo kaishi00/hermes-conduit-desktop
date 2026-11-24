@@ -511,6 +511,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             <ConnectionActionsContext.Provider value={connectionActions}>
               <LiveTranscript
                 store={transcriptStore}
+                chatId={request.id || undefined}
                 loading={loading}
                 error={error}
                 requests={openRequests}
