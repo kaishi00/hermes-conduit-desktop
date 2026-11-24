@@ -234,6 +234,13 @@ export function LocalLiveCall({
   const echo = useRef(0)
   /** The words shown of the reply now arriving. */
   const shown = useRef('')
+  /** Interrupt cut the response now arriving: its saved turn is what was heard, whenever its transcript ends. */
+  const cut = useRef(false)
+  /** What was heard of a reply that ended without its whole transcript is its saved turn. */
+  const keepHeard = () => {
+    keep('assistant', shown.current)
+    shown.current = ''
+  }
   const ended = useRef(false)
   const ready = useRef(false)
   // The greeting goes once per call, never on a reconnect's check.
@@ -716,6 +723,7 @@ export function LocalLiveCall({
         if (checking.current) return
         responding.current = true
         gate.current.replyStarted()
+        cut.current = false
         return
       case 'responseDone':
         if (checking.current) {
@@ -726,6 +734,8 @@ export function LocalLiveCall({
         }
         responding.current = false
         gate.current.replyEnded()
+        // A response that ended without its transcript's end (cancelled, or cut off) keeps what was heard of it.
+        keepHeard()
         if (wantsResponse.current) {
           wantsResponse.current = false
           respond()
@@ -760,14 +770,14 @@ export function LocalLiveCall({
         return
       case 'outputDone': {
         if (checking.current) return
-        const heard = shown.current
-        shown.current = ''
-        // Interrupted: the line and the saved call keep what was heard of it, not the words nobody played.
-        if (gate.current.dropped) {
-          keep('assistant', heard)
+        // Interrupted: the line and the saved call keep what was heard of it, not the words nobody played. The
+        // server may have ended the response already, so the cut is the response's, not the gate's.
+        if (cut.current || gate.current.dropped) {
+          keepHeard()
           setLines(current => current.map(line => (line.open && line.who === 'assistant' ? { ...line, open: false } : line)))
           return
         }
+        shown.current = ''
         keep('assistant', event.text)
         assistantLine(event.text, true)
         return
@@ -855,6 +865,8 @@ export function LocalLiveCall({
         responding.current = false
         stopPlayback()
         gate.current.replyEnded()
+        keepHeard()
+        cut.current = false
         setPhase('reconnecting')
         trace.current?.step('Connection lost: opening a new session')
       }
@@ -1033,6 +1045,9 @@ export function LocalLiveCall({
     trace.current?.step('Interrupt pressed')
     stopPlayback()
     gate.current.interrupt()
+    cut.current = gate.current.dropped
+    // Sent even when the reply has ended and only its tail plays: a server that shut its own microphone for the
+    // reply can't know the playback stopped (the phone's ruling, hermes-conduit #1331).
     send(RESPONSE_CANCEL)
     setPhase(current => (current === 'speaking' ? 'listening' : current))
   }
