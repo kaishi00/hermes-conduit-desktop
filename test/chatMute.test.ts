@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { muteIds, muteOf, muteOfTarget, mutePath, parseMutes, settingMute, turnNotifies } from '../src/renderer/src/state/chatMute'
+import { muteIds, muteOf, muteOfTarget, mutePath, muteProfilesToAsk, parseMutes, settingMute, turnNotifies } from '../src/renderer/src/state/chatMute'
 import type { ChatRow } from '../src/renderer/src/state/chats'
 
 const row = (id: string, extra: Partial<ChatRow> = {}): ChatRow => ({ id, title: id, pinned: false, ...extra })
@@ -93,5 +93,15 @@ describe("a finished turn's notification and the chat's mute (hermes-conduit iss
       throw new Error('404')
     })
     expect(await turnNotifies(http, null, row('s1'), ['default'])).toBe(true)
+  })
+
+  it('asks each profile once, the default profile whatever its bot is named', () => {
+    const bots = [
+      { name: 'main', isDefault: true },
+      { name: 'Work', isDefault: false },
+      { name: 'scout', isDefault: false }
+    ]
+    expect(muteProfilesToAsk(['default', 'work'], bots)).toEqual(['default', 'scout', 'work'])
+    expect(muteProfilesToAsk([], [])).toEqual([])
   })
 })

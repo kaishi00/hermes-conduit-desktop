@@ -197,7 +197,7 @@ import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply }
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isUnread, type ChatMarks } from './state/chatMarks'
 import { isDone, useChatDone } from './state/chatDone'
-import { muteOf, muteOfTarget, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
+import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { SCALES, applyScale, nextScale, readScale, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
@@ -1220,7 +1220,7 @@ function Shell({
   // list shows and every bot's, so one with no listed rows is asked too
   // (hermes-conduit #3143).
   const muteProfilesRef = useRef<string[]>([])
-  muteProfilesRef.current = [...new Set([...doneProfiles, ...glowBots.map(b => b.name || 'default')])].sort()
+  muteProfilesRef.current = muteProfilesToAsk(doneProfiles, glowBots)
   const [marks, setMarks] = useState<ChatMarks>(() => loadMarks(markHost))
   useEffect(() => setMarks(loadMarks(markHost)), [markHost])
   const updateMarks = useCallback(
