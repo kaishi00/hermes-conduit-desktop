@@ -92,6 +92,11 @@ const api: ConduitApi = {
     setAuto: on => ipcRenderer.invoke(IPC.setAutoUpdate, on),
     onState: listener => listen(IPC.updateStateChanged, listener)
   },
+  loginItem: {
+    state: () => ipcRenderer.invoke(IPC.loginItem),
+    set: on => ipcRenderer.invoke(IPC.setLoginItem, on),
+    openSystemSettings: () => ipcRenderer.send(IPC.openStartupSettings)
+  },
   unlock: () => ipcRenderer.invoke(IPC.unlock),
   probe: (url, headers) => ipcRenderer.invoke(IPC.probe, url, headers),
   checkCertificate: url => ipcRenderer.invoke(IPC.checkCertificate, url),

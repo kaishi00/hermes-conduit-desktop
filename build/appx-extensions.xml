@@ -1,0 +1,4 @@
+
+        <desktop:Extension Category="windows.startupTask" Executable="app\Conduit.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="ConduitStartup" Enabled="false" DisplayName="Hermes Conduit" />
+        </desktop:Extension>

@@ -58,6 +58,7 @@ import { parseScreenKey, releaseScreen } from '../shared/screenWindows'
 import { ConduitTray } from './tray'
 import { applyAppIcon, watchNewWindows } from './appIcon'
 import { watchEditMenu } from './editMenu'
+import { launchedAtLogin, loginItemState, openStartupSettings, setLoginItem } from './loginItem'
 import {
   appIconChoice,
   askHostAtLaunch,
@@ -417,7 +418,11 @@ async function openSavedHosts(): Promise<void> {
   await connection.restore({ askWhich: askHostAtLaunch() })
 }
 
+/** This launch came from the sign-in: its first window stays hidden. */
+let startInTray: boolean | null = null
+
 function createWindow(): void {
+  if (startInTray === null) startInTray = launchedAtLogin()
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -441,7 +446,11 @@ function createWindow(): void {
   mainWindow = window
   watchWindowFreezes(window)
   watchDockedChats(window)
-  window.on('ready-to-show', () => window.show())
+  // The sign-in's start stays in the tray (issue 442): the window is made, and shows when asked for.
+  window.on('ready-to-show', () => {
+    if (!startInTray) window.show()
+    startInTray = false
+  })
   window.on('close', event => {
     if (quitting) return
     event.preventDefault()
@@ -519,6 +528,9 @@ function registerIpc(): void {
   isWakeListener = registerWake(() => mainWindow).isListener
   ipcMain.handle(IPC.deviceReports, () => deviceReports())
   ipcMain.handle(IPC.updateState, () => updateState())
+  ipcMain.handle(IPC.loginItem, () => loginItemState())
+  ipcMain.handle(IPC.setLoginItem, (_event, on: unknown) => setLoginItem(on === true))
+  ipcMain.on(IPC.openStartupSettings, () => openStartupSettings())
   ipcMain.handle(IPC.checkForUpdates, () => checkForUpdates())
   ipcMain.handle(IPC.downloadUpdate, () => downloadUpdate())
   ipcMain.on(IPC.installUpdate, () => restartToUpdate())

@@ -20,7 +20,9 @@ pop a chat out into its own window, ask from anywhere with Quick Ask, call
 your bot with the phone's voice modes, and keep several Hermes hosts
 side by side. Close the window and Conduit stays in the tray (the menu bar
 on the Mac), so approvals and finished replies still reach you as
-notifications. It speaks the iPhone app's thirteen languages.
+notifications. Settings > App > Open at Sign-In starts it there with your
+computer, with no window (the Microsoft Store's copy is turned on in Windows'
+Startup apps). It speaks the iPhone app's thirteen languages.
 
 Right-click a chat to archive it; open **Filter > Archived** to search,
 restore or permanently delete archived chats.

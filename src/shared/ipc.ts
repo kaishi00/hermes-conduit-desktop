@@ -254,6 +254,13 @@ export interface ConduitApi {
     setAuto(on: boolean): Promise<UpdateState>
     onState(listener: (state: UpdateState) => void): () => void
   }
+  /** Open at sign-in (main/loginItem.ts). */
+  loginItem: {
+    state(): Promise<LoginItemState>
+    set(on: boolean): Promise<LoginItemState>
+    /** Windows' Startup apps page, for the Microsoft Store's copy. */
+    openSystemSettings(): void
+  }
   /** `headers` are for a proxy in front of the dashboard (Cloudflare Access and the like). */
   probe(url: string, headers?: Record<string, string>): Promise<HostProbe>
   /** Reads the root certificate the server at `url` sends, trusting it for nothing. */
@@ -573,6 +580,9 @@ export const IPC = {
   declineDeviceReports: 'conduit:decline-device-reports',
   deviceReportsChanged: 'conduit:device-reports-changed',
   updateState: 'conduit:update-state',
+  loginItem: 'conduit:login-item',
+  setLoginItem: 'conduit:set-login-item',
+  openStartupSettings: 'conduit:open-startup-settings',
   checkForUpdates: 'conduit:check-for-updates',
   downloadUpdate: 'conduit:download-update',
   installUpdate: 'conduit:install-update',
@@ -634,4 +644,14 @@ export function mintedSocket(response: unknown): MintedSocket {
   }
   if (!url.searchParams.has('access_token')) url.searchParams.set('access_token', token)
   return { ok: true, url: url.toString(), model: text(r.model), voice: text(r.voice) }
+}
+
+/**
+ * Open at sign-in: `switch` where Conduit turns it on and off itself (the
+ * Windows installer, the Mac), `system` where Windows' Startup apps does (the
+ * Microsoft Store's copy), `none` where it isn't offered (a run from source, Linux).
+ */
+export interface LoginItemState {
+  kind: 'switch' | 'system' | 'none'
+  on: boolean
 }

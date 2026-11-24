@@ -70,6 +70,10 @@ appx:
   publisher: CN=92D09677-83F4-4D47-B55F-22F31F2EF929
   publisherDisplayName: Milim
   displayName: Hermes Conduit
+  # Open at sign-in (issue 442): a startup task, off until its owner turns it on in
+  # Windows' Startup apps (src/main/loginItem.ts). The file is XML put inside the
+  # package's <Extensions>; its Executable is app\<productName>.exe.
+  customExtensionsPath: build/appx-extensions.xml
 linux:
   target: [AppImage]
   artifactName: Conduit-linux-${arch}.${ext}
