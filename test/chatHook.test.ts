@@ -633,6 +633,44 @@ describe("model and run settings before a new chat's first message", () => {
     expect(hook.result().chat.reasoning).toBe('high')
   })
 
+  it('keeps a pick made in a new draft while an earlier chat’s create is still out', async () => {
+    const sentRpc: { method: string; params: Record<string, unknown> }[] = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const baseRpc = conduit.rpcOutcome
+    let made!: () => void
+    conduit.rpcOutcome = (method, params) => {
+      sentRpc.push({ method, params })
+      if (method === 'session.create') {
+        return new Promise(resolve => {
+          made = () => resolve({ ok: true, result: { session_id: 'live-new', stored_session_id: 'new' } })
+        })
+      }
+      return baseRpc(method, params)
+    }
+
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', profile: 'a', sessionAuthority: false })
+    let sending!: Promise<unknown>
+    await act(async () => {
+      sending = hook.result().send('hello')
+      await settle()
+    })
+    // The person moves to a new chat for another bot while the first chat's create is out.
+    await act(async () => {
+      hook.rerender({ storedId: null, connected: true, url: 'h1', profile: 'b', sessionAuthority: false })
+      await settle()
+    })
+    await act(async () => {
+      await hook.result().setReasoning('high')
+    })
+    expect(hook.result().chat.reasoning).toBe('high')
+    await act(async () => {
+      made()
+      await sending
+    })
+    expect(hook.result().chat.reasoning).toBe('high')
+    expect(sentRpc.some(c => c.method === 'config.set')).toBe(false)
+  })
+
   it('forwards draft reasoning, ultrafast service_tier and yolo directly to session.create under sessionAuthority', async () => {
     const sentRpc: { method: string; params: Record<string, unknown> }[] = []
     const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit

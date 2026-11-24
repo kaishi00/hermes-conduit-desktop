@@ -363,6 +363,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     liveId.current = null
     openingChat.current = null
     draftOverrides.current = {}
+    // A create still out belongs to the chat that just left: a pick in this one mustn't wait on it and be dropped.
+    creating.current = null
     // A resume this re-run abandons can't clear it any more: its finally is fenced by the ticket.
     setLoading(false)
     setTakeover(null)

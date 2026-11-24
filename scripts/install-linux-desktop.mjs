@@ -19,16 +19,30 @@ function argument(text) {
 }
 
 /** Each desktop entry under a directory, nested ones under their XDG id (a dash per separator).
- *  Directories reached through a symlink count, as they do for GLib's own scan. */
-function desktopEntries(directory, prefix = '') {
+ *  Directories reached through a symlink count, as they do for GLib's own scan, but never one
+ *  the walk is already inside: a symlink back up the tree (`alias -> .`) would otherwise find the
+ *  installed entry again under another id, and two of them branch at every level (desktop#461). */
+function desktopEntries(directory, prefix = '', inside = new Set()) {
   if (!existsSync(directory)) return []
+  let listing
+  let key
+  try {
+    const at = statSync(directory)
+    key = `${at.dev}:${at.ino}`
+    if (inside.has(key)) return []
+    listing = readdirSync(directory, { withFileTypes: true })
+  } catch {
+    throw new Error(`Could not read ${directory}; make it readable or remove it before installing a source launcher.`)
+  }
   const entries = []
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+  inside.add(key)
+  for (const entry of listing) {
     const path = join(directory, entry.name)
     const id = `${prefix}${entry.name}`
-    if (isDirectory(path, entry)) entries.push(...desktopEntries(path, `${id}-`))
+    if (isDirectory(path, entry)) entries.push(...desktopEntries(path, `${id}-`, inside))
     else if (entry.isFile() || entry.isSymbolicLink()) entries.push({ path, id })
   }
+  inside.delete(key)
   return entries
 }
 function isDirectory(path, entry) {
@@ -79,7 +93,8 @@ try {
   }
   const desktopName = typeof pkg.desktopName === 'string' && /^[A-Za-z0-9._-]+$/.test(pkg.desktopName) ? pkg.desktopName : 'conduit'
   // An empty or blank XDG_DATA_HOME is unset, as the spec says: fall back rather than demand a path.
-  const data = (process.env.XDG_DATA_HOME || '').trim() || join(homedir(), '.local', 'share')
+  // A real path keeps its spaces: only the blank test trims.
+  const data = (process.env.XDG_DATA_HOME || '').trim() ? process.env.XDG_DATA_HOME : join(homedir(), '.local', 'share')
   if (!isAbsolute(data)) throw new Error('XDG_DATA_HOME must be an absolute path.')
   const applications = join(data, 'applications')
   const destination = join(applications, `${desktopName}.desktop`)
@@ -129,8 +144,9 @@ try {
     console.log('update-desktop-database is not installed; refresh the desktop database when it becomes available.')
   } else if (refresh.error) {
     console.warn(`The entry is installed, but the desktop database was not refreshed: ${refresh.error.message}`)
-  } else if (refresh.status !== null && refresh.status !== 0) {
-    const detail = (refresh.stderr || '').trim() || `update-desktop-database exited with ${refresh.status}`
+  } else if (refresh.status !== 0) {
+    const ended = refresh.status === null ? `was stopped by ${refresh.signal ?? 'a signal'}` : `exited with ${refresh.status}`
+    const detail = (refresh.stderr || '').trim() || `update-desktop-database ${ended}`
     console.warn(`The entry is installed, but the desktop database was not refreshed: ${detail}`)
   }
   console.log('Rebuild with pnpm build after changing source. To make this the conduit:// handler, run:')

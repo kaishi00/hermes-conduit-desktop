@@ -228,6 +228,49 @@ describe.skipIf(process.platform !== 'linux')('Linux source launcher', () => {
     expect(existsSync(f.entry)).toBe(false)
   })
 
+  it('reinstalls past symlinks that lead back into applications (#461)', () => {
+    const f = fixture()
+    expect(f.install().status).toBe(0)
+    symlinkSync('.', join(f.data, 'applications/alias'))
+    symlinkSync('.', join(f.data, 'applications/other'))
+    const again = f.install()
+    expect(again.status, again.stderr).toBe(0)
+    expect(again.stdout).toContain(`Installed ${f.entry}`)
+  })
+
+  it.skipIf(process.getuid?.() === 0)('names a nested directory it cannot read (#461)', () => {
+    const f = fixture()
+    const locked = join(f.data, 'applications/locked')
+    mkdirSync(locked, { recursive: true })
+    chmodSync(locked, 0o000)
+    temporary.unshift(locked)
+    const refused = f.install()
+    chmodSync(locked, 0o755)
+    expect(refused.status).not.toBe(0)
+    expect(refused.stderr).toContain(`Could not read ${locked}`)
+    expect(refused.stderr).not.toContain('EACCES')
+  })
+
+  it('keeps the spaces of a real XDG_DATA_HOME (#461)', () => {
+    const f = fixture()
+    const spaced = join(f.base, 'data ')
+    const installed = f.install(spaced)
+    expect(installed.status, installed.stderr).toBe(0)
+    expect(existsSync(join(spaced, 'applications/conduit.desktop'))).toBe(true)
+  })
+
+  it('warns when the desktop database refresh is stopped by a signal (#461)', () => {
+    const f = fixture()
+    const bin = join(f.base, 'bin')
+    mkdirSync(bin, { recursive: true })
+    writeFileSync(join(bin, 'update-desktop-database'), '#!/bin/sh\nkill -KILL $$\n')
+    chmodSync(join(bin, 'update-desktop-database'), 0o755)
+    const installed = f.install(undefined, { PATH: `${bin}:${process.env.PATH}` })
+    expect(installed.status, installed.stderr).toBe(0)
+    expect(installed.stderr).toContain('stopped by SIGKILL')
+    expect(existsSync(f.entry)).toBe(true)
+  })
+
   it('reports the install even when refreshing the desktop database fails', () => {
     const f = fixture()
     const bin = join(f.base, 'bin')

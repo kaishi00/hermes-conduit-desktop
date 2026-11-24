@@ -272,6 +272,8 @@ describe('native OAuth grant requests', () => {
     expect(storedGrant({ ...grant, expires_at: 'soon' })).toBeUndefined()
     expect(storedGrant('not a grant')).toBeUndefined()
     expect(storedGrant(null)).toBeUndefined()
+    // A blank handle saved before desktop#460 reads as none, so no refresh leaves for it (#461).
+    expect(storedGrant({ ...grant, refresh_token: '   ' })).toEqual({ ...grant, refresh_token: '' })
   })
 
   it.each([400, 401, 403, 429, 500, 503, 302])('preserves HTTP %i without exposing response details', async status => {
