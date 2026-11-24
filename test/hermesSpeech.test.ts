@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { fieldProblem, rowProviderId, selectedProvider, speechFields, speechProviders, withFields, withProvider } from '../src/renderer/src/state/hermesSpeech'
+import {
+  CONFIG_UNSET_PATH,
+  fieldProblem,
+  rowProviderId,
+  saveFields,
+  saveProvider,
+  selectedProvider,
+  speechFields,
+  speechProviders,
+  withFields,
+  withProvider
+} from '../src/renderer/src/state/hermesSpeech'
+import type { Http } from '../src/renderer/src/state/profileConfig'
 
 const toolset = {
   providers: [
@@ -64,5 +76,66 @@ describe("Hermes' speech providers", () => {
 
   it('writes a provider with no row as its section, leaving no gateway routing behind', () => {
     expect(withProvider({ stt: { provider: 'local', use_gateway: true, local: { model: 'base' } } }, 'stt', 'groq')).toEqual({ stt: { provider: 'groq', local: { model: 'base' } } })
+  })
+})
+
+/** A Hermes whose PUT merges what it's sent over the file, and a plugin that takes keys out (or has no such route). */
+function hermes(file: Record<string, any>, plugin = true) {
+  const calls: string[] = []
+  const merge = (onto: Record<string, any>, from: Record<string, any>) => {
+    for (const [key, value] of Object.entries(from)) {
+      if (value && typeof value === 'object' && onto[key] && typeof onto[key] === 'object') merge(onto[key], value)
+      else onto[key] = structuredClone(value)
+    }
+  }
+  const http: Http = async (method, path, body) => {
+    calls.push(`${method} ${path}`)
+    if (method === 'GET') return structuredClone(file)
+    if (method === 'PUT') return void merge(file, (body as { config: Record<string, any> }).config)
+    if (!plugin) throw Object.assign(new Error('Not Found'), { code: 404 })
+    for (const key of (body as { keys: string[] }).keys) {
+      const [section, ...rest] = key.split('.')
+      const leaf = rest.pop()!
+      const parent = rest.reduce((at, part) => at?.[part], file[section!])
+      if (parent) delete parent[leaf]
+    }
+    return { ok: true }
+  }
+  return { http, calls, file }
+}
+
+describe('clearing a Hermes speech setting', () => {
+  const fields = speechFields('openai', 'tts')
+
+  it("takes a blanked field out through the plugin, since Hermes' save keeps a key left out", async () => {
+    const host = hermes({ tts: { provider: 'openai', openai: { voice: 'nova', model: 'tts-1' } } })
+    await saveFields(host.http, 'default', fields, { 'tts.openai.voice': '', 'tts.openai.model': ' tts-1-hd ' })
+    expect(host.file).toEqual({ tts: { provider: 'openai', openai: { model: 'tts-1-hd' } } })
+    expect(host.calls).toEqual(['GET /api/config', `POST ${CONFIG_UNSET_PATH}`, 'PUT /api/config'])
+  })
+
+  it('only asks the plugin when nothing else changed, for the profile named', async () => {
+    const host = hermes({ tts: { openai: { voice: 'nova' } } })
+    await saveFields(host.http, 'furina', fields, { 'tts.openai.voice': ' ' })
+    expect(host.file).toEqual({ tts: { openai: {} } })
+    expect(host.calls).toEqual(['GET /api/config?profile=furina', `POST ${CONFIG_UNSET_PATH}?profile=furina`])
+  })
+
+  it('says to update a plugin without the route, and saves nothing', async () => {
+    const host = hermes({ tts: { openai: { voice: 'nova', model: 'tts-1' } } }, false)
+    await expect(saveFields(host.http, 'default', fields, { 'tts.openai.voice': '', 'tts.openai.model': 'tts-1-hd' })).rejects.toThrow(/Update the Conduit plugin/)
+    expect(host.file).toEqual({ tts: { openai: { voice: 'nova', model: 'tts-1' } } })
+  })
+
+  it("takes a pick's stale gateway routing out, and still saves the pick on a plugin without the route", async () => {
+    const host = hermes({ stt: { provider: 'local', use_gateway: true } })
+    await saveProvider(host.http, 'default', 'stt', 'groq')
+    expect(host.file).toEqual({ stt: { provider: 'groq' } })
+    const old = hermes({ stt: { provider: 'local', use_gateway: true } }, false)
+    await saveProvider(old.http, 'default', 'stt', 'groq')
+    expect(old.file).toEqual({ stt: { provider: 'groq', use_gateway: true } })
+    const none = hermes({ stt: { provider: 'local' } })
+    await saveProvider(none.http, 'default', 'stt', 'groq')
+    expect(none.calls).toEqual(['GET /api/config', 'PUT /api/config'])
   })
 })

@@ -673,8 +673,8 @@ export function withValue(config: Row, key: string, value: unknown): Row {
   return out
 }
 
-export type Http = (method: 'GET' | 'PUT', path: string, body?: unknown) => Promise<unknown>
-const configPath = (profile: string) => (profile && profile !== 'default' ? `/api/config?profile=${encodeURIComponent(profile)}` : '/api/config')
+export type Http = (method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown) => Promise<unknown>
+export const configPath = (profile: string) => (profile && profile !== 'default' ? `/api/config?profile=${encodeURIComponent(profile)}` : '/api/config')
 
 let queue: Promise<unknown> = Promise.resolve()
 

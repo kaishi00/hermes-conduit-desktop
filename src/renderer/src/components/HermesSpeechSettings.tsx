@@ -2,18 +2,18 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { withProfile } from '../state/callSettings'
-import { inTurn, readConfig, updateConfig, type Http } from '../state/profileConfig'
+import { inTurn, readConfig, type Http } from '../state/profileConfig'
 import {
   fieldProblem,
   fieldText,
   providerPath,
+  saveFields,
+  saveProvider,
   selectedProvider,
   speechFields,
   speechProviders,
   statusLabel,
   toolsetPath,
-  withFields,
-  withProvider,
   type SpeechKind,
   type SpeechProvider
 } from '../state/hermesSpeech'
@@ -99,7 +99,7 @@ export function HermesSpeechSettings({ kind, profile }: { kind: SpeechKind; prof
       }
       // The managed Nous route means something only Hermes' route can say.
       if (id === 'nous') throw new Error(t('Update Hermes to pick the Nous Subscription here.'))
-      await updateConfig(http, name, c => withProvider(c, kind, id))
+      await saveProvider(http, name, kind, id)
     })
 
   if (!config) return <p className={`meta settings-caption${error ? ' voice-call-problem' : ''}`}>{error ?? t('Checking…')}</p>
@@ -175,7 +175,7 @@ export function HermesSpeechSettings({ kind, profile }: { kind: SpeechKind; prof
       ))}
       {fields.length ? (
         <div className="local-live-buttons">
-          <button className="primary" disabled={busy || !changed.length || !!problem} onClick={() => void run(() => updateConfig(http, name, c => withFields(c, changed, values)))}>
+          <button className="primary" disabled={busy || !changed.length || !!problem} onClick={() => void run(() => saveFields(http, name, changed, values))}>
             {t('Save')}
           </button>
           {saved && !changed.length ? <span className="meta">{t('Saved')}</span> : null}
