@@ -312,6 +312,21 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const request = useRef(0)
   /** Model and run settings chosen for a new draft chat before `session.create` runs. */
   const draftOverrides = useRef<Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>>({})
+  /**
+   * The new chat's `session.create` while it's out. A model or run setting
+   * picked meanwhile waits for it, then goes to the session it made: the
+   * create already took the picks as they stood when it left (desktop#431).
+   */
+  const creating = useRef<Promise<unknown> | null>(null)
+  /** False when the chat left the screen while its create was out: the pick was for a chat that's gone. */
+  const createSettled = useCallback(async (): Promise<boolean> => {
+    const run = creating.current
+    if (!run) return true
+    return run.then(
+      () => true,
+      e => !(e instanceof ChatMovedOn)
+    )
+  }, [])
   /** A chat this hook just created: selecting it in the list mustn't resume it over its first turn. */
   const created = useRef<string | null>(null)
   /** The open chat's resume while it runs (settles, never rejects): a send or command waits for it (desktop#298). */
@@ -456,7 +471,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   )
 
   /** A new chat's session, made on its first send or command. */
-  const createSession = useCallback(async (): Promise<{ sid: string; storedId: string | null }> => {
+  const makeSession = useCallback(async (): Promise<{ sid: string; storedId: string | null }> => {
     const params: Record<string, unknown> = sessionAuthority ? { source: 'gui' } : { cols: 96, source: 'desktop' }
     if (profile) params.profile = profile
     if (botChat) Object.assign(params, { title: 'Bot Chat', hidden: true, follow_profile_config: true })
@@ -500,6 +515,15 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     }
     return { sid, storedId }
   }, [profile, sessionAuthority, botChat, folder, dispatch])
+  const createSession = useCallback((): Promise<{ sid: string; storedId: string | null }> => {
+    const run = makeSession()
+    creating.current = run
+    const clear = () => {
+      if (creating.current === run) creating.current = null
+    }
+    run.then(clear, clear)
+    return run
+  }, [makeSession])
 
   /** The chat's history read again, after a command changed it (/undo, /retry, /compress). */
   const reloadHistory = useCallback(async () => {
@@ -923,6 +947,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   /** Switches the chat's model; a pick Hermes guards (an expensive model) asks first. */
   const setModel = useCallback(
     async (model: string, provider: string, confirmed = false): Promise<ModelSwitch> => {
+      if (!(await createSettled())) return { kind: 'failed', message: t('Not connected.') }
       if (isDraft()) {
         pickDraft({ model, provider })
         return { kind: 'switched', deferred: false }
@@ -966,11 +991,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         return { kind: 'failed', message: message(e) }
       }
     },
-    [configure, profile, sessionAuthority, isDraft, pickDraft]
+    [configure, profile, sessionAuthority, isDraft, pickDraft, createSettled]
   )
 
   const setReasoning = useCallback(
     async (effort: string) => {
+      if (!(await createSettled())) return
       if (isDraft()) {
         pickDraft({ reasoning: effort })
         return
@@ -978,11 +1004,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       await configure('reasoning', effort)
       setChat(c => ({ ...c, reasoning: effort }))
     },
-    [configure, isDraft, pickDraft]
+    [configure, isDraft, pickDraft, createSettled]
   )
 
   const setSpeed = useCallback(
     async (speed: 'normal' | 'fast' | 'ultrafast') => {
+      if (!(await createSettled())) return
       if (isDraft()) {
         pickDraft({ speed })
         return
@@ -990,11 +1017,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       await configure('fast', speed)
       setChat(c => ({ ...c, speed }))
     },
-    [configure, isDraft, pickDraft]
+    [configure, isDraft, pickDraft, createSettled]
   )
 
   const setYolo = useCallback(
     async (on: boolean) => {
+      if (!(await createSettled())) return
       if (isDraft()) {
         pickDraft({ yolo: on })
         return
@@ -1002,7 +1030,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       await configure('yolo', on ? '1' : '0')
       setChat(c => ({ ...c, yolo: on }))
     },
-    [configure, isDraft, pickDraft]
+    [configure, isDraft, pickDraft, createSettled]
   )
 
   /** Runs one of the queue dock's verbs on the open chat; Hermes' refusal is thrown for the dock to say. */

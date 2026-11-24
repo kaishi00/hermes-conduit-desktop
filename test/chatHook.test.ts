@@ -591,6 +591,48 @@ describe("model and run settings before a new chat's first message", () => {
     expect(hook.result().chat.yolo).toBe(true)
   })
 
+  it('sends a pick made while session.create is out to the session it made (#431)', async () => {
+    const sentRpc: { method: string; params: Record<string, unknown> }[] = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const baseRpc = conduit.rpcOutcome
+    let made!: () => void
+    conduit.rpcOutcome = (method, params) => {
+      sentRpc.push({ method, params })
+      if (method === 'session.create') {
+        return new Promise(resolve => {
+          made = () => resolve({ ok: true, result: { session_id: 'live-new', stored_session_id: 'new', info: { model: params.model, provider: params.provider } } })
+        })
+      }
+      if (method === 'config.set') return Promise.resolve({ ok: true, result: { info: { reasoning_effort: 'high' } } })
+      return baseRpc(method, params)
+    }
+
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', sessionAuthority: false })
+    await act(async () => {
+      await hook.result().setModel('claude-opus-4-6', 'anthropic')
+    })
+    let sending!: Promise<unknown>
+    let picking!: Promise<unknown>
+    await act(async () => {
+      sending = hook.result().send('hello')
+      await settle()
+      // The create is out with the first pick; the Model sheet is still open.
+      picking = hook.result().setReasoning('high')
+      await settle()
+    })
+    expect(sentRpc.find(c => c.method === 'session.create')?.params).toMatchObject({ model: 'claude-opus-4-6', provider: 'anthropic' })
+    expect(sentRpc.some(c => c.method === 'config.set')).toBe(false)
+    await act(async () => {
+      made()
+      await sending
+      await picking
+    })
+    // The later pick reached the session, so the chip and the session agree.
+    const set = sentRpc.find(c => c.method === 'config.set' && c.params.key === 'reasoning')
+    expect(set?.params).toMatchObject({ value: 'high', session_id: 'live-new' })
+    expect(hook.result().chat.reasoning).toBe('high')
+  })
+
   it('forwards draft reasoning, ultrafast service_tier and yolo directly to session.create under sessionAuthority', async () => {
     const sentRpc: { method: string; params: Record<string, unknown> }[] = []
     const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
