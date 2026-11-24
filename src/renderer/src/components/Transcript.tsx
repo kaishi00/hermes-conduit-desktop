@@ -13,7 +13,7 @@ import type { ExpiredQuestion } from '../state/expiredQuestions'
 import { Icon, type IconName } from './icons'
 import { JumpToLatest } from './JumpToLatest'
 import { atEnd } from '../state/scrollEnd'
-import { nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowWindow, startAt } from '../state/rowWindow'
+import { registerRowOpener, rowElement, rowIndex, rowWindow, scrollWindow, startAt } from '../state/rowWindow'
 import { WorkLinkCard, WorkLinks } from './WorkLinkCard'
 import { linkNamedRefs, linkSessionRefs, splitWorkLinks } from '../state/workLinks'
 import { Markdown, StreamingMarkdown } from './Markdown'
@@ -938,7 +938,7 @@ const Item = memo(function Item({
  * "4 steps · 12s", folded once the turn is done unless Keep tool cards
  * expanded is on, open while it runs; the reader's choice holds after.
  */
-function StepRun({
+export function StepRun({
   row,
   live,
   expandTools,
@@ -961,7 +961,7 @@ function StepRun({
   const thoughts = row.items.some(i => i.kind === 'thinking')
   const tools = row.items.some(i => i.kind === 'tool')
   return (
-    <div className={open ? 'step-run open' : 'step-run'} data-key={row.id}>
+    <div className={open ? 'step-run open' : 'step-run'} data-key={row.id} data-step-keys={row.items.map(item => item.key).join(' ')}>
       <button className="step-run-head" aria-expanded={open} onClick={() => setChoice(!open)}>
         <span className="step-run-icons" aria-hidden>
           {thoughts ? <Icon name="chats" /> : null}
@@ -991,13 +991,13 @@ function StepRun({
 }
 
 /** A step on its own, after the phone's singleExplained: its card, then what Hermes said about it when asked (Explain this step). */
-function LoneStep({ step, live, summaries, children }: { step: ToolItem; live: boolean; summaries: StepSummaries; children: React.ReactNode }) {
+export function LoneStep({ step, live, summaries, children }: { step: ToolItem; live: boolean; summaries: StepSummaries; children: React.ReactNode }) {
   const steps = [step]
   const summary = summaries.summary(steps)
   const lookingBack = summaries.lookingBack(steps)
   const explain = live || lookingBack ? undefined : summaries.explain(steps)
   return (
-    <div className="lone-step">
+    <div className="lone-step" data-key={step.key}>
       {children}
       {summary ? <p className="step-run-summary">{summary}</p> : null}
       {lookingBack ? (
@@ -1145,6 +1145,11 @@ export function Transcript({
   const summaries = useStepSummaries(state, sessionId, profile)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  // A chat switch gets a fresh window: the last chat's scrolled-up state must not leave the new
+  // one mid-history, away from a reply that is streaming at the bottom.
+  useEffect(() => {
+    pinned.current = true
+  }, [firstKey])
   /** The drawn height before the window took on rows above the reader, to keep their place. */
   const grew = useRef<{ start: number; height: number } | null>(null)
 
@@ -1155,15 +1160,17 @@ export function Transcript({
     const el = scroller.current
     if (!el) return
     const onScroll = () => {
-      pinned.current = atEnd(el)
+      const end = atEnd(el)
+      pinned.current = end
       const { rows: thisFrame, start: from, scrolledUp, chat } = liveRows.current
-      if (pinned.current) {
+      const decision = scrollWindow({ end, scrolledUp, scrollTop: el.scrollTop, from, count: thisFrame.length })
+      if (decision.reset) {
         // Only a window the reader scrolled up gives rows back: at the bottom every
         // scroll (a streaming reply's each frame) would otherwise draw the chat again.
-        if (scrolledUp) setWindowed({ chat, start: null })
-      } else if (nearTop(el.scrollTop) && from !== 0) {
+        setWindowed({ chat, start: null })
+      } else if (decision.olderFrom !== null) {
         grew.current = { start: from, height: el.scrollHeight }
-        setWindowed({ chat, start: olderStart(from, thisFrame.length) })
+        setWindowed({ chat, start: decision.olderFrom })
       }
     }
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -1290,7 +1297,7 @@ export function Transcript({
     if (!el || !before || drawnWindow.start >= before.start) return
     grew.current = null
     el.scrollTop += el.scrollHeight - before.height
-  })
+  }, [drawnWindow.start])
 
   // Pins: which reply each shows, the bar's order, and the row ids replies pinned as they arrived took.
   const pinList = pins?.list

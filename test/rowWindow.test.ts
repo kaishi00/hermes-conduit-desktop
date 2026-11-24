@@ -7,6 +7,7 @@ import {
   rowElement,
   rowIndex,
   rowWindow,
+  scrollWindow,
   startAt,
   WINDOW_PAGE,
   WINDOW_ROWS
@@ -105,5 +106,44 @@ describe('a jump to a row a window left out (desktop#291)', () => {
     expect(rowElement(container, 'b')).toBeNull()
     expect(asked).toEqual(['b'])
     off()
+  })
+})
+
+describe('the scroll paging rule', () => {
+  it('gives rows back only when a scrolled-up window reaches the bottom', () => {
+    expect(scrollWindow({ end: true, scrolledUp: true, scrollTop: 500, from: 200, count: 1000 }))
+      .toEqual({ reset: true, olderFrom: null })
+    // A streaming reply's every frame is a bottom scroll too, but must not redraw the chat.
+    expect(scrollWindow({ end: true, scrolledUp: false, scrollTop: 500, from: null as unknown as number, count: 1000 }))
+      .toEqual({ reset: false, olderFrom: null })
+  })
+
+  it('takes a page only near the top and only when rows above are left to take', () => {
+    expect(scrollWindow({ end: false, scrolledUp: true, scrollTop: 100, from: 600, count: 1000 }))
+      .toEqual({ reset: false, olderFrom: 400 })
+    expect(scrollWindow({ end: false, scrolledUp: true, scrollTop: 1_200, from: 600, count: 1000 }))
+      .toEqual({ reset: false, olderFrom: null })
+    expect(scrollWindow({ end: false, scrolledUp: true, scrollTop: 100, from: 0, count: 1000 }))
+      .toEqual({ reset: false, olderFrom: null })
+  })
+})
+
+describe('a jump to a step inside a run', () => {
+  it('finds the run that carries the step key', () => {
+    const container = document.createElement('div')
+    const run = document.createElement('div')
+    run.setAttribute('data-key', 'run-first')
+    run.setAttribute('data-step-keys', 'run-first run-second')
+    container.append(run)
+    expect(rowElement(container, 'run-second')).toBe(run)
+    expect(rowElement(container, 'not-there')).toBeNull()
+  })
+
+  it('finds a lone step that carries its own key', () => {
+    const container = document.createElement('div')
+    const step = document.createElement('div')
+    step.setAttribute('data-key', 'lone-tool')
+    container.append(step)
+    expect(rowElement(container, 'lone-tool')).toBe(step)
   })
 })

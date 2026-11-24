@@ -79,7 +79,23 @@ export function registerRowOpener(scroller: HTMLElement, open: RowOpener): () =>
   }
 }
 
-const escapeKey = (key: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(key) : key)
+/** No escaping means no safe selector: answer nothing rather than match the wrong row. */
+const escapeKey = (key: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(key) : null)
+
+/** What a scroll does to the drawn window, kept pure so the paging rule can be tested. */
+export function scrollWindow(params: {
+  end: boolean
+  scrolledUp: boolean
+  scrollTop: number
+  from: number
+  count: number
+}): { reset: boolean; olderFrom: number | null } {
+  if (params.end) return { reset: params.scrolledUp, olderFrom: null }
+  if (nearTop(params.scrollTop) && params.from !== 0) {
+    return { reset: false, olderFrom: olderStart(params.from, params.count) }
+  }
+  return { reset: false, olderFrom: null }
+}
 
 /**
  * The drawn element for `key` in `container`, widened into the window first
@@ -89,7 +105,14 @@ const escapeKey = (key: string) => (typeof CSS !== 'undefined' && CSS.escape ? C
  * no such row. Not for use while rendering, as the opener draws.
  */
 export function rowElement(container: HTMLElement, key: string): HTMLElement | null {
-  const find = () => container.querySelector<HTMLElement>(`[data-key="${escapeKey(key)}"]`)
+  const find = () => {
+    const escaped = escapeKey(key)
+    if (!escaped) return null
+    return container.querySelector<HTMLElement>(`[data-key="${escaped}"]`)
+      // A step inside a run shares its row: the run carries its steps' keys.
+      ?? [...container.querySelectorAll<HTMLElement>('[data-step-keys]')]
+        .find(row => row.getAttribute('data-step-keys')?.split(/\s+/).includes(key)) ?? null
+  }
   const drawn = find()
   if (drawn) return drawn
   const opener = openers.find(o => o.scroller === container) ?? openers.find(o => container.contains(o.scroller))
