@@ -11,7 +11,7 @@ import { UpdatingCapsule } from './UpdatingCapsule'
 import { facetOf, isSourceKey, isStarred, isUnread, parseSelection, selectRows, settingFilter, type ChatFilterKey, type ChatMarks } from '../state/chatMarks'
 import { sourceName, sourcesIn, type ChatSource } from '../state/chatSources'
 import { contentRows, useContentSearch } from '../state/contentSearch'
-import { arrangePinned, edgeScrollStep, moved, usePinnedOrder } from '../state/pinnedOrder'
+import { arrangePinned, edgeScrollDecision, moved, usePinnedOrder } from '../state/pinnedOrder'
 import { gateway } from '../gateway'
 import type { HostBadge, OtherChatRow } from '../state/keptHosts'
 import { HostBadgeMark } from './CombinedDashboards'
@@ -567,11 +567,10 @@ export function ChatList({
     const box = scroller.current
     const state = edge.current
     state.frame = 0
-    // Still for as long as the board allows between dragovers (useBoardScroll's 400 ms).
-    if (!box || performance.now() - state.at > 400) return
+    if (!box) return
     const rect = box.getBoundingClientRect()
-    const step = edgeScrollStep(state.y, rect.top, rect.bottom)
-    // Away from both edges the loop ends, as the board's does: the next dragover starts it again.
+    // The hold and the away-from-both-edges stop are one decision, tested beside edgeScrollStep.
+    const step = edgeScrollDecision(state.y, performance.now(), state.at, rect.top, rect.bottom)
     if (!step) return
     box.scrollTop += step
     state.frame = requestAnimationFrame(edgeScroll)

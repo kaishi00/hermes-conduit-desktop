@@ -9,6 +9,7 @@ import {
   takesOverAutomatically,
   takingOverMessage
 } from './chatTakeover'
+import { noteChatSession } from './expiredQuestions'
 import { connectionFrom, connectionOwner, type ConnectionCard } from './connections'
 import { isRuntimeGone } from './runtimeGone'
 import { gateway, GatewayError } from '../gateway'
@@ -36,7 +37,7 @@ import {
   openConnection,
   showConnection,
   fromHistory,
-  missingDetails,
+  missingToolIds,
   toolArgs,
   toolAnswers,
   toolNames,
@@ -77,13 +78,29 @@ type Action =
   | { type: 'notice'; text: string; tone?: 'error' | 'info' }
 
 /** The boards and tool details a chat's history showed: session.resume leaves the tool answers out, its REST transcript has them. */
-async function loadBoards(state: TranscriptState, storedId: string, profile: string | undefined, current: () => boolean, dispatch: (action: Action) => void) {
-  if (!missingDetails(state)) return
+const NO_IDS: ReadonlySet<string> = new Set()
+
+async function loadBoards(
+  state: TranscriptState,
+  storedId: string,
+  profile: string | undefined,
+  current: () => boolean,
+  dispatch: (action: Action) => void,
+  skip: ReadonlySet<string>,
+  remember: (ids: string[]) => void
+) {
+  const missing = missingToolIds(state, skip)
+  if (!missing.length) return
   const path = `/api/sessions/${encodeURIComponent(storedId)}/messages?order=latest&limit=500&inline_images=false${profile && profile !== 'default' ? `&profile=${encodeURIComponent(profile)}` : ''}`
   try {
     const page = await gateway.http('GET', path)
     const answers = toolAnswers(page)
-    if (current() && answers.size) dispatch({ type: 'boards', answers, args: toolArgs(page), names: toolNames(page) })
+    if (!current()) return
+    if (answers.size) dispatch({ type: 'boards', answers, args: toolArgs(page), names: toolNames(page) })
+    // Only a row the page had no answer for is unrecoverable: it is not read again on every
+    // reopen (issue 464). One the page did answer stays eligible for a later kept-copy read.
+    // A failed request is not remembered, so the next open retries.
+    remember(missing.filter(id => !answers.has(id)))
   } catch {
     // The rows stay as steps.
   }
@@ -309,6 +326,14 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const liveId = useRef<string | null>(null)
+  /** Tool ids a completed history read could not settle, kept per chat for this window. */
+  const readFailed = useRef(new Map<string, Set<string>>())
+  const skippedIds = (key: string) => readFailed.current.get(key) ?? NO_IDS
+  const rememberRead = (key: string, ids: string[]) => {
+    const set = readFailed.current.get(key) ?? new Set<string>()
+    for (const id of ids) set.add(id)
+    readFailed.current.set(key, set)
+  }
   const request = useRef(0)
   /** Model and run settings chosen for a new draft chat before `session.create` runs. */
   const draftOverrides = useRef<Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>>({})
@@ -395,6 +420,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       .then(({ result, rows }) => {
         if (ticket !== request.current) return
         liveId.current = result.session_id
+        noteChatSession(result.stored_session_id ?? storedId, result.session_id)
         setChat({
           storedId: result.stored_session_id ?? storedId,
           liveId: result.session_id,
@@ -409,7 +435,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         state = withPendingConnection(state, result)
         dispatch({ type: 'reset', state })
         setQueue(queueFrom(result.pending) ?? [])
-        if (!rows) void loadBoards(state, result.stored_session_id ?? storedId, profile, () => ticket === request.current, dispatch)
+        if (!rows) {
+          const key = result.stored_session_id ?? storedId
+          void loadBoards(state, key, profile, () => ticket === request.current, dispatch, skippedIds(key), ids => rememberRead(key, ids))
+        }
         // How full the window is, before the first reply ticks it.
         gateway
           .rpc('session.usage', { session_id: result.session_id })
@@ -544,7 +573,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       const state = withPendingConnection(resumedTranscript(result, rows), result)
       dispatch({ type: 'reset', state })
       setQueue(queueFrom(result.pending) ?? [])
-      if (!rows) void loadBoards(state, result.stored_session_id ?? stored, profile, () => ticket === request.current, dispatch)
+      if (!rows) {
+        const key = result.stored_session_id ?? stored
+        void loadBoards(state, key, profile, () => ticket === request.current, dispatch, skippedIds(key), ids => rememberRead(key, ids))
+      }
     } catch {
       // The chat as drawn stays; the next open reads it.
     }

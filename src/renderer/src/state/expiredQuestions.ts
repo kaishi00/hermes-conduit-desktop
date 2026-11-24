@@ -26,7 +26,8 @@ export interface ExpiredQuestion {
  * given, or any but the one given (a question of another chat, dismissed in
  * the Work panel beside this one). Left out, the wording alone decides.
  */
-export type AskedIn = { live: string } | { notLive: string }
+/** `stored` is the saved id of the chat that asked, when the caller knows it. */
+export type AskedIn = { live: string; stored?: string } | { notLive: string; stored?: string }
 
 /** The chat on screen beside the Work panel: its saved id, its live session, and whether it's the bot's Bot Chat. */
 export interface OpenChat {
@@ -39,11 +40,21 @@ export interface OpenChat {
 export function askedInOf(chat: string, open?: OpenChat): AskedIn | undefined {
   if (!open?.liveId) return undefined
   const here = chat ? chat === open.storedId : open.botChat === true
-  return here ? { live: open.liveId } : { notLive: open.liveId }
+  const stored = chat || ''
+  return here ? { live: open.liveId, stored } : { notLive: open.liveId, stored }
 }
 
 /** The most kept at once, oldest dropped first. */
 export const MOST_EXPIRED = 20
+
+/** A chat's saved id to the live session its questions carry, learned when a chat resumes. */
+const sessions = new Map<string, string>()
+
+/** The live session of a stored chat, when this window has seen it. */
+export function noteChatSession(storedId: string | null | undefined, liveId: string | null | undefined): void {
+  if (!storedId || !liveId) return
+  sessions.set(storedId, liveId)
+}
 
 const seen = new Map<string, PendingRequest>()
 const locks = new Map<string, Record<string, string | null>>()
@@ -120,7 +131,13 @@ function asked(request: PendingRequest): string[] {
 export function dropExpiredAsking(text: string, askedIn?: AskedIn): void {
   const wanted = text.trim()
   if (!wanted) return
-  const inChat = (request: PendingRequest) => !askedIn || ('live' in askedIn ? request.sessionId === askedIn.live : request.sessionId !== askedIn.notLive)
+  const inChat = (request: PendingRequest) => {
+    if (!askedIn) return true
+    const mapped = askedIn.stored ? sessions.get(askedIn.stored) : undefined
+    if ('live' in askedIn) return request.sessionId === (mapped ?? askedIn.live)
+    // Without the asking chat's live session, excluding the one on screen is all we can do.
+    return mapped ? request.sessionId === mapped : request.sessionId !== askedIn.notLive
+  }
   for (const request of seen.values()) {
     if (!inChat(request) || !asked(request).includes(wanted)) continue
     const before = dismissedEarly.get(request.id) ?? []
@@ -166,6 +183,7 @@ export function answering(question: string, answer: string | null): string {
 /** For tests. */
 export function resetExpiredQuestions(): void {
   seen.clear()
+  sessions.clear()
   locks.clear()
   dismissedEarly.clear()
   expired = []

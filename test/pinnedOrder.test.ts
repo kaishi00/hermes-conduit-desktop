@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arrangePinned, EDGE_MAX_STEP, EDGE_ZONE, edgeScrollStep, hostOrder, moved, ordered, pinIdOf, prefsPath, type PinnedOrders } from '../src/renderer/src/state/pinnedOrder'
+import { arrangePinned, EDGE_MAX_STEP, EDGE_ZONE, edgeScrollDecision, edgeScrollStep, hostOrder, moved, ordered, pinIdOf, prefsPath, type PinnedOrders } from '../src/renderer/src/state/pinnedOrder'
 import type { ChatRow } from '../src/renderer/src/state/chats'
 
 const row = (id: string, profile?: string, lineageRoot?: string): ChatRow => ({ id, title: id, pinned: true, profile, lineageRoot })
@@ -56,6 +56,13 @@ describe('edge scrolling while dragging', () => {
     expect(edgeScrollStep(101, 100, 500)).toBeLessThan(0)
     expect(edgeScrollStep(499, 100, 500)).toBeGreaterThan(0)
     expect(Math.abs(edgeScrollStep(110, 100, 500))).toBeLessThan(Math.abs(edgeScrollStep(101, 100, 500)))
+  })
+  it('stops after a pause and away from both edges, then restarts on the next dragover', () => {
+    // Fake clock values instead of waiting 400 ms: the decision is pure.
+    expect(edgeScrollDecision(101, 1_000, 1_000, 100, 500)).toBeLessThan(0)
+    expect(edgeScrollDecision(101, 1_401, 1_000, 100, 500)).toBe(0)
+    expect(edgeScrollDecision(300, 1_000, 1_000, 100, 500)).toBe(0)
+    expect(edgeScrollDecision(499, 1_100, 1_000, 100, 500)).toBeGreaterThan(0)
   })
   it('caps its speed past the edge and always moves inside the zone', () => {
     expect(edgeScrollStep(0, 100, 500)).toBe(-EDGE_MAX_STEP)
