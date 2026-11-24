@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { identityFields, moveChat, mutateSession, sessionIsBusy, sessionPath, warrantsRetry, withQuery } from '../src/renderer/src/state/chatActions'
+import { busyOnGateway, identityFields, moveChat, mutateSession, sessionIsBusy, sessionPath, warrantsRetry, withQuery } from '../src/renderer/src/state/chatActions'
 import { httpErrorText } from '../src/main/connection'
 
 describe('a chat row’s Pin, Rename and Delete', () => {
@@ -113,5 +113,34 @@ describe('Move to Project', () => {
     await moveChat(rpc, http, 's1', undefined, '/srv/site', true)
     expect(sent).toHaveLength(2)
     expect(sent[1]).toMatchObject({ method: 'session.mutate', session_id: 's1', operation: 'workspace', payload: { cwd: '/srv/site' }, expected_revision: 4, expected_generation: 2 })
+  })
+})
+
+describe('the busy read before an Archive or a Delete (#438)', () => {
+  const busy = { sessions: [{ id: 's1', status: 'working' }] }
+
+  it('asks the row\'s own profile and reads the answer', async () => {
+    const asked: unknown[] = []
+    const rpc = async (method: string, params?: Record<string, unknown>) => {
+      asked.push([method, params])
+      return busy
+    }
+    expect(await busyOnGateway(rpc, 's1', 'furina')).toBe(true)
+    expect(await busyOnGateway(rpc, 's2', 'default')).toBe(false)
+    expect(asked).toEqual([
+      ['session.active_list', { profile: 'furina' }],
+      ['session.active_list', undefined]
+    ])
+  })
+
+  it('lets the change through on a Hermes that has no such read', async () => {
+    // As the gateway refuses it, with the JSON-RPC code or only its words.
+    const coded = Object.assign(new Error('unknown method: session.active_list'), { code: -32601 })
+    expect(await busyOnGateway(async () => Promise.reject(coded), 's1')).toBe(false)
+    expect(await busyOnGateway(async () => Promise.reject(new Error('Method not found')), 's1')).toBe(false)
+  })
+
+  it('still stops the change when the gateway could not be asked', async () => {
+    await expect(busyOnGateway(async () => Promise.reject(new Error('Not connected.')), 's1')).rejects.toThrow('Not connected.')
   })
 })

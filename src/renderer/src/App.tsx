@@ -184,7 +184,7 @@ import { VoiceModeSettings } from './components/VoiceModeSettings'
 import { readAloud, readsRepliesAloud, setReadsRepliesAloud } from './state/readAloud'
 import { READ_ALOUD_SPEEDS, readAloudSpeed, setReadAloudSpeed, speedLabel } from './state/classicVoice'
 import { useCommands } from './state/useCommands'
-import { authorityMutation, moveChat, mutateSession, sessionIsBusy } from './state/chatActions'
+import { authorityMutation, busyOnGateway, moveChat, mutateSession } from './state/chatActions'
 import { branchPlan } from './state/branch'
 import { ROOM_CHATS_CAPABILITY, wrapUpPrompt, type RoomChatAgent } from './state/roomChats'
 import { openRoomChatHere } from './state/roomChatOpen'
@@ -1627,10 +1627,10 @@ function Shell({
       if (archived !== false) {
         // The background registry covers at most eight profiles in All; ask
         // this row's own profile before making an irreversible state change.
-        const profile = row.profile && row.profile !== 'default' ? { profile: row.profile } : undefined
-        const active = await gateway.rpc('session.active_list', profile)
+        // A Hermes without that read leaves it to the busy signs checked above.
+        const busy = await busyOnGateway(gateway.rpc, row.id, row.profile)
         if (!archiveHostMounted.current || statusUrlRef.current !== host) return false
-        if (sessionIsBusy(active, row.id)) {
+        if (busy) {
           void tell(t('Hermes is still busy in this chat. Try again in a moment.'))
           return false
         }

@@ -18,6 +18,27 @@ export function sessionIsBusy(response: unknown, id: string): boolean {
   )
 }
 
+/**
+ * Whether the gateway says the chat is busy, before an Archive or a Delete.
+ * A gateway that doesn't serve `session.active_list` (Hermes before 0.22.2,
+ * or one that refuses the method) can't say, so the caller's own busy signs
+ * (its Running badges, its open requests) decide alone, as they do for the
+ * list's badges; the change itself works on those hosts (desktop#438). Any
+ * other failure is thrown: an unreachable gateway mustn't let a delete past.
+ */
+export async function busyOnGateway(
+  rpc: (method: string, params?: Record<string, unknown>) => Promise<unknown>,
+  id: string,
+  profile?: string
+): Promise<boolean> {
+  try {
+    return sessionIsBusy(await rpc('session.active_list', profile && profile !== 'default' ? { profile } : undefined), id)
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error)
+    if ((error as { code?: unknown } | null)?.code === -32601 || /method not found|unknown method|-32601/i.test(text)) return false
+    throw error
+  }
+}
 
 export function sessionPath(id: string, profile?: string, suffix = ''): string {
   const path = `/api/sessions/${encodeURIComponent(id)}${suffix}`
