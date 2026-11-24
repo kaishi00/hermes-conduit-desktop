@@ -1,6 +1,6 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -226,6 +226,69 @@ describe.skipIf(process.platform !== 'linux')('Linux source launcher', () => {
     expect(refused.stderr).toContain('Could not read')
     expect(refused.stderr).toContain('old-source.desktop')
     expect(existsSync(f.entry)).toBe(false)
+  })
+
+  it('scans a symlinked alias of the applications directory only once', () => {
+    const f = fixture()
+    expect(f.install().status).toBe(0)
+    // `alias -> .` reaches the same physical directory; under the old walk its own entry came back
+    // as alias-conduit.desktop and a valid reinstall was refused as a second source launcher.
+    symlinkSync('.', join(f.data, 'applications/alias'))
+    const second = f.install()
+    expect(second.status, second.stderr).toBe(0)
+    expect(second.stderr).not.toContain('already has a source launcher')
+    expect(existsSync(f.entry)).toBe(true)
+  })
+
+  // Root can read a mode-000 directory, so this refusal can only be checked as a normal user.
+  it.skipIf(process.getuid?.() === 0)('names a nested applications directory it cannot scan', () => {
+    const f = fixture()
+    const nested = join(f.data, 'applications/private')
+    mkdirSync(nested, { recursive: true })
+    chmodSync(nested, 0o000)
+    try {
+      const refused = f.install()
+      expect(refused.status).not.toBe(0)
+      expect(refused.stderr).toContain('Could not scan')
+      expect(refused.stderr).toContain('private')
+      expect(existsSync(f.entry)).toBe(false)
+    } finally {
+      chmodSync(nested, 0o755)
+    }
+  })
+
+  it('warns when the desktop database refresh is killed by a signal', () => {
+    const f = fixture()
+    const bin = join(f.base, 'bin')
+    mkdirSync(bin, { recursive: true })
+    writeFileSync(join(bin, 'update-desktop-database'), '#!/bin/sh\nkill -TERM $$\n')
+    chmodSync(join(bin, 'update-desktop-database'), 0o755)
+    const installed = f.install(undefined, { PATH: `${bin}:${process.env.PATH}` })
+    expect(installed.status, installed.stderr).toBe(0)
+    expect(installed.stdout).toContain(`Installed ${f.entry}`)
+    expect(installed.stderr).toContain('terminated by a signal')
+    expect(installed.stderr).toContain('SIGTERM')
+    expect(existsSync(f.entry)).toBe(true)
+  })
+
+  it('uses a real XDG_DATA_HOME path with whitespace as written', () => {
+    const f = fixture()
+    const trailing = `${f.data} `
+    mkdirSync(trailing, { recursive: true })
+    const installed = f.run({ XDG_DATA_HOME: trailing })
+    expect(installed.status, installed.stderr).toBe(0)
+    expect(existsSync(join(trailing, 'applications/conduit.desktop'))).toBe(true)
+    expect(existsSync(join(f.data, 'applications/conduit.desktop'))).toBe(false)
+
+    // A leading space makes the path relative by Node's rules, so run from the fixture's own
+    // directory: the literal path must still be honoured without leaving a tree in the repo.
+    const leading = ` ${f.data}`
+    const fromTemp = spawnSync(process.execPath, [join(f.root, 'scripts/install-linux-desktop.mjs')], {
+      encoding: 'utf8', cwd: f.base,
+      env: { ...process.env, XDG_DATA_HOME: leading, XDG_DATA_DIRS: join(f.base, 'system') }
+    })
+    expect(fromTemp.status, fromTemp.stderr).toBe(0)
+    expect(existsSync(resolve(f.base, leading, 'applications/conduit.desktop'))).toBe(true)
   })
 
   it('reports the install even when refreshing the desktop database fails', () => {

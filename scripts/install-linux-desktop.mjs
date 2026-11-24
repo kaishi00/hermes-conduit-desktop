@@ -18,16 +18,39 @@ function argument(text) {
   return `"${value(text).replaceAll('\\', '\\\\').replaceAll('"', '\\\\"').replaceAll('$', '\\\\$').replaceAll('`', '\\\\`').replaceAll('%', '%%')}"`
 }
 
+function directoryKey(path) {
+  try {
+    const info = statSync(path)
+    return `${info.dev}:${info.ino}`
+  } catch {
+    return null
+  }
+}
+
 /** Each desktop entry under a directory, nested ones under their XDG id (a dash per separator).
- *  Directories reached through a symlink count, as they do for GLib's own scan. */
-function desktopEntries(directory, prefix = '') {
+ *  Directories reached through a symlink count, as they do for GLib's own scan, but each physical
+ *  directory is scanned once: `alias -> .` must not make the same entry look like a second id. */
+function desktopEntries(directory, prefix = '', visited = new Set()) {
   if (!existsSync(directory)) return []
+  const here = directoryKey(directory)
+  if (here) visited.add(here)
+  let contents
+  try {
+    contents = readdirSync(directory, { withFileTypes: true })
+  } catch {
+    throw new Error(`Could not scan ${directory}; make it readable or remove it before installing a source launcher.`)
+  }
   const entries = []
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+  for (const entry of contents) {
     const path = join(directory, entry.name)
     const id = `${prefix}${entry.name}`
-    if (isDirectory(path, entry)) entries.push(...desktopEntries(path, `${id}-`))
-    else if (entry.isFile() || entry.isSymbolicLink()) entries.push({ path, id })
+    if (isDirectory(path, entry)) {
+      const key = directoryKey(path)
+      if (key && !visited.has(key)) {
+        visited.add(key)
+        entries.push(...desktopEntries(path, `${id}-`, visited))
+      }
+    } else if (entry.isFile() || entry.isSymbolicLink()) entries.push({ path, id })
   }
   return entries
 }
@@ -78,9 +101,13 @@ try {
     throw new Error('Could not read package.json. Run pnpm install first.')
   }
   const desktopName = typeof pkg.desktopName === 'string' && /^[A-Za-z0-9._-]+$/.test(pkg.desktopName) ? pkg.desktopName : 'conduit'
-  // An empty or blank XDG_DATA_HOME is unset, as the spec says: fall back rather than demand a path.
-  const data = (process.env.XDG_DATA_HOME || '').trim() || join(homedir(), '.local', 'share')
-  if (!isAbsolute(data)) throw new Error('XDG_DATA_HOME must be an absolute path.')
+  // Only a blank XDG_DATA_HOME is unset. A real path keeps its exact bytes, even when it has
+  // leading or trailing whitespace: trimming it would silently install into a different directory.
+  const configuredData = process.env.XDG_DATA_HOME || ''
+  const data = configuredData.trim() ? configuredData : join(homedir(), '.local', 'share')
+  // Validate the trimmed spelling but keep the original bytes for the path itself: a real path
+  // that happens to start or end with whitespace must land where the user asked it to land.
+  if (!isAbsolute(data.trim())) throw new Error('XDG_DATA_HOME must be an absolute path.')
   const applications = join(data, 'applications')
   const destination = join(applications, `${desktopName}.desktop`)
   const id = `${desktopName}.desktop`
@@ -129,7 +156,10 @@ try {
     console.log('update-desktop-database is not installed; refresh the desktop database when it becomes available.')
   } else if (refresh.error) {
     console.warn(`The entry is installed, but the desktop database was not refreshed: ${refresh.error.message}`)
-  } else if (refresh.status !== null && refresh.status !== 0) {
+  } else if (refresh.status === null) {
+    const signal = refresh.signal ? ` (${refresh.signal})` : ''
+    console.warn(`The entry is installed, but the desktop database was not refreshed: update-desktop-database was terminated by a signal${signal}.`)
+  } else if (refresh.status !== 0) {
     const detail = (refresh.stderr || '').trim() || `update-desktop-database exited with ${refresh.status}`
     console.warn(`The entry is installed, but the desktop database was not refreshed: ${detail}`)
   }

@@ -300,6 +300,25 @@ describe('native OAuth grant requests', () => {
     expect(refreshImpl).not.toHaveBeenCalled()
   })
 
+  it('rejects a legacy stored whitespace handle without contacting the dashboard (issue 461)', async () => {
+    // Grants already on disk never pass through parseGrant; the guard in refreshOidc must hold too.
+    const legacy = { ...grant, refresh_token: '   ' }
+    const fetchImpl = vi.fn()
+    await expect(refreshOidc('https://dashboard.example', legacy, fetchImpl))
+      .rejects.toMatchObject({ name: 'OidcError', status: 400, isRejected: true })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    await expect(revokeOidc('https://dashboard.example', legacy, fetchImpl)).resolves.toBeUndefined()
+    expect(fetchImpl).not.toHaveBeenCalled()
+
+    // A malformed legacy store must be treated the same way, not throw a raw TypeError.
+    const malformed = { ...grant, refresh_token: 12345 }
+    await expect(refreshOidc('https://dashboard.example', malformed as unknown as OidcGrant, fetchImpl))
+      .rejects.toMatchObject({ name: 'OidcError', status: 400, isRejected: true })
+    await expect(revokeOidc('https://dashboard.example', malformed as unknown as OidcGrant, fetchImpl))
+      .resolves.toBeUndefined()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it('skips revoke without a refresh handle', async () => {
     const fetchImpl = vi.fn()
     await expect(revokeOidc('https://dashboard.example', { ...grant, refresh_token: '' }, fetchImpl))

@@ -346,7 +346,9 @@ export async function oidcLogin(
 }
 
 export async function refreshOidc(baseUrl: string, grant: OidcGrant, fetchImpl: typeof fetch): Promise<OidcGrant> {
-  if (!grant.refresh_token) {
+  // A grant saved before the parseGrant fix can still hold a whitespace-only handle. Treat it as
+  // absent here too: a refresh round-trip with no real token can only fail.
+  if (typeof grant.refresh_token !== 'string' || !grant.refresh_token.trim()) {
     // Access-token-only session (the dashboard issued no refresh token — an IdP like
     // Authentik 2024.2+ withholds one without offline_access): the dashboard's refresh
     // endpoint requires a refresh token, so mirror its rejection and let the caller
@@ -361,6 +363,6 @@ export async function refreshOidc(baseUrl: string, grant: OidcGrant, fetchImpl: 
 
 /** The caller clears local credentials even if this best-effort request fails. */
 export async function revokeOidc(baseUrl: string, grant: OidcGrant, fetchImpl: typeof fetch): Promise<void> {
-  if (!grant.refresh_token) return
+  if (typeof grant.refresh_token !== 'string' || !grant.refresh_token.trim()) return
   await postNative(baseUrl, '/auth/native/revoke', { refresh_token: grant.refresh_token }, fetchImpl, REVOKE_TIMEOUT_MS, false)
 }
