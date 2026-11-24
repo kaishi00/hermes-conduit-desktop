@@ -38,6 +38,7 @@ import {
   NEEDS_INPUT_LINE,
   ON_SCREEN_LINE,
   PLUGIN_MISSING,
+  RESPONSE_CANCEL,
   READY_TIMED_OUT,
   READY_TIMEOUT_MS,
   SAMPLE_RATE,
@@ -84,6 +85,7 @@ import { CANCEL_JOB, INTERRUPT_JOB, LIST_JOBS, START_JOB, VoiceJobs, type VoiceJ
 import { dashboardProfilePath, dashboardProfileQuery } from '../state/dashboardProfile'
 import { RECONNECT_ATTEMPTS, isRefusalClose, reconnectDelayMs } from '@shared/liveReconnect'
 import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
+import { ECHO_TAIL_MS, SpeakerGate, echoDelay, micLatency } from '../state/speakerGate'
 
 interface Props {
   profile?: string
@@ -129,8 +131,6 @@ interface Line {
 
 /** A turn Hermes never started on (the chat refused it) is let go after this. */
 const SEND_STALL_MS = 20_000
-/** The microphone stays closed this long after the server's audio ends, so its tail isn't heard back. */
-const ECHO_TAIL_MS = 300
 const SILENCE = new Float32Array(Math.round(SAMPLE_RATE * 0.8))
 /** Agent mode: Conduit's own updates wait this long after the user last spoke. */
 const USER_QUIET_MS = 2000
@@ -228,6 +228,9 @@ export function LocalLiveCall({
   const processor = useRef<ScriptProcessorNode | null>(null)
   const sources = useRef(new Set<AudioBufferSourceNode>())
   const playUntil = useRef(0)
+  // The microphone on the speakers: closed while the server's reply arrives and plays.
+  const gate = useRef(new SpeakerGate())
+  const echo = useRef(0)
   const ended = useRef(false)
   const ready = useRef(false)
   // The greeting goes once per call, never on a reconnect's check.
@@ -687,7 +690,10 @@ export function LocalLiveCall({
       }
       return
     }
-    if (!checking.current && stopsPlayback(text)) stopPlayback()
+    if (!checking.current && stopsPlayback(text)) {
+      stopPlayback()
+      gate.current.replyEnded()
+    }
     const event = decode(text)
     if (!event) return
     switch (event.type) {
@@ -704,7 +710,9 @@ export function LocalLiveCall({
         }
         return
       case 'responseStarted':
-        if (!checking.current) responding.current = true
+        if (checking.current) return
+        responding.current = true
+        gate.current.replyStarted()
         return
       case 'responseDone':
         if (checking.current) {
@@ -714,6 +722,7 @@ export function LocalLiveCall({
           return
         }
         responding.current = false
+        gate.current.replyEnded()
         if (wantsResponse.current) {
           wantsResponse.current = false
           respond()
@@ -724,6 +733,7 @@ export function LocalLiveCall({
         userSpokeAt.current = Date.now()
         trace.current?.speechStarted()
         stopPlayback()
+        gate.current.replyEnded()
         return
       case 'speechStopped':
         trace.current?.speechStopped()
@@ -737,16 +747,18 @@ export function LocalLiveCall({
         if (event.final) keep('user', event.text)
         return
       case 'audio':
-        if (!checking.current && !ended.current) play(event.pcm)
+        if (!checking.current && !ended.current && gate.current.audio(responding.current)) play(event.pcm)
         return
       case 'output':
         askFirst.current.modelSpoke()
-        if (!checking.current) assistantLine(event.text)
+        if (!checking.current && gate.current.words(responding.current)) assistantLine(event.text)
         return
       case 'outputDone':
         if (checking.current) return
         keep('assistant', event.text)
-        assistantLine(event.text, true)
+        // Interrupted: the line keeps what was heard of it.
+        if (gate.current.dropped) setLines(current => current.map(line => (line.open && line.who === 'assistant' ? { ...line, open: false } : line)))
+        else assistantLine(event.text, true)
         return
       default:
         return
@@ -757,7 +769,7 @@ export function LocalLiveCall({
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (ended.current || !ready.current) return
-      const speaking = playing()
+      const speaking = playing() || gate.current.replying
       setPhase(current => (current === 'failed' ? current : speaking ? 'speaking' : 'listening'))
       // Agent mode: Hermes' replies and what it waits on go to the fast model once the conversation is quiet.
       const quiet = !responding.current && !speaking && !userSpeaking.current && Date.now() - userSpokeAt.current > USER_QUIET_MS
@@ -830,6 +842,7 @@ export function LocalLiveCall({
         ready.current = false
         responding.current = false
         stopPlayback()
+        gate.current.replyEnded()
         setPhase('reconnecting')
         trace.current?.step('Connection lost: opening a new session')
       }
@@ -881,10 +894,12 @@ export function LocalLiveCall({
         const source = ctx.createMediaStreamSource(stream)
         const node = ctx.createScriptProcessor(2048, 1, 1)
         processor.current = node
+        echo.current = echoDelay(ctx, micLatency(stream), node.bufferSize / ctx.sampleRate)
+        trace.current?.step(`Microphone closed while a reply arrives and plays, and ${Math.round(echo.current * 1000 + ECHO_TAIL_MS)} ms after`)
         node.onaudioprocess = event => {
           if (!ready.current || ended.current || mutedRef.current) return
           // While the server talks on the speakers, its own voice isn't sent back.
-          if (ctx.currentTime < playUntil.current + ECHO_TAIL_MS / 1000) return
+          if (gate.current.holds(ctx, playUntil.current, echo.current)) return
           const samples = event.inputBuffer.getChannelData(0)
           trace.current?.audio(samples, SAMPLE_RATE)
           send(audioAppend(samples))
@@ -995,6 +1010,17 @@ export function LocalLiveCall({
     }
   }, [requests])
 
+  // The microphone is closed while the server talks, so this is how the user cuts in: what plays stops, and the
+  // server is told, since one that shuts its own microphone while it speaks listens again only then.
+  const interrupt = () => {
+    if (!gate.current.replying && !playing()) return
+    trace.current?.step('Interrupt pressed')
+    stopPlayback()
+    gate.current.interrupt()
+    send(RESPONSE_CANCEL)
+    setPhase(current => (current === 'speaking' ? 'listening' : current))
+  }
+
   const toggleMute = () => {
     const next = !muted
     setMuted(next)
@@ -1050,6 +1076,11 @@ export function LocalLiveCall({
           {phase === 'failed' ? (
             <button className="secondary" onClick={onClassic}>
               {t('Classic voice')}
+            </button>
+          ) : null}
+          {phase === 'speaking' ? (
+            <button className="secondary" onClick={interrupt}>
+              {t('Interrupt')}
             </button>
           ) : null}
           <button

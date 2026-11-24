@@ -48,6 +48,8 @@ export function sessionUpdate(): Row {
 }
 
 export const KEEPALIVE: Row = { type: 'conduit.ping' }
+/** Interrupt: the server stops the reply it speaks, and one that shut its microphone for it listens again. */
+export const RESPONSE_CANCEL: Row = { type: 'response.cancel' }
 
 /** Words no one says, asked as the readiness check: its turn coming back proves the whole path works. */
 export const readinessMarker = () => `conduit-ready-${crypto.randomUUID().toLowerCase()}`

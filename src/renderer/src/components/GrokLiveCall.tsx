@@ -52,6 +52,7 @@ import { CANCEL_JOB, INTERRUPT_JOB, LIST_JOBS, START_JOB, VoiceJobs, type VoiceJ
 import { dashboardProfileQuery } from '../state/dashboardProfile'
 import { RECONNECT_ATTEMPTS, isRefusalClose, reconnectDelayMs } from '@shared/liveReconnect'
 import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
+import { ECHO_TAIL_MS, SpeakerGate, echoDelay, micLatency } from '../state/speakerGate'
 
 interface Props {
   profile?: string
@@ -99,8 +100,6 @@ const END_TIMEOUT_MS = 8000
 const SEND_STALL_MS = 20_000
 /** Conduit's own updates wait this long after the user last spoke. */
 const USER_QUIET_MS = 2000
-/** The microphone stays closed this long after the model's audio ends, so its tail isn't heard back. */
-const ECHO_TAIL_MS = 300
 /** 0.8 s of silence: longer than the turn detector's window, so a mute ends the user's turn. */
 const SILENCE = new Float32Array(Math.round(SAMPLE_RATE * 0.8))
 
@@ -176,6 +175,9 @@ export function GrokLiveCall({
   const processor = useRef<ScriptProcessorNode | null>(null)
   const sources = useRef(new Set<AudioBufferSourceNode>())
   const playUntil = useRef(0)
+  // The microphone on the speakers: closed while the model's reply arrives and plays.
+  const gate = useRef(new SpeakerGate())
+  const echo = useRef(0)
   const ended = useRef(false)
   const ending = useRef(false)
   const ready = useRef(false)
@@ -478,9 +480,11 @@ export function GrokLiveCall({
         return
       case 'responseStarted':
         responding.current = true
+        gate.current.replyStarted()
         return
       case 'responseDone':
         responding.current = false
+        gate.current.replyEnded()
         // A response cut off before its whole transcript keeps what was said of it.
         keep('assistant', spoken.current)
         spoken.current = ''
@@ -496,6 +500,7 @@ export function GrokLiveCall({
         userSpokeAt.current = Date.now()
         trace.current?.speechStarted()
         stopPlayback()
+        gate.current.replyEnded()
         return
       case 'speechStopped':
         trace.current?.speechStopped()
@@ -509,15 +514,18 @@ export function GrokLiveCall({
         if (event.final) keep('user', event.text)
         return
       case 'audio':
-        if (ended.current) return
+        if (ended.current || !gate.current.audio(responding.current)) return
         play(event.pcm)
         return
       case 'output':
         askFirst.current.modelSpoke()
+        if (!gate.current.words(responding.current)) return
         spoken.current += event.text
         assistantLine(event.text)
         return
       case 'outputDone':
+        // Interrupted: the response's end keeps what was heard of it.
+        if (gate.current.dropped) return
         spoken.current = ''
         keep('assistant', event.text)
         assistantLine(event.text, true)
@@ -536,7 +544,7 @@ export function GrokLiveCall({
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (ended.current || !ready.current) return
-      const speaking = playing()
+      const speaking = playing() || gate.current.replying
       if (!ending.current) setPhase(current => (current === 'failed' ? current : speaking ? 'speaking' : 'listening'))
       const quiet = !responding.current && !speaking && !userSpeaking.current && Date.now() - userSpokeAt.current > USER_QUIET_MS
       if (quiet && !ending.current && updates.current.length) {
@@ -606,6 +614,7 @@ export function GrokLiveCall({
         ready.current = false
         responding.current = false
         stopPlayback()
+        gate.current.replyEnded()
         setPhase('reconnecting')
         trace.current?.step('Connection lost: opening a new session')
       }
@@ -658,11 +667,13 @@ export function GrokLiveCall({
         // The microphone, as 24 kHz PCM, while the call listens.
         const source = ctx.createMediaStreamSource(stream)
         const node = ctx.createScriptProcessor(2048, 1, 1)
+        echo.current = echoDelay(ctx, micLatency(stream), node.bufferSize / ctx.sampleRate)
+        trace.current?.step(`Microphone closed while a reply arrives and plays, and ${Math.round(echo.current * 1000 + ECHO_TAIL_MS)} ms after`)
         processor.current = node
         node.onaudioprocess = event => {
           if (!ready.current || ended.current || ending.current || mutedRef.current) return
           // While the model talks on the speakers, its own voice isn't sent back.
-          if (ctx.currentTime < playUntil.current + ECHO_TAIL_MS / 1000) return
+          if (gate.current.holds(ctx, playUntil.current, echo.current)) return
           const samples = event.inputBuffer.getChannelData(0)
           trace.current?.audio(samples, SAMPLE_RATE)
           send(audioAppend(samples))
@@ -725,6 +736,16 @@ export function GrokLiveCall({
     }
   }, [requests])
 
+  // The microphone is closed while the model talks, so this is how the user cuts in. Only what plays here
+  // stops: xAI keeps no microphone gate of its own, and the rest of this response isn't played.
+  const interrupt = () => {
+    if (!gate.current.replying && !playing()) return
+    trace.current?.step('Interrupt pressed')
+    stopPlayback()
+    gate.current.interrupt()
+    setPhase(current => (current === 'speaking' ? 'listening' : current))
+  }
+
   const toggleMute = () => {
     const next = !muted
     setMuted(next)
@@ -782,6 +803,11 @@ export function GrokLiveCall({
           {phase === 'failed' ? (
             <button className="secondary" onClick={onClassic}>
               {t('Classic voice')}
+            </button>
+          ) : null}
+          {phase === 'speaking' ? (
+            <button className="secondary" onClick={interrupt}>
+              {t('Interrupt')}
             </button>
           ) : null}
           <button
