@@ -158,11 +158,11 @@ const quotasKey = (profile?: string) => `rpc:model.options:quotas:${profile || '
 
 /**
  * How long a usage answer counts as current. The route takes ten seconds or more on a
- * host with a large library (desktop#444), and what it sums — tokens and cost over days —
- * barely moves in five minutes, so a pane reopened on the same period draws what it has
- * and asks nothing. Refresh reads anyway.
+ * host with a large library (desktop#444), so a pane reopened within half a minute on
+ * the same period draws what it has and asks nothing. No longer than that: a turn that
+ * just ran should show in the totals the next time the pane opens. Refresh reads anyway.
  */
-const FRESH_MS = 300_000
+const FRESH_MS = 30_000
 
 export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
   useMouseBack(onBack)
