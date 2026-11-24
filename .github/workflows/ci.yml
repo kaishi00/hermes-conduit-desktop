@@ -2,6 +2,12 @@ name: CI
 
 on:
   pull_request:
+    # Docs-only PRs have nothing to build or test, so ci.yml does not run for
+    # them. Reviews and the feature-map check are separate workflows and still
+    # run. Main pushes keep CI regardless of the files touched.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   push:
     branches: [main]
   workflow_dispatch:
