@@ -9,10 +9,11 @@ import { writeFileAtomic } from './atomicWrite'
 import { join } from 'node:path'
 import { LANGUAGES, pickLanguage, setLanguage, type Language } from '../shared/i18n'
 import type { AppIconChoice, LanguageChoice, ThemeChoice } from '../shared/ipc'
+import { DEFAULT_QUICK_ASK_ACCELERATOR, validAccelerator } from '../shared/accelerator'
 
 const path = () => join(app.getPath('userData'), 'settings.json')
 
-function read(): { language?: unknown; theme?: unknown; lock?: unknown; askHost?: unknown; appIcon?: unknown } {
+function read(): { language?: unknown; theme?: unknown; lock?: unknown; askHost?: unknown; appIcon?: unknown; quickAsk?: unknown } {
   try {
     return JSON.parse(readFileSync(path(), 'utf8')) as { language?: unknown; theme?: unknown; lock?: unknown; askHost?: unknown }
   } catch {
@@ -97,6 +98,22 @@ export const askHostAtLaunch = (): boolean => read().askHost === true
 export function chooseAskHost(on: boolean): boolean {
   try {
     writeFileAtomic(path(), JSON.stringify({ ...read(), askHost: on }, null, 2))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Quick Ask's global shortcut: the one picked in Settings, null when it's turned off, Alt+Space until either. */
+export function quickAskAccelerator(): string | null {
+  const stored = read().quickAsk
+  if (stored === false) return null
+  return validAccelerator(stored) ? stored : DEFAULT_QUICK_ASK_ACCELERATOR
+}
+
+export function chooseQuickAskAccelerator(accelerator: string | null): boolean {
+  try {
+    writeFileAtomic(path(), JSON.stringify({ ...read(), quickAsk: accelerator ?? false }, null, 2))
     return true
   } catch {
     return false

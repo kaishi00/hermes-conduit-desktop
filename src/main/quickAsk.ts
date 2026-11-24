@@ -2,15 +2,13 @@
  * Quick ask: Alt+Space (Option+Space on the Mac) from anywhere opens a small
  * window over everything to ask Hermes one thing. It hides again on Esc or
  * when it loses focus; the chat it started opens in the main window on
- * request.
+ * request. Settings > Quick Ask picks other keys, or none.
  */
 import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import { t } from '../shared/i18n'
 import { confineNavigation } from './navigation'
-
-export const QUICK_ASK_ACCELERATOR = 'Alt+Space'
 
 const WIDTH = 680
 /** Just the field, so nothing invisible sits over other apps; a reply grows it. */
@@ -27,18 +25,34 @@ export function quickAskHeight(expanded: boolean | number): number {
 export class QuickAsk {
   private window: BrowserWindow | null = null
   private height = FIELD_HEIGHT
+  /** The keys picked, null when the shortcut is off. */
+  accelerator: string | null = null
+  /** Whether the system let Conduit have them: another app may hold them. */
   registered = false
 
-  register(): void {
+  register(accelerator: string | null): boolean {
+    this.unregister()
+    this.accelerator = accelerator
+    if (!accelerator) return true
     try {
-      this.registered = globalShortcut.register(QUICK_ASK_ACCELERATOR, () => this.toggle())
+      this.registered = globalShortcut.register(accelerator, () => this.toggle())
     } catch {
       this.registered = false
     }
+    return this.registered
+  }
+
+  /** Other keys from Settings: when the system refuses them, the ones before stay. */
+  change(accelerator: string | null): boolean {
+    const before = this.accelerator
+    if (accelerator === before && (this.registered || !accelerator)) return true
+    if (this.register(accelerator)) return true
+    this.register(before)
+    return false
   }
 
   unregister(): void {
-    if (this.registered) globalShortcut.unregister(QUICK_ASK_ACCELERATOR)
+    if (this.registered && this.accelerator) globalShortcut.unregister(this.accelerator)
     this.registered = false
   }
 

@@ -68,7 +68,7 @@ export interface ShortcutRow {
 }
 
 /** The list ⌘/ opens, grouped as the phone's sheet is. */
-export function shortcutGroups(mac: boolean): { title: string; rows: ShortcutRow[] }[] {
+export function shortcutGroups(mac: boolean, quickAsk?: string | null): { title: string; rows: ShortcutRow[] }[] {
   const row = (title: string, action: MenuAction): ShortcutRow => ({ title, keys: [glyphs(action, mac)] })
   return [
     {
@@ -78,7 +78,9 @@ export function shortcutGroups(mac: boolean): { title: string; rows: ShortcutRow
         row(t('Search'), 'search'),
         { title: t('Send'), keys: [mac ? '↩' : 'Enter'] },
         { title: t('Stop'), keys: [glyphs('stop', mac), 'Esc'] },
-        row(t('Show or Hide Sidebar'), 'toggle-sidebar')
+        row(t('Show or Hide Sidebar'), 'toggle-sidebar'),
+        // From anywhere, with the keys Settings > Quick Ask holds; left out while it's off or another app has them.
+        ...(quickAsk ? [{ title: t('Quick Ask'), keys: [quickAsk] }] : [])
       ]
     },
     {

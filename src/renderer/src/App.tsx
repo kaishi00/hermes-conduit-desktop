@@ -199,6 +199,7 @@ import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { GO_TO, SCALES, applyScale, glyphs, nextScale, readScale, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
+import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
@@ -3497,6 +3498,7 @@ function Settings({
             </Select>
           </dd>
           <SettingsLink label={t('Keyboard')} detail={t('Keyboard Shortcuts')} onOpen={onShortcuts} />
+          <QuickAskShortcutSetting />
           <AppLockSetting />
           <AskDashboardSetting hosts={status.hosts?.length ?? 0} />
           <CombineDashboardsSetting hosts={status.hosts ?? []} />

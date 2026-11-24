@@ -7131,7 +7131,8 @@ button.cap-row-text {
   border-bottom: none;
 }
 
-.shortcuts-sheet kbd {
+.shortcuts-sheet kbd,
+.quick-ask-shortcut kbd {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   color: var(--text-2);
@@ -7139,6 +7140,19 @@ button.cap-row-text {
   border: 1px solid var(--line-strong);
   border-radius: 5px;
   padding: 2px 6px;
+}
+
+.quick-ask-shortcut > kbd,
+.quick-ask-shortcut > span {
+  margin-right: 10px;
+}
+
+.quick-ask-shortcut > .link + .link {
+  margin-left: 10px;
+}
+
+.quick-ask-taken {
+  color: var(--danger);
 }
 
 .text-size-slider {

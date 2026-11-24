@@ -36,6 +36,8 @@ export class ConduitTray {
   private waiting = 0
   /** A downloaded update's version: the menu offers Restart to Update. */
   private update: string | null = null
+  /** Quick Ask's shortcut, shown beside its item. */
+  private quickAsk: string | null = null
 
   constructor(private readonly deps: TrayDeps) {}
 
@@ -63,6 +65,12 @@ export class ConduitTray {
   setAppIcon(icon: AppIconChoice): void {
     if (!this.tray || process.platform === 'darwin') return
     this.tray.setImage(nativeImage.createFromPath(trayIconPath(trayFile(icon))))
+  }
+
+  setQuickAsk(accelerator: string | null): void {
+    if (accelerator === this.quickAsk) return
+    this.quickAsk = accelerator
+    this.render()
   }
 
   setUpdate(version: string | null): void {
@@ -97,7 +105,7 @@ export class ConduitTray {
             this.deps.command('new-chat')
           }
         },
-        { label: t('Quick Ask'), accelerator: 'Alt+Space', click: () => this.deps.quickAsk() },
+        { label: t('Quick Ask'), ...(this.quickAsk ? { accelerator: this.quickAsk } : {}), click: () => this.deps.quickAsk() },
         {
           label: t('Needs You'),
           enabled: this.waiting > 0,

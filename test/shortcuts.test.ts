@@ -53,6 +53,11 @@ describe('glyphs and groups', () => {
     const go = shortcutGroups(true)[1]
     expect(go.rows.map(r => r.keys[0])).toEqual(['⌘1', '⌘2', '⌘3', '⌘4', '⌘5', '⌘,'])
   })
+
+  it('lists Quick Ask with its keys, and leaves it out without any', () => {
+    expect(shortcutGroups(true, '⌥Space')[0].rows.at(-1)?.keys).toEqual(['⌥Space'])
+    expect(shortcutGroups(true)[0].rows).toHaveLength(5)
+  })
 })
 
 describe('nextScale', () => {
