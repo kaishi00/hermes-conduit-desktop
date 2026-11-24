@@ -73,6 +73,9 @@ export function SectionRail({
 
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null)
+  const railRef = useRef<HTMLElement>(null)
+  const opener = useRef<HTMLElement | null>(null)
+  const restoreFocus = useRef(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const draggingRef = useRef<RailSection | null>(null)
@@ -81,10 +84,16 @@ export function SectionRail({
 
   useLayoutEffect(() => {
     if (!menu) {
+      if (restoreFocus.current) {
+        restoreFocus.current = false
+        const target = opener.current?.isConnected ? opener.current : railRef.current?.querySelector<HTMLButtonElement>('button[aria-current="page"]')
+        target?.focus()
+      }
       setMenuPos(null)
       return
     }
     const el = menuRef.current
+    el?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
     const width = el?.offsetWidth || 220
     const height = el?.offsetHeight || 280
     setMenuPos({
@@ -98,24 +107,26 @@ export function SectionRail({
     const onDown = (e: MouseEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setMenu(null)
     }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenu(null)
-    }
     const close = () => setMenu(null)
     window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey)
     window.addEventListener('blur', close)
     window.addEventListener('resize', close)
     return () => {
       window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
       window.removeEventListener('blur', close)
       window.removeEventListener('resize', close)
     }
   }, [menu])
 
-  const openMenu = (x: number, y: number, target: RailSection | null) => {
-    setMenu({ x, y, target })
+  const openMenu = (element: HTMLElement, x?: number, y?: number) => {
+    const rect = element.getBoundingClientRect()
+    opener.current = element.closest('button') ?? railRef.current?.querySelector('button[aria-current="page"]') ?? null
+    setMenu({ x: x ?? rect.right + 4, y: y ?? rect.top, target: (element.dataset.section as RailSection) || null })
+  }
+
+  const finishMenu = () => {
+    restoreFocus.current = true
+    setMenu(null)
   }
 
   const ariaLabelFor = (section: RailSection): string => {
@@ -136,12 +147,19 @@ export function SectionRail({
   return (
     <>
       <nav
+        ref={railRef}
         className="rail"
         aria-label={t('Sections')}
         onContextMenu={e => {
           e.preventDefault()
-          const rect = e.currentTarget.getBoundingClientRect()
-          openMenu(e.clientX || Math.round(rect.right + 4), e.clientY || Math.round(rect.top + 14), null)
+          const element = (e.target as Element).closest('button') ?? e.currentTarget
+          if (e.clientX || e.clientY) openMenu(element, e.clientX, e.clientY)
+          else openMenu(element)
+        }}
+        onKeyDown={e => {
+          if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return
+          e.preventDefault()
+          openMenu(e.target as HTMLElement)
         }}
       >
         {showSidebarButton ? (
@@ -168,18 +186,13 @@ export function SectionRail({
             return (
               <button
                 key={section}
+                data-section={section}
                 className={className}
                 draggable
                 aria-label={ariaLabelFor(section)}
                 title={titleFor(section)}
                 aria-current={activeSection === section ? 'page' : undefined}
                 onClick={() => onSelect(section)}
-                onContextMenu={e => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  openMenu(e.clientX || Math.round(rect.right + 4), e.clientY || Math.round(rect.top), section)
-                }}
                 onDragStart={e => {
                   setMenu(null)
                   draggingRef.current = section
@@ -254,6 +267,25 @@ export function SectionRail({
           ref={menuRef}
           className="host-menu row-menu rail-menu"
           role="menu"
+          aria-label={t('Sections')}
+          onBlur={e => {
+            if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setMenu(null)
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              finishMenu()
+              return
+            }
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+            e.preventDefault()
+            e.stopPropagation()
+            const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
+            const index = items.indexOf(document.activeElement as HTMLButtonElement)
+            const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : index + (e.key === 'ArrowDown' ? 1 : -1)
+            items[(next + items.length) % items.length]?.focus()
+          }}
           onContextMenu={e => e.preventDefault()}
           style={{
             left: menuPos?.left ?? Math.max(8, Math.min(menu.x, window.innerWidth - 228)),
@@ -267,7 +299,7 @@ export function SectionRail({
                 onClick={() => {
                   const isPinned = !layout.hidden.has(menu.target!)
                   onChangeLayout(setSectionPinned(layout, menu.target!, !isPinned))
-                  setMenu(null)
+                  finishMenu()
                 }}
               >
                 {!layout.hidden.has(menu.target)
@@ -291,7 +323,7 @@ export function SectionRail({
                 onClick={() => {
                   if (locked) return
                   onChangeLayout(setSectionPinned(layout, section, !isPinned))
-                  setMenu(null)
+                  finishMenu()
                 }}
               >
                 <span className="host-check" aria-hidden="true">
@@ -317,7 +349,7 @@ export function SectionRail({
                 role="menuitem"
                 onClick={() => {
                   onChangeLayout(resetRailLayout())
-                  setMenu(null)
+                  finishMenu()
                 }}
               >
                 {t('Reset Sections')}

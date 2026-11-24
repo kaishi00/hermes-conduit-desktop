@@ -66,6 +66,19 @@ describe('SectionRail context menu and customization', () => {
       'Needs you (⌘6)'
     ])
 
+    const trigger = nav.querySelector<HTMLButtonElement>('[title="Chats (⌘2)"]')!
+    trigger.focus()
+    const key = (name: string, shiftKey = false) => act(() => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: name, shiftKey, bubbles: true, cancelable: true }))
+    })
+    key('F10', true)
+    expect(document.activeElement?.textContent).toContain('Bots')
+    key('ArrowDown') // Chats is locked, so move to Tasks.
+    expect(document.activeElement?.textContent).toContain('Tasks')
+    key('Escape')
+    expect(document.activeElement).toBe(trigger)
+    expect(host.querySelector('[role="menu"]')).toBeNull()
+
     // Right-click empty rail space -> checklist with checkmarks & shortcuts, no Reset yet.
     act(() => {
       nav.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 24, clientY: 300 }))
