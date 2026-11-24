@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { t } from '@shared/i18n'
-import { shortcutGroups } from '../state/shortcuts'
+import { shortcutGroups, type GoTo } from '../state/shortcuts'
 import { inSelectMenu } from './Select'
 
 /** ⌘/ (Ctrl+/) and Settings > Keyboard: every shortcut, grouped as the phone's sheet is. Esc, Done or ⌘/ again closes it. */
-export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
+export function ShortcutsSheet({ sections, onClose }: { sections?: readonly GoTo[]; onClose: () => void }) {
   const done = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     done.current?.focus()
@@ -18,7 +18,7 @@ export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
-  const groups = shortcutGroups(window.conduit.platform === 'darwin')
+  const groups = shortcutGroups(window.conduit.platform === 'darwin', sections)
   return (
     <div className="shortcuts-backdrop" onClick={onClose}>
       <div className="shortcuts-sheet" role="dialog" aria-modal="true" aria-label={t('Keyboard Shortcuts')} onClick={e => e.stopPropagation()}>

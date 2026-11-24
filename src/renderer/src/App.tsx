@@ -197,8 +197,10 @@ import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies
 import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isUnread, type ChatMarks } from './state/chatMarks'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
-import { GO_TO, SCALES, applyScale, glyphs, nextScale, readScale, shortcutFor } from './state/shortcuts'
+import { SCALES, applyScale, nextScale, readScale, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
+import { SectionRail } from './components/SectionRail'
+import { fallbackAfterUnpin, pinnedSections, readRailLayout, resolveInitialSection, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
@@ -370,7 +372,18 @@ function Shell({
   // Before any picture is read for this host: its pictures are kept under it.
   useState(() => setAvatarHost(status.url ?? ''))
   const connected = status.phase === 'open'
-  const [section, setSection] = useState<Section>(() => reopenedSection(status.url ?? ''))
+  const [railLayout, setRailLayout] = useState<RailLayout>(() => readRailLayout())
+  const [section, setSection] = useState<Section>(() => resolveInitialSection(reopenedSection(status.url ?? ''), railLayout))
+  const pinnedRail = useMemo(() => pinnedSections(railLayout), [railLayout])
+  const pinnedRailRef = useRef(pinnedRail)
+  pinnedRailRef.current = pinnedRail
+  useEffect(() => {
+    window.conduit.setRailSections?.(pinnedRail)
+  }, [pinnedRail])
+  const selectRailSection = useCallback((target: RailSection) => {
+    if (target === 'chats') setBotsSide(false)
+    setSection(target)
+  }, [])
   // A bot opened from Bots home keeps the bots, and its workstreams, in the sidebar (as the iPad's Bots column
   // stays beside an open Bot Chat) until Chats in the rail asks for the sessions list.
   const [botsSide, setBotsSide] = useState(false)
@@ -515,8 +528,8 @@ function Shell({
       // The list mounts with Chats.
       setTimeout(() => document.querySelector<HTMLInputElement>('.chatlist-search input')?.focus(), 0)
     } else if (action.startsWith('go-')) {
-      const target = GO_TO[Number(action.slice(3)) - 1]
-      if (target) setSection(target)
+      const target = pinnedRailRef.current[Number(action.slice(3)) - 1]
+      if (target) selectRailSection(target)
     }
   }
   useEffect(() => {
@@ -783,6 +796,31 @@ function Shell({
   const botsSideShown = botsSideHolds || (botsSide && section === 'chats' && !dockedChat && !!workItem)
   // Wherever the bots list shows: beside a bot's chat, a group chat, or New Bot and Edit Bot.
   const botsListShown = section === 'bots' || section === 'room' || (section === 'chats' && botsSideShown)
+  const activeRailSection: RailSection | null =
+    section === 'settings'
+      ? null
+      : section === 'bots' || section === 'room' || (section === 'chats' && botsSideShown)
+        ? 'bots'
+        : section
+  const changeRailLayout = useCallback(
+    (next: RailLayout) => {
+      let unpinned: RailSection | null = null
+      for (const s of next.hidden) {
+        if (!railLayout.hidden.has(s)) {
+          unpinned = s
+          break
+        }
+      }
+      setRailLayout(next)
+      writeRailLayout(next)
+      if (unpinned) {
+        const fallback = fallbackAfterUnpin(section, botsSideShown, unpinned, next)
+        if (fallback.botsSide !== botsSideShown) setBotsSide(fallback.botsSide)
+        if (fallback.section !== section) setSection(fallback.section)
+      }
+    },
+    [railLayout, section, botsSideShown]
+  )
   const readResolvedForChat = work.readResolved
   const resolvedChatOpen = !!selected.id && !!work.snapshot && !openWorkItem && workSessions.has(selected.id)
   useEffect(() => {
@@ -2296,93 +2334,20 @@ function Shell({
           } as CSSProperties
         }
       >
-        <nav className="rail" aria-label={t('Sections')}>
-          {(section === 'chats' || section === 'room' || section === 'bots') && listHidden ? (
-            <button
-              className="railbtn rail-show-list"
-              aria-label={t('Show Sidebar')}
-              title={`${t('Show Sidebar')} (${glyphs('toggle-sidebar', window.conduit.platform === 'darwin')})`}
-              onClick={() => hideList(false)}
-            >
-              <Icon name="chevronsRight" />
-            </button>
-          ) : null}
-          <button
-            className="railbtn"
-            aria-label={t('Bots')}
-            title={t('Bots')}
-            aria-current={section === 'bots' || section === 'room' || (section === 'chats' && botsSideShown) ? 'page' : undefined}
-            onClick={() => setSection('bots')}
-          >
-            <Icon name="bots" />
-          </button>
-          <button
-            className="railbtn"
-            aria-label={t('Chats')}
-            title={t('Chats')}
-            aria-current={section === 'chats' && !botsSideShown ? 'page' : undefined}
-            onClick={() => {
-              setBotsSide(false)
-              setSection('chats')
-            }}
-          >
-            <Icon name="chats" />
-          </button>
-          <button
-            className="railbtn"
-            aria-label={t('Tasks')}
-            title={t('Tasks')}
-            aria-current={section === 'tasks' ? 'page' : undefined}
-            onClick={() => setSection('tasks')}
-          >
-            <Icon name="tasks" />
-          </button>
-          <button
-            className="railbtn"
-            aria-label={pulse.feed?.unseen ? t('Pulse, new cards') : t('Pulse')}
-            title={t('Pulse')}
-            aria-current={section === 'pulse' ? 'page' : undefined}
-            onClick={() => setSection('pulse')}
-          >
-            <Icon name="pulse" />
-            {pulse.feed?.unseen && section !== 'pulse' ? <span className="badge">{pulse.feed.unseen > 99 ? '99+' : pulse.feed.unseen}</span> : null}
-          </button>
-          <button
-            className="railbtn"
-            aria-label={t('Artifacts')}
-            title={t('Artifacts')}
-            aria-current={section === 'artifacts' ? 'page' : undefined}
-            onClick={() => setSection('artifacts')}
-          >
-            <Icon name="paperclip" />
-          </button>
-          <button
-            className="railbtn"
-            aria-label={needsCount ? t('Needs you, {count}', { count: needsCount }) : t('Needs you')}
-            title={t('Needs you')}
-            aria-current={section === 'needs' ? 'page' : undefined}
-            onClick={() => setSection('needs')}
-          >
-            <Icon name="bell" />
-            {needsCount ? <span className="badge">{needsCount > 99 ? '99+' : needsCount}</span> : null}
-          </button>
-          <span className="spacer" />
-          <button
-            className="railbtn"
-            aria-label={t('Settings')}
-            title={t('Settings')}
-            aria-current={section === 'settings' ? 'page' : undefined}
-            onClick={() => setSection('settings')}
-          >
-            <Icon name="settings" />
-          </button>
-          <span
-            className={`dot${connected ? '' : ' warn'}`}
-            role="img"
-            aria-label={connected ? t('Connected') : t('Not connected')}
-            title={connected ? t('Connected to {host}', { host: status.hostLabel ?? '' }) : t('Not connected')}
-          />
-        </nav>
+        <SectionRail
+          layout={railLayout}
+          activeSection={activeRailSection}
+          settingsSelected={section === 'settings'}
+          showSidebarButton={(section === 'chats' || section === 'room' || section === 'bots') && listHidden}
+          onShowSidebar={() => hideList(false)}
+          pulseUnseen={pulse.feed?.unseen ?? 0}
+          needsCount={needsCount}
+          connected={connected}
+          hostLabel={status.hostLabel}
+          onSelect={selectRailSection}
+          onSettings={() => setSection('settings')}
+          onChangeLayout={changeRailLayout}
+        />
         {/* Chats stays mounted once shown, hidden while another section is open, so coming back doesn't rebuild every row and the open transcript. */}
         {chatsShown ? (
           <KeptPane away={section !== 'chats'} onShown={() => botSideScroll.opened()}>
@@ -2956,7 +2921,7 @@ function Shell({
           />
         )}
       </div>
-      {shortcutsOpen ? <ShortcutsSheet onClose={closeShortcuts} /> : null}
+      {shortcutsOpen ? <ShortcutsSheet sections={pinnedRail} onClose={closeShortcuts} /> : null}
       {archivedOpen && section === 'chats' && connected ? (
         <ArchivedChats
           host={status.url ?? ''}
