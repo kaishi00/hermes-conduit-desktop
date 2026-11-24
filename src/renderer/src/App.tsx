@@ -175,6 +175,7 @@ import { useChatCall } from './components/ChatCall'
 import { screenKey } from '@shared/screenWindows'
 import { useWork, useWorkSessions } from './state/useWork'
 import { shownTitle, type WorkItem } from './state/work'
+import { landsWithBots } from './state/workLinks'
 import { HermesCallSettings } from './components/HermesCallSettings'
 import { WakePhraseSettings } from './components/WakePhraseSettings'
 import { IncomingCall } from './components/IncomingCall'
@@ -537,7 +538,9 @@ function Shell({
         return
       }
       // A workstream's chat opened from a chat window's card lives with its bot: the bots sidebar shows beside it.
-      if (workSessionsRef.current.has(ref.storedId)) setBotsSide(true)
+      // The window read it from the bot's own work and says so, since the cross-bot read here can trail a
+      // workstream just started (#428).
+      if (landsWithBots(ref, workSessionsRef.current)) setBotsSide(true)
       setSelected({ id: ref.storedId, profile: ref.profile, title: ref.title, ...(ref.botChat ? { botChat: true } : {}) })
       setSection('chats')
     })

@@ -204,3 +204,13 @@ export function linkNamedRefs(text: string, chatOf: (ref: string) => { sessionId
     )
   )
 }
+
+/**
+ * Whether a chat another window asks the main window to open belongs beside
+ * the bots: the window said it's a workstream (it read the bot's own work),
+ * or the main window's cross-bot read lists it. The read alone trails a
+ * workstream just started, which then landed in the sessions list.
+ */
+export function landsWithBots(request: { storedId: string; workstream?: boolean }, workSessions: ReadonlySet<string>): boolean {
+  return request.workstream === true || workSessions.has(request.storedId)
+}

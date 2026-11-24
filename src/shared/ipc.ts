@@ -429,6 +429,12 @@ export interface OpenChatRequest {
   fresh?: boolean
   /** From the chat's own window (its Open in Main Window), which closes once the main window has it; any other open focuses a chat's window when it has one. */
   fromWindow?: boolean
+  /**
+   * The chat is a bot's workstream, as the window that asked read it from the
+   * bot's own work: the main window shows it beside the bots without waiting
+   * for its own cross-bot read to list it.
+   */
+  workstream?: boolean
 }
 
 /** A bot's screen for a window of its own; the viewer id it had before, if it did. */

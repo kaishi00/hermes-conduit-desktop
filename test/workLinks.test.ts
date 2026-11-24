@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { linkNamedRefs, linkSessionRefs, sessionInLink, splitWorkLinks } from '../src/renderer/src/state/workLinks'
+import { landsWithBots, linkNamedRefs, linkSessionRefs, sessionInLink, splitWorkLinks } from '../src/renderer/src/state/workLinks'
 
 const W19 = 'conduit://session/20261120_165155_a24bea?profile=zhongli'
 
@@ -98,5 +98,15 @@ describe('named refs in a Bot Chat reply', () => {
   it('links a ref the work lists, and leaves others, links and code as written', () => {
     expect(linkNamedRefs('W50 found it; W51 is new.', chatOf)).toBe('[W50](conduit://session/s50?profile=zhongli) found it; W51 is new.')
     expect(linkNamedRefs('[W50](https://x) and `W50` and W50.txt', chatOf)).toBe('[W50](https://x) and `W50` and W50.txt')
+  })
+})
+
+describe("a chat window's request to open a chat in the main window (#428)", () => {
+  it('lands a workstream beside the bots on the window\'s word, before the cross-bot read lists it', () => {
+    expect(landsWithBots({ storedId: 's1', workstream: true }, new Set())).toBe(true)
+    expect(landsWithBots({ storedId: 's1' }, new Set(['s1']))).toBe(true)
+    // An ordinary chat keeps the list it was opened from.
+    expect(landsWithBots({ storedId: 's1' }, new Set(['s2']))).toBe(false)
+    expect(landsWithBots({ storedId: 's1', workstream: false }, new Set())).toBe(false)
   })
 })
