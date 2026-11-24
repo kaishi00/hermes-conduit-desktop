@@ -8219,10 +8219,13 @@ button.cap-row-text {
   margin: 12px 0 0;
   padding: 0;
   display: grid;
+  /* A column that can't grow past the sheet: a long code line scrolls in its block instead of widening the bubble (#418). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 .call-transcript-turns li {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 3px;
   justify-items: start;
   padding: 0;
@@ -8233,6 +8236,10 @@ button.cap-row-text {
 }
 .call-transcript-bubble {
   max-width: 85%;
+  min-width: 0;
+  box-sizing: border-box;
+  /* A word with nowhere to break (a long address or id) wraps rather than leaving the bubble. */
+  overflow-wrap: anywhere;
   padding: 8px 12px;
   border-radius: 14px;
   background: var(--surface);
