@@ -1256,8 +1256,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     } catch {
       // The rows stay as they are; the next scroll to the top asks again.
     } finally {
-      if (olderLoading.current === ticket) olderLoading.current = null
-      if (ticket === request.current) setLoadingOlder(false)
+      // Still this read's line to end: a chat switch took it over, a reload of this chat (/undo, /retry) didn't.
+      if (olderLoading.current === ticket) {
+        olderLoading.current = null
+        setLoadingOlder(false)
+      }
     }
   }, [profile, dispatch, transcriptRef])
 
