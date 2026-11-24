@@ -684,7 +684,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
    */
   const catchUp = useCallback(async (): Promise<number | null> => {
     const stored = chatRef.current.storedId
-    if (!stored || !liveId.current || openingChat.current || catchingUp.current) return null
+    if (!stored || !liveId.current || openingChat.current) return null
+    // A change that lands while one read runs asks again after it, since that read may predate its row.
+    if (catchingUp.current) return CATCH_UP_SETTLE_MS
     const busy = () => readOver(transcriptRef.current)
     if (busy()) return null
     const ticket = request.current
@@ -704,6 +706,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       if (wait > 0) return wait
       reloadedAt.current = Date.now()
       await reloadHistory(true)
+      // Counted from the read's end too, so a slow read of a long chat isn't followed by another at once.
+      reloadedAt.current = Date.now()
       return null
     } catch {
       // The next change asks again.

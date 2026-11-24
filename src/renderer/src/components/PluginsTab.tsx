@@ -102,6 +102,8 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
     )
     const catalogRead = gateway.http('GET', CATALOG_PATH, undefined, 30_000).then(
       value => {
+        // A read a newer load replaced says nothing: it would draw over the newer one's answer.
+        if (!current()) return
         try {
           setCatalog(parseCatalog(value))
           setCatalogFailed(false)
