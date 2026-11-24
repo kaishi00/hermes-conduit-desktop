@@ -804,9 +804,21 @@ export function missingBoards(state: TranscriptState): string[] {
   )
 }
 
+/** The tool ids a full history read still has to settle, minus those a read already failed to settle. */
+export function missingToolIds(state: TranscriptState, skip: ReadonlySet<string> = new Set()): string[] {
+  const ids = new Set<string>()
+  for (const item of state.items) {
+    if (item.kind !== 'tool' || skip.has(item.toolId)) continue
+    const boardMissing = !item.board && (item.name.toLowerCase() === SHOW_TOOL || (item.status === 'done' && isWrapperName(item.name)))
+    const detailsMissing = item.status === 'done' && !item.result && !item.board
+    if (boardMissing || detailsMissing) ids.add(item.toolId)
+  }
+  return [...ids]
+}
+
 /** History rows without the call's details (session.resume leaves them out), or a board to draw. */
-export function missingDetails(state: TranscriptState): boolean {
-  return missingBoards(state).length > 0 || state.items.some(item => item.kind === 'tool' && item.status === 'done' && !item.result && !item.board)
+export function missingDetails(state: TranscriptState, skip: ReadonlySet<string> = new Set()): boolean {
+  return missingToolIds(state, skip).length > 0
 }
 
 /**

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { PendingRequest } from '../src/shared/ipc'
-import { answering, askedInOf, clearExpired, dropExpiredAsking, expiredFor, markExpired, noteLocked, noteRequests, resetExpiredQuestions, takeCancel } from '../src/renderer/src/state/expiredQuestions'
+import { answering, askedInOf, clearExpired, dropExpiredAsking, expiredFor, markExpired, noteChatSession, noteLocked, noteRequests, resetExpiredQuestions, takeCancel } from '../src/renderer/src/state/expiredQuestions'
 import { insertQuote } from '../src/renderer/src/state/quote'
 
 const ask = (id: string, sessionId = 's1'): PendingRequest => ({
@@ -92,6 +92,18 @@ describe('a dismissed question leaves its own chat and its own question only (#3
     expect(expiredFor('s3')).toEqual([])
   })
 
+  it('dismisses only the asking chat when its stored id maps to a live session (issue 464)', () => {
+    markExpired(ask('a', 's1'))
+    markExpired(ask('b', 's2'))
+    markExpired(ask('c', 's3'))
+    noteChatSession('stored-c', 's3')
+    // The Work panel beside s2 dismisses a question asked in stored-c; s1 is a third chat.
+    dropExpiredAsking('Run the fix?', { notLive: 's2', stored: 'stored-c' })
+    expect(expiredFor('s3')).toEqual([])
+    expect(expiredFor('s1')).toHaveLength(1)
+    expect(expiredFor('s2')).toHaveLength(1)
+  })
+
   it("takes one question off a batch's card and the card once none is left", () => {
     markExpired(batch('a', 's1'))
     dropExpiredAsking('Run the fix?', { live: 's1' })
@@ -121,11 +133,11 @@ describe('a dismissed question leaves its own chat and its own question only (#3
   })
 
   it('reads where a Work panel question was asked against the chat on screen', () => {
-    expect(askedInOf('c1', { storedId: 'c1', liveId: 'L' })).toEqual({ live: 'L' })
-    expect(askedInOf('c2', { storedId: 'c1', liveId: 'L' })).toEqual({ notLive: 'L' })
+    expect(askedInOf('c1', { storedId: 'c1', liveId: 'L' })).toEqual({ live: 'L', stored: 'c1' })
+    expect(askedInOf('c2', { storedId: 'c1', liveId: 'L' })).toEqual({ notLive: 'L', stored: 'c2' })
     // "" is the Bot Chat.
-    expect(askedInOf('', { storedId: 'c1', liveId: 'L', botChat: true })).toEqual({ live: 'L' })
-    expect(askedInOf('', { storedId: 'c1', liveId: 'L' })).toEqual({ notLive: 'L' })
+    expect(askedInOf('', { storedId: 'c1', liveId: 'L', botChat: true })).toEqual({ live: 'L', stored: '' })
+    expect(askedInOf('', { storedId: 'c1', liveId: 'L' })).toEqual({ notLive: 'L', stored: '' })
     // No live chat on screen: the wording decides, as before.
     expect(askedInOf('c1', { storedId: 'c1' })).toBeUndefined()
     expect(askedInOf('c1')).toBeUndefined()

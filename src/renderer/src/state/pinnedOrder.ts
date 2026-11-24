@@ -217,6 +217,24 @@ export function usePinnedOrder(host: string, rows: ChatRow[] | null, http: Http)
 
 /** How close to the list's top or bottom edge (px) a dragged row starts scrolling it. */
 export const EDGE_ZONE = 56
+/** How long a paused drag still keeps the edge scroll alive (useBoardScroll's 400 ms). */
+export const EDGE_HOLD_MS = 400
+
+/**
+ * The pinned drag's stop-and-restart decision: a frame past the hold leaves the loop alone,
+ * and a pointer away from both edges (step 0) ends it until the next dragover (issue 464).
+ */
+export function edgeScrollDecision(
+  y: number,
+  now: number,
+  at: number,
+  top: number,
+  bottom: number
+): number {
+  if (now - at > EDGE_HOLD_MS) return 0
+  return edgeScrollStep(y, top, bottom)
+}
+
 /** The fastest the list scrolls while dragging (px per frame). */
 export const EDGE_MAX_STEP = 18
 

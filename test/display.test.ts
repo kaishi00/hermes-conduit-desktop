@@ -282,6 +282,12 @@ describe('wrapped call restore leftovers (#425, #429)', () => {
     // A running one has no answer to read yet, and a concrete tool with its answer needs nothing.
     expect(missingBoards({ items: [{ ...row, status: 'running' as const }], running: true })).toEqual([])
     expect(missingDetails({ items: [{ ...row, name: 'terminal' }], running: false })).toBe(false)
+
+    // A full read that could not settle this row is remembered: reopening does not read it again.
+    const { missingToolIds } = await import('../src/renderer/src/state/transcript')
+    expect(missingToolIds({ items: [row], running: false }, new Set(['w1']))).toEqual([])
+    expect(missingDetails({ items: [row], running: false }, new Set(['w1']))).toBe(false)
+    expect(missingDetails({ items: [row], running: false }, new Set(['other']))).toBe(true)
   })
 
   it('verifies an envelope against the page name whatever the case', async () => {
