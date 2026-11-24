@@ -4,7 +4,11 @@
  * (20,000 rows by default) — and the renderer then lays every row out in one
  * go (desktop#291), so a chat past one stored page (500 rows) opens on its
  * newest page instead and reads the pages before it as the reader scrolls up
- * (`olderRows`). A resume carrying the whole transcript is refused (4130,
+ * (`olderRows`). The transcript draws a window of the rows it holds
+ * (rowWindow.ts): scrolling up first takes on the rows already read, and the
+ * page before them is read once the window reaches the first. A chat the
+ * list says is shorter than a page resumes whole, with no page read first
+ * (chatLength.ts). A resume carrying the whole transcript is refused (4130,
  * "This session is too long to reload safely") past that limit, while the
  * compact one (`omit_messages`) counts only the rows the model still holds,
  * so a chat that compacts in place, like a long-running inbox bot's, still
@@ -100,14 +104,6 @@ export async function olderRows(
   const answer = (await http('GET', pagePath(storedId, profile, offset))) as { messages?: unknown } | null
   const rows = Array.isArray(answer?.messages) ? (answer.messages as HistoryRow[]).map(storedRow) : []
   return { rows, more: rows.length === LONG_CHAT_PAGE }
-}
-
-/** Whether the chat grew above what the reader sees — rows read in earlier — rather than below it or into another chat. */
-export function grewAbove(
-  before: { first?: string; last?: string; length: number },
-  now: { first?: string; last?: string; length: number }
-): boolean {
-  return now.length > before.length && now.last === before.last && now.first !== before.first
 }
 
 /** What a chat opened on its newest stored page draws above them: the note saying why, when Hermes refused the whole resume, then the rows. */

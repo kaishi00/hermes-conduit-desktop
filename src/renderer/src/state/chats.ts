@@ -3,6 +3,7 @@
  * profile, newest activity first), with the gateway's `session.list` as the
  * fallback an older dashboard needs, grouped the way the phone groups them.
  */
+import { noteChatLength } from './chatLength'
 import { formatDate, t } from '../../../shared/i18n'
 import { cleanTitle, previewText } from './text'
 import { silenceShown } from './silence'
@@ -188,6 +189,8 @@ export function rowsFromResponse(body: unknown): ChatRow[] {
     if (isLegacyKanbanWorker(source, typeof obj.preview === 'string' ? obj.preview : undefined)) continue
     const title = typeof obj.title === 'string' ? cleanTitle(obj.title) : ''
     const preview = typeof obj.preview === 'string' ? previewText(silenceShown(obj.preview)) : ''
+    // A chat the list says fits one stored page opens whole, with no page read first (chatLength.ts).
+    if (typeof obj.message_count === 'number') noteChatLength(id, obj.message_count)
     let activeAt: number | undefined
     for (const key of ACTIVITY_KEYS) {
       activeAt = toMillis(obj[key])

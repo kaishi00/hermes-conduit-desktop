@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
 import { forgetTranscripts } from '../src/renderer/src/state/transcriptCache'
+import { forgetChatLengths } from '../src/renderer/src/state/chatLength'
 import { settleRunning } from '../src/renderer/src/state/longChat'
 import { useTranscript, useTranscriptValue } from '../src/renderer/src/state/transcriptStore'
 
@@ -16,6 +17,7 @@ let calls: string[] = []
 
 beforeEach(() => {
   forgetTranscripts()
+  forgetChatLengths()
   listeners = []
   resumes = {}
   pendingResumes = []

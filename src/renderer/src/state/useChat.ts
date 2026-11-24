@@ -60,7 +60,8 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, LONG_CHAT_PAGE, newestPageItems, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
+import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, newestPageItems, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
+import { knownChatLength, noteChatLength } from './chatLength'
 
 type Action =
   | { type: 'reset'; state: TranscriptState }
@@ -115,10 +116,15 @@ interface OpenTranscript {
  */
 async function resumeChat(params: Record<string, unknown>, storedId: string, profile: string | undefined): Promise<OpenTranscript> {
   const http = (method: 'GET', path: string) => gateway.http(method, path)
-  const bounded = await boundedOpen(http, params, storedId, profile).catch(() => null)
+  // A chat the list says fits one page resumes whole, without that page read first (chatLength.ts).
+  const fits = (knownChatLength(storedId) ?? LONG_CHAT_PAGE) < LONG_CHAT_PAGE
+  const bounded = fits ? null : await boundedOpen(http, params, storedId, profile).catch(() => null)
   if (bounded) return bounded
   try {
-    return { result: await gateway.rpc<ResumeResult>('session.resume', params), rows: null }
+    const result = await gateway.rpc<ResumeResult>('session.resume', params)
+    // What it carried is the chat's length, for the next open: one that grew past a page is read in pages then.
+    noteChatLength(storedId, result.messages?.length)
+    return { result, rows: null }
   } catch (e) {
     if (!isResumeTooLong(e)) throw e
     const compact = { ...params, omit_messages: true }
@@ -143,7 +149,8 @@ async function resumeChat(params: Record<string, unknown>, storedId: string, pro
  * its messages, so the renderer never lays out a whole history to show the
  * newest (desktop#291). A shorter chat — or one with nothing stored yet, or a
  * gateway that won't resume compact — answers null, and the whole resume runs
- * as it did.
+ * as it did. Only a chat whose length the list didn't give, or gave as a page
+ * or more, comes here.
  */
 async function boundedOpen(
   http: (method: 'GET', path: string) => Promise<unknown>,
@@ -1228,20 +1235,27 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     setLoadingOlder(true)
     const ticket = request.current
     try {
-      const page = await olderRows((method, path) => gateway.http(method, path), stored, profile, at.offset)
-      if (ticket !== request.current) return
-      // The chat may have written since: a row the page serves twice is drawn once (transcript.ts).
-      const next = { offset: at.offset + page.rows.length, more: page.more }
-      olderNow.current = next
-      setOlder(next)
-      if (page.rows.length) dispatch({ type: 'older', items: fromHistory(page.rows) })
+      // A page that draws nothing (hidden rows, or ones the chat already has) reads the one
+      // before it, since the reader at the top has no further scroll to ask with.
+      let next = at
+      for (let page = 0; page < LONG_CHAT_PAGES && next.more; page++) {
+        const got = await olderRows((method, path) => gateway.http(method, path), stored, profile, next.offset)
+        if (ticket !== request.current) return
+        // The chat may have written since: a row the page serves twice is drawn once (transcript.ts).
+        next = { offset: next.offset + got.rows.length, more: got.more }
+        olderNow.current = next
+        setOlder(next)
+        const held = transcriptRef.current.items.length
+        if (got.rows.length) dispatch({ type: 'older', items: fromHistory(got.rows) })
+        if (transcriptRef.current.items.length > held) break
+      }
     } catch {
       // The rows stay as they are; the next scroll to the top asks again.
     } finally {
       olderLoading.current = false
       if (ticket === request.current) setLoadingOlder(false)
     }
-  }, [profile, dispatch])
+  }, [profile, dispatch, transcriptRef])
 
   return {
     transcriptStore,

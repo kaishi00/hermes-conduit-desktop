@@ -708,16 +708,16 @@ export function addNotice(state: TranscriptState, text: string, tone: NoticeItem
 /**
  * Rows read in from the stored transcript before the chat's, drawn above
  * them: a chat opened on its newest page reads the page before it when the
- * reader scrolls up (`olderRows`). The notes at the top stay on top, and a
- * row the chat already draws — paging by offset can serve it twice while the
- * chat writes — isn't drawn again.
+ * reader scrolls up (`olderRows`). A too-long chat's note stays on top, and
+ * a row the chat already draws — paging by offset can serve it twice while
+ * the chat writes — isn't drawn again.
  */
 export function prependOlder(state: TranscriptState, items: TranscriptItem[]): TranscriptState {
   const known = new Set(state.items.map(item => item.key))
   const fresh = items.filter(item => !known.has(item.key))
   if (!fresh.length) return state
   let at = 0
-  while (at < state.items.length && state.items[at]!.kind === 'notice') at++
+  while (at < state.items.length && state.items[at]!.key === 'long-chat') at++
   return { ...state, items: [...state.items.slice(0, at), ...fresh, ...state.items.slice(at)] }
 }
 

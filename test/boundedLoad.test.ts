@@ -5,7 +5,8 @@ import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
 import { useTranscript } from '../src/renderer/src/state/transcriptStore'
 import { forgetTranscripts } from '../src/renderer/src/state/transcriptCache'
-import { grewAbove, olderRows, storedRow } from '../src/renderer/src/state/longChat'
+import { olderRows, storedRow } from '../src/renderer/src/state/longChat'
+import { forgetChatLengths, noteChatLength } from '../src/renderer/src/state/chatLength'
 import { prependOlder } from '../src/renderer/src/state/transcript'
 import type { HistoryRow } from '../src/renderer/src/state/transcript'
 
@@ -23,6 +24,7 @@ let resumeRows: HistoryRow[] = []
 
 beforeEach(() => {
   forgetTranscripts()
+  forgetChatLengths()
   paths = []
   calls = []
   pages = {}
@@ -97,6 +99,42 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     hook.unmount()
   })
 
+  it('resumes a chat the list says fits one page whole, with no page read first', async () => {
+    noteChatLength('small', 12)
+    resumeRows = page(1, 12)
+    const hook = mount('small')
+    await settle()
+    expect(paths.filter(p => p.includes('include_compacted=true'))).toEqual([])
+    expect(calls.filter(c => c.method === 'session.resume').map(c => c.params.omit_messages === true)).toEqual([false])
+    expect(hook.result().transcript.items.length).toBe(12)
+    hook.unmount()
+  })
+
+  it('reads the newest page for a chat the list says is past one, and for one a whole open found past one', async () => {
+    noteChatLength('big', 1000)
+    pages[0] = page(501, 500)
+    const hook = mount('big')
+    await settle()
+    expect(calls.filter(c => c.method === 'session.resume').map(c => c.params.omit_messages === true)).toEqual([true])
+    hook.unmount()
+  })
+
+  it('reads on past a page that draws nothing new, so the top of the chat is never a dead end', async () => {
+    pages[0] = page(1001, 500)
+    // The page before holds only rows the chat already draws; the one before that has the words.
+    pages[500] = page(1001, 500)
+    pages[1000] = page(1, 300)
+    const hook = mount('big')
+    await settle()
+    await act(async () => {
+      await hook.result().loadOlder()
+    })
+    expect(paths.map(p => /offset=(\d+)/.exec(p)?.[1])).toEqual(['0', '500', '1000'])
+    expect(hook.result().transcript.items.length).toBe(800)
+    expect(words(hook.result().transcript)[0]).toBe('message 1')
+    hook.unmount()
+  })
+
   it('draws the page once when the scroll asks twice while it is on its way', async () => {
     pages[0] = page(201, 500)
     pages[500] = page(1, 200)
@@ -148,11 +186,4 @@ describe('the stored page before the drawn rows (desktop#291)', () => {
     expect(prependOlder(next, [{ kind: 'user', key: 'row-1', text: 'message 1' }] as Parameters<typeof prependOlder>[1])).toBe(next)
   })
 
-  it('tells rows read in above the chat from rows arriving below it', () => {
-    expect(grewAbove({ first: 'a', last: 'z', length: 10 }, { first: 'x', last: 'z', length: 12 })).toBe(true)
-    // The turn wrote below: the top is the same row.
-    expect(grewAbove({ first: 'a', last: 'z', length: 10 }, { first: 'a', last: 'w', length: 12 })).toBe(false)
-    // Another chat opened over this one.
-    expect(grewAbove({ first: 'a', last: 'z', length: 10 }, { first: 'x', last: 'y', length: 12 })).toBe(false)
-  })
 })
