@@ -116,7 +116,8 @@ function ClarifyCard({ request, chatTitle }: { request: PendingRequest; chatTitl
  * choice under it. With no composer to fill, the choices are listed only.
  */
 export function ExpiredClarifyCard({ expired, onAnswer }: { expired: ExpiredQuestion; onAnswer?: (text: string) => void }) {
-  const questions = clarifyQuestions(expired.request.params)
+  // A batch's dismissed questions leave the card; the rest stay to answer.
+  const questions = clarifyQuestions(expired.request.params).filter(q => !expired.dismissed?.includes(q.question.trim()))
   const locked = { ...lockedAnswers(expired.request.params), ...expired.locked }
   const answer = (question: string, choice: string | null) => {
     const text = answering(question, choice)

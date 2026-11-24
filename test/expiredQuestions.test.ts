@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { PendingRequest } from '../src/shared/ipc'
-import { answering, clearExpired, dropExpiredAsking, expiredFor, markExpired, noteLocked, noteRequests, resetExpiredQuestions, takeCancel } from '../src/renderer/src/state/expiredQuestions'
+import { answering, askedInOf, clearExpired, dropExpiredAsking, expiredFor, markExpired, noteLocked, noteRequests, resetExpiredQuestions, takeCancel } from '../src/renderer/src/state/expiredQuestions'
 import { insertQuote } from '../src/renderer/src/state/quote'
 
 const ask = (id: string, sessionId = 's1'): PendingRequest => ({
@@ -66,5 +66,68 @@ describe('questions Hermes stopped waiting for (issue 2850)', () => {
     expect(answering('Which branch?', '  ')).toBe('> Which branch?')
     expect(answering(' \n', 'Yes')).toBe('')
     expect(insertQuote(answering('Run it?', 'Yes'), 'Draft')).toBe('Draft\n\n> Run it?\n\nYes\n\n')
+  })
+})
+
+describe('a dismissed question leaves its own chat and its own question only (#376)', () => {
+  beforeEach(resetExpiredQuestions)
+  const batch = (id: string, sessionId: string): PendingRequest => ({
+    id,
+    method: 'clarify',
+    sessionId,
+    params: { questions: [{ question: 'Run the fix?', choices: ['Yes', 'No'] }, { question: 'Which branch?' }] },
+    receivedAt: 1
+  })
+
+  it('keeps the same words kept in another chat', () => {
+    markExpired(ask('a', 's1'))
+    markExpired(ask('b', 's2'))
+    dropExpiredAsking('Run the fix?', { live: 's1' })
+    expect(expiredFor('s1')).toEqual([])
+    expect(expiredFor('s2')).toHaveLength(1)
+    // A question of some other chat, dismissed in the Work panel beside s2: s2's card stays.
+    markExpired(ask('c', 's3'))
+    dropExpiredAsking('Run the fix?', { notLive: 's2' })
+    expect(expiredFor('s2')).toHaveLength(1)
+    expect(expiredFor('s3')).toEqual([])
+  })
+
+  it("takes one question off a batch's card and the card once none is left", () => {
+    markExpired(batch('a', 's1'))
+    dropExpiredAsking('Run the fix?', { live: 's1' })
+    expect(expiredFor('s1')).toHaveLength(1)
+    expect(expiredFor('s1')[0]!.dismissed).toEqual(['Run the fix?'])
+    // Dismissing it again changes nothing.
+    const kept = expiredFor('s1')[0]
+    dropExpiredAsking('Run the fix?', { live: 's1' })
+    expect(expiredFor('s1')[0]).toBe(kept)
+    dropExpiredAsking('Which branch?', { live: 's1' })
+    expect(expiredFor('s1')).toEqual([])
+  })
+
+  it('stays gone when the wait ends after the dismissal', () => {
+    // The card still waits here (a replay after a reconnect): its cancel lands after the dismissal.
+    noteRequests([ask('a', 's1'), batch('b', 's1'), ask('c', 's2')])
+    dropExpiredAsking('Run the fix?', { live: 's1' })
+    takeCancel({ id: 'a', reason: 'timeout' })
+    takeCancel({ id: 'b', reason: 'timeout' })
+    takeCancel({ id: 'c', reason: 'timeout' })
+    // a had only that question; b keeps its other one; c is another chat's.
+    expect(expiredFor('s1').map(e => [e.request.id, e.dismissed])).toEqual([['b', ['Run the fix?']]])
+    expect(expiredFor('s2').map(e => e.request.id)).toEqual(['c'])
+    // The same words asked again later are a new question.
+    markExpired(ask('d', 's1'))
+    expect(expiredFor('s1').map(e => e.request.id)).toEqual(['b', 'd'])
+  })
+
+  it('reads where a Work panel question was asked against the chat on screen', () => {
+    expect(askedInOf('c1', { storedId: 'c1', liveId: 'L' })).toEqual({ live: 'L' })
+    expect(askedInOf('c2', { storedId: 'c1', liveId: 'L' })).toEqual({ notLive: 'L' })
+    // "" is the Bot Chat.
+    expect(askedInOf('', { storedId: 'c1', liveId: 'L', botChat: true })).toEqual({ live: 'L' })
+    expect(askedInOf('', { storedId: 'c1', liveId: 'L' })).toEqual({ notLive: 'L' })
+    // No live chat on screen: the wording decides, as before.
+    expect(askedInOf('c1', { storedId: 'c1' })).toBeUndefined()
+    expect(askedInOf('c1')).toBeUndefined()
   })
 })

@@ -513,7 +513,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             )
           }
         />
-        <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} />
+        <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} liveId={chat.liveId} />
         <FileLinks.Provider value={openPath}>
           <WorkLinks.Provider value={workLinkActions}>
             <ConnectionActionsContext.Provider value={connectionActions}>
@@ -665,6 +665,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           error={work.error}
           onReload={() => void work.reload()}
           onAnswered={() => void waiting.refresh()}
+          openChat={{ storedId: chat.storedId, liveId: chat.liveId, botChat }}
           onOpenChat={item => openOther(item.sessionId, shownTitle(item), { workstream: item.kind === 'workstream' })}
           onClose={() => openTab(null)}
           tabs={panelTabBar}

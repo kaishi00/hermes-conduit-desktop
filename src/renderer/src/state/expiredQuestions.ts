@@ -17,6 +17,29 @@ export interface ExpiredQuestion {
   request: PendingRequest
   /** Answers locked on this computer before the wait ended, by question id; null skipped. */
   locked: Record<string, string | null>
+  /** The wordings of this card's questions the person dismissed: the card stops showing those, and goes once none is left. */
+  dismissed?: string[]
+}
+
+/**
+ * Which chat a dismissed question was asked in, by its live session: the one
+ * given, or any but the one given (a question of another chat, dismissed in
+ * the Work panel beside this one). Left out, the wording alone decides.
+ */
+export type AskedIn = { live: string } | { notLive: string }
+
+/** The chat on screen beside the Work panel: its saved id, its live session, and whether it's the bot's Bot Chat. */
+export interface OpenChat {
+  storedId?: string | null
+  liveId?: string | null
+  botChat?: boolean
+}
+
+/** Where a Work panel question was asked, against the chat on screen; `chat` is its saved id, "" the Bot Chat. */
+export function askedInOf(chat: string, open?: OpenChat): AskedIn | undefined {
+  if (!open?.liveId) return undefined
+  const here = chat ? chat === open.storedId : open.botChat === true
+  return here ? { live: open.liveId } : { notLive: open.liveId }
 }
 
 /** The most kept at once, oldest dropped first. */
@@ -24,6 +47,8 @@ export const MOST_EXPIRED = 20
 
 const seen = new Map<string, PendingRequest>()
 const locks = new Map<string, Record<string, string | null>>()
+/** Wordings dismissed while their card still waited here, by request id: its `request.cancel` hasn't landed yet. */
+const dismissedEarly = new Map<string, string[]>()
 let expired: ExpiredQuestion[] = []
 const listeners = new Set<() => void>()
 const changed = () => listeners.forEach(listener => listener())
@@ -41,10 +66,14 @@ export function noteLocked(id: string, qid: string, shown: string | null): void 
 /** The card stops waiting: kept, with what was locked here. */
 export function markExpired(request: PendingRequest, locked: Record<string, string | null> = {}): void {
   seen.delete(request.id)
+  // Dismissed before this window heard the wait had ended (a replay after a reconnect, say): those stay gone.
+  const dismissed = dismissedEarly.get(request.id) ?? []
+  dismissedEarly.delete(request.id)
   if (expired.some(e => e.request.id === request.id)) return
   const all = { ...locks.get(request.id), ...locked }
   locks.delete(request.id)
-  expired = [...expired, { request, locked: all }].slice(-MOST_EXPIRED)
+  if (dismissed.length && asked(request).every(text => dismissed.includes(text))) return
+  expired = [...expired, { request, locked: all, ...(dismissed.length ? { dismissed } : {}) }].slice(-MOST_EXPIRED)
   changed()
 }
 
@@ -57,6 +86,7 @@ export function takeCancel(payload: unknown): void {
   if (reason === 'resolved' || reason === 'superseded') {
     seen.delete(id)
     locks.delete(id)
+    dismissedEarly.delete(id)
     return
   }
   markExpired(request)
@@ -82,12 +112,30 @@ function asked(request: PendingRequest): string[] {
 /**
  * The person dismissed a kept question in the Work panel or the asked-question bar (hermes-conduit issue 3105):
  * its card in the chat goes too, so it doesn't still offer to answer a question the bot was told was dismissed.
- * The Work panel's question carries its wording, not the request's id, so the wording matches it.
+ * The Work panel's question carries its wording, not the request's id, so the wording matches it, within the
+ * chat that asked when the caller knows it: the same words kept in another chat stay, and a batch's other
+ * questions stay on their card. A card still waiting here is remembered, so the `request.cancel` that
+ * follows doesn't keep what was just dismissed.
  */
-export function dropExpiredAsking(text: string): void {
+export function dropExpiredAsking(text: string, askedIn?: AskedIn): void {
   const wanted = text.trim()
-  if (!wanted || !expired.some(e => asked(e.request).includes(wanted))) return
-  expired = expired.filter(e => !asked(e.request).includes(wanted))
+  if (!wanted) return
+  const inChat = (request: PendingRequest) => !askedIn || ('live' in askedIn ? request.sessionId === askedIn.live : request.sessionId !== askedIn.notLive)
+  for (const request of seen.values()) {
+    if (!inChat(request) || !asked(request).includes(wanted)) continue
+    const before = dismissedEarly.get(request.id) ?? []
+    if (!before.includes(wanted)) dismissedEarly.set(request.id, [...before, wanted])
+  }
+  let any = false
+  const next = expired.flatMap(entry => {
+    const texts = asked(entry.request)
+    if (!inChat(entry.request) || !texts.includes(wanted) || entry.dismissed?.includes(wanted)) return [entry]
+    any = true
+    const dismissed = [...(entry.dismissed ?? []), wanted]
+    return texts.every(text => dismissed.includes(text)) ? [] : [{ ...entry, dismissed }]
+  })
+  if (!any) return
+  expired = next
   changed()
 }
 
@@ -119,6 +167,7 @@ export function answering(question: string, answer: string | null): string {
 export function resetExpiredQuestions(): void {
   seen.clear()
   locks.clear()
+  dismissedEarly.clear()
   expired = []
   changed()
 }

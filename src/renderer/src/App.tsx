@@ -2525,7 +2525,7 @@ function Shell({
                 }
               />
               {/* A question the bot asked here that waits past its turn. */}
-              <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} />
+              <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} liveId={chat.liveId} />
               <FileLinks.Provider value={openPath}>
                 <WorkLinks.Provider value={workLinkActions}>
                   <ConnectionActionsContext.Provider value={connectionActions}>
@@ -2699,6 +2699,7 @@ function Shell({
                 error={work.error}
                 onReload={() => void work.reload()}
                 onAnswered={() => void waiting.refresh()}
+                openChat={{ storedId: selected.id, liveId: chat.liveId, botChat: selected.botChat === true || !!openBotChat }}
                 onOpenChat={item => {
                   // The panel is the bot tab's list of its work: its rows keep the bots beside the chat they open.
                   setBotsSide(true)

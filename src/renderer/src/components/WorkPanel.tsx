@@ -31,7 +31,7 @@ import {
 import { Markdown } from './Markdown'
 import { Icon } from './icons'
 import { timeLabel } from '../state/chats'
-import { dropExpiredAsking } from '../state/expiredQuestions'
+import { askedInOf, dropExpiredAsking, type AskedIn, type OpenChat } from '../state/expiredQuestions'
 import type { WaitingRow } from '../state/needsYou'
 
 interface Props {
@@ -46,6 +46,8 @@ interface Props {
   onClose: () => void
   /** The side panel's tabs, atop it. */
   tabs?: ReactNode
+  /** The chat the panel sits beside, so a dismissed question's kept card leaves the chat that asked and no other. */
+  openChat?: OpenChat
 }
 
 function WorkCard({
@@ -250,13 +252,16 @@ export function QuestionCard({
   question,
   profile,
   onChanged,
-  inChat = false
+  inChat = false,
+  askedIn
 }: {
   question: WorkQuestion
   profile?: string
   onChanged: () => void
   /** Drawn over the chat that asked, whose composer answers one with no buttons. */
   inChat?: boolean
+  /** The chat that asked, where the caller knows it: a dismissal takes the kept card out of that chat only. */
+  askedIn?: AskedIn
 }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -270,7 +275,7 @@ export function QuestionCard({
     setProblem(null)
     try {
       await gateway.http('POST', workPath(`${WORK}/${encodeURIComponent(question.id)}/${action}`, profile), body)
-      if (given.kind === 'dismiss') dropExpiredAsking(question.text)
+      if (given.kind === 'dismiss') dropExpiredAsking(question.text, askedIn)
       onChanged()
     } catch (e) {
       setProblem(workRefusal(e))
@@ -329,12 +334,28 @@ export function QuestionCard({
  * its transcript, after the phone's ChatAskedQuestionBar: the oldest first,
  * the next once it's answered.
  */
-export function AskedQuestionBar({ rows, onChanged }: { rows: readonly WaitingRow[]; onChanged: () => void }) {
+export function AskedQuestionBar({
+  rows,
+  onChanged,
+  liveId
+}: {
+  rows: readonly WaitingRow[]
+  onChanged: () => void
+  /** The live session of the chat on screen, which asked these. */
+  liveId?: string | null
+}) {
   const first = rows[0]
   if (!first?.question) return null
   return (
     <div className="asked-question-bar">
-      <QuestionCard key={first.id} question={first.question} profile={first.profile} onChanged={onChanged} inChat />
+      <QuestionCard
+        key={first.id}
+        question={first.question}
+        profile={first.profile}
+        onChanged={onChanged}
+        inChat
+        askedIn={liveId ? { live: liveId } : undefined}
+      />
       {rows.length > 1 ? <div className="meta asked-question-more">{t('{count} more waiting', { count: rows.length - 1 })}</div> : null}
     </div>
   )
@@ -346,7 +367,7 @@ export function AskedQuestionBar({ rows, onChanged }: { rows: readonly WaitingRo
  * Resolved list. Each card shows where its workstream is, and takes the
  * user's own actions, which skip the Bot Chat's model.
  */
-export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswered, onOpenChat, onClose, tabs }: Props) {
+export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswered, onOpenChat, onClose, tabs, openChat }: Props) {
   const [allRecent, setAllRecent] = useState(false)
   const [resolved, setResolved] = useState<WorkItem[] | null>(null)
   const [resolvedError, setResolvedError] = useState<string | null>(null)
@@ -434,6 +455,7 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
                     key={question.id}
                     question={question}
                     profile={profile}
+                    askedIn={askedInOf(question.chat, openChat)}
                     onChanged={() => {
                       changed()
                       onAnswered?.()
