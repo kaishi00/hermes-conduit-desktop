@@ -172,6 +172,7 @@ import { canDelete, duplicateBot, writeMeta } from './state/botActions'
 import { AskedQuestionBar, WorkPanel } from './components/WorkPanel'
 import { PanelTabs, workCount, type PanelTab } from './components/PanelTabs'
 import { ChatHeader } from './components/ChatHeader'
+import { chatMenuItems } from './state/chatMenu'
 import { useChatCall } from './components/ChatCall'
 import { screenKey } from '@shared/screenWindows'
 import { useWork, useWorkSessions } from './state/useWork'
@@ -195,7 +196,7 @@ import { parseProjects, type Project, type ProjectChat } from './state/projects'
 import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
-import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isUnread, type ChatMarks } from './state/chatMarks'
+import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isStarred, isUnread, type ChatMarks } from './state/chatMarks'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor } from './state/shortcuts'
@@ -1149,6 +1150,15 @@ function Shell({
     },
     [list, selected.id, chat.storedId, newChat, updatePins]
   )
+  // A chat's own window can rename or delete it (its header's menu), and closes on a delete: the list reads again.
+  const windowsOpen = chatWindowIds.length
+  const windowsSeen = useRef(windowsOpen)
+  useEffect(() => {
+    if (windowsSeen.current === windowsOpen) return
+    windowsSeen.current = windowsOpen
+    list.refresh()
+  }, [windowsOpen, list])
+
   // Filter › Projects: the project tree of the profile the list shows (with one profile, All is that one), read again as
   // turns end, as Projects closes (a project made, renamed or deleted there) and after Move to Project.
   const [projectsChanged, setProjectsChanged] = useState(0)
@@ -1305,6 +1315,27 @@ function Shell({
     : selected.botChat && selected.title
       ? selected.title
       : cleanTitle(chat.title || selected.title || '') || (selected.id ? '' : t('New chat'))
+
+  // The open chat's own menu (issue 448): its row's steps, where the Chats list has its row.
+  const headerMenu =
+    openRow && section === 'chats' && !dockedChat
+      ? chatMenuItems(openRow, {
+          archive: connected ? () => void changeArchived(openRow, true) : undefined,
+          pin: () => void chatAction(openRow, { pinned: !openRow.pinned }),
+          star: { on: isStarred(marks, openRow), toggle: () => updateMarks(current => toggleStar(current, openRow)) },
+          done: chatDone.available ? { on: isRowDone(openRow), toggle: () => chatDone.toggle(openRow) } : undefined,
+          mute: chatMute.available ? { now: rowMute(openRow), set: seconds => chatMute.setMute(openRow, seconds) } : undefined,
+          rename: async () => {
+            const name = (await askText(t('Rename'), openRow.title))?.trim()
+            if (name && name !== openRow.title) void chatAction(openRow, { title: name })
+          },
+          move: { targets: () => moveTargets(openRow), to: target => void moveToProject(openRow, target) },
+          remove: async () => {
+            if (await ask(`${t('Delete conversation?')}\n\n${t('This permanently deletes the conversation and cannot be undone.')}`, { confirm: t('Delete'), destructive: true }))
+              void chatAction(openRow, null)
+          }
+        })
+      : undefined
 
   /**
    * ⋯'s Branch on a reply, as the phone's: a new chat with the turns through
@@ -2503,6 +2534,7 @@ function Shell({
                       }
                     : undefined
                 }
+                menu={headerMenu}
               />
               {/* A question the bot asked here that waits past its turn. */}
               <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} liveId={chat.liveId} />

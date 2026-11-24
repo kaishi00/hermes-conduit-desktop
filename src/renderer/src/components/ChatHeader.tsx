@@ -4,6 +4,7 @@ import { VOICE_MODES, voiceModeTitle, type VoiceMode } from '../state/gptLive'
 import { statusText, workTone, type WorkItem } from '../state/work'
 import { Icon } from './icons'
 import { Select } from './Select'
+import { HeaderMenu, HeaderMenuButton, useHeaderMenu, type HeaderMenuItem } from './HeaderMenu'
 
 /** The Call pill: Call (or End call) and the voice mode the next call takes, or the running call's. */
 export interface HeaderCall {
@@ -31,7 +32,9 @@ export interface HeaderButton {
  * window of its own. Its title with a workstream's status chip, a line under
  * it (a workstream's way back to its bot, or the bot a window's chat is
  * with), then the Call pill with its voice mode, Open in New Window, the
- * bot's screen and the side panel's toggle, each where the chat offers it.
+ * bot's screen and the side panel's toggle, each where the chat offers it,
+ * and last the chat's own menu (issue 448), which a right-click on the title
+ * opens too.
  */
 export function ChatHeader({
   title,
@@ -42,6 +45,7 @@ export function ChatHeader({
   newWindow,
   screen,
   panel,
+  menu,
   trailing
 }: {
   title: string
@@ -56,14 +60,32 @@ export function ChatHeader({
   screen?: HeaderButton
   /** The side panel's toggle, with its work dot. */
   panel?: HeaderButton & { dot?: { tone: string; label: string } | null }
+  /** The chat's own menu: what its row in the chat list offers. Left out or empty, no button is drawn. */
+  menu?: HeaderMenuItem[]
   /** Anything after the buttons (a window's Open in Main Window). */
   trailing?: ReactNode
 }) {
+  const more = useHeaderMenu()
+  const items = menu?.length ? menu : null
   return (
     <div className="chat-head soft">
       <div className="chat-titles">
         <div className="chat-title-line">
-          {title ? <div className="chat-title">{title}</div> : null}
+          {title ? (
+            <div
+              className="chat-title"
+              onContextMenu={
+                items
+                  ? e => {
+                      e.preventDefault()
+                      more.setOpen({ x: e.clientX, y: e.clientY })
+                    }
+                  : undefined
+              }
+            >
+              {title}
+            </div>
+          ) : null}
           {workItem ? (
             <span className={`status-chip tone-${workTone(workItem)}`} title={statusText(workItem)}>
               <span className="status-chip-text">{statusText(workItem)}</span>
@@ -123,8 +145,10 @@ export function ChatHeader({
             {panel.dot ? <span className={`chat-head-dot ${panel.dot.tone}`} aria-label={panel.dot.label} /> : null}
           </button>
         ) : null}
+        {items ? <HeaderMenuButton menu={more} /> : null}
         {trailing}
       </div>
+      {items ? <HeaderMenu menu={more} items={items} /> : null}
     </div>
   )
 }

@@ -39,6 +39,9 @@ import { useReplyFace } from './BotsHome'
 import { AskedQuestionBar, WorkPanel } from './WorkPanel'
 import { useChatCall } from './ChatCall'
 import { ChatHeader } from './ChatHeader'
+import { chatMenuItems } from '../state/chatMenu'
+import { mutateSession } from '../state/chatActions'
+import { ask, askText, tell } from '../state/dialogs'
 import { PanelTabs, workCount, type PanelTab } from './PanelTabs'
 import { ArtifactsPanel } from './ArtifactsPanel'
 import { FilesPanel } from './FilesPanel'
@@ -182,7 +185,9 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const plan = useTranscriptValue(transcriptStore, state => state.plan)
 
   // A Bot Chat goes by its bot's name: Hermes titles every one "Bot Chat".
-  const title = botChat ? botTitle : cleanTitle(chat.title || request.title || '') || t('Chat')
+  // A name given from this window's menu shows at once: Hermes sends no title for a rename.
+  const [renamed, setRenamed] = useState<string | null>(null)
+  const title = botChat ? botTitle : cleanTitle(renamed ?? (chat.title || request.title || '')) || t('Chat')
   useEffect(() => {
     if (!docked) document.title = chatWindowTitle(title, botChat ? undefined : botTitle)
   }, [title, botTitle, botChat, docked])
@@ -496,6 +501,37 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     [botChat, docked, command, commands, notice, send, roster.bots, profile, botTitle, chat.liveId]
   )
 
+  // A window's chat has no list row beside it, so its header's menu (issue 448) renames and deletes it here. A bot's
+  // one chat and a workstream keep their names and aren't deleted from a list either; a docked chat is its dashboard's.
+  const storedId = chat.storedId ?? (request.fresh ? null : request.id)
+  const headerMenu =
+    !docked && !botChat && !workItem && storedId && connected
+      ? chatMenuItems(
+          { pinned: false },
+          {
+            rename: async () => {
+              const name = (await askText(t('Rename'), title))?.trim()
+              if (!name || name === title) return
+              try {
+                await mutateSession(gateway.http, storedId, profile, { title: name })
+                setRenamed(name)
+              } catch (e) {
+                void tell(t('Couldn’t change “{title}”: {reason}', { title, reason: e instanceof Error ? e.message : String(e) }))
+              }
+            },
+            remove: async () => {
+              if (!(await ask(`${t('Delete conversation?')}\n\n${t('This permanently deletes the conversation and cannot be undone.')}`, { confirm: t('Delete'), destructive: true }))) return
+              try {
+                await mutateSession(gateway.http, storedId, profile, null)
+                window.close()
+              } catch (e) {
+                void tell(t('Couldn’t change “{title}”: {reason}', { title, reason: e instanceof Error ? e.message : String(e) }))
+              }
+            }
+          }
+        )
+      : undefined
+
   return (
     <div className="chat-window-page" style={panelWidth !== null ? ({ '--panel-width': `${panelWidth}px` } as CSSProperties) : undefined}>
       <main className="chat chat-window-chat" ref={pane} aria-label={title}>
@@ -542,6 +578,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 }
               : undefined
           }
+          menu={headerMenu}
           trailing={
             docked ? null : (
               <button className="link" onClick={openInMain} title={t('Opens this chat in the main window and closes this one.')}>
