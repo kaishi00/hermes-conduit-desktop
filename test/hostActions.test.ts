@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GatewayError } from '../src/renderer/src/gateway'
 import {
   RestartMonitor,
@@ -132,7 +132,7 @@ describe('gateway restart', () => {
 describe("a finished update's outcome in the store", () => {
   it('stops speaking for the banner once Hermes is reachable, and dismisses', async () => {
     const { startUpdate, hostReachable, dismissUpdate, hostActionsNow, updateBanner } = await import('../src/renderer/src/state/hostActions')
-    await startUpdate('https://a.example', () => Promise.reject(new Error('refused')), 'fallback', () => {})
+    await startUpdate('https://a.example', () => Promise.reject(new Error('refused')), 'fallback', () => {}, () => 'https://a.example')
     expect(hostActionsNow().update.kind).toBe('failed')
     expect(updateBanner(hostActionsNow().update)).toBe('failed')
     hostReachable('https://other.example')
@@ -146,11 +146,88 @@ describe("a finished update's outcome in the store", () => {
 
   it('keeps the version from the last check when a dismissed row clears it', async () => {
     const { startCheck, dismissUpdate, hostActionsNow } = await import('../src/renderer/src/state/hostActions')
-    await startCheck('https://b.example', async () => ({ current_version: '0.23.4', update_available: false, behind: 0 }), false)
+    const onB = () => 'https://b.example'
+    await startCheck('https://b.example', async () => ({ current_version: '0.23.4', update_available: false, behind: 0 }), false, onB)
     expect(hostActionsNow().version).toBe('0.23.4')
-    await startCheck('https://b.example', () => Promise.reject(new Error('timed out')), true)
+    await startCheck('https://b.example', () => Promise.reject(new Error('timed out')), true, onB)
     expect(hostActionsNow().update.kind).toBe('checkFailed')
     dismissUpdate('https://b.example')
     expect(hostActionsNow()).toMatchObject({ update: { kind: 'idle' }, version: '0.23.4' })
+  })
+})
+
+describe('a dashboard switch while an action runs (#391)', () => {
+  const A = 'https://a.example'
+  const B = 'https://b.example'
+  afterEach(() => vi.useRealTimers())
+
+  it("stops Restart Gateway: the other dashboard's answers never settle this host's row", async () => {
+    vi.useFakeTimers()
+    const { startRestart, hostActionsNow, hostBusy } = await import('../src/renderer/src/state/hostActions')
+    let screen = A
+    const asked: string[] = []
+    // Dashboard B's gateway: up, another process, nothing restarting — what would read as "back".
+    const request = async (method: 'GET' | 'POST', path: string) => {
+      asked.push(`${screen} ${method} ${path}`)
+      if (method === 'POST') return {}
+      if (path === '/api/status') return screen === A ? { gateway_running: true, gateway_pid: 100 } : { gateway_running: true, gateway_pid: 999 }
+      return { running: true, lines: ['Draining'] }
+    }
+    const run = startRestart(A, request, () => screen)
+    await vi.advanceTimersByTimeAsync(1600)
+    expect(hostActionsNow()).toMatchObject({ host: A, restart: { kind: 'restarting' } })
+    const before = asked.length
+
+    screen = B
+    await vi.advanceTimersByTimeAsync(10_000)
+    await run
+    // Nothing was asked of B, and A's row cleared instead of saying it restarted.
+    expect(asked.slice(before)).toEqual([])
+    expect(asked.every(line => line.startsWith(A))).toBe(true)
+    expect(hostActionsNow()).toMatchObject({ host: A, restart: { kind: 'idle' } })
+    expect(hostBusy(A)).toBe(false)
+  })
+
+  it('stops Update Hermes without reading the new version from the other dashboard', async () => {
+    vi.useFakeTimers()
+    const { startUpdate, hostActionsNow } = await import('../src/renderer/src/state/hostActions')
+    let screen = A
+    const updated = vi.fn()
+    const request = async (method: 'GET' | 'POST', path: string) => {
+      if (screen !== A) throw new Error(`asked ${path} of ${screen}`)
+      if (method === 'POST') return { ok: true, name: 'hermes-update', action_id: 'id1' }
+      return { running: true, lines: ['Installing'] }
+    }
+    const run = startUpdate(A, request, 'fallback', updated, () => screen)
+    await vi.advanceTimersByTimeAsync(1600)
+    expect(hostActionsNow()).toMatchObject({ host: A, update: { kind: 'updating' } })
+    screen = B
+    await vi.advanceTimersByTimeAsync(5_000)
+    await run
+    expect(hostActionsNow()).toMatchObject({ host: A, update: { kind: 'idle' } })
+    expect(updated).not.toHaveBeenCalled()
+  })
+
+  it("clears a check the switch cut short, and leaves another host's newer run alone", async () => {
+    const { startCheck, hostActionsNow } = await import('../src/renderer/src/state/hostActions')
+    let screen = A
+    let answer!: (value: unknown) => void
+    const slow = () => new Promise<unknown>(resolve => (answer = resolve))
+    const run = startCheck(A, slow, false, () => screen)
+    expect(hostActionsNow()).toMatchObject({ host: A, update: { kind: 'checking' } })
+    screen = B
+    answer({ current_version: '0.23.4', update_available: false, behind: 0 })
+    await run
+    expect(hostActionsNow()).toMatchObject({ host: A, update: { kind: 'idle' } })
+
+    // A run B started meanwhile owns the store: the stopped one changes nothing of it.
+    screen = A
+    const again = startCheck(A, slow, false, () => screen)
+    const first = answer
+    screen = B
+    await startCheck(B, async () => ({ current_version: '0.24.0', update_available: false, behind: 0 }), false, () => screen)
+    first({ current_version: '0.23.4', update_available: false, behind: 0 })
+    await again
+    expect(hostActionsNow()).toMatchObject({ host: B, update: { kind: 'checked' }, version: '0.24.0' })
   })
 })

@@ -9,6 +9,7 @@
  */
 import { useSyncExternalStore } from 'react'
 import { GatewayError } from '../gateway'
+import { dashboardHost } from './dashboardProfile'
 
 type Row = Record<string, unknown>
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -386,13 +387,27 @@ export const hostBusy = (host: string) => current.host === host && (updateInProg
 /** Whether Update Hermes is running on `host`: Restart Now waits for it. */
 export const hermesUpdateRunning = (host: string) => current.host === host && current.update.kind === 'updating'
 
-function runner(host: string, request: Runner['request']): Runner {
+/** A run's requests once its dashboard has left the screen: none is sent, since another host would answer. */
+class LeftDashboard extends Error {}
+
+/**
+ * A run for `host`. Its requests go through the window's gateway, which
+ * follows the dashboard on screen: after a switch another host would answer,
+ * and its restart or update status would settle this host's row. So the run
+ * is live only while `host` is on screen, and sends nothing once it isn't
+ * (desktop#391; the plugin update and Restart Now fence the same way).
+ */
+function runner(host: string, request: Runner['request'], onScreen: () => string): Runner & { left: () => boolean } {
   const id = ++runs
+  const owns = () => runs === id && current.host === host
+  const here = () => onScreen() === host
   return {
-    request,
+    request: (method, path) => (here() ? request(method, path) : Promise.reject(new LeftDashboard())),
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     now: () => Date.now(),
-    live: () => runs === id && current.host === host
+    live: () => owns() && here(),
+    // Still this host's one run, stopped only because its dashboard left the screen.
+    left: () => owns() && !here()
   }
 }
 
@@ -400,31 +415,46 @@ function claim(host: string) {
   if (current.host !== host) current = { host, update: { kind: 'idle' }, restart: { kind: 'idle' } }
 }
 
-export async function startCheck(host: string, request: Runner['request'], force: boolean) {
+/**
+ * `onScreen` names the dashboard the window's gateway answers for. A run whose
+ * dashboard leaves the screen stops there and its row clears: the host
+ * carries on with the update or the restart by itself, and Settings checks
+ * again when that dashboard is back on screen.
+ */
+export async function startCheck(host: string, request: Runner['request'], force: boolean, onScreen: () => string = dashboardHost) {
   if (hostBusy(host)) return
   claim(host)
-  const run = runner(host, request)
+  const run = runner(host, request, onScreen)
   set({ update: { kind: 'checking' } })
   const outcome = await checkUpdate(run, force)
   if (run.live()) set({ update: outcome })
+  else if (run.left()) set({ update: { kind: 'idle' } })
 }
 
-export async function startUpdate(host: string, request: Runner['request'], fallback: string, onUpdated: () => void) {
+export async function startUpdate(
+  host: string,
+  request: Runner['request'],
+  fallback: string,
+  onUpdated: () => void,
+  onScreen: () => string = dashboardHost
+) {
   if (hostBusy(host)) return
   claim(host)
-  const run = runner(host, request)
+  const run = runner(host, request, onScreen)
   const outcome = await runUpdate(run, state => run.live() && set({ update: state }), fallback)
+  if (run.left()) set({ update: { kind: 'idle' } })
   if (!run.live()) return
   set({ update: outcome })
   if (outcome.kind === 'updated') onUpdated()
 }
 
-export async function startRestart(host: string, request: Runner['request']) {
+export async function startRestart(host: string, request: Runner['request'], onScreen: () => string = dashboardHost) {
   if (hostBusy(host)) return
   claim(host)
-  const run = runner(host, request)
+  const run = runner(host, request, onScreen)
   const outcome = await runRestart(run, state => run.live() && set({ restart: state }))
   if (run.live()) set({ restart: outcome })
+  else if (run.left()) set({ restart: { kind: 'idle' } })
 }
 
 /**
