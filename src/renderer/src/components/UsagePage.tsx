@@ -159,10 +159,10 @@ const quotasKey = (profile?: string) => `rpc:model.options:quotas:${profile || '
 /**
  * How long a usage answer counts as current. The route takes ten seconds or more on a
  * host with a large library (desktop#444), and what it sums — tokens and cost over days —
- * barely moves in half a minute, so a pane reopened on the same period draws what it has
+ * barely moves in five minutes, so a pane reopened on the same period draws what it has
  * and asks nothing. Refresh reads anyway.
  */
-const FRESH_MS = 30_000
+const FRESH_MS = 300_000
 
 export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
   useMouseBack(onBack)
@@ -193,18 +193,27 @@ export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
       .rpc('model.options', params)
       .then(answer => ({ answer }))
       .catch(() => ({ answer: null as unknown }))
-    const [usage, models] = await Promise.allSettled([
-      gateway.http('GET', path),
-      gateway.http('GET', withProfile(`/api/analytics/models?days=${days}`, profile))
-    ])
+    // The totals stand without the per-model route, so they are drawn the moment they
+    // arrive and the per-model rows merge in when theirs does (desktop#444).
+    const modelsRead = gateway
+      .http('GET', withProfile(`/api/analytics/models?days=${days}`, profile))
+      .catch(() => null)
+    const usageRead = await gateway.http('GET', path).then(
+      value => ({ ok: true as const, value }),
+      error => ({ ok: false as const, error })
+    )
     if (generation.current !== mine) return
     setLoading(false)
-    if (usage.status === 'fulfilled') {
-      const perModel = models.status === 'fulfilled' ? models.value : null
-      setReport(parseUsage(usage.value, perModel, days))
-      keep({ usage: usage.value, models: perModel })
+    if (usageRead.ok) {
+      setReport(parseUsage(usageRead.value, null, days))
+      keep({ usage: usageRead.value, models: null })
       setFailure(null)
-    } else setFailure(usageFailure(usage.reason))
+    } else setFailure(usageFailure(usageRead.error))
+    const perModel = await modelsRead
+    if (generation.current === mine && usageRead.ok && perModel) {
+      setReport(parseUsage(usageRead.value, perModel, days))
+      keep({ usage: usageRead.value, models: perModel })
+    }
     const { answer } = await quotas
     if (generation.current !== mine) return
     // A quota that couldn't be read goes rather than stay up as current.

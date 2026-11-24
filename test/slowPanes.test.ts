@@ -131,6 +131,22 @@ describe('Settings > Usage', () => {
     }
   })
 
+  it('draws the totals while the per-model route is still out', async () => {
+    const view = await mount(USAGE_PANE, 'UsagePage', { bots: [{ name: 'default', title: 'Hermes' }], profile: 'default', onBack: () => {} })
+    await settle()
+    try {
+      await act(async () => {
+        pending.get('/api/analytics/usage?days=30')!({ totals: { total_input: 1000, total_output: 500 } })
+        // /api/analytics/models stays in flight: the totals never wait on it.
+      })
+      await settle()
+      expect(text(view.host)).toContain('Totals')
+      expect(text(view.host)).not.toContain('Loading…')
+    } finally {
+      view.unmount()
+    }
+  })
+
   it('says it is still working past ten seconds, then draws the answer that lands', async () => {
     vi.useFakeTimers()
     const view = await mount(USAGE_PANE, 'UsagePage', { bots: [{ name: 'default', title: 'Hermes' }], profile: 'default', onBack: () => {} })
@@ -165,4 +181,29 @@ describe('Capabilities > Plugins', () => {
     expect(text(view.host)).toContain('This is taking longer than usual.')
     view.unmount()
   })
+})
+
+describe('Capabilities > Plugins, one answer at a time', () => {
+  it('draws the installed list while the catalog is still out', async () => {
+    // Catalog is a separate route, and the slower one: the list must not wait for it.
+    const view = await mount(PLUGINS_TAB, 'PluginsTab', { profile: 'default', query: '', host: undefined })
+    await settle()
+    try {
+      await act(async () => {
+        pending.get('/api/dashboard/plugins/hub')!({ plugins: [{ name: 'zeta', source: 'git', can_update_git: true }] })
+      })
+      await settle()
+      const installedOnly = view.host.querySelectorAll('.cap-row').length
+      expect(installedOnly).toBe(1)
+      // The catalog's rows join when their own route answers, without a second look at the list.
+      await act(async () => {
+        pending.get('/api/dashboard/plugins/catalog')!({ entries: [{ name: 'alpha', title: 'Alpha' }, { name: 'beta', title: 'Beta' }] })
+      })
+      await settle()
+      expect(view.host.querySelectorAll('.cap-row').length).toBe(installedOnly + 2)
+    } finally {
+      view.unmount()
+    }
+  })
+
 })

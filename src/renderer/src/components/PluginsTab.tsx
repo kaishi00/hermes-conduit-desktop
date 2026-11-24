@@ -76,29 +76,37 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
     const keepHub = answerKeeper(scoped(HUB_PATH, profile))
     // The catalog is the same for every profile: kept once per dashboard.
     const keepCatalog = answerKeeper(CATALOG_PATH)
-    const [hub, list, rows] = await Promise.allSettled([
-      gateway.http('GET', scoped(HUB_PATH, profile)),
-      gateway.http('GET', CATALOG_PATH, undefined, 30_000),
-      gateway.rpc('plugins.manage', { action: 'list', profile })
-    ])
-    setManage(rows.status === 'fulfilled' ? rows.value : null)
-    if (hub.status === 'fulfilled') {
-      try {
-        setInstalled(parseInstalled(hub.value))
-        keepHub(hub.value)
-      } catch {
-        setError(t("Couldn't load agent plugins"))
-      }
-    } else setError(`${t("Couldn't load agent plugins")} ${message(hub.reason)}`)
-    if (list.status === 'fulfilled') {
-      try {
-        setCatalog(parseCatalog(list.value))
-        setCatalogFailed(false)
-        keepCatalog(list.value)
-      } catch {
-        setCatalogFailed(true)
-      }
-    } else setCatalogFailed(true)
+    // Each answer is drawn the moment it lands: the installed list comes from the hub and
+    // must not wait on the catalog, which is the slower of the two on a large host
+    // (desktop#444).
+    const hubRead = gateway.http('GET', scoped(HUB_PATH, profile)).then(
+      value => {
+        try {
+          setInstalled(parseInstalled(value))
+          keepHub(value)
+        } catch {
+          setError(t("Couldn't load agent plugins"))
+        }
+      },
+      reason => setError(`${t("Couldn't load agent plugins")} ${message(reason)}`)
+    )
+    const catalogRead = gateway.http('GET', CATALOG_PATH, undefined, 30_000).then(
+      value => {
+        try {
+          setCatalog(parseCatalog(value))
+          setCatalogFailed(false)
+          keepCatalog(value)
+        } catch {
+          setCatalogFailed(true)
+        }
+      },
+      () => setCatalogFailed(true)
+    )
+    const manageRead = gateway.rpc('plugins.manage', { action: 'list', profile }).then(
+      value => setManage(value),
+      () => setManage(null)
+    )
+    await Promise.allSettled([hubRead, catalogRead, manageRead])
   }, [profile])
 
   useEffect(() => {
