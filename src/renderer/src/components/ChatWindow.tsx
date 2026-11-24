@@ -40,6 +40,7 @@ import { AskedQuestionBar, WorkPanel } from './WorkPanel'
 import { useChatCall } from './ChatCall'
 import { ChatHeader } from './ChatHeader'
 import { chatMenuItems } from '../state/chatMenu'
+import { loadPins, savePins, withoutChat } from '../state/pinnedReplies'
 import { mutateSession } from '../state/chatActions'
 import { ask, askText, tell } from '../state/dialogs'
 import { PanelTabs, workCount, type PanelTab } from './PanelTabs'
@@ -524,6 +525,9 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
               if (!(await ask(`${t('Delete conversation?')}\n\n${t('This permanently deletes the conversation and cannot be undone.')}`, { confirm: t('Delete'), destructive: true }))) return
               try {
                 await mutateSession(gateway.http, storedId, profile, null)
+                // A deleted chat's pinned replies go with it, as from its row; the main window reads them again when this one closes.
+                const pinHost = host ?? status.url ?? ''
+                savePins(pinHost, withoutChat(loadPins(pinHost), profile, storedId))
                 window.close()
               } catch (e) {
                 void tell(t('Couldn’t change “{title}”: {reason}', { title, reason: e instanceof Error ? e.message : String(e) }))

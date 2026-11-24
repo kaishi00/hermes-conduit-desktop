@@ -55,7 +55,10 @@ function readPending(): PendingSignOut[] {
         !!item && typeof item === 'object' && typeof (item as PendingSignOut).url === 'string' &&
         typeof (item as PendingSignOut).refreshToken === 'string' && typeof (item as PendingSignOut).expiresAt === 'number'
       )
-      .map(({ url, refreshToken, expiresAt, headers }) => ({ url, refreshToken, expiresAt, ...(pendingHeaders(headers) ? { headers: pendingHeaders(headers) } : {}) }))
+      .map(({ url, refreshToken, expiresAt, headers }) => {
+        const kept = pendingHeaders(headers)
+        return { url, refreshToken, expiresAt, ...(kept ? { headers: kept } : {}) }
+      })
       .slice(-20)
   } catch {
     return []

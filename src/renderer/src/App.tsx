@@ -1159,7 +1159,9 @@ function Shell({
     if (windowsSeen.current === windowsOpen) return
     windowsSeen.current = windowsOpen
     list.refresh()
-  }, [windowsOpen, list])
+    // Its Delete takes the chat's pinned replies out of what's kept here: this window's copy follows.
+    setPins(loadPins(pinHost))
+  }, [windowsOpen, list, pinHost])
 
   // Filter › Projects: the project tree of the profile the list shows (with one profile, All is that one), read again as
   // turns end, as Projects closes (a project made, renamed or deleted there) and after Move to Project.

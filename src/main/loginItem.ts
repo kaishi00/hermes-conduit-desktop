@@ -73,7 +73,7 @@ export function setLoginItem(on: boolean): LoginItemState {
 
 /** Windows' Startup apps page, where the Store's copy is turned on. */
 export function openStartupSettings(): void {
-  if (process.platform === 'win32') void shell.openExternal('ms-settings:startupapps')
+  if (process.platform === 'win32') void shell.openExternal('ms-settings:startupapps').catch(() => undefined)
 }
 
 /** Whether this launch came from the sign-in, so no window shows. */
