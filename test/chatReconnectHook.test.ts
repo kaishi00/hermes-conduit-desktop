@@ -100,10 +100,27 @@ describe('a chat after the connection drops and comes back (desktop#471)', () =>
     expect(texts(hook)).toEqual(['Write the report', 'Here is the first part'])
 
     // The new socket's events reach the chat again.
+    // A step that began during the drop has no start here; once the turn ends the chat is read again, with its row.
+    resumes = [
+      {
+        session_id: 'live-1',
+        stored_session_id: 's1',
+        running: false,
+        messages: [
+          { role: 'user', text: 'Write the report', row_id: 1 },
+          { role: 'assistant', text: 'Here is the first part', row_id: 2 },
+          { role: 'assistant', text: 'A step the drop hid.', row_id: 3 },
+          { role: 'assistant', text: 'and the rest.', row_id: 4 }
+        ]
+      }
+    ]
     emit({ type: 'message.complete', session_id: 'live-1', payload: { text: 'Here is the first part and the rest.' } })
     expect(hook.result().transcriptStore.get().running).toBe(false)
+    await until(() => resumeCalls() === 2, 'the read after the joined turn ended')
+    await settle()
+    expect(texts(hook)).toEqual(['Write the report', 'Here is the first part', 'A step the drop hid.', 'and the rest.'])
     hook.unmount()
-  })
+  }, 15_000)
 
   it('asks again when Hermes says the live session is between two states', async () => {
     let refused = 0
