@@ -420,6 +420,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const followedLive = useRef(false)
   const reloadedAt = useRef(0)
   const catchingUp = useRef(false)
+  /** A replay gap that landed while the chat was busy: it is read again once it isn't. */
+  const gapPending = useRef(false)
   const chatRef = useRef(chat)
   chatRef.current = chat
   /** True only for a connected, unsaved new chat (never while an existing chat is still resuming). */
@@ -464,6 +466,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     drawnTip.current = null
     followedLive.current = false
     reloadedAt.current = 0
+    gapPending.current = false
     // A create still out belongs to the chat that just left: a pick in this one mustn't wait on it and be dropped.
     creating.current = null
     // A resume this re-run abandons can't clear it any more: its finally is fenced by the ticket.
@@ -697,7 +700,21 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // A change that lands while one read runs asks again after it, since that read may predate its row.
     if (catchingUp.current) return CATCH_UP_SETTLE_MS
     const busy = () => readOver(transcriptRef.current)
-    if (busy()) return null
+    // Events were lost between two sockets while the chat was busy: it asks again until it can be read,
+    // and is then read whatever its newest row, since a turn followed live may have lost its start.
+    if (busy()) return gapPending.current ? CATCH_UP_SETTLE_MS : null
+    if (gapPending.current) {
+      gapPending.current = false
+      catchingUp.current = true
+      try {
+        reloadedAt.current = Date.now()
+        await reloadHistory(true)
+        reloadedAt.current = Date.now()
+      } finally {
+        catchingUp.current = false
+      }
+      return null
+    }
     const ticket = request.current
     catchingUp.current = true
     try {
@@ -747,7 +764,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       // would drop it: the store's next move reads the chat in once it is.
       else if (event.type === 'session.replay_gap' && event.session_id && event.session_id === liveId.current) {
         if (!readOver(transcriptRef.current)) void reloadHistory(true)
-        else soon(CATCH_UP_SETTLE_MS)
+        else {
+          gapPending.current = true
+          soon(CATCH_UP_SETTLE_MS)
+        }
       }
     })
     const forward = () => {

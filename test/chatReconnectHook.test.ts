@@ -174,4 +174,23 @@ describe('rows another process wrote into the open chat (desktop#432)', () => {
     expect(resumeCalls()).toBe(1)
     hook.unmount()
   }, 15_000)
+
+  it('reads the chat again after a replay gap that landed mid-turn, once the turn ends', async () => {
+    resumes = [
+      stored([{ role: 'user', text: 'Hi', row_id: 1 }]),
+      stored([{ role: 'user', text: 'Hi', row_id: 1 }, { role: 'assistant', text: 'The whole reply.', row_id: 2 }])
+    ]
+    const hook = open({ id: 's3', connected: true })
+    await until(() => texts(hook).length === 1, 'the chat opening')
+    emit({ type: 'message.start', session_id: 'live-3' })
+    emit({ type: 'session.replay_gap', session_id: 'live-3' })
+    await act(async () => new Promise(resolve => setTimeout(resolve, 1_700)))
+    // Busy: nothing is read over the running turn.
+    expect(resumeCalls()).toBe(1)
+    emit({ type: 'message.complete', session_id: 'live-3', payload: { text: 'reply.' } })
+    await until(() => resumeCalls() === 2, 'the chat being read again')
+    await settle()
+    expect(texts(hook)).toEqual(['Hi', 'The whole reply.'])
+    hook.unmount()
+  }, 15_000)
 })
