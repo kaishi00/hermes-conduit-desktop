@@ -336,6 +336,55 @@ function userItem(key: string, raw: string, at?: number): UserItem | null {
   return { kind: 'user', key, text, at, ...(attachments.length ? { attachments } : {}) }
 }
 
+/** A string that is itself JSON comes through, up to four levels of string-encoded JSON; anything else stands as it is. */
+function jsonValue(value: unknown): unknown {
+  let current = value
+  for (let depth = 0; typeof current === 'string' && depth < 4; depth++) {
+    const trimmed = current.trim()
+    if (!trimmed) return null
+    try {
+      current = JSON.parse(trimmed)
+    } catch {
+      return null
+    }
+  }
+  return current
+}
+
+/** The bridge's own names, which `tool_call` can never have run; connector batches keep the wrapper. */
+const WRAPPER_TOOL = 'tool_call'
+const BRIDGE_NAMES = new Set(['tool_call', 'tool_search', 'tool_describe'])
+const CONNECTOR_PREFIX = 'connectors__'
+
+/** The deferred wrapper's name, which a saved call row carries instead of the tool that ran. */
+function isWrapperName(name: string | null | undefined): boolean {
+  return (name ?? '').trim().toLowerCase() === WRAPPER_TOOL
+}
+
+/**
+ * The one tool a deferred `tool_call` envelope runs, as Hermes resolves it:
+ * `{"calls":[{name, arguments}]}` or the legacy `{name, arguments}`, either
+ * level possibly a JSON string. Null for a batch, a connector call, or a
+ * malformed envelope — those keep the wrapper (the phone's ToolSearchBridge
+ * is the reference for the shape).
+ */
+function unwrappedCall(envelope: unknown): { name: string; arguments: unknown } | null {
+  const object = jsonValue(envelope)
+  if (!object || typeof object !== 'object' || Array.isArray(object)) return null
+  const record = object as Record<string, unknown>
+  let entry: unknown = record
+  if (record.calls != null) {
+    const calls = jsonValue(record.calls)
+    if (!Array.isArray(calls) || calls.length !== 1) return null
+    entry = calls[0]
+  }
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+  const call = entry as Record<string, unknown>
+  const name = typeof call.name === 'string' ? call.name.trim() : ''
+  if (!name || BRIDGE_NAMES.has(name.toLowerCase()) || name.toLowerCase().startsWith(CONNECTOR_PREFIX)) return null
+  return { name, arguments: call.arguments }
+}
+
 export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
   const items: TranscriptItem[] = []
   for (const row of rows) {
@@ -383,20 +432,27 @@ export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
         if (review) items.push({ kind: 'review', key, ...review, at })
         break
       }
-      case 'tool':
+      case 'tool': {
+        // A deferred call keeps the wrapper's name and envelope in saved
+        // history; the envelope names the tool that ran, so a resumed row is
+        // drawn under it with the tool's own arguments, as the live events
+        // and the phone draw it.
+        const wrapper = isWrapperName(row.name) ? unwrappedCall(row.args) : null
+        const shownName = wrapper?.name ?? row.name ?? 'tool'
         items.push({
           kind: 'tool',
           key,
           toolId: row.tool_call_id ?? key,
-          name: row.name ?? 'tool',
+          name: shownName,
           context: row.context ?? undefined,
           status: 'done',
           at,
-          board: boardFrom(row.name ?? '', rowText(row), undefined) ?? undefined,
-          args: toolDetail(row.args),
+          board: boardFrom(shownName, rowText(row), undefined) ?? undefined,
+          args: toolDetail(wrapper ? wrapper.arguments : row.args),
           result: toolDetail(rowText(row))
         })
         break
+      }
       default:
         break
     }
@@ -686,8 +742,8 @@ export function missingDetails(state: TranscriptState): boolean {
  * their answers by tool call id (the REST transcript has them). A call made
  * through the deferred `tool_call` wrapper resumes under that name, while its
  * answer's row names the tool that ran (`conduit_show`), so the board is read
- * and the row shown under the tool it ran — as the live events and the phone
- * do (desktop#389).
+ * and the row shown under the tool it ran, with the tool's own arguments —
+ * as the live events and the phone do (desktop#389).
  */
 export function attachBoards(
   state: TranscriptState,
@@ -700,10 +756,17 @@ export function attachBoards(
     if (item.kind !== 'tool') return item
     const named = names.get(item.toolId)
     const answer = answers.get(item.toolId)
+    // A wrapped call shows the tool's own arguments, not the wrapper's envelope:
+    // the envelope counts when it names the tool the answer verified, which also
+    // covers a row fromHistory already unwrapped to a tool that took no arguments.
+    const rawArgs = args.get(item.toolId)
+    const unwrapped = unwrappedCall(rawArgs)
+    const shownArgs = unwrapped && unwrapped.name === named ? unwrapped.arguments : rawArgs
     const board = item.board ?? (answer === undefined ? null : boardFrom(named ?? item.name, answer, undefined))
     const result = item.result ?? (answer === undefined ? undefined : toolDetail(answer))
-    const given = item.args ?? (args.has(item.toolId) ? toolDetail(args.get(item.toolId)) : undefined)
-    if ((!named || named === item.name) && board === (item.board ?? null) && result === item.result && given === item.args) return item
+    const given = item.args ?? (shownArgs !== undefined ? toolDetail(shownArgs) : undefined)
+    const argsUnchanged = shownArgs === rawArgs || (shownArgs === undefined && item.args === undefined)
+    if ((!named || named === item.name) && argsUnchanged && board === (item.board ?? null) && result === item.result && given === item.args) return item
     changed = true
     return { ...item, ...(named && named !== item.name ? { name: named } : {}), ...(board ? { board } : {}), result, args: given }
   })
@@ -727,13 +790,18 @@ export function withKeptDetails(state: TranscriptState, kept: TranscriptState | 
   const items = state.items.map(item => {
     if (item.kind !== 'tool') return item
     const known = details.get(item.toolId)
-    if (!known || known.name !== item.name) return item
+    if (!known) return item
+    // A fresh resume of a wrapped call can still say tool_call (an envelope that
+    // won't read); the kept row names the tool the page's answer verified, so
+    // adopt it while filling — never the other way around, or a stale kept copy
+    // would undo the envelope's name.
+    const name = isWrapperName(item.name) ? known.name : item.name
     const board = item.board ?? known.board
     const result = item.result ?? known.result
     const args = item.args ?? known.args
-    if (board === item.board && result === item.result && args === item.args) return item
+    if (name === item.name && board === item.board && result === item.result && args === item.args) return item
     changed = true
-    return { ...item, ...(board ? { board } : {}), result, args }
+    return { ...item, ...(name !== item.name ? { name } : {}), ...(board ? { board } : {}), result, args }
   })
   return changed ? { ...state, items } : state
 }

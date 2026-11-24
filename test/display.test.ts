@@ -118,6 +118,132 @@ describe('boards from the REST transcript', () => {
     // The page names w2 the wrapper too: nothing to change, so the row stays the same object.
     expect(next.items[1]).toBe(state.items[1])
   })
+
+  it("shows a renamed wrapped call's own arguments, not the wrapper's envelope", async () => {
+    const { attachBoards, toolArgs, toolNames } = await import('../src/renderer/src/state/transcript')
+    const page = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: '{"name":"conduit_show","arguments":{"path":"/x"}}' } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: '' }
+      ]
+    }
+    const state = {
+      items: [{ kind: 'tool' as const, key: 'a', toolId: 'w1', name: 'tool_call', status: 'done' as const }],
+      running: false
+    }
+    const next = attachBoards(state, new Map(), toolArgs(page), toolNames(page))
+    expect(next.items[0]).toMatchObject({ name: 'conduit_show', args: '{\n  "path": "/x"\n}' })
+    // An envelope naming another tool stays the envelope: only the verified answer's tool is trusted.
+    const other = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: '{"name":"web_search","arguments":{}}' } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: '' }
+      ]
+    }
+    const diverged = attachBoards(state, new Map(), toolArgs(other), toolNames(other))
+    expect(diverged.items[0]).toMatchObject({ name: 'conduit_show', args: '{\n  "name": "web_search",\n  "arguments": {}\n}' })
+  })
+})
+
+describe('wrapped calls in saved history', () => {
+  it("draws a resumed wrapped call under the tool its envelope names, with the tool's own arguments", async () => {
+    const { fromHistory } = await import('../src/renderer/src/state/transcript')
+    const items = fromHistory([
+      { role: 'tool', name: 'tool_call', tool_call_id: 'w1', args: '{"name":"conduit_show","arguments":{"path":"/x"}}', content: '' },
+      { role: 'tool', name: 'tool_call', tool_call_id: 'w2', args: '{"name":"terminal"}', content: '' },
+      { role: 'tool', name: 'tool_call', tool_call_id: 'w3', args: '{"calls":[{"name":"terminal"},{"name":"web_search"}]}', content: '' },
+      { role: 'tool', name: 'tool_call', tool_call_id: 'w4', args: '{"name":"connectors__slack"}', content: '' },
+      { role: 'tool', name: 'tool_call', tool_call_id: 'w5', args: 'not-json{', content: '' },
+      { role: 'tool', name: 'tool_call', tool_call_id: 'w6', args: JSON.stringify(JSON.stringify({ name: 'conduit_show', arguments: { a: 1 } })), content: '' },
+      { role: 'tool', name: 'terminal', tool_call_id: 'w7', args: '{"plain":"envelope"}', content: '' }
+    ])
+    expect(items[0]).toMatchObject({ name: 'conduit_show', args: '{\n  "path": "/x"\n}' })
+    // A tool that took no arguments shows no Input.
+    expect(items[1]).toMatchObject({ name: 'terminal' })
+    expect((items[1] as { args?: unknown }).args).toBeUndefined()
+    // A batch, a connector call and a malformed envelope keep the wrapper.
+    expect(items[2]).toMatchObject({ name: 'tool_call' })
+    expect(items[3]).toMatchObject({ name: 'tool_call' })
+    expect(items[4]).toMatchObject({ name: 'tool_call', args: 'not-json{' })
+    // A string-encoded envelope reads the same as the object.
+    expect(items[5]).toMatchObject({ name: 'conduit_show', args: '{\n  "a": 1\n}' })
+    // A concrete tool's row is never touched.
+    expect(items[6]).toMatchObject({ name: 'terminal', args: '{\n  "plain": "envelope"\n}' })
+  })
+
+  it('fills a wrapped row from the kept copy and adopts its verified name', async () => {
+    const { withKeptDetails } = await import('../src/renderer/src/state/transcript')
+    const kept = {
+      items: [
+        {
+          kind: 'tool' as const,
+          key: 'row-1',
+          toolId: 'w1',
+          name: 'conduit_show',
+          status: 'done' as const,
+          args: '{\n  "path": "/x"\n}',
+          board: { cards: [{ type: 'callout', title: 'Heads up', text: 'Hi' }], tabs: false, next: [] }
+        }
+      ],
+      running: false
+    }
+    const fresh = {
+      items: [{ kind: 'tool' as const, key: 'row-1', toolId: 'w1', name: 'tool_call', status: 'done' as const }],
+      running: false
+    }
+    const next = withKeptDetails(fresh, kept)
+    expect(next.items[0]).toMatchObject({ name: 'conduit_show', args: '{\n  "path": "/x"\n}' })
+    expect(next.items[0]).toHaveProperty('board')
+    // Nothing to fill: the state comes back untouched.
+    expect(withKeptDetails(next, kept)).toBe(next)
+  })
+
+  it('keeps a fresh verified name over a stale kept wrapper name', async () => {
+    const { withKeptDetails } = await import('../src/renderer/src/state/transcript')
+    const kept = {
+      items: [
+        {
+          kind: 'tool' as const,
+          key: 'row-1',
+          toolId: 'w1',
+          name: 'tool_call',
+          status: 'done' as const,
+          args: '{\n  "envelope": true\n}',
+          result: 'The kept answer.'
+        }
+      ],
+      running: false
+    }
+    const fresh = {
+      items: [{ kind: 'tool' as const, key: 'row-1', toolId: 'w1', name: 'conduit_show', status: 'done' as const }],
+      running: false
+    }
+    const next = withKeptDetails(fresh, kept)
+    // The envelope already named this row: a stale kept copy must not undo it.
+    expect(next.items[0]).toMatchObject({ name: 'conduit_show', result: 'The kept answer.' })
+  })
+
+  it('keeps a no-argument wrapped call argumentless through the boards pass', async () => {
+    const { attachBoards, fromHistory, toolAnswers, toolArgs, toolNames } = await import('../src/renderer/src/state/transcript')
+    const envelope = '{"name":"conduit_show"}'
+    const rows = [
+      { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: envelope } }] },
+      { role: 'tool', name: 'tool_call', tool_call_id: 'w1', args: envelope, content: '' }
+    ]
+    const page = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: envelope } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: JSON.stringify({ cards: [{ type: 'callout', title: 'Heads up', text: 'Hi' }] }) }
+      ]
+    }
+    const state = { items: fromHistory(rows), running: false }
+    const next = attachBoards(state, toolAnswers(page), toolArgs(page), toolNames(page))
+    expect(next.items[0]).toMatchObject({ name: 'conduit_show' })
+    // The envelope must not resurface as the tool's Input.
+    expect((next.items[0] as { args?: unknown }).args).toBeUndefined()
+    // Nothing left to fill: the same objects come back.
+    expect(attachBoards(next, toolAnswers(page), toolArgs(page), toolNames(page))).toBe(next)
+  })
 })
 
 describe('self-improvement reviews', () => {
