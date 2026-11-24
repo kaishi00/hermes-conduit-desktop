@@ -1379,6 +1379,8 @@ export function Transcript({
   const [barReveal, setBarReveal] = useState<{ id: string; passage?: string } | null>(null)
   const jumpToPin = (pin: { id: string; passage?: string }) => {
     if (!pinKeys.has(pin.id) && onSeekRow) return setBarReveal({ id: pin.id, passage: pin.passage })
+    // This jump is the one asked for now: a pin still being read for doesn't take the reader away later.
+    setBarReveal(null)
     pinned.current = false
     if (pin.passage) revealPassage(scroller.current, pinKeys.get(pin.id), pin.passage)
     else revealMessage(scroller.current, pinKeys.get(pin.id))
@@ -1518,7 +1520,12 @@ export function Transcript({
             </div>
           ) : null}
         </div>
-        <JumpToLatest scroller={scroller} onJump={() => (pinned.current = true)} />
+        <JumpToLatest scroller={scroller} onJump={() => {
+            // Back to the latest: a jump's hold is over, and replies are followed again.
+            jumpUntil.current = 0
+            pinned.current = true
+          }}
+        />
       </div>
       {selectionMenu ? <SelectionMenu at={selectionMenu} items={selectionItems(selectionMenu)} onClose={closeSelectionMenu} /> : null}
     </PictureProfile.Provider>
