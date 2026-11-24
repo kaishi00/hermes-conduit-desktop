@@ -188,9 +188,16 @@ describe('SectionRail context menu and customization', () => {
     const chatsBtn = buttons[1]!
     botsBtn.getBoundingClientRect = () => ({ top: 10, bottom: 54, height: 44, left: 0, right: 44, width: 44, x: 0, y: 10, toJSON: () => ({}) })
 
+    const carried = new Map<string, string>()
     act(() => {
-      chatsBtn.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }))
+      const start = new Event('dragstart', { bubbles: true, cancelable: true })
+      Object.defineProperty(start, 'dataTransfer', {
+        value: { effectAllowed: 'none', dropEffect: 'none', setData: (type: string, value: string) => void carried.set(type, value) }
+      })
+      chatsBtn.dispatchEvent(start)
     })
+    expect([...carried.keys()]).toEqual(['application/x-conduit-rail-move'])
+    expect(carried.get('application/x-conduit-rail-move')).toBe('chats')
     act(() => {
       const over = new MouseEvent('dragover', { bubbles: true, cancelable: true, clientY: 16 })
       botsBtn.dispatchEvent(over)

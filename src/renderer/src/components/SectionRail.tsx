@@ -14,6 +14,9 @@ import {
 import { glyphs, sectionTitle, shortcutForSection } from '../state/shortcuts'
 import { Icon, type IconName } from './icons'
 
+/** A rail button's own drag type, so a dropped section never lands in a text field as its name. */
+const RAIL_MOVE = 'application/x-conduit-rail-move'
+
 const SECTION_ICONS: Record<RailSection, IconName> = {
   bots: 'bots',
   chats: 'chats',
@@ -183,7 +186,7 @@ export function SectionRail({
                   setDragging(section)
                   if (e.dataTransfer) {
                     e.dataTransfer.effectAllowed = 'move'
-                    e.dataTransfer.setData('text/plain', section)
+                    e.dataTransfer.setData(RAIL_MOVE, section)
                   }
                 }}
                 onDragOver={e => {
