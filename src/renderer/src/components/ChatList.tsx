@@ -862,6 +862,11 @@ export function ChatList({
                       <span className="row-top">
                         <span className="row-title">
                           {badge ? <HostBadgeMark badge={badge} /> : null}
+                          {windowIds?.includes(row.id) ? (
+                            <span role="img" aria-label={t('Open in its own window')} title={t('Open in its own window')}>
+                              <Icon name="window" className="row-pin row-windowed" />
+                            </span>
+                          ) : null}
                           {row.title}
                         </span>
                         <span className="meta row-time">{timeLabel(row.activeAt, today)}</span>

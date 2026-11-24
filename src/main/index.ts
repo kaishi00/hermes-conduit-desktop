@@ -1056,7 +1056,8 @@ function macMenu(): Menu {
   // every window; raising the main window over it would take the reader away from the chat (desktop#449).
   const textSize = (action: MenuAction) => () => {
     const front = BrowserWindow.getFocusedWindow()
-    if (front && front !== mainWindow && !front.isDestroyed()) front.webContents.send(IPC.menu, action)
+    // Only a chat's window listens for it: Quick Ask and a Bot's Screen leave it to the main window.
+    if (front && chatBrowserWindows.has(front) && !front.isDestroyed()) front.webContents.send(IPC.menu, action)
     else command(action)()
   }
   const go = currentRailSections.slice(0, 6).map((section, i) => ({

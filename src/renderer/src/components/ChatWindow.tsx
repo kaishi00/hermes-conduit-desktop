@@ -91,8 +91,9 @@ export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
     let scale = readScale()
     document.documentElement.style.setProperty('--chat-scale', String(scale))
     const step = (by: -1 | 0 | 1 | null) => {
-      // Docked in the main window, that window's own shortcuts set the size.
-      if (by === null || request.docked) return false
+      // Docked in the main window too: keys pressed in the pane never reach that window's page, and the
+      // size it writes reaches every window.
+      if (by === null) return false
       scale = nextScale(scale, by)
       applyScale(scale)
       return true

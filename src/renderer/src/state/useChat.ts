@@ -655,6 +655,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     try {
       const open = await resumeChat(params, stored, profile)
       if (ticket !== request.current) return
+      // A send that started while a catch-up's read ran drew its own row: the read isn't drawn over it,
+      // and the store's next move asks again.
+      if (keepOlder && readOver(transcriptRef.current)) return
       const { result, rows } = open
       liveId.current = result.session_id
       setChat(c => ({ ...c, liveId: result.session_id, title: result.info?.title ?? c.title }))
