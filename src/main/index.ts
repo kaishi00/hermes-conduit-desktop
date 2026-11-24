@@ -19,10 +19,12 @@ import { join, resolve } from 'node:path'
 import WebSocket from 'ws'
 import { LINK_SCHEME, linkUrl, linkUrlFromArgs } from '../shared/linkUrls'
 import {
+  DEFAULT_RAIL_SECTIONS,
   IPC,
   type GatewayEventMessage,
   type LanguageChoice,
   type MenuAction,
+  type RailSection,
   type ChatWindowRequest,
   type ConnectionStatus,
   type OpenChatRequest,
@@ -458,6 +460,14 @@ function saveFailure(error: unknown): string {
 function registerIpc(): void {
   // Elsewhere Electron's default menu would take Ctrl+0 and Ctrl+Plus for zoom: the window reads them for the chat's text size.
   Menu.setApplicationMenu(process.platform === 'darwin' ? macMenu() : null)
+  ipcMain.on(IPC.setRailSections, (_event, value: unknown) => {
+    if (!Array.isArray(value)) return
+    const valid = value.filter((s): s is RailSection => typeof s === 'string' && (DEFAULT_RAIL_SECTIONS as readonly string[]).includes(s))
+    const next: RailSection[] = [...new Set<RailSection>(valid.includes('chats') ? valid : [...valid, 'chats'])].slice(0, 6)
+    if (next.length === currentRailSections.length && next.every((s, i) => s === currentRailSections[i])) return
+    currentRailSections = next
+    if (isMac) Menu.setApplicationMenu(macMenu())
+  })
   ipcMain.handle(IPC.requests, event => connectionOf(event.sender.id)?.requests() ?? [])
   ipcMain.on(IPC.setWaiting, (_event, count: number) => tray.setWaiting(Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0))
   ipcMain.on(IPC.windowShow, () => showWindow())
@@ -972,13 +982,32 @@ if (!app.requestSingleInstanceLock()) {
  * Help > Keyboard Shortcuts on ⌘/. Windows has no menu bar (the title bar
  * is ours), so the window takes Ctrl and the same keys itself there.
  */
+let currentRailSections: RailSection[] = [...DEFAULT_RAIL_SECTIONS]
+
+function railSectionLabel(section: RailSection): string {
+  switch (section) {
+    case 'bots':
+      return t('Bots')
+    case 'chats':
+      return t('Chats')
+    case 'tasks':
+      return t('Tasks')
+    case 'pulse':
+      return t('Pulse')
+    case 'artifacts':
+      return t('Artifacts')
+    default:
+      return t('Needs you')
+  }
+}
+
 function macMenu(): Menu {
   const command = (action: MenuAction) => () => {
     showWindow()
     sendCommand(action)
   }
-  const go = [t('Bots'), t('Chats'), t('Tasks'), t('Pulse'), t('Needs you')].map((label, i) => ({
-    label,
+  const go = currentRailSections.slice(0, 6).map((section, i) => ({
+    label: railSectionLabel(section),
     accelerator: `Cmd+${i + 1}`,
     click: command(`go-${i + 1}` as MenuAction)
   }))
