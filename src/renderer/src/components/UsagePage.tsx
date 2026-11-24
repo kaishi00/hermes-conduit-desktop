@@ -230,8 +230,9 @@ export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
     setQuotas(keptOptions ? parseQuotas(keptOptions) : null)
     setFailure(null)
     // An answer read a moment ago is still what the slow route would answer: draw it, ask nothing (desktop#444).
-    const at = keptAt(path)
-    if (kept?.usage && at !== null && Date.now() - at < FRESH_MS) {
+    // The quota's own answer has to be as fresh: one a failed read left behind is read again, not drawn as current.
+    const fresh = (at: number | null) => at !== null && Date.now() - at < FRESH_MS
+    if (kept?.usage && fresh(keptAt(path)) && fresh(keptAt(quotasKey(profile)))) {
       // A read still out for the period or profile just left is dropped when it lands,
       // as a new read would have dropped it.
       generation.current++

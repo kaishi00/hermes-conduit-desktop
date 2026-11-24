@@ -14,6 +14,7 @@ import {
   type MenuItemConstructorOptions
 } from 'electron'
 import { registerWake } from './wake'
+import { handleUncaught } from './socketOptionErrors'
 import { EventRouter } from './eventRouting'
 import { join, resolve } from 'node:path'
 import WebSocket from 'ws'
@@ -241,6 +242,11 @@ function sendToFarWindows(url: string, channel: string, payload: unknown, sessio
     page.send(channel, payload)
   }
 }
+// A refused socket option is logged, not shown; anything else gets Electron's own dialog (socketOptionErrors.ts).
+process.on('uncaughtException', error => {
+  handleUncaught(error, { log: message => console.warn(message), showError: (title, body) => dialog.showErrorBox(title, body) })
+})
+
 app.on('browser-window-created', (_event, window) => {
   const id = window.webContents.id
   // A reloaded page (a language change) opens its sessions again: until it does, it hasn't, so a notification

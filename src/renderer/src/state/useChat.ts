@@ -59,6 +59,7 @@ import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
 import { isResumeTooLong, longChatItems, newestRows, rowsSince, settleRunning } from './longChat'
+import { CATCH_UP_FOCUS_MS, CATCH_UP_RELOAD_MS, CATCH_UP_SETTLE_MS, catchUpStep, newestRowId, tipOf } from './chatCatchUp'
 
 type Action =
   | { type: 'reset'; state: TranscriptState }
@@ -89,6 +90,27 @@ async function loadBoards(state: TranscriptState, storedId: string, profile: str
   }
 }
 
+/** Hermes' "session no longer live; retry resume" and "session disconnect interrupt settling". */
+const RESUME_UNSETTLED = [4007, 4009]
+const RESUME_RETRY_MS = [400, 1_200]
+
+/**
+ * `session.resume`, asked again when Hermes says the chat's live session is
+ * between two states (a socket that dropped mid-turn and came straight
+ * back can land there): the refusal asks for exactly that.
+ */
+async function resumeSettled(params: Record<string, unknown>): Promise<ResumeResult> {
+  for (const wait of RESUME_RETRY_MS) {
+    try {
+      return await gateway.rpc<ResumeResult>('session.resume', params)
+    } catch (e) {
+      if (!(e instanceof GatewayError) || !RESUME_UNSETTLED.includes(e.code as number)) throw e
+      await new Promise(resolve => setTimeout(resolve, wait))
+    }
+  }
+  return gateway.rpc<ResumeResult>('session.resume', params)
+}
+
 /**
  * A chat's resume. One Hermes refuses to resume whole (past
  * `sessions.max_resume_messages`) resumes compact, which still takes
@@ -101,12 +123,12 @@ async function resumeChat(
   profile: string | undefined
 ): Promise<{ result: ResumeResult; rows: HistoryRow[] | null }> {
   try {
-    return { result: await gateway.rpc<ResumeResult>('session.resume', params), rows: null }
+    return { result: await resumeSettled(params), rows: null }
   } catch (e) {
     if (!isResumeTooLong(e)) throw e
     const compact = { ...params, omit_messages: true }
     const http = (method: 'GET', path: string) => gateway.http(method, path)
-    const result = await gateway.rpc<ResumeResult>('session.resume', compact)
+    const result = await resumeSettled(compact)
     const stored = result.stored_session_id ?? storedId
     const rows = await newestRows(http, stored, profile).catch(() => [] as HistoryRow[])
     // No rows to draw: the refusal, which says what to do, beats a note over nothing.
@@ -333,6 +355,13 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const openingChat = useRef<Promise<void> | null>(null)
   /** The chat whose transcript the store holds, so a switch while offline doesn't show the last chat's rows (desktop#283). */
   const drawn = useRef<string | null>(storedId)
+  /** The chat a dropped connection left on screen: its rows stay drawn while the resume after the drop runs. */
+  const dropped = useRef<string | null>(null)
+  /** The newest stored row the transcript accounts for, and whether a turn followed live wrote since (chatCatchUp.ts). */
+  const drawnTip = useRef<number | null>(null)
+  const followedLive = useRef(false)
+  const reloadedAt = useRef(0)
+  const catchingUp = useRef(false)
   const chatRef = useRef(chat)
   chatRef.current = chat
   /** True only for a connected, unsaved new chat (never while an existing chat is still resuming). */
@@ -354,6 +383,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // (desktop#201). It also drops what this re-run's cleanup just kept: React runs that first.
     if (!connected) forgetTranscripts(host)
     // A chat just created here: its first turn is already drawn, so no resume, but leaving it keeps it.
+    // Only while the socket that made it lasts: after a drop the new socket hears nothing of the chat
+    // until it resumes it, so a turn running through the drop would never show its reply (desktop#471).
+    if (!connected) created.current = null
     if (storedId && storedId === created.current) {
       drawn.current = storedId
       return () => keepTranscript(storedId, profile, transcriptRef.current, host)
@@ -363,6 +395,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     liveId.current = null
     openingChat.current = null
     draftOverrides.current = {}
+    drawnTip.current = null
+    followedLive.current = false
     // A create still out belongs to the chat that just left: a pick in this one mustn't wait on it and be dropped.
     creating.current = null
     // A resume this re-run abandons can't clear it any more: its finally is fenced by the ticket.
@@ -380,11 +414,14 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       // The chat that was open stays drawn through a drop; another one picked meanwhile starts blank.
       if (drawn.current !== storedId) dispatch({ type: 'reset', state: emptyTranscript })
       drawn.current = storedId
+      dropped.current = storedId
       return
     }
     setLoading(true)
     // A chat left a moment ago draws as it was while its resume runs, which replaces it (desktop#201).
-    const cached = keptTranscript(storedId, profile, host)
+    // So does the chat a drop left on screen: it isn't blanked while it's read again.
+    const cached = keptTranscript(storedId, profile, host) ?? (dropped.current === storedId && drawn.current === storedId ? transcriptRef.current : null)
+    dropped.current = null
     drawn.current = storedId
     dispatch({ type: 'reset', state: cached ?? emptyTranscript })
     const params: Record<string, unknown> = { session_id: storedId, cols: 96, source: 'desktop' }
@@ -408,6 +445,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         }
         state = withPendingConnection(state, result)
         dispatch({ type: 'reset', state })
+        drawnTip.current = tipOf(rows ?? result.messages)
+        // A turn still running is followed from here, and stores its rows as it goes.
+        followedLive.current = result.running === true
         setQueue(queueFrom(result.pending) ?? [])
         if (!rows) void loadBoards(state, result.stored_session_id ?? storedId, profile, () => ticket === request.current, dispatch)
         // How full the window is, before the first reply ticks it.
@@ -461,6 +501,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           if (typeof title === 'string') setChat(c => ({ ...c, title }))
           return
         }
+        // What a turn followed here stores isn't news to this chat (chatCatchUp.ts).
+        followedLive.current = true
         if (STREAMING_DELTAS.has(event.type)) {
           deltas.current.push(event)
           // A hidden or minimized window gets no frames: a timer flushes there instead, so deltas never pile up.
@@ -541,14 +583,93 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       liveId.current = result.session_id
       setChat(c => ({ ...c, liveId: result.session_id, title: result.info?.title ?? c.title }))
       setError(null)
-      const state = withPendingConnection(resumedTranscript(result, rows), result)
+      // The details the rows on screen already had come along, so only new ones are read.
+      let state = withKeptDetails(resumedTranscript(result, rows), transcriptRef.current)
+      if (result.running && result.inflight?.assistant) state = applyEvent(state, { type: 'message.delta', payload: { text: result.inflight.assistant } })
+      state = withPendingConnection(state, result)
       dispatch({ type: 'reset', state })
+      drawnTip.current = tipOf(rows ?? result.messages)
+      followedLive.current = result.running === true
       setQueue(queueFrom(result.pending) ?? [])
       if (!rows) void loadBoards(state, result.stored_session_id ?? stored, profile, () => ticket === request.current, dispatch)
     } catch {
       // The chat as drawn stays; the next open reads it.
     }
   }, [profile, sessionAuthority])
+
+  /**
+   * Reads the chat again when its newest stored row is one it hasn't drawn: a turn another process
+   * ran in it, or a note (chatCatchUp.ts). Answers how long to wait before asking again, when it
+   * read the chat too recently to read it now.
+   */
+  const catchUp = useCallback(async (): Promise<number | null> => {
+    const stored = chatRef.current.storedId
+    if (!stored || !liveId.current || openingChat.current || catchingUp.current) return null
+    // A turn running here is followed live, and a send on its way draws its own row: neither is read over.
+    const busy = () => {
+      const state = transcriptRef.current
+      return state.running || !!state.held?.length || state.items.some(item => item.kind === 'user' && item.pending)
+    }
+    if (busy()) return null
+    const ticket = request.current
+    catchingUp.current = true
+    try {
+      const tip = await newestRowId((method, path) => gateway.http(method, path), stored, profile)
+      if (ticket !== request.current || busy()) return null
+      const step = catchUpStep(tip, drawnTip.current, followedLive.current)
+      if (step === 'none') return null
+      if (step === 'adopt') {
+        drawnTip.current = tip
+        followedLive.current = false
+        return null
+      }
+      // A turn elsewhere stores rows as it goes: the chat is read again at most this often while it does.
+      const wait = reloadedAt.current + CATCH_UP_RELOAD_MS - Date.now()
+      if (wait > 0) return wait
+      reloadedAt.current = Date.now()
+      await reloadHistory()
+      return null
+    } catch {
+      // The next change asks again.
+      return null
+    } finally {
+      catchingUp.current = false
+    }
+  }, [profile, reloadHistory])
+
+  // The store moved, or the window came forward: rows written elsewhere are read in.
+  useEffect(() => {
+    if (!connected || !storedId) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let asked = 0
+    const soon = (ms: number) => {
+      if (timer) return
+      timer = setTimeout(() => {
+        timer = null
+        void catchUp().then(again => {
+          if (again !== null) soon(again)
+        })
+      }, ms)
+    }
+    const off = window.conduit.onEvent(event => {
+      if (event.type === 'sessions.changed') soon(CATCH_UP_SETTLE_MS)
+      // The events between two sockets couldn't be replayed: the chat as Hermes has it now.
+      else if (event.type === 'session.replay_gap' && event.session_id && event.session_id === liveId.current) void reloadHistory()
+    })
+    const forward = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - asked < CATCH_UP_FOCUS_MS) return
+      asked = Date.now()
+      soon(0)
+    }
+    window.addEventListener('focus', forward)
+    document.addEventListener('visibilitychange', forward)
+    return () => {
+      off()
+      window.removeEventListener('focus', forward)
+      document.removeEventListener('visibilitychange', forward)
+      if (timer) clearTimeout(timer)
+    }
+  }, [connected, storedId, catchUp, reloadHistory])
 
   /**
    * Waits out the open chat's resume, if one runs. A stored chat whose open failed is opened once more, so

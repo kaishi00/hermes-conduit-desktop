@@ -73,6 +73,22 @@ describe('a live turn', () => {
     expect(state).toMatchObject({ running: true, status: 'reading files' })
   })
 
+  it('shows a hidden turn\'s whole reply after an earlier reply (no message of the user\'s between them)', () => {
+    const stored: TranscriptState = { items: fromHistory([{ role: 'user', text: 'Hi', row_id: 1 }, { role: 'assistant', text: 'Hello.', row_id: 2 }]), running: false }
+    const state = play([{ type: 'message.start' }, { type: 'message.complete', payload: { text: 'Your report is ready.' } }], stored)
+    expect(state.items.map(i => ('text' in i ? i.text : ''))).toEqual(['Hi', 'Hello.', 'Your report is ready.'])
+    expect(state.turnFrom).toBeUndefined()
+  })
+
+  it('does not repeat a hidden turn\'s streamed reply at its end', () => {
+    const stored: TranscriptState = { items: fromHistory([{ role: 'user', text: 'Hi', row_id: 1 }, { role: 'assistant', text: 'Hello.', row_id: 2 }]), running: false }
+    const state = play(
+      [{ type: 'message.start' }, { type: 'message.delta', payload: { text: 'Ready.' } }, { type: 'message.complete', payload: { text: 'Ready.' } }],
+      stored
+    )
+    expect(kinds(state)).toEqual(['user', 'assistant', 'assistant'])
+  })
+
   it('uses the final text when nothing streamed', () => {
     const state = play([{ type: 'message.start' }, { type: 'message.complete', payload: { text: 'Done.' } }])
     expect(state.items).toMatchObject([{ kind: 'assistant', text: 'Done.' }])

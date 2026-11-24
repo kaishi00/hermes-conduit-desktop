@@ -291,6 +291,12 @@ export interface TranscriptState {
    * at their turn's `message.start`, which names the admission.
    */
   held?: { admission: string; item: UserItem }[]
+  /**
+   * Where the running turn's rows begin, from its `message.start`. A turn
+   * with no row of the user's (a hidden one) has nothing else to say which
+   * replies are its own.
+   */
+  turnFrom?: number
 }
 
 export const emptyTranscript: TranscriptState = { items: [], running: false }
@@ -546,7 +552,7 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       return card ? showConnection(state, card) : state
     }
     case 'message.start': {
-      const started = { ...state, running: true, status: undefined, items: confirmPending(state.items) }
+      const started = { ...state, running: true, status: undefined, items: confirmPending(state.items), turnFrom: state.items.length }
       const admission = event.admission_id ?? str(payload.admission_id)
       return admission ? releaseHeld(started, admission) : started
     }
@@ -610,7 +616,9 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       let items = seal(confirmPending(state.items))
       const finalText = silenceShown(str(payload.text) ?? str(payload.rendered) ?? '')
       const lastUser = items.map(i => i.kind).lastIndexOf('user')
-      const repliedThisTurn = items.slice(lastUser + 1).some(i => i.kind === 'assistant')
+      // A hidden turn has no row of the user's: its replies are the ones since its start, not since
+      // the last message, or a reply sent whole (no deltas) after an earlier one is dropped (desktop#432).
+      const repliedThisTurn = items.slice(Math.max(lastUser + 1, state.turnFrom ?? 0)).some(i => i.kind === 'assistant')
       if (finalText?.trim() && !repliedThisTurn) {
         items = [...items, { kind: 'assistant', key: nextKey('a'), text: finalText.trim(), at: Date.now(), streaming: false }]
       }
@@ -623,7 +631,7 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       } else if (status === 'interrupted') {
         items = [...items, { kind: 'notice', key: nextKey('n'), text: t('Stopped'), tone: 'info' }]
       }
-      return { ...state, items, running: false, status: undefined }
+      return { ...state, items, running: false, status: undefined, turnFrom: undefined }
     }
     case 'message.reaction': {
       // The agent reacted (or a reaction changed elsewhere): the row's whole list. A live reply

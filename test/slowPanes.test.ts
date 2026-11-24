@@ -131,6 +131,31 @@ describe('Settings > Usage', () => {
     }
   })
 
+  it('asks again on a quick return when the quota read failed, so no older quota is drawn as current (desktop#477)', async () => {
+    const props = { bots: [{ name: 'default', title: 'Hermes' }], profile: 'default', onBack: () => {} }
+    const first = await mount(USAGE_PANE, 'UsagePage', props)
+    await settle()
+    await act(async () => {
+      pending.get('/api/analytics/usage?days=30')!({ totals: { total_input: 1000, total_output: 500 } })
+      pending.get('/api/analytics/models?days=30')!({ models: [] })
+      pending.get('rpc:model.options')!(Promise.reject(new Error('rate limited')))
+    })
+    await settle()
+    first.unmount()
+
+    asked.length = 0
+    pending.clear()
+    const again = await mount(USAGE_PANE, 'UsagePage', props)
+    await settle()
+    try {
+      // The totals it kept draw at once, and the reads go out again.
+      expect(text(again.host)).toContain('Totals')
+      expect(asked.map(a => a.path)).toContain('rpc:model.options')
+    } finally {
+      again.unmount()
+    }
+  })
+
   it('drops a read for the period left when the period come back to draws its kept answer', async () => {
     const view = await mount(USAGE_PANE, 'UsagePage', { bots: [{ name: 'default', title: 'Hermes' }], profile: 'default', onBack: () => {} })
     await settle()
@@ -216,6 +241,26 @@ describe('Capabilities > Plugins', () => {
 })
 
 describe('Capabilities > Plugins, one answer at a time', () => {
+  it('says the catalog is still working when it alone takes longer than usual (desktop#477)', async () => {
+    vi.useFakeTimers()
+    const view = await mount(PLUGINS_TAB, 'PluginsTab', { profile: 'default', query: '', host: undefined })
+    await settle()
+    try {
+      await act(async () => {
+        pending.get('/api/dashboard/plugins/hub')!({ plugins: [{ name: 'zeta', source: 'git', can_update_git: true }] })
+      })
+      await settle()
+      expect(text(view.host)).toContain('Loading…')
+      act(() => void vi.advanceTimersByTime(10_000))
+      await settle()
+      expect(text(view.host)).toContain('This is taking longer than usual.')
+      expect(text(view.host)).not.toContain('Loading…')
+    } finally {
+      view.unmount()
+    }
+  })
+
+
   it('draws the installed list while the catalog is still out', async () => {
     // Catalog is a separate route, and the slower one: the list must not wait for it.
     const view = await mount(PLUGINS_TAB, 'PluginsTab', { profile: 'default', query: '', host: undefined })

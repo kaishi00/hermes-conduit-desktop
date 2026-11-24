@@ -21,6 +21,7 @@ import { ContextPanel } from './components/ContextPanel'
 import { RoomView } from './components/RoomView'
 import { Tasks } from './components/Tasks'
 import { PulseHostChips, PulsePage } from './components/PulsePage'
+import { PulseSettings } from './components/PulseSettings'
 import { FilesPanel } from './components/FilesPanel'
 import { ColumnDivider } from './components/ColumnDivider'
 import { LastCallTrace } from './components/LastCallTrace'
@@ -3080,7 +3081,7 @@ function Settings({
   const [readAloudOn, setReadAloudOn] = useState(readsRepliesAloud)
   const [speed, setSpeed] = useState(readAloudSpeed)
   const [page, setPage] = useState<
-    'main' | 'usage' | 'models' | 'capabilities' | 'memory' | 'workspace' | 'advanced' | 'chat' | 'plugin' | 'vault' | 'appearance' | 'multiplayer' | 'voice' | 'calls'
+    'main' | 'usage' | 'models' | 'capabilities' | 'memory' | 'workspace' | 'advanced' | 'chat' | 'plugin' | 'vault' | 'appearance' | 'multiplayer' | 'voice' | 'calls' | 'pulse'
   >('main')
   // Back from a page lands where Settings was, on the row it was opened from.
   const pane = useRef<HTMLElement>(null)
@@ -3240,6 +3241,13 @@ function Settings({
     return (
       <SettingsPane pane={pane}>
         <ConduitPluginPage onBack={() => setPage('main')} />
+      </SettingsPane>
+    )
+  // Pulse's settings, also behind the Pulse page's gear: Hermes and the plugin say "Settings > Pulse" (desktop#398).
+  if (page === 'pulse')
+    return (
+      <SettingsPane pane={pane}>
+        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} />
       </SettingsPane>
     )
   if (page === 'chat')
@@ -3407,6 +3415,7 @@ function Settings({
           {linksServed ? (
             <SettingsLink label={t('Multiplayer')} detail={t("Rooms with other people's agents")} disabled={status.phase !== 'open'} onOpen={() => setPage('multiplayer')} />
           ) : null}
+          <SettingsLink label={t('Pulse')} detail={t('When Pulse speaks up')} disabled={status.phase !== 'open'} onOpen={() => setPage('pulse')} />
           <SettingsLink label={t('Conduit plugin')} detail={t('Version, updates and what it does here')} disabled={status.phase !== 'open'} onOpen={() => setPage('plugin')} />
         </dl>
       </section>

@@ -70,6 +70,8 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
   // The hub route takes ten seconds or more on a host with a large library, and a bare
   // "Loading…" for that long reads as a frozen tab (desktop#444).
   const slow = useSlowWait(!installed && !error)
+  // The catalog is the slower read on a large host, and waits under its own heading.
+  const catalogSlow = useSlowWait(!catalog && !catalogFailed)
 
   const generation = useRef(0)
 
@@ -105,10 +107,13 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
           setCatalogFailed(false)
           keepCatalog(value)
         } catch {
-          setCatalogFailed(true)
+          if (current()) setCatalogFailed(true)
         }
       },
-      () => setCatalogFailed(true)
+      // A read a newer load replaced says nothing about the one still out.
+      () => {
+        if (current()) setCatalogFailed(true)
+      }
     )
     const manageRead = gateway.rpc('plugins.manage', { action: 'list', profile }).then(
       value => {
@@ -120,6 +125,10 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
     )
     await Promise.allSettled([hubRead, catalogRead, manageRead])
   }, [profile])
+
+  // The load of the profile on screen now: a change that settles after a profile switch reloads that one.
+  const latestLoad = useRef(load)
+  latestLoad.current = load
 
   useEffect(() => {
     // What the tab listed last time on this dashboard and profile, until Hermes answers again.
@@ -137,7 +146,7 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
       void tell(message(e))
     } finally {
       setBusy(null)
-      void load()
+      void latestLoad.current()
     }
   }
 
@@ -286,7 +295,7 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
         <h2>{t('Plugin catalog')}</h2>
         <p className="meta">{t("Reviewed plugins from Hermes' catalog.")}</p>
         {catalogFailed && !catalog ? <p className="meta">{t("Couldn't load the catalog.")}</p> : null}
-        {!catalog && !catalogFailed ? <p className="meta">{t('Loading…')}</p> : null}
+        {!catalog && !catalogFailed ? <p className="meta">{catalogSlow ? t('This is taking longer than usual.') : t('Loading…')}</p> : null}
         {catalog && !available.length ? <p className="meta">{t('No matching plugins')}</p> : null}
         {available.map(entry => {
           const expanded = open === `c:${entry.name}`
