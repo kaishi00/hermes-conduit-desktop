@@ -85,7 +85,7 @@ import { CANCEL_JOB, INTERRUPT_JOB, LIST_JOBS, START_JOB, VoiceJobs, type VoiceJ
 import { dashboardProfilePath, dashboardProfileQuery } from '../state/dashboardProfile'
 import { RECONNECT_ATTEMPTS, isRefusalClose, reconnectDelayMs } from '@shared/liveReconnect'
 import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
-import { ECHO_TAIL_MS, SpeakerGate, echoDelay, micLatency } from '../state/speakerGate'
+import { ECHO_TAIL_MS, SpeakerGate, echoDelay, micLatency, talksOver } from '../state/speakerGate'
 
 interface Props {
   profile?: string
@@ -229,7 +229,8 @@ export function LocalLiveCall({
   const sources = useRef(new Set<AudioBufferSourceNode>())
   const playUntil = useRef(0)
   // The microphone on the speakers: closed while the server's reply arrives and plays.
-  const gate = useRef(new SpeakerGate())
+  const gate = useRef<SpeakerGate>(null!)
+  gate.current ??= new SpeakerGate(talksOver())
   const echo = useRef(0)
   const ended = useRef(false)
   const ready = useRef(false)
@@ -895,7 +896,11 @@ export function LocalLiveCall({
         const node = ctx.createScriptProcessor(2048, 1, 1)
         processor.current = node
         echo.current = echoDelay(ctx, micLatency(stream), node.bufferSize / ctx.sampleRate)
-        trace.current?.step(`Microphone closed while a reply arrives and plays, and ${Math.round(echo.current * 1000 + ECHO_TAIL_MS)} ms after`)
+        trace.current?.step(
+          gate.current.talkOver
+            ? 'Microphone open while a reply plays (talk over it on the speaker)'
+            : `Microphone closed while a reply arrives and plays, and ${Math.round(echo.current * 1000 + ECHO_TAIL_MS)} ms after`
+        )
         node.onaudioprocess = event => {
           if (!ready.current || ended.current || mutedRef.current) return
           // While the server talks on the speakers, its own voice isn't sent back.

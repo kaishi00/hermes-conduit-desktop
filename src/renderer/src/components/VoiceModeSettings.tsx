@@ -76,6 +76,7 @@ import { Select } from './Select'
 import { LiveCallStyleSettings } from './LiveCallStyleSettings'
 import { HermesSpeechSettings } from './HermesSpeechSettings'
 import { continuousConversation, pushToTalk, setContinuousConversation, setPushToTalk } from '../state/classicVoice'
+import { setTalksOver, talksOver } from '../state/speakerGate'
 
 /** Settings > Voice's mode, after the phone's Voice mode: Classic, or GPT-Live with how it's paid for. */
 export function VoiceModeSettings({ profile }: { profile?: string }) {
@@ -89,6 +90,7 @@ export function VoiceModeSettings({ profile }: { profile?: string }) {
   const [memory, setMemory] = useState(sendsMemory)
   const [persona, setPersona] = useState(sendsPersona)
   const [saveCalls, setSaveCalls] = useState(savesCalls)
+  const [talkOver, setTalkOver] = useState(talksOver)
   const [holdToTalk, setHoldToTalk] = useState(pushToTalk)
   const [continuous, setContinuous] = useState(continuousConversation)
   const [geminiMemory, setGeminiMemory] = useState(geminiSendsMemory)
@@ -553,6 +555,26 @@ export function VoiceModeSettings({ profile }: { profile?: string }) {
       ) : null}
       {mode === 'local' ? <LocalLiveSettings profile={profile} /> : null}
       {isLive(mode) ? <ProviderConsentRow mode={mode} /> : null}
+      {mode !== 'classic' && mode !== 'gpt' ? (
+        <>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={talkOver}
+              onChange={e => {
+                setTalkOver(e.target.checked)
+                setTalksOver(e.target.checked)
+              }}
+            />
+            {t('Talk over it on the speaker')}
+          </label>
+          <p className="meta settings-caption">
+            {t(
+              "Experimental. Keeps the microphone open while the call talks on your computer's speakers, with the app's echo cancellation, so you can cut in by speaking. On headphones it's safe to turn on. Turn it off if replies keep cutting themselves off. With it off, the microphone is closed while a reply speaks, and Interrupt on the call stops it. Shared by Gemini Live, Qwen Live, Grok Live and Local Live. Applies to the next conversation."
+            )}
+          </p>
+        </>
+      ) : null}
       {mode !== 'classic' ? (
         <>
           <label className="toggle">

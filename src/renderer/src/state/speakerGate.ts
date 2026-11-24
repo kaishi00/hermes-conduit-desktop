@@ -25,7 +25,30 @@ export function echoDelay(output: Output, micLatency: unknown, bufferSeconds: nu
 /** The latency the microphone's track reports, where it reports one. */
 export const micLatency = (stream: MediaStream): unknown => (stream.getAudioTracks()[0]?.getSettings() as { latency?: unknown } | undefined)?.latency
 
+const TALK_OVER_KEY = 'conduit.voice.speakerBargeIn'
+
+/** "Talk over it on the speaker", off unless turned on: the phone's setting, kept on this computer. */
+export function talksOver(): boolean {
+  try {
+    return localStorage.getItem(TALK_OVER_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function setTalksOver(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(TALK_OVER_KEY, 'true')
+    else localStorage.removeItem(TALK_OVER_KEY)
+  } catch {
+    // Off next time.
+  }
+}
+
 export class SpeakerGate {
+  /** `talkOver`: the microphone stays open while the reply speaks, and the capture's echo cancellation keeps the reply out of it. */
+  constructor(readonly talkOver = false) {}
+
   /** The reply is still arriving: more of it may follow what has played. */
   private arriving = false
   /** Interrupt was pressed while the reply was arriving: the rest of that reply isn't played. */
@@ -78,6 +101,7 @@ export class SpeakerGate {
 
   /** Whether the microphone's samples are held back now. */
   holds(output: Output | null, playUntil: number, delay: number): boolean {
+    if (this.talkOver) return false
     if (this.arriving) return true
     return !!output && output.currentTime < playUntil + delay + ECHO_TAIL_MS / 1000
   }

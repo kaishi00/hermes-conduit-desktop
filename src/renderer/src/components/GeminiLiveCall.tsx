@@ -79,7 +79,7 @@ import { RECONNECT_ATTEMPTS, isRefusalClose, isResumptionLost, reconnectDelayMs,
 import { LiveHandoff } from '@shared/liveHandoff'
 import { askedQuestionsForCall } from '../state/askedForCalls'
 import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
-import { ECHO_TAIL_MS, SpeakerGate, echoDelay, micLatency } from '../state/speakerGate'
+import { ECHO_TAIL_MS, SpeakerGate, echoDelay, micLatency, talksOver } from '../state/speakerGate'
 
 interface Props {
   profile?: string
@@ -221,7 +221,8 @@ export function GeminiLiveCall({
   const sources = useRef(new Set<AudioBufferSourceNode>())
   const playUntil = useRef(0)
   // The microphone on the speakers: closed while the model's turn arrives and plays.
-  const gate = useRef(new SpeakerGate())
+  const gate = useRef<SpeakerGate>(null!)
+  gate.current ??= new SpeakerGate(talksOver())
   const echo = useRef(0)
   const ended = useRef(false)
   const ending = useRef(false)
@@ -841,7 +842,11 @@ export function GeminiLiveCall({
         const source = input.createMediaStreamSource(stream)
         const node = input.createScriptProcessor(1024, 1, 1)
         echo.current = echoDelay(speaker.current ?? input, micLatency(stream), node.bufferSize / input.sampleRate)
-        trace.current?.step(`Microphone closed while a reply arrives and plays, and ${Math.round(echo.current * 1000 + ECHO_TAIL_MS)} ms after`)
+        trace.current?.step(
+          gate.current.talkOver
+            ? 'Microphone open while a reply plays (talk over it on the speaker)'
+            : `Microphone closed while a reply arrives and plays, and ${Math.round(echo.current * 1000 + ECHO_TAIL_MS)} ms after`
+        )
         processor.current = node
         node.onaudioprocess = event => {
           if (!ready.current || ended.current || ending.current || mutedRef.current) return

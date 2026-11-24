@@ -84,3 +84,15 @@ describe("a live call's microphone on the speakers", () => {
     expect(gate.audio()).toBe(true)
   })
 })
+
+describe('talk over it on the speaker', () => {
+  it('keeps the microphone open while a reply arrives and plays', () => {
+    const gate = new SpeakerGate(true)
+    gate.audio()
+    expect(gate.holds(at(1), 5, 0.2)).toBe(false)
+    // The call still shows the reply speaking, and Interrupt still drops it.
+    expect(gate.replying).toBe(true)
+    gate.interrupt()
+    expect(gate.audio()).toBe(false)
+  })
+})
