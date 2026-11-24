@@ -232,6 +232,8 @@ export function LocalLiveCall({
   const gate = useRef<SpeakerGate>(null!)
   gate.current ??= new SpeakerGate(talksOver())
   const echo = useRef(0)
+  /** The words shown of the reply now arriving. */
+  const shown = useRef('')
   const ended = useRef(false)
   const ready = useRef(false)
   // The greeting goes once per call, never on a reconnect's check.
@@ -752,15 +754,24 @@ export function LocalLiveCall({
         return
       case 'output':
         askFirst.current.modelSpoke()
-        if (!checking.current && gate.current.words(responding.current)) assistantLine(event.text)
+        if (checking.current || !gate.current.words(responding.current)) return
+        shown.current += event.text
+        assistantLine(event.text)
         return
-      case 'outputDone':
+      case 'outputDone': {
         if (checking.current) return
+        const heard = shown.current
+        shown.current = ''
+        // Interrupted: the line and the saved call keep what was heard of it, not the words nobody played.
+        if (gate.current.dropped) {
+          keep('assistant', heard)
+          setLines(current => current.map(line => (line.open && line.who === 'assistant' ? { ...line, open: false } : line)))
+          return
+        }
         keep('assistant', event.text)
-        // Interrupted: the line keeps what was heard of it.
-        if (gate.current.dropped) setLines(current => current.map(line => (line.open && line.who === 'assistant' ? { ...line, open: false } : line)))
-        else assistantLine(event.text, true)
+        assistantLine(event.text, true)
         return
+      }
       default:
         return
     }
