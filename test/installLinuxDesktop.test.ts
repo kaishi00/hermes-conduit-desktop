@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -15,7 +15,10 @@ afterEach(() => {
 function fixture(desktopName?: string) {
   const base = mkdtempSync(join(tmpdir(), 'conduit-launcher-'))
   temporary.push(base)
-  const root = join(base, 'source with space " $ ` %')
+  // Every reserved character the installer escapes, and '=' which /usr/bin/env would read as an
+  // assignment. A literal backslash cannot live in the checkout: node refuses an ESM entry whose
+  // path holds one (ERR_INVALID_MODULE_SPECIFIER), so the round-trip test below covers its math.
+  const root = join(base, 'source with space " $ ` % =')
   const data = join(base, 'data')
   mkdirSync(join(root, 'scripts'), { recursive: true })
   mkdirSync(join(root, 'node_modules/electron/dist'), { recursive: true })
@@ -28,11 +31,14 @@ function fixture(desktopName?: string) {
   chmodSync(electron, 0o755)
   writeFileSync(join(root, 'build/icon.png'), '')
   writeFileSync(join(root, 'out/main/index.js'), '')
-  const install = (xdg = data) => spawnSync(process.execPath, [join(root, 'scripts/install-linux-desktop.mjs')], {
-    encoding: 'utf8', env: { ...process.env, XDG_DATA_HOME: xdg, XDG_DATA_DIRS: join(base, 'system') }
+  const install = (xdg = data, extraEnv: NodeJS.ProcessEnv = {}) => spawnSync(process.execPath, [join(root, 'scripts/install-linux-desktop.mjs')], {
+    encoding: 'utf8', env: { ...process.env, XDG_DATA_HOME: xdg, XDG_DATA_DIRS: join(base, 'system'), ...extraEnv }
+  })
+  const run = (env: NodeJS.ProcessEnv) => spawnSync(process.execPath, [join(root, 'scripts/install-linux-desktop.mjs')], {
+    encoding: 'utf8', env: { ...process.env, XDG_DATA_DIRS: join(base, 'system'), ...env }
   })
   const entry = join(data, 'applications', `${desktopName || 'conduit'}.desktop`)
-  return { base, root, data, entry, install }
+  return { base, root, data, entry, install, run }
 }
 
 describe.skipIf(process.platform !== 'linux')('Linux source launcher', () => {
@@ -114,5 +120,123 @@ describe.skipIf(process.platform !== 'linux')('Linux source launcher', () => {
     expect(rejected.status).not.toBe(0)
     expect(rejected.stderr).toContain('absolute path')
     expect(existsSync(f.entry)).toBe(false)
+  })
+
+  it('escapes every reserved character so the two unescapes restore the paths', () => {
+    const f = fixture()
+    expect(f.install().status).toBe(0)
+    const entry = readFileSync(f.entry, 'utf8')
+    const field = (key: string) => entry.split('\n').find(line => line.startsWith(`${key}=`))!.slice(key.length + 1)
+    // The desktop entry unescapes its value once, then Exec splits quoted arguments and unescapes
+    // each: both halves are undone here in that order, as a launcher does them, and what comes out
+    // has to be the path that went in.
+    // The entry spec's escapes, as a launcher undoes them: \s, \n, \t, \r and \\.
+    const escapes: Record<string, string> = { s: ' ', n: '\n', t: '\t', r: '\r', '\\': '\\' }
+    const entryUnescape = (text: string) =>
+      text.replace(/\\([sntr\\])/g, (_match, char: string) => escapes[char] ?? char)
+    const execArgs = (value: string) => {
+      const text = entryUnescape(value)
+      const args: string[] = []
+      let current = ''
+      let quoted = false
+      let started = false
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i]
+        if (char === '"') quoted = !quoted
+        else if (char === '\\' && i + 1 < text.length) current += text[++i]
+        else if (char === '%' && text[i + 1] === '%') {
+          current += '%'
+          i++
+        }
+        else if (char === ' ' && !quoted) {
+          if (started) args.push(current)
+          current = ''
+          started = false
+          continue
+        } else current += char
+        started = true
+      }
+      if (started) args.push(current)
+      return args
+    }
+    expect(execArgs(field('Exec'))).toEqual([
+      '/bin/sh',
+      '-c',
+      'exec "$0" "$@"',
+      join(f.root, 'node_modules/electron/dist/electron'),
+      f.root,
+      '%u'
+    ])
+    expect(entryUnescape(field('Path'))).toBe(f.root)
+    expect(entryUnescape(field('Icon'))).toBe(join(f.root, 'build/icon.png'))
+  })
+
+  it('names the checkout apart from the packaged app', () => {
+    const f = fixture()
+    expect(f.install().status).toBe(0)
+    const entry = readFileSync(f.entry, 'utf8')
+    expect(entry).toContain('Name=Conduit (source)')
+    // Neither env (it reads a '=' in the path as an assignment) nor the bare electron path
+    // (GLib refuses a '%' in the program position) can carry every legal checkout.
+    expect(entry).not.toContain('Exec=/usr/bin/env')
+    expect(entry).toContain('Exec="/bin/sh" "-c"')
+  })
+
+  it('refuses a dangling symlink at its id with the friendly message, not a raw ENOENT', () => {
+    const f = fixture()
+    mkdirSync(join(f.data, 'applications'), { recursive: true })
+    symlinkSync(join(f.data, 'missing-entry.desktop'), f.entry)
+    const refused = f.install()
+    expect(refused.status).not.toBe(0)
+    expect(refused.stderr).toContain('already uses desktop id')
+    expect(refused.stderr).not.toContain('ENOENT')
+  })
+
+  it.each(['', '   '])('treats an empty or blank XDG_DATA_HOME (%j) as unset and falls back to the home directory', blank => {
+    const f = fixture()
+    const home = join(f.base, 'home')
+    const installed = f.run({ HOME: home, XDG_DATA_HOME: blank })
+    expect(installed.status, installed.stderr).toBe(0)
+    expect(existsSync(join(home, '.local/share/applications/conduit.desktop'))).toBe(true)
+  })
+
+  it('finds its own earlier entry through a symlinked directory, as GLib does', () => {
+    const f = fixture()
+    expect(f.install().status).toBe(0)
+    // The entry moves into a real directory that only a symlink under applications/ reaches.
+    const real = join(f.base, 'elsewhere')
+    mkdirSync(real, { recursive: true })
+    renameSync(f.entry, join(real, 'older.desktop'))
+    symlinkSync(real, join(f.data, 'applications/nested'))
+    const refused = f.install()
+    expect(refused.status).not.toBe(0)
+    expect(refused.stderr).toContain('already has a source launcher')
+    expect(existsSync(join(real, 'older.desktop'))).toBe(true)
+  })
+
+  it('refuses to install beside an entry it cannot read', () => {
+    const f = fixture()
+    mkdirSync(join(f.data, 'applications'), { recursive: true })
+    const locked = join(f.data, 'applications/old-source.desktop')
+    writeFileSync(locked, '[Desktop Entry]\nName=Old\n')
+    chmodSync(locked, 0o000)
+    const refused = f.install()
+    expect(refused.status).not.toBe(0)
+    expect(refused.stderr).toContain('Could not read')
+    expect(refused.stderr).toContain('old-source.desktop')
+    expect(existsSync(f.entry)).toBe(false)
+  })
+
+  it('reports the install even when refreshing the desktop database fails', () => {
+    const f = fixture()
+    const bin = join(f.base, 'bin')
+    mkdirSync(bin, { recursive: true })
+    writeFileSync(join(bin, 'update-desktop-database'), '#!/bin/sh\necho "database is locked" >&2\nexit 1\n')
+    chmodSync(join(bin, 'update-desktop-database'), 0o755)
+    const installed = f.install(undefined, { PATH: `${bin}:${process.env.PATH}` })
+    expect(installed.status, installed.stderr).toBe(0)
+    expect(installed.stdout).toContain(`Installed ${f.entry}`)
+    expect(installed.stderr).toContain('database is locked')
+    expect(existsSync(f.entry)).toBe(true)
   })
 })
