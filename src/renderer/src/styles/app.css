@@ -1072,10 +1072,19 @@ a:hover {
   cursor: default;
 }
 
+/* Stop is red with a white square, as the phone's (issue 402; Eric, 2026-11-24): the same red in both
+   themes, dark enough for the white square to read on (4.9:1). */
 .send.stop {
-  background: var(--surface-hover);
-  color: var(--text);
-  border: 1px solid var(--line-strong);
+  background: #d32f2f;
+  color: #fff;
+}
+
+.send.stop:hover {
+  background: #c62828;
+}
+
+.send.stop svg {
+  fill: currentColor;
 }
 
 /* Sign in ------------------------------------------------------------ */
