@@ -938,7 +938,7 @@ const Item = memo(function Item({
  * "4 steps · 12s", folded once the turn is done unless Keep tool cards
  * expanded is on, open while it runs; the reader's choice holds after.
  */
-function StepRun({
+export function StepRun({
   row,
   live,
   expandTools,
@@ -961,7 +961,7 @@ function StepRun({
   const thoughts = row.items.some(i => i.kind === 'thinking')
   const tools = row.items.some(i => i.kind === 'tool')
   return (
-    <div className={open ? 'step-run open' : 'step-run'} data-key={row.id}>
+    <div className={open ? 'step-run open' : 'step-run'} data-key={row.id} data-step-keys={row.items.map(item => item.key).join(' ')}>
       <button className="step-run-head" aria-expanded={open} onClick={() => setChoice(!open)}>
         <span className="step-run-icons" aria-hidden>
           {thoughts ? <Icon name="chats" /> : null}
@@ -991,13 +991,13 @@ function StepRun({
 }
 
 /** A step on its own, after the phone's singleExplained: its card, then what Hermes said about it when asked (Explain this step). */
-function LoneStep({ step, live, summaries, children }: { step: ToolItem; live: boolean; summaries: StepSummaries; children: React.ReactNode }) {
+export function LoneStep({ step, live, summaries, children }: { step: ToolItem; live: boolean; summaries: StepSummaries; children: React.ReactNode }) {
   const steps = [step]
   const summary = summaries.summary(steps)
   const lookingBack = summaries.lookingBack(steps)
   const explain = live || lookingBack ? undefined : summaries.explain(steps)
   return (
-    <div className="lone-step">
+    <div className="lone-step" data-key={step.key}>
       {children}
       {summary ? <p className="step-run-summary">{summary}</p> : null}
       {lookingBack ? (

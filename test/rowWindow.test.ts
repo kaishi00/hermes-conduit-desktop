@@ -133,3 +133,23 @@ describe('a window when a stored page is read in above the chat (desktop#291)', 
     expect(heldStart(rows('x', 'y'), 1, undefined)).toBe(1)
   })
 })
+
+describe('a jump to a step inside a run', () => {
+  it('finds the run that carries the step key', () => {
+    const container = document.createElement('div')
+    const run = document.createElement('div')
+    run.setAttribute('data-key', 'run-first')
+    run.setAttribute('data-step-keys', 'run-first run-second')
+    container.append(run)
+    expect(rowElement(container, 'run-second')).toBe(run)
+    expect(rowElement(container, 'not-there')).toBeNull()
+  })
+
+  it('finds a lone step that carries its own key', () => {
+    const container = document.createElement('div')
+    const step = document.createElement('div')
+    step.setAttribute('data-key', 'lone-tool')
+    container.append(step)
+    expect(rowElement(container, 'lone-tool')).toBe(step)
+  })
+})
