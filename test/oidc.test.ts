@@ -242,7 +242,8 @@ describe('native OAuth grant requests', () => {
   it.each([
     ['missing access token', { ...grant, access_token: '' }],
     ['unsafe access token', { ...grant, access_token: 'bad\r\nheader' }],
-    ['missing refresh token', { ...grant, refresh_token: '' }],
+    ['missing refresh token key', { ...grant, refresh_token: undefined }],
+    ['null refresh token', { ...grant, refresh_token: null }],
     ['missing provider', { ...grant, provider: ' ' }],
     ['string expiry', { ...grant, expires_at: '1900000000' }],
     ['null user ID', { ...grant, user_id: null }],
@@ -270,6 +271,26 @@ describe('native OAuth grant requests', () => {
     }
     await expect(refreshOidc('https://dashboard.example', grant, async () => Response.json(withoutUser)))
       .resolves.toEqual(withoutUser)
+  })
+
+  it('accepts an access-token-only grant with an empty refresh token (Authentik 2024.2+ without offline_access)', async () => {
+    const accessOnly = { ...grant, refresh_token: '' }
+    await expect(refreshOidc('https://dashboard.example', grant, async () => Response.json(accessOnly)))
+      .resolves.toEqual(accessOnly)
+  })
+
+  it('refreshing an access-token-only grant rejects without contacting the dashboard', async () => {
+    const fetchImpl = vi.fn()
+    const failure = refreshOidc('https://dashboard.example', { ...grant, refresh_token: '' }, fetchImpl)
+    await expect(failure).rejects.toMatchObject({ name: 'OidcError', status: 400, isRejected: true })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('skips revoke without a refresh handle', async () => {
+    const fetchImpl = vi.fn()
+    await expect(revokeOidc('https://dashboard.example', { ...grant, refresh_token: '' }, fetchImpl))
+      .resolves.toBeUndefined()
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
   it('limits streamed and declared response sizes', async () => {

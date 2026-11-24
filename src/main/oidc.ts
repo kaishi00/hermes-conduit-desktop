@@ -6,6 +6,7 @@ import { t } from '../shared/i18n'
 
 export interface OidcGrant {
   access_token: string
+  /** Refresh handle; '' on access-token-only sessions (the dashboard issued none). */
   refresh_token: string
   /** Unix seconds, as returned by the dashboard. */
   expires_at: number
@@ -63,7 +64,7 @@ function parseGrant(value: unknown): OidcGrant {
   const row = value as Record<string, unknown>
   if (
     !nonEmptyString(row.access_token) || !/^[\x21-\x7e]+$/.test(row.access_token) ||
-    !nonEmptyString(row.refresh_token) || !nonEmptyString(row.provider) ||
+    typeof row.refresh_token !== 'string' || !nonEmptyString(row.provider) ||
     typeof row.expires_at !== 'number' || !Number.isFinite(row.expires_at) ||
     (row.user_id !== undefined && typeof row.user_id !== 'string') ||
     (row.token_type !== undefined && (typeof row.token_type !== 'string' || row.token_type.toLowerCase() !== 'bearer'))
@@ -342,6 +343,13 @@ export async function oidcLogin(
 }
 
 export async function refreshOidc(baseUrl: string, grant: OidcGrant, fetchImpl: typeof fetch): Promise<OidcGrant> {
+  if (!grant.refresh_token) {
+    // Access-token-only session (the dashboard issued no refresh token — an IdP like
+    // Authentik 2024.2+ withholds one without offline_access): the dashboard's refresh
+    // endpoint requires a refresh token, so mirror its rejection and let the caller
+    // clear the grant for re-login instead of a doomed round-trip.
+    throw new OidcError(t('Your browser sign-in has expired. Sign in again.'), 400)
+  }
   return (await postNative(baseUrl, '/auth/native/refresh', {
     refresh_token: grant.refresh_token,
     provider: grant.provider
@@ -350,5 +358,6 @@ export async function refreshOidc(baseUrl: string, grant: OidcGrant, fetchImpl: 
 
 /** The caller clears local credentials even if this best-effort request fails. */
 export async function revokeOidc(baseUrl: string, grant: OidcGrant, fetchImpl: typeof fetch): Promise<void> {
+  if (!grant.refresh_token) return
   await postNative(baseUrl, '/auth/native/revoke', { refresh_token: grant.refresh_token }, fetchImpl, REVOKE_TIMEOUT_MS, false)
 }
