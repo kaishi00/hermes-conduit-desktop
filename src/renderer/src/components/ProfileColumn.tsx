@@ -66,18 +66,27 @@ export function ProfileColumn({
       window.removeEventListener('blur', close)
     }
   }, [menu])
+  // A face's name, beside it while the pointer or the keyboard is on it (desktop#395): the column
+  // scrolls and clips, so the name is placed in the window, level with its face.
+  const [named, setNamed] = useState<{ key: string; text: string; top: number; left: number } | null>(null)
+  const name = (key: string, text: string) => (e: { currentTarget: HTMLElement }) => {
+    const box = e.currentTarget.getBoundingClientRect()
+    setNamed({ key, text, top: box.top + box.height / 2, left: box.right + 10 })
+  }
+  const unname = (key: string) => () => setNamed(current => (current?.key === key ? null : current))
   const same = (a: string | null, b: string) => !!a && a.toLowerCase() === b.toLowerCase()
   // The chosen face scrolls into view, by its own tile (a namesake on another dashboard is never it).
   const column = useRef<HTMLDivElement>(null)
   useEffect(() => {
     column.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [profile, otherProfile])
+  const allLabel = t('All')
   return (
     <>
-      <div className="profile-column" role="tablist" aria-orientation="vertical" aria-label={t('Profiles')} ref={column}>
+      <div className="profile-column" role="tablist" aria-orientation="vertical" aria-label={t('Profiles')} ref={column} onScroll={() => setNamed(null)}>
         <button
           role="tab"
-          className="profile-column-all"
+          className={allLabel.length > 6 ? 'profile-column-all long longer' : allLabel.length > 3 ? 'profile-column-all long' : 'profile-column-all'}
           aria-selected={profile === null && !otherProfile}
           title={onShowInAll ? t('Right-click to choose which profiles All shows') : t('All')}
           onClick={() => (profile === null && onShowInAll ? onShowInAll() : onProfile(null))}
@@ -90,7 +99,7 @@ export function ProfileColumn({
               : undefined
           }
         >
-          {t('All')}
+          {allLabel}
         </button>
         <span className="profile-column-rule" aria-hidden="true" />
         {tiles.map(tile => {
@@ -106,7 +115,10 @@ export function ProfileColumn({
               className="profile-column-face"
               aria-selected={chosen}
               aria-label={badge ? `${bot.title}, ${badge.name}` : bot.title}
-              title={badge ? `${bot.title} · ${badge.name}` : bot.title}
+              onMouseEnter={name(tile.key, badge ? `${bot.title} · ${badge.name}` : bot.title)}
+              onMouseLeave={unname(tile.key)}
+              onFocus={name(tile.key, badge ? `${bot.title} · ${badge.name}` : bot.title)}
+              onBlur={unname(tile.key)}
               onClick={() => (tile.own ? onProfile(chosen ? null : bot.name) : chosen ? (onLeaveOther ? onLeaveOther() : onProfile(null)) : onOther?.(tile))}
               onContextMenu={
                 tile.own && onEditProfile
@@ -134,6 +146,11 @@ export function ProfileColumn({
           )
         })}
       </div>
+      {named && !menu ? (
+        <span className="profile-column-name" role="tooltip" style={{ top: named.top, left: named.left }}>
+          {named.text}
+        </span>
+      ) : null}
       {menu && onEditProfile ? (
         <div className="host-menu row-menu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 60) }}>
           <button role="menuitem" onClick={() => onEditProfile(menu.bot)}>

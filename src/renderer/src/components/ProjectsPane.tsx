@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { KeptScroll } from '../state/keptScroll'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { timeLabel } from '../state/chats'
-import { createParams, parseProjectChats, parseProjects, type Project, type ProjectChat, type ProjectDetail } from '../state/projects'
+import { createParams, gatherProjects, parseProjectChats, parseProjects, type Project, type ProjectChat, type ProjectDetail } from '../state/projects'
 import { HideListButton } from './HideListButton'
 import { Icon } from './icons'
 import { ask, tell } from '../state/dialogs'
+import { includedInAll, readLeftOut } from '../state/profileGroups'
 
 interface Props {
   /** The chat list's profile; null reads the active one. */
   profile: string | null
+  /** This dashboard's profiles: under All the page lists each one's projects, named by its profile. */
+  profiles?: readonly { name: string; title: string }[]
   connected: boolean
   selectedId: string | null
   onSelect: (chat: ProjectChat) => void
@@ -28,13 +31,23 @@ interface Props {
 const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /** The phone's Chats › Projects: Hermes' projects, then one project's chats by folder. */
-export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewChat, onClose, isUnread, runningIds, onHide }: Props) {
+export function ProjectsPane({ profile, profiles, connected, selectedId, onSelect, onNewChat, onClose, isUnread, runningIds, onHide }: Props) {
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<Project | null>(null)
   const [creating, setCreating] = useState(false)
   const [reload, setReload] = useState(0)
-  const withProfile = useCallback((params: Record<string, unknown>) => (profile ? { ...params, profile } : params), [profile])
+  // The open project's own profile under All, the list's otherwise.
+  const scope = open?.profile ?? profile
+  const withProfile = useCallback((params: Record<string, unknown>) => (scope ? { ...params, profile: scope } : params), [scope])
+  // Under All, the profiles All shows (Show in All), when there is more than one.
+  const names = (profiles ?? []).map(p => `${p.name}\u0000${p.title}`).join('\u0001')
+  const gathered = useMemo(() => {
+    if (profile !== null || !profiles || profiles.length < 2) return null
+    const shown = new Set(includedInAll(profiles.map(p => p.name), readLeftOut()).map(name => name.toLowerCase()))
+    const list = profiles.filter(p => shown.has(p.name.toLowerCase()))
+    return list.length > 1 ? list : null
+  }, [profile, names])
   // Back from a project lands where the list was: the list draws afresh, so it restores its kept spot.
   const listScroll = useRef<KeptScroll | null>(null)
   listScroll.current ??= new KeptScroll()
@@ -55,8 +68,23 @@ export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewCh
   useEffect(() => {
     if (!connected) return
     let live = true
+    if (gathered) {
+      void Promise.allSettled(gathered.map(p => gateway.rpc('projects.tree', { preview_limit: 3, profile: p.name }))).then(answers => {
+        if (!live) return
+        const read = answers.flatMap((answer, i) =>
+          answer.status === 'fulfilled' ? [{ profile: gathered[i]!.name, title: gathered[i]!.title, projects: parseProjects(answer.value, gathered[i]!.name) }] : []
+        )
+        const failed = answers.find(answer => answer.status === 'rejected')
+        if (!read.length && failed?.status === 'rejected') return setError(reason(failed.reason))
+        setProjects(gatherProjects(read))
+        setError(null)
+      })
+      return () => {
+        live = false
+      }
+    }
     gateway
-      .rpc('projects.tree', withProfile({ preview_limit: 3 }))
+      .rpc('projects.tree', profile ? { preview_limit: 3, profile } : { preview_limit: 3 })
       .then(response => {
         if (!live) return
         // Home, the chats in no project, leads the list as on the phone, with its own dot.
@@ -68,7 +96,7 @@ export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewCh
     return () => {
       live = false
     }
-  }, [connected, profile, withProfile, reload])
+  }, [connected, profile, gathered, reload])
 
   // Another profile's projects are its own.
   useEffect(() => setOpen(null), [profile])
@@ -133,7 +161,7 @@ export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewCh
           const unread = !!isUnread && project.previews.some(chat => chat.id !== selectedId && isUnread(chat))
           const running = !!runningIds && project.previews.some(chat => runningIds.has(chat.id))
           return (
-            <button key={project.id} className="row project-row" onClick={() => setOpen(project)}>
+            <button key={project.profile ? `${project.profile}:${project.id}` : project.id} className="row project-row" onClick={() => setOpen(project)}>
               <span className="row-top">
                 <span className="row-title">
                   <span className="project-icon">
@@ -141,6 +169,7 @@ export function ProjectsPane({ profile, connected, selectedId, onSelect, onNewCh
                     {unread ? <span className="unread-dot project-dot" role="img" aria-label={t('Unread')} /> : null}
                   </span>
                   {project.title}
+                  {project.profileTitle ? <span className="meta project-profile">{project.profileTitle}</span> : null}
                 </span>
                 <span className="meta row-time">{project.count}</span>
               </span>
@@ -245,7 +274,7 @@ function ProjectPage({
       .rpc('projects.project_sessions', withProfile({ project_id: project.id }))
       .then(response => {
         if (!live) return
-        setDetail(parseProjectChats(response, project.previews[0]?.profile))
+        setDetail(parseProjectChats(response, project.profile ?? project.previews[0]?.profile))
         setError(null)
       })
       .catch(e => live && setError(reason(e)))
@@ -318,6 +347,7 @@ function ProjectPage({
         {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
       <div className="project-meta">
+        {project.profileTitle ? <span className="meta project-profile">{project.profileTitle}</span> : null}
         {project.path ? <span className="meta project-path">{project.path}</span> : null}
         {!project.isAuto && !project.isHome ? (
           <span className="project-actions">

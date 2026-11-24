@@ -2370,10 +2370,11 @@ function Shell({
               {projectsOpen ? (
                 <ProjectsPane
                   profile={chatProfile}
+                  profiles={roster.bots ?? undefined}
                   connected={connected}
                   selectedId={chat.storedId ?? selected.id}
                   onSelect={item => setSelected({ id: item.id, profile: item.profile ?? chatProfile ?? undefined, title: item.title })}
-                  onNewChat={folder => setSelected({ id: null, profile: chatProfile ?? undefined, folder })}
+                  onNewChat={(folder, project) => setSelected({ id: null, profile: project.profile ?? chatProfile ?? undefined, folder })}
                   onClose={() => setProjectsOpen(false)}
                   isUnread={projectChatUnread}
                   runningIds={runningIds}

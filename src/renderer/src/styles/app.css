@@ -8730,6 +8730,19 @@ button.cap-row-text {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Under All, whose project it is. */
+.project-profile {
+  flex: none;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 500;
+}
+.project-meta .project-profile {
+  margin-left: 0;
+}
 .project-meta {
   display: flex;
   align-items: center;
@@ -12088,8 +12101,40 @@ button.ghost:disabled {
   border-radius: 50%;
   border: 1px solid var(--line-strong);
   background: var(--surface);
+  padding: 0;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+/* A longer word for All (Todos, Semua, Wszystkie) gets a wider shape and smaller letters, never clipped ones. */
+.profile-column-all.long {
+  width: 46px;
+  border-radius: 14px;
+  font-size: 10.5px;
+  letter-spacing: -0.02em;
+}
+
+.profile-column-all.longer {
+  font-size: 8.5px;
+}
+
+.profile-column-name {
+  position: fixed;
+  z-index: 60;
+  transform: translateY(-50%);
+  max-width: 260px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--composer);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 .profile-column-all:hover {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createParams, parseProjectChats, parseProjects } from '../src/renderer/src/state/projects'
+import { createParams, gatherProjects, parseProjectChats, parseProjects, type Project } from '../src/renderer/src/state/projects'
 
 describe('projects', () => {
   it('reads the tree: Home, a made project and a folder one', () => {
@@ -63,5 +63,18 @@ describe('projects', () => {
 
   it('sends create with the folder as its primary path', () => {
     expect(createParams(' Site ', ' /srv/site ')).toEqual({ name: 'Site', folders: ['/srv/site'], primary_path: '/srv/site', use: true })
+  })
+})
+
+describe('gatherProjects (desktop#393)', () => {
+  const project = (id: string, isHome = false): Project => ({ id, title: id, isHome, isAuto: false, count: 0, previews: [] })
+
+  it('lists every profile’s projects, each naming its profile, the Homes first', () => {
+    const all = gatherProjects([
+      { profile: 'default', title: 'Hermes', projects: [project('home', true), project('p_site')] },
+      { profile: 'coder', title: 'Coder', projects: [project('home', true), project('p_site')] }
+    ])
+    expect(all.map(p => `${p.profileTitle}:${p.id}`)).toEqual(['Hermes:home', 'Coder:home', 'Hermes:p_site', 'Coder:p_site'])
+    expect(all[3]!.profile).toBe('coder')
   })
 })

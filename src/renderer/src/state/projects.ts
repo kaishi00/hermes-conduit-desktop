@@ -25,6 +25,20 @@ export interface Project {
   isAuto: boolean
   count: number
   previews: ProjectChat[]
+  /** Under All, the profile whose project it is: Hermes keeps each profile's projects in its own projects.db. */
+  profile?: string
+  /** That profile's name as its face shows it. */
+  profileTitle?: string
+}
+
+/**
+ * Every profile's projects in one list, each naming its profile (desktop#393):
+ * the Homes first, then the rest, in the profiles' order. A profile whose
+ * read failed leaves the others' standing.
+ */
+export function gatherProjects(read: { profile: string; title: string; projects: Project[] }[]): Project[] {
+  const all = read.flatMap(({ profile, title, projects }) => projects.map(project => ({ ...project, profile, profileTitle: title })))
+  return [...all.filter(p => p.isHome), ...all.filter(p => !p.isHome)]
 }
 
 export interface ProjectLane {
