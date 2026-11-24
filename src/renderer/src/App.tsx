@@ -746,8 +746,9 @@ function Shell({
   // Workstreams' chats stay with their bots, as on the phone.
   const botNames = useMemo(() => (roster.bots ?? []).map(bot => bot.name), [roster.bots])
   const { sessions: workSessions, byBot: workByBot } = useWorkSessions(botNames, connected)
-  // The cross-bot work read, fresh for handlers registered once (the window's open-chat route): a workstream
-  // opened from a chat window's card docks with its bot, as the in-window ones do.
+  // The cross-bot work read, fresh for handlers registered once (the window's open-chat route; the empty-deps
+  // effect below would otherwise close over the first render's empty set): a workstream opened from a chat
+  // window's card lands with its bot, as the in-window ones do.
   const workSessionsRef = useRef(workSessions)
   workSessionsRef.current = workSessions
   // Voice's rows: calls, Classic's chats and voice jobs under Voice, the plugin's archived ones listed again.
@@ -773,7 +774,10 @@ function Shell({
   const openWorkItem = selected.id ? work.snapshot?.items.find(item => item.kind === 'workstream' && item.sessionId === selected.id) : undefined
   const workItem: WorkItem | undefined =
     openWorkItem ?? (selected.id ? work.resolved?.find(item => item.kind === 'workstream' && item.sessionId === selected.id) : undefined)
-  const botsSideShown = botsSideHolds || (section === 'chats' && !dockedChat && !!workItem)
+  // The bot's own read settles a workstream the cross-bot set hasn't listed yet; only while the bots
+  // sidebar is asked for (until Chats in the rail asks for the sessions list), so an explicit Chats
+  // click keeps its sessions list.
+  const botsSideShown = botsSideHolds || (botsSide && section === 'chats' && !dockedChat && !!workItem)
   // Wherever the bots list shows: beside a bot's chat, a group chat, or New Bot and Edit Bot.
   const botsListShown = section === 'bots' || section === 'room' || (section === 'chats' && botsSideShown)
   const readResolvedForChat = work.readResolved
@@ -817,7 +821,7 @@ function Shell({
         // A workstream's chat lives with its bot: opening one from a reply's card or link keeps the bots
         // beside it (the side panel's behavior), wherever the click came from — a workstream opened from an
         // ordinary chat's reference doesn't land in the sessions list.
-        if (item || workSessions.has(sessionId)) setBotsSide(true)
+        if (item?.kind === 'workstream' || workSessions.has(sessionId)) setBotsSide(true)
         setSelected({ id: sessionId, profile: profile ?? selected.profile, title: item ? shownTitle(item) : row?.title })
         setSection('chats')
       },
