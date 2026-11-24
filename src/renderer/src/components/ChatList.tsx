@@ -893,6 +893,7 @@ export function ChatList({
                   starred={!!marks && isStarred(marks, row)}
                   done={!!isDone?.(row)}
                   muted={!!muteOf?.(row)}
+                  windowed={!!windowIds?.includes(row.id)}
                   botName={botName(row)}
                   draggable={canReorder && row.pinned && !renaming}
                   dragging={dragging === row.id}
@@ -1233,6 +1234,7 @@ const ChatRowItem = memo(function ChatRowItem({
   starred,
   done,
   muted,
+  windowed,
   botName,
   draggable,
   dragging,
@@ -1254,6 +1256,8 @@ const ChatRowItem = memo(function ChatRowItem({
   starred: boolean
   done: boolean
   muted: boolean
+  /** The chat is open in a window of its own (desktop#479): its row says so, and a click brings that window forward. */
+  windowed: boolean
   botName: string | null
   draggable: boolean
   dragging: boolean
@@ -1305,6 +1309,11 @@ const ChatRowItem = memo(function ChatRowItem({
               {muted ? (
                 <span role="img" aria-label={t('Notifications muted')}>
                   <Icon name="bellSlash" className="row-pin" />
+                </span>
+              ) : null}
+              {windowed ? (
+                <span role="img" aria-label={t('Open in its own window')} title={t('Open in its own window')}>
+                  <Icon name="window" className="row-pin row-windowed" />
                 </span>
               ) : null}
               {row.title}

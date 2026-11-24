@@ -3890,6 +3890,10 @@ html[data-window='quick'] body {
   color: var(--text-3);
 }
 
+.row-windowed {
+  color: var(--accent);
+}
+
 .row-star {
   color: var(--warning);
   fill: currentColor;

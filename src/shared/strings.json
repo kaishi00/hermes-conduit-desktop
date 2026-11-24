@@ -46093,5 +46093,20 @@
     "tr": "{page} bu bilgisayarda raydan kaldırıldı, bu yüzden Conduit burada {other} ile açılır.",
     "zh-Hans": "在这台电脑上，{page}未固定在侧栏中，因此 Conduit 在这里打开{other}。",
     "zh-Hant": "在這台電腦上，{page}未釘選在側欄中，因此 Conduit 在這裡開啟{other}。"
+  },
+  "Open in its own window": {
+    "de": "In eigenem Fenster geöffnet",
+    "es": "Abierto en su propia ventana",
+    "fr": "Ouvert dans sa propre fenêtre",
+    "id": "Terbuka di jendelanya sendiri",
+    "it": "Aperta in una finestra propria",
+    "ja": "専用ウインドウで開いています",
+    "ko": "별도 창에서 열려 있음",
+    "pl": "Otwarty we własnym oknie",
+    "pt-BR": "Aberta em uma janela própria",
+    "ru": "Открыт в отдельном окне",
+    "tr": "Kendi penceresinde açık",
+    "zh-Hans": "已在独立窗口中打开",
+    "zh-Hant": "已在獨立視窗中開啟"
   }
 }
