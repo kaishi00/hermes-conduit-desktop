@@ -453,6 +453,7 @@ function Shell({
     resendLost,
     loadOlder,
     loadingOlder,
+    olderRows,
     seekRow,
     react: reactTo
   } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '')
@@ -2533,6 +2534,7 @@ function Shell({
                       onLoadOlder={loadOlder}
                       onSeekRow={seekRow}
                       loadingOlder={loadingOlder}
+                      olderRows={olderRows}
                     />
                   </ConnectionActionsContext.Provider>
                 </WorkLinks.Provider>

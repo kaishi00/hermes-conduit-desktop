@@ -1062,6 +1062,7 @@ export function Transcript({
   onBranch,
   onLoadOlder,
   loadingOlder = false,
+  olderRows = false,
   onSeekRow
 }: {
   state: TranscriptState
@@ -1105,6 +1106,8 @@ export function Transcript({
   onLoadOlder?: () => void
   /** Whether that page is on its way, drawn as a line above the rows. */
   loadingOlder?: boolean
+  /** Whether the chat has stored rows before the ones it holds: a call from before them is drawn once its page is read. */
+  olderRows?: boolean
   /** Reads the pages before until `found` says the chat holds the row a jump is after (useChat's seekRow). */
   onSeekRow?: (found: (items: readonly TranscriptItem[]) => boolean) => void
 }) {
@@ -1129,9 +1132,10 @@ export function Transcript({
                 ? display.showReviews
                 : true
         ),
-        calls ?? []
+        calls ?? [],
+        olderRows
       ),
-    [state.items, showsThinking, display.toolCards, display.showReviews, calls]
+    [state.items, showsThinking, display.toolCards, display.showReviews, calls, olderRows]
   )
   const rows = useMemo(() => foldRuns(shown), [shown])
   // A chat past a window's worth of rows draws a window of them — its newest, and the
@@ -1324,23 +1328,25 @@ export function Transcript({
   // stored page was read in: the chat grew above them, so the reader stays as far from its
   // end as they were. That is read before the rows are drawn and set after, so it holds
   // whether or not the browser's own scroll anchoring moved the scroller too.
+  // Rows can arrive under a first row that stays first (a row with no time of its own),
+  // so a change in how many are drawn counts as well as a new first row.
   const topKey = drawn[0] ? rowKey(drawn[0]) : undefined
   const endKey = rows.length ? rowKey(rows[rows.length - 1]!) : undefined
-  const before = useRef<{ chat: string; top?: string; end?: string } | null>(null)
+  const before = useRef<{ chat: string; top?: string; end?: string; count: number } | null>(null)
   const fromEnd = useRef<number | null>(null)
   {
     const el = scroller.current
     const last = before.current
     // Not for a jump, which scrolls to its row itself.
     const jumping = performance.now() < jumpUntil.current
-    const grewAbove = !jumping && el && last && last.chat === chatKey && last.end === endKey && last.top !== topKey
+    const grewAbove = !jumping && el && last && last.chat === chatKey && last.end === endKey && (last.top !== topKey || last.count !== drawn.length)
     fromEnd.current = grewAbove ? el.scrollHeight - el.scrollTop : null
   }
   useLayoutEffect(() => {
     const el = scroller.current
     if (el && fromEnd.current !== null && !pinned.current) el.scrollTop = el.scrollHeight - fromEnd.current
     fromEnd.current = null
-    before.current = { chat: chatKey, top: topKey, end: endKey }
+    before.current = { chat: chatKey, top: topKey, end: endKey, count: drawn.length }
   })
 
   // A page read in above the chat moved the window's start: the window keeps it from here

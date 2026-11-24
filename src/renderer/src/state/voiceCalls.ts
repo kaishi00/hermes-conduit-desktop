@@ -46,11 +46,18 @@ export function chatCalls(response: unknown, chatId: string): ChatCall[] {
 /**
  * The chat's items with a card for each call, placed before the first item
  * after the call started (or at the end). Items without a time stay where they are.
+ * A chat holding only its newest stored pages (`moreAbove`) leaves out the calls
+ * from before its first timed item: their place is in a page not read yet, and
+ * drawn on top of the rows held they would stay there as each page is read in.
  */
-export function withCalls(items: TranscriptItem[], calls: ChatCall[]): TranscriptItem[] {
+export function withCalls(items: TranscriptItem[], calls: ChatCall[], moreAbove = false): TranscriptItem[] {
   if (!calls.length) return items
   const out: TranscriptItem[] = []
   let next = 0
+  if (moreAbove) {
+    const first = items.find(item => 'at' in item && typeof item.at === 'number') as { at: number } | undefined
+    while (first && next < calls.length && calls[next]!.startedAt < first.at) next++
+  }
   const card = (call: ChatCall): CallItem => ({
     kind: 'call',
     key: `call-${call.callId}`,

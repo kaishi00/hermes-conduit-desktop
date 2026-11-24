@@ -1494,6 +1494,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   useEffect(() => seekMore(), [older, seekMore])
 
   return {
+    /** Whether the chat has stored rows before the ones it holds. */
+    olderRows: older?.more === true,
     seekRow,
     transcriptStore,
     chat,

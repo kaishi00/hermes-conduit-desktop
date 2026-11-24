@@ -37,6 +37,22 @@ describe("a chat's saved voice calls", () => {
     expect(withCalls(items, [])).toBe(items)
   })
 
+  it('leaves out the calls from before the rows a chat on its newest pages holds', () => {
+    const items: TranscriptItem[] = [
+      { kind: 'notice', key: 'n', text: 'no time', tone: 'info' },
+      { kind: 'user', key: 'u1', text: 'hi', at: 4000 },
+      { kind: 'assistant', key: 'a1', text: 'hello', at: 5000 }
+    ] as TranscriptItem[]
+    const calls = [
+      { callId: 'old', chatId: 'c', engine: null, startedAt: 1000, endedAt: 2000 },
+      { callId: 'x', chatId: 'c', engine: null, startedAt: 4500, endedAt: 4600 },
+      { callId: 'y', chatId: 'c', engine: null, startedAt: 9000, endedAt: 9500 }
+    ]
+    // Held whole, the old call leads the chat; with pages still to read, it waits for its own.
+    expect(withCalls(items, calls).map(i => i.key)).toEqual(['n', 'call-old', 'u1', 'call-x', 'a1', 'call-y'])
+    expect(withCalls(items, calls, true).map(i => i.key)).toEqual(['n', 'u1', 'call-x', 'a1', 'call-y'])
+  })
+
   it("gives the call's length in its two largest units", () => {
     expect(callLength(5_000)).toBe('5s')
     expect(callLength(65_000)).toBe('1m 5s')

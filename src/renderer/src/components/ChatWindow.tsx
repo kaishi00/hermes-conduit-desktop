@@ -173,6 +173,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     resendLost,
     loadOlder,
     loadingOlder,
+    olderRows,
     seekRow,
     react,
     noteCorrection
@@ -571,6 +572,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 onLoadOlder={loadOlder}
                 onSeekRow={seekRow}
                 loadingOlder={loadingOlder}
+                olderRows={olderRows}
               />
             </ConnectionActionsContext.Provider>
           </WorkLinks.Provider>
