@@ -125,6 +125,8 @@ export interface ToolItem {
   /** The call's arguments and result, cut to a readable length, for the card's details. */
   args?: string
   result?: string
+  /** The call is known to have taken no arguments (an envelope that names its tool and gives none), unlike arguments not read yet. */
+  noArgs?: true
 }
 
 /** A tool's arguments or result as the card's details show them: JSON indented, long text cut. */
@@ -439,6 +441,8 @@ export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
         // and the phone draw it.
         const wrapper = isWrapperName(row.name) ? unwrappedCall(row.args) : null
         const shownName = wrapper?.name ?? row.name ?? 'tool'
+        const given = wrapper ? wrapper.arguments : row.args
+        const args = toolDetail(given)
         items.push({
           kind: 'tool',
           key,
@@ -447,9 +451,11 @@ export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
           context: row.context ?? undefined,
           status: 'done',
           at,
-          board: boardFrom(shownName, rowText(row), undefined) ?? undefined,
-          args: toolDetail(wrapper ? wrapper.arguments : row.args),
-          result: toolDetail(rowText(row))
+          // A show that answered only {ok: true} drew the cards it was given.
+          board: boardFrom(shownName, rowText(row), given) ?? undefined,
+          args,
+          result: toolDetail(rowText(row)),
+          ...(wrapper && args === undefined ? { noArgs: true as const } : {})
         })
         break
       }
@@ -727,9 +733,15 @@ export function failPendingUser(state: TranscriptState, error: string): Transcri
   return { ...state, items }
 }
 
-/** History rows of conduit_show calls without their board: session.resume leaves tool answers out. */
+/**
+ * History rows of conduit_show calls without their board: session.resume
+ * leaves tool answers out. A finished row still under the wrapper's name
+ * counts too, since only the REST page says which tool it ran.
+ */
 export function missingBoards(state: TranscriptState): string[] {
-  return state.items.flatMap(item => (item.kind === 'tool' && !item.board && item.name.toLowerCase() === SHOW_TOOL ? [item.toolId] : []))
+  return state.items.flatMap(item =>
+    item.kind === 'tool' && !item.board && (item.name.toLowerCase() === SHOW_TOOL || (item.status === 'done' && isWrapperName(item.name))) ? [item.toolId] : []
+  )
 }
 
 /** History rows without the call's details (session.resume leaves them out), or a board to draw. */
@@ -761,14 +773,22 @@ export function attachBoards(
     // covers a row fromHistory already unwrapped to a tool that took no arguments.
     const rawArgs = args.get(item.toolId)
     const unwrapped = unwrappedCall(rawArgs)
-    const shownArgs = unwrapped && unwrapped.name === named ? unwrapped.arguments : rawArgs
-    const board = item.board ?? (answer === undefined ? null : boardFrom(named ?? item.name, answer, undefined))
+    const verified = !!unwrapped && !!named && unwrapped.name.toLowerCase() === named.toLowerCase()
+    const shownArgs = verified ? unwrapped.arguments : rawArgs
+    // A show that answered only {ok: true} drew the cards it was given, so the restore reads them too.
+    const board = item.board ?? (answer === undefined ? null : boardFrom(named ?? item.name, answer, shownArgs))
     const result = item.result ?? (answer === undefined ? undefined : toolDetail(answer))
-    const given = item.args ?? (shownArgs !== undefined ? toolDetail(shownArgs) : undefined)
-    const argsUnchanged = shownArgs === rawArgs || (shownArgs === undefined && item.args === undefined)
-    if ((!named || named === item.name) && argsUnchanged && board === (item.board ?? null) && result === item.result && given === item.args) return item
+    // A row drawn under another tool's name (an envelope that diverged from its answer) holds
+    // that tool's arguments: the page's replace them, as they fill a row that had none.
+    const renamed = !!named && named.toLowerCase() !== item.name.toLowerCase() && !isWrapperName(item.name) && rawArgs !== undefined
+    const given = (renamed ? undefined : item.args) ?? (shownArgs !== undefined ? toolDetail(shownArgs) : undefined)
+    const noArgs = (renamed ? undefined : item.noArgs) ?? (verified && given === undefined ? (true as const) : undefined)
+    if ((!named || named === item.name) && board === (item.board ?? null) && result === item.result && given === item.args && noArgs === item.noArgs) return item
     changed = true
-    return { ...item, ...(named && named !== item.name ? { name: named } : {}), ...(board ? { board } : {}), result, args: given }
+    const next: ToolItem = { ...item, ...(named && named !== item.name ? { name: named } : {}), ...(board ? { board } : {}), result, args: given }
+    if (noArgs) next.noArgs = noArgs
+    else delete next.noArgs
+    return next
   })
   return changed ? { ...state, items } : state
 }
@@ -783,25 +803,33 @@ export function withKeptDetails(state: TranscriptState, kept: TranscriptState | 
   if (!kept) return state
   const details = new Map<string, ToolItem>()
   // Only a kept row with its arguments stands in: one without them (a live board's answer carries none)
-  // leaves the row to the REST page, the only place they come from.
-  for (const item of kept.items) if (item.kind === 'tool' && item.args !== undefined && (item.board || item.result !== undefined)) details.set(item.toolId, item)
+  // leaves the row to the REST page, the only place they come from. A call known to take none has them all.
+  for (const item of kept.items)
+    if (item.kind === 'tool' && (item.args !== undefined || item.noArgs) && (item.board || item.result !== undefined)) details.set(item.toolId, item)
   if (!details.size) return state
   let changed = false
   const items = state.items.map(item => {
     if (item.kind !== 'tool') return item
     const known = details.get(item.toolId)
     if (!known) return item
-    // A fresh resume of a wrapped call can still say tool_call (an envelope that
-    // won't read); the kept row names the tool the page's answer verified, so
-    // adopt it while filling — never the other way around, or a stale kept copy
-    // would undo the envelope's name.
-    const name = isWrapperName(item.name) ? known.name : item.name
+    // The kept row names the tool the page's answer verified. A fresh resume
+    // can still say tool_call (an envelope that won't read), or name another
+    // tool than the one that ran (an envelope that diverged from its answer):
+    // either way the verified name wins, so every open draws the same row.
+    // A kept row still under the wrapper's name says nothing.
+    const name = isWrapperName(known.name) ? item.name : known.name
+    const diverged = name !== item.name && !isWrapperName(item.name)
     const board = item.board ?? known.board
     const result = item.result ?? known.result
-    const args = item.args ?? known.args
-    if (name === item.name && board === item.board && result === item.result && args === item.args) return item
+    // An envelope that named another tool gave that tool's arguments, not this one's.
+    const args = diverged ? known.args : (item.args ?? known.args)
+    const noArgs = diverged ? known.noArgs : (item.noArgs ?? known.noArgs)
+    if (name === item.name && board === item.board && result === item.result && args === item.args && noArgs === item.noArgs) return item
     changed = true
-    return { ...item, ...(name !== item.name ? { name } : {}), ...(board ? { board } : {}), result, args }
+    const next: ToolItem = { ...item, ...(name !== item.name ? { name } : {}), ...(board ? { board } : {}), result, args }
+    if (noArgs) next.noArgs = noArgs
+    else delete next.noArgs
+    return next
   })
   return changed ? { ...state, items } : state
 }

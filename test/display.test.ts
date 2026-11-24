@@ -246,6 +246,114 @@ describe('wrapped calls in saved history', () => {
   })
 })
 
+describe('wrapped call restore leftovers (#425, #429)', () => {
+  const cards = [{ type: 'callout', title: 'Heads up', text: 'Hi' }]
+
+  it('restores a show that answered only ok from the cards it was given', async () => {
+    const { attachBoards, fromHistory, toolAnswers, toolArgs, toolNames } = await import('../src/renderer/src/state/transcript')
+    const page = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 's1', function: { name: 'conduit_show', arguments: JSON.stringify({ cards }) } }] },
+        { role: 'tool', tool_call_id: 's1', tool_name: 'conduit_show', content: '{"ok":true}' },
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: JSON.stringify({ name: 'conduit_show', arguments: { cards } }) } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: '{"ok":true}' }
+      ]
+    }
+    const state = {
+      items: [
+        { kind: 'tool' as const, key: 'a', toolId: 's1', name: 'conduit_show', status: 'done' as const },
+        { kind: 'tool' as const, key: 'b', toolId: 'w1', name: 'tool_call', status: 'done' as const }
+      ],
+      running: false
+    }
+    const next = attachBoards(state, toolAnswers(page), toolArgs(page), toolNames(page))
+    expect(next.items[0]).toMatchObject({ board: { cards } })
+    expect(next.items[1]).toMatchObject({ name: 'conduit_show', board: { cards } })
+    // A resume row that carries its answer reads the cards the same way.
+    const resumed = fromHistory([{ role: 'tool', name: 'conduit_show', tool_call_id: 's1', args: JSON.stringify({ cards }), content: '{"ok":true}' }])
+    expect(resumed[0]).toMatchObject({ board: { cards } })
+  })
+
+  it('counts a finished wrapper-named row without a board as missing, answer or not', async () => {
+    const { missingBoards, missingDetails } = await import('../src/renderer/src/state/transcript')
+    const row = { kind: 'tool' as const, key: 'a', toolId: 'w1', name: 'tool_call', status: 'done' as const, result: 'An answer.' }
+    expect(missingBoards({ items: [row], running: false })).toEqual(['w1'])
+    expect(missingDetails({ items: [row], running: false })).toBe(true)
+    // A running one has no answer to read yet, and a concrete tool with its answer needs nothing.
+    expect(missingBoards({ items: [{ ...row, status: 'running' as const }], running: true })).toEqual([])
+    expect(missingDetails({ items: [{ ...row, name: 'terminal' }], running: false })).toBe(false)
+  })
+
+  it('verifies an envelope against the page name whatever the case', async () => {
+    const { attachBoards, toolArgs, toolNames } = await import('../src/renderer/src/state/transcript')
+    const page = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: '{"name":"Conduit_Show","arguments":{"path":"/x"}}' } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: '' }
+      ]
+    }
+    const state = { items: [{ kind: 'tool' as const, key: 'a', toolId: 'w1', name: 'tool_call', status: 'done' as const }], running: false }
+    const next = attachBoards(state, new Map(), toolArgs(page), toolNames(page))
+    expect(next.items[0]).toMatchObject({ name: 'conduit_show', args: '{\n  "path": "/x"\n}' })
+  })
+
+  it('returns a wrapped row with its arguments untouched on a second pass', async () => {
+    const { attachBoards, toolAnswers, toolArgs, toolNames } = await import('../src/renderer/src/state/transcript')
+    const page = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: '{"name":"terminal","arguments":{"command":"ls"}}' } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'terminal', content: 'a.txt' }
+      ]
+    }
+    const state = { items: [{ kind: 'tool' as const, key: 'a', toolId: 'w1', name: 'tool_call', status: 'done' as const }], running: false }
+    const next = attachBoards(state, toolAnswers(page), toolArgs(page), toolNames(page))
+    expect(next.items[0]).toMatchObject({ name: 'terminal', args: '{\n  "command": "ls"\n}', result: 'a.txt' })
+    expect(attachBoards(next, toolAnswers(page), toolArgs(page), toolNames(page))).toBe(next)
+  })
+
+  it('keeps a no-argument wrapped call in the reopen cache', async () => {
+    const { attachBoards, fromHistory, toolAnswers, toolArgs, toolNames, withKeptDetails, missingDetails } = await import('../src/renderer/src/state/transcript')
+    const envelope = '{"name":"conduit_show"}'
+    const rows = [{ role: 'tool', name: 'tool_call', tool_call_id: 'w1', args: envelope, content: '' }]
+    const page = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: envelope } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: JSON.stringify({ cards }) }
+      ]
+    }
+    const first = attachBoards({ items: fromHistory(rows), running: false }, toolAnswers(page), toolArgs(page), toolNames(page))
+    expect(first.items[0]).toMatchObject({ noArgs: true, board: { cards } })
+    // The next open fills the board from the kept copy, so nothing is left to read.
+    const again = withKeptDetails({ items: fromHistory(rows), running: false }, first)
+    expect(again.items[0]).toMatchObject({ name: 'conduit_show', board: { cards } })
+    expect((again.items[0] as { args?: unknown }).args).toBeUndefined()
+    expect(missingDetails(again)).toBe(false)
+  })
+
+  it('draws a divergent envelope the same on every open', async () => {
+    const { attachBoards, fromHistory, toolAnswers, toolArgs, toolNames, withKeptDetails } = await import('../src/renderer/src/state/transcript')
+    // The envelope names web_search; the page's answer verified conduit_show.
+    const envelope = '{"name":"web_search","arguments":{"query":"x"}}'
+    const rows = [{ role: 'tool', name: 'tool_call', tool_call_id: 'w1', args: envelope, content: '' }]
+    const page = {
+      messages: [
+        { role: 'assistant', tool_calls: [{ id: 'w1', function: { name: 'tool_call', arguments: envelope } }] },
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: JSON.stringify({ cards }) }
+      ]
+    }
+    const first = attachBoards({ items: fromHistory(rows), running: false }, toolAnswers(page), toolArgs(page), toolNames(page))
+    const again = withKeptDetails({ items: fromHistory(rows), running: false }, first)
+    const shown = (state: { items: unknown[] }) => {
+      const { name, args, result, board } = state.items[0] as { name: string; args?: string; result?: string; board?: unknown }
+      return { name, args, result, board }
+    }
+    expect(shown(first).name).toBe('conduit_show')
+    // The Input is the envelope as sent, never the other tool's arguments under this tool's name.
+    expect(shown(first).args).toBe('{\n  "name": "web_search",\n  "arguments": {\n    "query": "x"\n  }\n}')
+    expect(shown(again)).toEqual(shown(first))
+  })
+})
+
 describe('self-improvement reviews', () => {
   it('reads a review row as the phone does', async () => {
     const { reviewFromText, fromHistory, applyEvent } = await import('../src/renderer/src/state/transcript')
