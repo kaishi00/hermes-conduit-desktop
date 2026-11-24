@@ -1237,8 +1237,8 @@ export function Transcript({
         break
       }
     }
-    const lastUser = items.map(i => i.kind).lastIndexOf('user')
-    const lastReply = items.map(i => i.kind).lastIndexOf('assistant')
+    const lastUser = items.findLastIndex(i => i.kind === 'user')
+    const lastReply = items.findLastIndex(i => i.kind === 'assistant')
     if (lastReply > lastUser && lastUser >= 0) retryKey.add(items[lastReply]!.key)
     let turns = 0
     for (let i = items.length - 1; i >= 0; i--) {
@@ -1251,7 +1251,7 @@ export function Transcript({
   }, [state, onCommand])
 
   const retry = async () => {
-    const lastUser = state.items.map(i => i.kind).lastIndexOf('user')
+    const lastUser = state.items.findLastIndex(i => i.kind === 'user')
     const ranSteps = state.items.slice(lastUser + 1).some(i => i.kind === 'tool')
     // Steps run again: a file written, a message sent, twice.
     if (ranSteps && !(await ask(`${t('Retry this reply?')}\n\n${t('Steps ran for this reply, and retrying runs them again.')}`))) return
@@ -1409,7 +1409,7 @@ export function Transcript({
   useEffect(() => setBarReveal(null), [chatKey])
 
   // What reactionTarget allows, without a walk of the chat per reply.
-  const newestReply = useMemo(() => [...state.items].reverse().find(i => i.kind === 'assistant')?.key, [state.items])
+  const newestReply = useMemo(() => state.items.findLast(i => i.kind === 'assistant')?.key, [state.items])
   const reactable = (item: TranscriptItem) =>
     item.kind === 'assistant' && !!item.text.trim() && (!!item.rowId || (!state.running && item.key === newestReply))
   const renderItem = (item: TranscriptItem) => (
