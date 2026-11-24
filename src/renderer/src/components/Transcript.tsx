@@ -1,4 +1,5 @@
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import { flushSync } from 'react-dom'
 import { mediaKind, splitReply } from '../state/media'
 import { PagePreview } from './PagePreview'
 import { baseName, type Attachment } from '../state/text'
@@ -12,6 +13,7 @@ import type { ExpiredQuestion } from '../state/expiredQuestions'
 import { Icon, type IconName } from './icons'
 import { JumpToLatest } from './JumpToLatest'
 import { atEnd } from '../state/scrollEnd'
+import { nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowWindow, startAt } from '../state/rowWindow'
 import { WorkLinkCard, WorkLinks } from './WorkLinkCard'
 import { linkNamedRefs, linkSessionRefs, splitWorkLinks } from '../state/workLinks'
 import { Markdown, StreamingMarkdown } from './Markdown'
@@ -234,10 +236,10 @@ export function QuotedCard({ name, quote, onJump }: { name: string; quote: strin
   )
 }
 
-/** Scrolls to the message a card quoted and flashes it. */
+/** Scrolls to the message a card quoted and flashes it, drawing it first when a window left it out (rowWindow.ts). */
 export function revealMessage(container: HTMLElement | null, key: string | undefined) {
   if (!container || !key) return
-  const el = container.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)
+  const el = rowElement(container, key)
   if (!el) return
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   el.classList.remove('flash')
@@ -289,7 +291,7 @@ let passageTimer: ReturnType<typeof setTimeout> | null = null
  */
 export function revealPassage(container: HTMLElement | null, key: string | undefined, passage: string) {
   if (!container || !key) return
-  const el = container.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)
+  const el = rowElement(container, key)
   const range = el ? passageRange(el, passage) : null
   if (!range) return revealMessage(container, key)
   const box = range.getBoundingClientRect()
@@ -1026,9 +1028,6 @@ function ReviewRun({ count, children }: { count: number; children: React.ReactNo
   )
 }
 
-/** Rows a long transcript draws on its first frame, the newest; the rest follow a frame later. */
-const FIRST_ROWS = 40
-
 /**
  * The open chat's transcript, from its store: only this runs as a reply
  * streams, not the window around it (desktop#212).
@@ -1120,39 +1119,60 @@ export function Transcript({
     [state.items, showsThinking, display.toolCards, display.showReviews, calls]
   )
   const rows = useMemo(() => foldRuns(shown), [shown])
-  // A long chat opened (or come back to after a dashboard switch) draws its newest
-  // rows on the first frame and the rest just after, so it shows at once
-  // rather than after the whole transcript is laid out.
+  // A chat past a window's worth of rows draws a window of them — its newest, and the
+  // rows above them as the reader scrolls up (rowWindow.ts) — so a streaming reply
+  // draws into its own row each frame instead of laying the whole history out again
+  // (desktop#291).
   const firstKey = state.items[0]?.key
-  const [whole, setWhole] = useState<string | undefined>(undefined)
-  const partial = rows.length > FIRST_ROWS && whole !== firstKey
-  useEffect(() => {
-    if (!partial) return
-    let second = 0
-    const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => setWhole(firstKey))
-    })
-    return () => {
-      cancelAnimationFrame(first)
-      cancelAnimationFrame(second)
-    }
-  }, [partial, firstKey])
-  const drawn = partial ? rows.slice(-FIRST_ROWS) : rows
+  const [windowed, setWindowed] = useState<{ chat?: string; start: number | null }>({ start: null })
+  // Another chat opened: its own newest rows, not the window the last one was left at.
+  const start = windowed.chat === firstKey ? windowed.start : null
+  const drawnWindow = rowWindow(rows.length, start)
+  const drawn = drawnWindow.start > 0 ? rows.slice(drawnWindow.start, drawnWindow.end) : rows
+  // What the scroll listener reads: the rows and the window as this frame has them.
+  const liveRows = useRef({ rows, start: drawnWindow.start, chat: firstKey })
+  liveRows.current.rows = rows
+  liveRows.current.start = drawnWindow.start
+  liveRows.current.chat = firstKey
   const followedUpKeySet = useMemo(() => followedUpKeys(state.items, followedUp), [state.items, followedUp])
   const repliesToTeammates = useMemo(() => teammateReplies(state.items), [state.items])
   const summaries = useStepSummaries(state, sessionId, profile)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  /** The drawn height before the window took on rows above the reader, to keep their place. */
+  const grew = useRef<{ start: number; height: number } | null>(null)
 
   // Follow the reply while the reader is at the bottom; leave them be once they scroll up.
+  // At the top of what's drawn the window takes on the rows above it, and back at the
+  // bottom it gives them up again, so a long chat stays a window.
   useEffect(() => {
     const el = scroller.current
     if (!el) return
     const onScroll = () => {
       pinned.current = atEnd(el)
+      const { rows: thisFrame, start: from, chat } = liveRows.current
+      if (pinned.current) {
+        if (from !== null) setWindowed({ chat, start: null })
+      } else if (nearTop(el.scrollTop) && from !== 0) {
+        grew.current = { start: from, height: el.scrollHeight }
+        setWindowed({ chat, start: olderStart(from, thisFrame.length) })
+      }
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // A jump to a row the window left out — a pin, a quote, Show in Chat — draws that row's
+  // part of the window before the jump looks for it (rowWindow.ts).
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    return registerRowOpener(el, key => {
+      const at = rowIndex(liveRows.current.rows, key)
+      if (at < 0) return false
+      flushSync(() => setWindowed({ chat: liveRows.current.chat, start: startAt(at, liveRows.current.rows.length) }))
+      return true
+    })
   }, [])
 
   // Retry is on the newest reply while it answers the last message sent;
@@ -1247,7 +1267,17 @@ export function Transcript({
   useLayoutEffect(() => {
     const el = scroller.current
     if (el && pinned.current) el.scrollTop = el.scrollHeight
-  }, [state, requests, expired, partial])
+  }, [state, requests, expired, drawnWindow.start])
+
+  // Rows the window took on above the reader keep their place: the chat grew above them,
+  // so the scroller moves down by just what was added (measured as they scrolled for them).
+  useLayoutEffect(() => {
+    const el = scroller.current
+    const before = grew.current
+    if (!el || !before || drawnWindow.start >= before.start) return
+    grew.current = null
+    el.scrollTop += el.scrollHeight - before.height
+  })
 
   // Pins: which reply each shows, the bar's order, and the row ids replies pinned as they arrived took.
   const pinList = pins?.list

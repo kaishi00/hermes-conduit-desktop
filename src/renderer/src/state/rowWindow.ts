@@ -1,0 +1,98 @@
+/**
+ * A transcript long enough that its whole history costs every frame draws a
+ * window of its rows: its newest, and the rows above them as the reader
+ * scrolls up (desktop#291). The chat still holds every item — the paths that
+ * change a row by its key (reactions, pins, boards, undo, take-back) read the
+ * whole list — but only the window's rows are drawn, so a streaming reply
+ * lays out its own row per frame rather than the history behind it.
+ */
+import type { Row } from './runs'
+
+/** Rows a window holds at its smallest: a tall window's worth, and then some. */
+export const WINDOW_ROWS = 200
+
+/** Rows a window takes on when the reader scrolls to the top of it. */
+export const WINDOW_PAGE = 200
+
+/** How near the top of the drawn rows, in px, a scroll takes on the rows above them. */
+export const WINDOW_EDGE = 800
+
+/** The rows a window draws, `[start, end)`: always to the newest row, so a streaming reply's row is drawn. */
+export interface RowWindow {
+  start: number
+  end: number
+}
+
+/**
+ * The rows a window draws for a chat of `count` rows: its newest WINDOW_ROWS,
+ * or from `start` when the reader scrolled up, and never above them — a chat
+ * that got shorter (an undo) draws its newest rows rather than nothing.
+ */
+export function rowWindow(count: number, start: number | null): RowWindow {
+  const end = Math.max(0, count)
+  const newest = Math.max(0, end - WINDOW_ROWS)
+  const from = start === null ? newest : Math.min(Math.max(0, start), newest)
+  return { start: from, end }
+}
+
+/** The start a window takes on when the reader scrolls to the top of it: WINDOW_PAGE rows more, or the chat's first row. */
+export function olderStart(start: number | null, count: number): number {
+  const from = start === null ? Math.max(0, count - WINDOW_ROWS) : start
+  return Math.max(0, from - WINDOW_PAGE)
+}
+
+/** Whether a scroll this far down asks a window for the rows above it. */
+export function nearTop(scrollTop: number): boolean {
+  return scrollTop <= WINDOW_EDGE
+}
+
+/** The row holding the item `key`, as drawn: one row of its own, or the run it joined. -1 when the chat has no such row. */
+export function rowIndex(rows: readonly Row[], key: string): number {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
+    if (row.type === 'item' ? row.item.key === key : row.items.some(item => item.key === key)) return i
+  }
+  return -1
+}
+
+/** The start a window takes on to draw the row at `index` near its middle: a jump to a row the window left out. */
+export function startAt(index: number, count: number): number {
+  const newest = Math.max(0, count - WINDOW_ROWS)
+  return Math.max(0, Math.min(index - Math.floor(WINDOW_ROWS / 2), newest))
+}
+
+/** A windowed transcript's way to draw a row it left out, answering whether the chat has that row at all. */
+export type RowOpener = (key: string) => boolean
+
+const openers: { scroller: HTMLElement; open: RowOpener }[] = []
+
+/**
+ * Registers a windowed transcript's scroller, so a jump to a row it left out
+ * can widen its window first. Call the answer when it goes away.
+ */
+export function registerRowOpener(scroller: HTMLElement, open: RowOpener): () => void {
+  const entry = { scroller, open }
+  openers.push(entry)
+  return () => {
+    const at = openers.indexOf(entry)
+    if (at >= 0) openers.splice(at, 1)
+  }
+}
+
+const escapeKey = (key: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(key) : key)
+
+/**
+ * The drawn element for `key` in `container`, widened into the window first
+ * when the transcript there left it out: a jump from a pin, a quote or Show in
+ * Chat lands on rows the window doesn't draw yet. The opener draws them
+ * before it answers, so the element is there to return; null when the chat has
+ * no such row. Not for use while rendering, as the opener draws.
+ */
+export function rowElement(container: HTMLElement, key: string): HTMLElement | null {
+  const find = () => container.querySelector<HTMLElement>(`[data-key="${escapeKey(key)}"]`)
+  const drawn = find()
+  if (drawn) return drawn
+  const opener = openers.find(o => o.scroller === container) ?? openers.find(o => container.contains(o.scroller))
+  if (!opener || !opener.open(key)) return null
+  return find()
+}
