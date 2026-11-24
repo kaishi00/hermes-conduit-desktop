@@ -101,6 +101,9 @@ function harness(opts: { ticketsBeforeExpiry?: number; hosts?: boolean } = {}) {
   return { connection, sockets, statuses, log, sentHeaders, timers, requests, saved: () => saved, written, hostList }
 }
 
+/** The refresh handle a logout carried, as Hermes reads it: its session cookie. */
+const revokedHandle = (init?: RequestInit) => (new Headers(init?.headers).get('cookie') ?? '').replace(/^hermes_session_rt=/, '')
+
 describe('the connection', () => {
   it('restores an OIDC host, rotates an expired grant once, and uses the new bearer for tickets and requests', async () => {
     const url = 'https://hermes.example.com'
@@ -177,7 +180,7 @@ describe('the connection', () => {
     const fetchImpl: Fetch = async (input, init) => {
       const path = new URL(String(input)).pathname
       if (path === '/auth/native/refresh') return response.promise
-      if (path === '/auth/native/revoke') revoked.push(JSON.parse(String(init?.body)).refresh_token)
+      if (path === '/auth/logout') revoked.push(revokedHandle(init))
       return json({})
     }
     const connection = new Connection({
@@ -234,7 +237,7 @@ describe('the connection', () => {
         const path = new URL(String(input)).pathname
         if (path === '/auth/native/token') return json(grant)
         if (path === '/api/auth/ws-ticket') { started.resolve(); return ticket.promise }
-        if (path === '/auth/native/revoke') revoked.push(JSON.parse(String(init?.body)).refresh_token)
+        if (path === '/auth/logout') revoked.push(revokedHandle(init))
         return json({})
       },
       openExternal: async address => {
@@ -259,6 +262,242 @@ describe('the connection', () => {
 
 
 
+
+  describe('browser sign-in leftovers (#414, #417)', () => {
+    const url = 'https://hermes.example.com'
+    const fresh = () => Date.now() / 1000 + 3600
+    /** The browser coming back with a code, as the system browser's redirect does. */
+    const browserReturns = async (address: string) => {
+      const authorize = new URL(address)
+      const callback = new URL(authorize.searchParams.get('redirect_uri')!)
+      callback.searchParams.set('state', authorize.searchParams.get('state')!)
+      callback.searchParams.set('code', 'code')
+      await fetch(callback)
+    }
+    const sockets = () => {
+      const made: FakeSocket[] = []
+      return { made, create: (address: string, headers: Record<string, string>) => (made.push(new FakeSocket(address, headers)), made.at(-1) as unknown as WebSocketLike) }
+    }
+
+    it('ends the sign-in it replaces on Hermes when the same host signs in again', async () => {
+      const old = { access_token: 'old', refresh_token: 'old-refresh', expires_at: fresh(), provider: 'self-hosted' }
+      const next = { ...old, access_token: 'new', refresh_token: 'new-refresh' }
+      const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }], active: url })
+      const revoked: string[] = []
+      const connection = new Connection({
+        store,
+        fetch: async (input, init) => {
+          const path = new URL(String(input)).pathname
+          if (path === '/auth/native/token') return json(next)
+          if (path === '/auth/logout') revoked.push(revokedHandle(init))
+          return json({ ticket: 'ticket' })
+        },
+        openExternal: browserReturns,
+        createSocket: sockets().create,
+        onStatus: () => {}, onEvent: () => {}
+      })
+      expect(await connection.signIn({ url, method: 'oidc' })).toEqual({ ok: true })
+      await until(() => revoked.length > 0)
+      // The displaced grant only: the new one is the sign-in now.
+      expect(revoked).toEqual(['old-refresh'])
+      expect(store.get?.(url)?.oidc).toEqual(next)
+    })
+
+    it("ends the displaced sign-in on Edit Connection, and a removed host's too", async () => {
+      const old = { access_token: 'old', refresh_token: 'old-refresh', expires_at: fresh(), provider: 'self-hosted' }
+      const other = { access_token: 'o', refresh_token: 'other-refresh', expires_at: fresh(), provider: 'self-hosted' }
+      const next = { ...old, access_token: 'new', refresh_token: 'new-refresh' }
+      const second = 'https://second.example.com'
+      const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }, { url: second, method: 'oidc', oidc: other }], active: url })
+      const revoked: string[] = []
+      const connection = new Connection({
+        store,
+        fetch: async (input, init) => {
+          const path = new URL(String(input)).pathname
+          if (path === '/auth/native/token') return json(next)
+          if (path === '/auth/logout') revoked.push(`${new URL(String(input)).host} ${revokedHandle(init)}`)
+          return json({ ticket: 'ticket' })
+        },
+        openExternal: browserReturns,
+        createSocket: sockets().create,
+        onStatus: () => {}, onEvent: () => {}
+      })
+      await connection.restore()
+      expect(await connection.editHost(url, { url, method: 'oidc' })).toEqual({ ok: true, url })
+      await until(() => revoked.length > 0)
+      expect(revoked).toEqual(['hermes.example.com old-refresh'])
+      connection.removeHost(second)
+      await until(() => revoked.length > 1)
+      expect(revoked).toContain('second.example.com other-refresh')
+      expect(store.get?.(second)).toBeNull()
+    })
+
+    it('opens the host that was open again when a browser sign-in to another is cancelled', async () => {
+      const store = createHostList(() => {}, { hosts: [], active: null })
+      const made = sockets()
+      const opened = Promise.withResolvers<void>()
+      const connection = new Connection({
+        store,
+        fetch: async () => json({ ticket: 'ticket' }),
+        // The browser is out and never comes back.
+        openExternal: async () => opened.resolve(),
+        createSocket: made.create,
+        onStatus: () => {}, onEvent: () => {}
+      })
+      await connection.signIn({ url: 'https://one.example.com', method: 'token', token: 'a' })
+      await until(() => connection.current().phase === 'open')
+      const signingIn = connection.signIn({ url, method: 'oidc' })
+      await opened.promise
+      connection.cancelSignIn()
+      expect(await signingIn).toMatchObject({ ok: false })
+      await until(() => made.made.length === 2 && made.made[1]!.readyState === 1)
+      // A live socket again, not an "open" left over a closed one.
+      expect(connection.current()).toMatchObject({ phase: 'open', url: 'https://one.example.com' })
+      expect(made.made[0]!.readyState).toBe(3)
+      expect(made.made[1]!.readyState).toBe(1)
+    })
+
+    it('says signed out when a first sign-in is cancelled after the browser returned', async () => {
+      const grant = { access_token: 'new', refresh_token: 'new-refresh', expires_at: fresh(), provider: 'self-hosted' }
+      const store = createHostList(() => {}, { hosts: [], active: null })
+      const ticket = Promise.withResolvers<Response>()
+      const started = Promise.withResolvers<void>()
+      const statuses: ConnectionStatus[] = []
+      const connection = new Connection({
+        store,
+        fetch: async input => {
+          const path = new URL(String(input)).pathname
+          if (path === '/auth/native/token') return json(grant)
+          if (path === '/api/auth/ws-ticket') { started.resolve(); return ticket.promise }
+          return json({})
+        },
+        openExternal: browserReturns,
+        createSocket: sockets().create,
+        onStatus: status => statuses.push(status), onEvent: () => {}
+      })
+      const signingIn = connection.signIn({ url, method: 'oidc' })
+      await started.promise
+      expect(connection.current().phase).toBe('connecting')
+      connection.cancelSignIn()
+      expect(connection.current().phase).toBe('signed-out')
+      ticket.resolve(json({ ticket: 'ticket' }))
+      expect(await signingIn).toMatchObject({ ok: false })
+      expect(connection.current()).toMatchObject({ phase: 'signed-out' })
+      expect(connection.current().url).toBeUndefined()
+    })
+
+    it('leaves no socket behind when the sign-in is cancelled while its socket connects', async () => {
+      const grant = { access_token: 'new', refresh_token: 'new-refresh', expires_at: fresh(), provider: 'self-hosted' }
+      const store = createHostList(() => {}, { hosts: [], active: null })
+      /** A socket still connecting: it never opens by itself. */
+      class HeldSocket extends EventTarget {
+        readyState = 0
+        send() {}
+        close() {
+          if (this.readyState === 3) return
+          this.readyState = 3
+          this.dispatchEvent(Object.assign(new Event('close'), { code: 1000 }))
+        }
+      }
+      const made: HeldSocket[] = []
+      const connection = new Connection({
+        store,
+        fetch: async input => (new URL(String(input)).pathname === '/auth/native/token' ? json(grant) : json({ ticket: 'ticket' })),
+        openExternal: browserReturns,
+        createSocket: () => (made.push(new HeldSocket()), made.at(-1) as unknown as WebSocketLike),
+        onStatus: () => {}, onEvent: () => {}
+      })
+      const signingIn = connection.signIn({ url, method: 'oidc' })
+      await until(() => made.length > 0)
+      expect(made).toHaveLength(1)
+      connection.cancelSignIn()
+      expect(await signingIn).toMatchObject({ ok: false })
+      await tick()
+      expect(made.every(socket => socket.readyState === 3)).toBe(true)
+      expect(connection.current().phase).toBe('signed-out')
+      expect(store.get?.(url)).toBeNull()
+    })
+
+    it('asks to sign in again as soon as a refresh is refused while the host is open', async () => {
+      const old = { access_token: 'old', refresh_token: 'old-refresh', expires_at: fresh(), provider: 'self-hosted' }
+      const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }], active: url })
+      const made = sockets()
+      let refused = false
+      const connection = new Connection({
+        store,
+        fetch: async input => {
+          const path = new URL(String(input)).pathname
+          if (path === '/auth/native/refresh') return json({ detail: 'revoked' }, 401)
+          if (path === '/api/auth/ws-ticket') return json({ ticket: 'ticket' })
+          // Hermes stops taking the access token.
+          return refused ? json({ detail: 'expired' }, 401) : json({ ok: true })
+        },
+        createSocket: made.create,
+        onStatus: () => {}, onEvent: () => {}
+      })
+      await connection.restore()
+      await until(() => connection.current().phase === 'open')
+      refused = true
+      await expect(connection.http('GET', '/api/a')).rejects.toThrow('Sign in again')
+      expect(connection.current()).toMatchObject({ phase: 'failed', url, error: 'Hermes signed this computer out. Sign in again.' })
+      expect(made.made[0]!.readyState).toBe(3)
+      expect(store.get?.(url)?.oidc).toBeUndefined()
+    })
+
+    it('refreshes once and sends a read again when Hermes refuses the access token', async () => {
+      const old = { access_token: 'old', refresh_token: 'old-refresh', expires_at: fresh(), provider: 'self-hosted' }
+      const next = { ...old, access_token: 'new', refresh_token: 'new-refresh' }
+      const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }], active: url })
+      const bearers: (string | null)[] = []
+      let refreshes = 0
+      const connection = new Connection({
+        store,
+        fetch: async (input, init) => {
+          const path = new URL(String(input)).pathname
+          if (path === '/auth/native/refresh') { refreshes++; return json(next) }
+          if (path === '/api/auth/ws-ticket') return json({ ticket: 'ticket' })
+          const bearer = new Headers(init?.headers).get('authorization')
+          bearers.push(bearer)
+          return bearer === 'Bearer new' ? json({ ok: true }) : json({ detail: 'expired' }, 401)
+        },
+        createSocket: sockets().create,
+        onStatus: () => {}, onEvent: () => {}
+      })
+      await connection.restore()
+      await until(() => connection.current().phase === 'open')
+      expect(await connection.http('GET', '/api/a')).toEqual({ ok: true })
+      expect(bearers).toEqual(['Bearer old', 'Bearer new'])
+      expect(refreshes).toBe(1)
+      expect(store.get?.(url)?.oidc).toEqual(next)
+      expect(connection.current().phase).toBe('open')
+    })
+
+    it('mints the socket ticket again after a refresh when the first bearer is refused', async () => {
+      const old = { access_token: 'old', refresh_token: 'old-refresh', expires_at: fresh(), provider: 'self-hosted' }
+      const next = { ...old, access_token: 'new', refresh_token: 'new-refresh' }
+      const store = createHostList(() => {}, { hosts: [{ url, method: 'oidc', oidc: old }], active: url })
+      const tickets: (string | null)[] = []
+      const connection = new Connection({
+        store,
+        fetch: async (input, init) => {
+          const path = new URL(String(input)).pathname
+          if (path === '/auth/native/refresh') return json(next)
+          if (path === '/api/auth/ws-ticket') {
+            const bearer = new Headers(init?.headers).get('authorization')
+            tickets.push(bearer)
+            return bearer === 'Bearer new' ? json({ ticket: 'ticket' }) : json({ detail: 'expired' }, 401)
+          }
+          return json({ ok: true })
+        },
+        createSocket: sockets().create,
+        onStatus: () => {}, onEvent: () => {}
+      })
+      await connection.restore()
+      await until(() => connection.current().phase === 'open')
+      expect(tickets).toEqual(['Bearer old', 'Bearer new'])
+      expect(connection.current().phase).toBe('open')
+    })
+  })
 
   it('signs in with a password and opens the socket with a ticket and the cookie', async () => {
     const h = harness()

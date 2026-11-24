@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { keepUnreadable, writeFileAtomic } from './atomicWrite'
 import type { ConnectionStore, SavedConnection } from './connection'
 import { createHostList } from './hosts'
+import { storedGrant } from './oidc'
 
 interface StoredHost {
   url: string
@@ -51,7 +52,8 @@ export function createFileStore(): ConnectionStore {
         saved.password = secrets.password
         saved.token = secrets.token
         saved.cookies = secrets.cookies
-        saved.oidc = secrets.oidc
+        // A grant that no longer reads as one is dropped here, so the host asks to sign in again at once.
+        saved.oidc = secrets.oidc === undefined ? undefined : storedGrant(secrets.oidc)
         saved.headers = secrets.headers
       } catch {
         // Encrypted by another user or machine: sign in again.

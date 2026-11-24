@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createServer, request, type Server } from 'node:http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OidcError, oidcLogin, refreshOidc, revokeOidc, type OidcGrant } from '../src/main/oidc'
+import { OidcError, oidcLogin, refreshOidc, revokeOidc, storedGrant, type OidcGrant } from '../src/main/oidc'
 
 const grant: OidcGrant = {
   access_token: 'access-token',
@@ -206,16 +206,72 @@ describe('native OAuth grant requests', () => {
     await expect(refreshOidc('https://dashboard.example', grant, async () => Response.json(expired))).resolves.toEqual(expired)
   })
 
-  it('revokes using only the refresh handle', async () => {
+  it("ends the sign-in through Hermes' logout, the refresh handle as its session cookie and nothing else (#417)", async () => {
     const requests: { url: string; init: RequestInit }[] = []
     await revokeOidc('https://dashboard.example/proxy/', grant, async (input, init = {}) => {
       requests.push({ url: String(input), init })
-      return new Response(null, { status: 204 })
+      // Hermes answers its logout with a redirect to its own sign-in page.
+      return new Response(null, { status: 302, headers: { location: '/proxy/login' } })
     })
     const sent = requests[0]
-    expect(sent?.url).toBe('https://dashboard.example/proxy/auth/native/revoke')
-    expect(JSON.parse(String(sent?.init.body))).toEqual({ refresh_token: grant.refresh_token })
-    expect(sent?.init).toMatchObject({ method: 'POST', redirect: 'manual', credentials: 'omit' })
+    expect(requests).toHaveLength(1)
+    expect(sent?.url).toBe('https://dashboard.example/proxy/auth/logout')
+    expect(sent?.init.body).toBeUndefined()
+    expect(sent?.init).toMatchObject({ method: 'POST', redirect: 'manual', credentials: 'omit', referrerPolicy: 'no-referrer' })
+    const headers = new Headers(sent?.init.headers)
+    expect(headers.get('cookie')).toBe(`hermes_session_rt=${grant.refresh_token}`)
+    expect(headers.has('authorization')).toBe(false)
+  })
+
+  it.each([
+    [204, null],
+    [200, null],
+    [303, 'https://dashboard.example/login'],
+    // A server without the route has nothing to revoke with.
+    [404, null],
+    [405, null]
+  ])('takes HTTP %i from logout as done', async (status, location) => {
+    await expect(
+      revokeOidc('https://dashboard.example', grant, async () => new Response(null, { status, headers: location ? { location } : {} }))
+    ).resolves.toBeUndefined()
+  })
+
+  it.each([
+    // An auth edge in front of Hermes sent the request elsewhere: Hermes never saw it.
+    [302, 'https://sso.example/login'],
+    [302, '/somewhere-else'],
+    [302, null],
+    [401, null],
+    [403, null],
+    [500, null],
+    [503, null]
+  ])('reports HTTP %i (%s) from logout as not revoked, without the handle in the message', async (status, location) => {
+    let caught: unknown
+    try {
+      await revokeOidc('https://dashboard.example', grant, async () => new Response('secret detail', { status, headers: location ? { location } : {} }))
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(OidcError)
+    expect(caught).toMatchObject({ status })
+    expect((caught as Error).message).not.toContain(grant.refresh_token)
+    expect((caught as Error).message).not.toContain('secret detail')
+  })
+
+  it('sends nothing for a handle that could not travel as a cookie value', async () => {
+    const fetchImpl = vi.fn()
+    for (const refresh_token of ['two words', 'semi;colon', 'quo"te', 'com,ma', 'back\\slash', 'line\nbreak', 'ünïcode']) {
+      await expect(revokeOidc('https://dashboard.example', { ...grant, refresh_token }, fetchImpl)).resolves.toBeUndefined()
+    }
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('reads a stored grant back only when it still is one', () => {
+    expect(storedGrant(grant)).toEqual(grant)
+    expect(storedGrant({ ...grant, access_token: '' })).toBeUndefined()
+    expect(storedGrant({ ...grant, expires_at: 'soon' })).toBeUndefined()
+    expect(storedGrant('not a grant')).toBeUndefined()
+    expect(storedGrant(null)).toBeUndefined()
   })
 
   it.each([400, 401, 403, 429, 500, 503, 302])('preserves HTTP %i without exposing response details', async status => {

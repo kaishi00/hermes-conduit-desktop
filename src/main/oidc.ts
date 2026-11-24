@@ -84,6 +84,15 @@ function parseGrant(value: unknown): OidcGrant {
   return grant
 }
 
+/** A stored grant as it was saved, or nothing when it no longer reads as one (a damaged file): the host asks to sign in again. */
+export function storedGrant(value: unknown): OidcGrant | undefined {
+  try {
+    return parseGrant(value)
+  } catch {
+    return undefined
+  }
+}
+
 function discardResponse(response: Response): void {
   if (response.body) void response.body.cancel().catch(() => undefined)
 }
@@ -359,8 +368,75 @@ export async function refreshOidc(baseUrl: string, grant: OidcGrant, fetchImpl: 
   }, fetchImpl, REQUEST_TIMEOUT_MS, true))!
 }
 
-/** The caller clears local credentials even if this best-effort request fails. */
+/** Hermes' session refresh cookie, which `/auth/logout` reads (the bare name, or its `__Host-` and `__Secure-` forms). */
+const REFRESH_COOKIE = 'hermes_session_rt'
+const LOGOUT_PATH = '/auth/logout'
+
+/** Whether the handle can travel as a cookie value unchanged: visible ASCII without `"`, `,`, `;` or `\`. */
+function cookieSafe(token: string): boolean {
+  return /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/.test(token)
+}
+
+/**
+ * Whether `/auth/logout`'s answer means Hermes took it. Hermes answers with a
+ * redirect to its own sign-in page; a redirect anywhere else is something in
+ * front of it that never passed the request on. A server without the route
+ * (404, 405) has nothing to revoke with, so there is nothing more to do.
+ */
+function logoutTaken(status: number, location: string | null, url: URL): boolean {
+  if ((status >= 200 && status < 300) || status === 404 || status === 405) return true
+  if (status < 300 || status >= 400 || !location) return false
+  let target: URL
+  try {
+    target = new URL(location, url)
+  } catch {
+    return false
+  }
+  return target.origin === url.origin && target.pathname === `${url.pathname.slice(0, -LOGOUT_PATH.length)}/login`
+}
+
+/**
+ * Ends the sign-in on Hermes too, so the refresh handle stops working at the
+ * identity provider and not only on this computer. Hermes has no revoke
+ * route for a native sign-in: its public `POST /auth/logout` revokes the
+ * refresh token it reads from the session cookie, with every provider, so
+ * the handle goes as that cookie, as the phone sends it (hermes-conduit#889).
+ * Nothing else is sent, and a redirect is never followed. The caller clears
+ * local credentials even if this best-effort request fails.
+ */
 export async function revokeOidc(baseUrl: string, grant: OidcGrant, fetchImpl: typeof fetch): Promise<void> {
-  if (!grant.refresh_token) return
-  await postNative(baseUrl, '/auth/native/revoke', { refresh_token: grant.refresh_token }, fetchImpl, REVOKE_TIMEOUT_MS, false)
+  if (!grant.refresh_token || !cookieSafe(grant.refresh_token)) return
+  const url = nativeEndpoint(baseUrl, LOGOUT_PATH)
+  const controller = new AbortController()
+  const { promise: deadline, reject: rejectDeadline } = Promise.withResolvers<never>()
+  const timer = setTimeout(() => {
+    rejectDeadline(new OidcError(t('The dashboard authentication request timed out.')))
+    controller.abort()
+  }, REVOKE_TIMEOUT_MS)
+  const request = async (): Promise<void> => {
+    const response = await fetchImpl(url.toString(), {
+      method: 'POST',
+      headers: { Cookie: `${REFRESH_COOKIE}=${grant.refresh_token}`, Accept: 'application/json' },
+      credentials: 'omit',
+      redirect: 'manual',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+      signal: controller.signal
+    })
+    discardResponse(response)
+    if (controller.signal.aborted) throw new OidcError(t('The dashboard authentication request timed out.'))
+    if (!logoutTaken(response.status, response.headers.get('location'), url)) {
+      throw new OidcError(t('Dashboard authentication failed (HTTP {status}).', { status: response.status }), response.status)
+    }
+  }
+  try {
+    await Promise.race([request(), deadline])
+  } catch (error) {
+    if (error instanceof OidcError) throw error
+    // Transport errors can contain request URLs or headers. Never expose those to callers.
+    throw new OidcError(t('Could not complete the dashboard authentication request.'))
+  } finally {
+    clearTimeout(timer)
+    controller.abort()
+  }
 }

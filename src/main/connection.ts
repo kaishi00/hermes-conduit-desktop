@@ -229,6 +229,9 @@ export class Connection {
     if (this.saved && this.newOidc.has(this.saved)) {
       this.teardown()
       this.saved = null
+      // The host that was dialing was never saved: nothing is connecting any more. A host that
+      // was open before opens again once the sign-in returns (signIn, editHost).
+      this.setStatus({ phase: 'signed-out', hosts: this.hosts() })
     }
     this.browserSignIn = null
   }
@@ -237,8 +240,12 @@ export class Connection {
     if (this.locked) return { ok: false, error: t('Unlock Conduit first.') }
     const previous = this.saved
     const result = await this.trySignIn(request)
-    // A failed sign-in to another host goes back to the one that was open.
-    if (!result.ok && previous && !this.saved) this.open(previous)
+    // A failed sign-in to another host goes back to the one that was open. One cancelled while
+    // its browser was out left that host saved but closed its socket; it opens again too, unless a
+    // newer sign-in has taken over, whose own end decides.
+    if (!result.ok && previous && !this.browserSignIn && (!this.saved || (this.saved === previous && !this.client && !this.retryTimer))) {
+      this.open(previous)
+    }
     return result
   }
 
@@ -318,9 +325,12 @@ export class Connection {
       return { ok: false, error: (error as Error).message }
     }
     if (generation !== this.generation) {
+      if (this.browserSignIn === browserAttempt) this.browserSignIn = null
       if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
       return { ok: false, error: t('Cancelled.') }
     }
+    // The sign-in this one takes the place of (the same host signed in again, or Edit Connection's).
+    const displaced = this.deps.store.get?.(replacing ?? url)
     this.saved = saved
     this.setStatus({ ...this.identity(), phase: 'connecting' })
     const error = await this.dial(generation)
@@ -339,6 +349,11 @@ export class Connection {
     if (replacing && this.deps.store.replace) this.deps.store.replace(replacing, saved)
     else this.deps.store.save(saved)
     this.newOidc.delete(saved)
+    // The browser sign-in it replaced ends on Hermes too, or its refresh handle would stay good
+    // at the identity provider with nothing left here to revoke it with.
+    if (displaced?.method === 'oidc' && displaced.oidc && displaced.oidc.refresh_token !== saved.oidc?.refresh_token) {
+      void revokeOidc(displaced.url, displaced.oidc, this.fetchFor(displaced)).catch(() => {})
+    }
     // The host list now holds it, and its name.
     this.setStatus({ ...this.status, hosts: this.hosts(), hostLabel: this.identityOf(saved).hostLabel })
     return { ok: true }
@@ -608,6 +623,8 @@ export class Connection {
         if (generation !== this.generation) return t('Cancelled.')
         return this.failed(generation, error)
       }
+      // Cancelled or replaced while the token was read: no socket is made for it.
+      if (generation !== this.generation) return 'Cancelled.'
     }
     const client = new JsonRpcGatewayClient({
       socketFactory: url => this.deps.createSocket(url, withProxyHeaders(headers, url, saved.url, saved.headers)),
@@ -615,12 +632,21 @@ export class Connection {
     })
     this.client = client
     this.attach(client, generation)
+    // A dial that was cancelled or replaced while it connected leaves no open socket behind.
+    const abandon = (): string => {
+      if (this.client === client) {
+        this.unbindClient()
+        this.client = null
+      }
+      client.close()
+      return 'Cancelled.'
+    }
     try {
       await client.connect(wsUrl)
-      if (generation !== this.generation) return 'Cancelled.'
+      if (generation !== this.generation) return abandon()
       return null
     } catch (error) {
-      if (generation !== this.generation) return 'Cancelled.'
+      if (generation !== this.generation) return abandon()
       return this.failed(generation, error)
     }
   }
@@ -842,7 +868,18 @@ export class Connection {
       }).finally(() => pendingByHost!.delete(key))
       pendingByHost.set(key, pending)
     }
-    saved.oidc = await pending
+    try {
+      saved.oidc = await pending
+    } catch (error) {
+      // The sign-in ended while the host was open: say so now, so the window asks to sign in
+      // again rather than showing a connection whose requests all fail until the socket drops.
+      if (error instanceof AuthError && error.signedOut && this.saved === saved && this.status.phase === 'open') {
+        this.generation++
+        this.teardown()
+        this.setStatus({ ...this.identity(), phase: 'failed', error: t('Hermes signed this computer out. Sign in again.') })
+      }
+      throw error
+    }
     return saved.oidc.access_token
   }
 
