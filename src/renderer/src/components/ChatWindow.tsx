@@ -1,3 +1,4 @@
+import { applyScale, nextScale, readScale, scaleFromStorage, scaleStep, shortcutFor } from '../state/shortcuts'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { t } from '@shared/i18n'
 import type { ChatWindowRequest, ConnectionStatus } from '@shared/ipc'
@@ -84,6 +85,38 @@ const muteHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gatewa
  */
 export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
   const [status, setStatus] = useState<ConnectionStatus | null>(null)
+  // The chat's text size, the one setting every window shares: its keys work here too, and a change made
+  // in another window shows here (desktop#449).
+  useEffect(() => {
+    let scale = readScale()
+    document.documentElement.style.setProperty('--chat-scale', String(scale))
+    const step = (by: -1 | 0 | 1 | null) => {
+      // Docked in the main window, that window's own shortcuts set the size.
+      if (by === null || request.docked) return false
+      scale = nextScale(scale, by)
+      applyScale(scale)
+      return true
+    }
+    const mac = window.conduit.platform === 'darwin'
+    const onKey = (event: KeyboardEvent) => {
+      // On a Mac the View menu's own keys arrive as its commands.
+      if (!mac && step(scaleStep(shortcutFor(event, false)))) event.preventDefault()
+    }
+    const follow = (event: StorageEvent) => {
+      const next = scaleFromStorage(event)
+      if (next === null) return
+      scale = next
+      document.documentElement.style.setProperty('--chat-scale', String(next))
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('storage', follow)
+    const offMenu = window.conduit.onMenu(action => void step(scaleStep(action)))
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('storage', follow)
+      offMenu()
+    }
+  }, [request.docked])
   useEffect(() => {
     const off = window.conduit.onStatus(setStatus)
     void window.conduit.status().then(s => setStatus(current => current ?? s))

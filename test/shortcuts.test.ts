@@ -87,3 +87,22 @@ describe('nextScale', () => {
     expect(nextScale(SCALES[SCALES.length - 1], 1)).toBe(SCALES[SCALES.length - 1])
   })
 })
+
+describe('the chat text size across windows (desktop#449)', () => {
+  it('reads the size another window saved, and takes a removed key as normal size', async () => {
+    const { scaleFromStorage } = await import('../src/renderer/src/state/shortcuts')
+    expect(scaleFromStorage({ key: 'conduit.chatTextScale', newValue: '1.2' })).toBe(1.2)
+    expect(scaleFromStorage({ key: 'conduit.chatTextScale', newValue: null })).toBe(1)
+    expect(scaleFromStorage({ key: 'conduit.chatTextScale', newValue: '9' })).toBe(1)
+    expect(scaleFromStorage({ key: 'conduit.other', newValue: '1.2' })).toBeNull()
+  })
+
+  it('knows which shortcuts step the size', async () => {
+    const { scaleStep } = await import('../src/renderer/src/state/shortcuts')
+    expect(scaleStep('text-bigger')).toBe(1)
+    expect(scaleStep('text-smaller')).toBe(-1)
+    expect(scaleStep('text-normal')).toBe(0)
+    expect(scaleStep('new-chat')).toBeNull()
+    expect(scaleStep(null)).toBeNull()
+  })
+})

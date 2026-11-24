@@ -198,7 +198,7 @@ import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies
 import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isUnread, type ChatMarks } from './state/chatMarks'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
-import { SCALES, applyScale, nextScale, readScale, shortcutFor } from './state/shortcuts'
+import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { SectionRail } from './components/SectionRail'
@@ -477,6 +477,15 @@ function Shell({
   const closeShortcuts = useCallback(() => setShortcutsOpen(false), [])
   const [chatScale, setChatScale] = useState(readScale)
   useEffect(() => applyScale(chatScale), [chatScale])
+  // A chat in its own window changed the size: this window follows it.
+  useEffect(() => {
+    const follow = (event: StorageEvent) => {
+      const scale = scaleFromStorage(event)
+      if (scale !== null) setChatScale(scale)
+    }
+    window.addEventListener('storage', follow)
+    return () => window.removeEventListener('storage', follow)
+  }, [])
   // A chat's apps card opens Settings > Capabilities > Browse Apps.
   const [appsRequest, setAppsRequest] = useState<AppsRequest | null>(null)
   useEffect(

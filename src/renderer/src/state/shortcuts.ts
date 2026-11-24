@@ -134,3 +134,15 @@ export function applyScale(scale: number): void {
     // Normal size next time.
   }
 }
+
+/** The scale another window just saved, from its `storage` event; null for any other key. */
+export function scaleFromStorage(event: Pick<StorageEvent, 'key' | 'newValue'>): number | null {
+  if (event.key !== SCALE_KEY) return null
+  const value = Number(event.newValue)
+  return SCALES.includes(value) ? value : 1
+}
+
+/** The text-size step a shortcut asks for, or null when the action is another one. */
+export function scaleStep(action: MenuAction | null): -1 | 0 | 1 | null {
+  return action === 'text-bigger' ? 1 : action === 'text-smaller' ? -1 : action === 'text-normal' ? 0 : null
+}
