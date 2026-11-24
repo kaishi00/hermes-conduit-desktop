@@ -1,3 +1,4 @@
+import { searchFold } from '../state/searchFold'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { underSource } from '../state/voiceList'
 import { includedInAll, profileGroups, readClosedSections, readGroupByProfile, readLeftOut, shownInAll, writeClosedSections, writeGroupByProfile, writeLeftOut } from '../state/profileGroups'
@@ -182,12 +183,12 @@ const isOther = (row: ChatRow): row is OtherChatRow => typeof (row as Partial<Ot
 const searchHttp = (path: string) => gateway.http('GET', path)
 const prefsHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gateway.http(method, path, body)
 
-/** A row's words for the search, lowercased once per row object (rows keep theirs across refreshes: keepSameRows). */
+/** A row's words for the search, folded once per row object (rows keep theirs across refreshes: keepSameRows). */
 const searchTexts = new WeakMap<ChatRow, string>()
 function searchText(row: ChatRow): string {
   let text = searchTexts.get(row)
   if (text === undefined) {
-    text = `${row.title} ${row.preview ?? ''}`.toLowerCase()
+    text = searchFold(`${row.title} ${row.preview ?? ''}`)
     searchTexts.set(row, text)
   }
   return text
@@ -371,7 +372,7 @@ export function ChatList({
   // Only grouped by profile does the open chat change what's listed (its section keeps it past the cap), so a click elsewhere doesn't list again.
   const groupOpenId = grouped ? selectedId : null
   const { sections, listed, allowed, pinnedSection, nesting, hidesEverything } = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = searchFold(query.trim())
     const inProfile = otherProfile
       ? []
       : profile
@@ -390,9 +391,9 @@ export function ChatList({
     // Another combined host's chats, only in All with no filter: found by title or by the host's name. Another
     // dashboard's face shows only its profile's, and none of this dashboard's.
     const others = otherProfile
-      ? otherRows.filter(r => r.host === otherProfile.host && sameProfile(r, otherProfile.name) && (!q || `${r.title} ${r.preview ?? ''}`.toLowerCase().includes(q)))
+      ? otherRows.filter(r => r.host === otherProfile.host && sameProfile(r, otherProfile.name) && (!q || searchFold(`${r.title} ${r.preview ?? ''}`).includes(q)))
       : !profile && !active.length
-        ? otherRows.filter(r => !q || `${r.title} ${r.preview ?? ''} ${badgeFor?.(r.host)?.name ?? ''}`.toLowerCase().includes(q))
+        ? otherRows.filter(r => !q || searchFold(`${r.title} ${r.preview ?? ''} ${badgeFor?.(r.host)?.name ?? ''}`).includes(q))
         : []
     const sections = sectionRows(grouped ? filtered : [...filtered, ...others])
     // The Pinned section in the person's order, arranged from every pinned chat the profile shown has.

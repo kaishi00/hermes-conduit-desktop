@@ -1,3 +1,4 @@
+import { searchFold } from '../state/searchFold'
 import { useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
@@ -337,11 +338,11 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
 
   // A host change hides the old host's rows even before the effect starts its new read.
   const shown = view.host === host ? view : emptyView(host)
-  const needle = query.trim().toLowerCase()
+  const needle = searchFold(query.trim())
   const rows = shown.rows.filter(row =>
     (!profile || sameProfile(row.profile, profile)) &&
     !(visibleVoiceIds?.has(row.id) && isArchivedVoiceChat(row, shown.voice)) &&
-    (!needle || `${row.title} ${row.id} ${row.preview ?? ''} ${row.profile || 'default'} ${row.source ?? ''} ${row.model ?? ''}`.toLowerCase().includes(needle))
+    (!needle || searchFold(`${row.title} ${row.id} ${row.preview ?? ''} ${row.profile || 'default'} ${row.source ?? ''} ${row.model ?? ''}`).includes(needle))
   )
   const unread = shown.unread.filter(item => !profile || sameProfile(item.profile, profile))
 
