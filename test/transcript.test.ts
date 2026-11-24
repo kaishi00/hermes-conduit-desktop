@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  inflightRemainder,
   coalesceDeltas,
   addPendingUser,
   applyEvent,
@@ -199,5 +200,21 @@ describe('a frame of streaming deltas', () => {
     const fold = (list: typeof events) => list.reduce((state, event) => applyEvent(state, event), emptyTranscript)
     const strip = (state: ReturnType<typeof fold>) => state.items.map(i => ({ kind: i.kind, text: 'text' in i ? i.text : '' }))
     expect(strip(fold(coalesceDeltas(events)))).toEqual(strip(fold(events)))
+  })
+})
+
+describe('inflightRemainder', () => {
+  const said = (text: string, key: string) => ({ kind: 'assistant' as const, key, text, streaming: false })
+  const asked = { kind: 'user' as const, key: 'row-1', text: 'count', at: 0 }
+
+  it('leaves out the parts of a running reply its stored rows already draw', () => {
+    const state = { ...emptyTranscript, items: [asked, said('41 42 43', 'row-2'), said('44 45', 'row-3')] }
+    expect(inflightRemainder(state, '41 42 43\n\n44 45\n\n46 47')).toBe('46 47')
+    expect(inflightRemainder(state, '41 42 43 44 45')).toBe('')
+  })
+
+  it('keeps the reply whole when the rows are an earlier turn’s, or do not lead it', () => {
+    expect(inflightRemainder({ ...emptyTranscript, items: [said('41 42', 'row-0'), asked] }, '41 42 43')).toBe('41 42 43')
+    expect(inflightRemainder({ ...emptyTranscript, items: [asked, said('something else', 'row-2')] }, '41 42 43')).toBe('41 42 43')
   })
 })

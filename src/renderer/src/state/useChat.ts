@@ -41,6 +41,7 @@ import {
   toolAnswers,
   toolNames,
   applyingReaction,
+  inflightRemainder,
   olderPagesOf,
   prependOlder,
   reactionTarget,
@@ -234,6 +235,13 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
     case 'older':
       return prependOlder(state, action.items)
   }
+}
+
+/** A running turn's reply so far, drawn as streaming: only the part the stored rows don't already say. */
+function withInflight(state: TranscriptState, result: { running?: boolean | null; inflight?: { assistant?: string } | null }): TranscriptState {
+  if (!result.running || !result.inflight?.assistant) return state
+  const text = inflightRemainder(state, result.inflight.assistant)
+  return text ? applyEvent(state, { type: 'message.delta', payload: { text } }) : state
 }
 
 interface ResumeResult {
@@ -508,9 +516,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         setOlder(open.older ?? null)
         // The tool answers the kept copy had come along, so only new ones are read (desktop#293).
         let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), cached)
-        if (result.running && result.inflight?.assistant) {
-          state = applyEvent(state, { type: 'message.delta', payload: { text: result.inflight.assistant } })
-        }
+        state = withInflight(state, result)
         state = withPendingConnection(state, result)
         dispatch({ type: 'reset', state })
         drawnTip.current = tipOf(rows ?? result.messages)
@@ -665,7 +671,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       }
       olderNow.current = olderAt
       setOlder(olderAt)
-      if (result.running && result.inflight?.assistant) state = applyEvent(state, { type: 'message.delta', payload: { text: result.inflight.assistant } })
+      state = withInflight(state, result)
       state = withPendingConnection(state, result)
       dispatch({ type: 'reset', state })
       drawnTip.current = tipOf(rows ?? result.messages)
