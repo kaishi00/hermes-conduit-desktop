@@ -14,12 +14,16 @@ beforeAll(() => {
   })
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
-    value: { writeText: async (text: string) => void copies.push(text) }
+    value: { writeText: (text: string) => write(text) }
   })
 })
 
+/** The clipboard's answer to the next writes; a test swaps it for a refusal or a slow one. */
+let write: (text: string) => Promise<void> = async text => void copies.push(text)
+
 beforeEach(() => {
   copies.length = 0
+  write = async text => void copies.push(text)
   vi.useFakeTimers()
 })
 
@@ -85,5 +89,42 @@ describe("a code block's Copy button", () => {
     view.render('```\nsecond card\n```')
     expect(view.state()).toEqual(rest)
     view.unmount()
+  })
+
+  it("says it couldn't copy for 1.5 s when the clipboard refuses, and copies on the next try (#421)", async () => {
+    write = async () => {
+      throw new Error('denied')
+    }
+    const view = await mount('```\nls -la\n```')
+    act(() => view.button().click())
+    await settle()
+    expect(view.state()).toEqual({ icon: 'close', label: 'Copy', announced: "Couldn't copy" })
+    expect(view.button().className).toBe('code-copy failed')
+
+    act(() => vi.advanceTimersByTime(1500))
+    expect(view.state()).toEqual(rest)
+
+    write = async text => void copies.push(text)
+    act(() => view.button().click())
+    await settle()
+    expect(view.state()).toEqual(done)
+    expect(copies).toEqual(['ls -la'])
+    view.unmount()
+  })
+
+  it('changes nothing when the write lands after the block has gone', async () => {
+    let land!: () => void
+    write = () =>
+      new Promise<void>(resolve => {
+        land = resolve
+      })
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const view = await mount('```\nls -la\n```')
+    act(() => view.button().click())
+    view.unmount()
+    await act(async () => land())
+    await settle()
+    expect(errors).not.toHaveBeenCalled()
+    errors.mockRestore()
   })
 })

@@ -45958,5 +45958,20 @@
     "tr": "Tarayıcıyla giriş süreniz doldu. Yeniden giriş yapın.",
     "zh-Hans": "你的浏览器登录已过期。请重新登录。",
     "zh-Hant": "你的瀏覽器登入已過期。請重新登入。"
+  },
+  "Couldn't copy": {
+    "de": "Kopieren nicht möglich",
+    "es": "No se pudo copiar",
+    "fr": "Copie impossible",
+    "id": "Tidak dapat menyalin",
+    "it": "Impossibile copiare",
+    "ja": "コピーできませんでした",
+    "ko": "복사할 수 없음",
+    "pl": "Nie udało się skopiować",
+    "pt-BR": "Não foi possível copiar",
+    "ru": "Не удалось скопировать",
+    "tr": "Kopyalanamadı",
+    "zh-Hans": "无法拷贝",
+    "zh-Hant": "無法拷貝"
   }
 }

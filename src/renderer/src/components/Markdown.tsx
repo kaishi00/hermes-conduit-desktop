@@ -1,4 +1,4 @@
-import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, isValidElement, memo, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
@@ -56,38 +56,51 @@ export function codeToCopy(children: ReactNode): string {
 
 /** A code block with a Copy button that is always shown, so a draft or a command can be taken in one tap. */
 function Pre({ children }: { children?: ReactNode }) {
-  const code = useMemo(() => codeToCopy(children), [children])
-  // The code copied, and a count, so a second click restarts the 1.5 s "Copied"
-  // rather than ending the first one's. "Copied" shows only while the block still
-  // holds that code: a surface that swaps one text for another in place reuses
-  // this block, and its new code hasn't been copied.
-  const [copied, setCopied] = useState<{ code: string; n: number } | null>(null)
+  // Read on each draw: `children` is a new node every time, so a memo on it never held.
+  const code = codeToCopy(children)
+  // The code copied (or the code whose copy failed), and a count, so a second
+  // click restarts the 1.5 s note rather than ending the first one's. The note
+  // shows only while the block still holds that code: a surface that swaps one
+  // text for another in place reuses this block, and its new code hasn't been
+  // copied.
+  const [copied, setCopied] = useState<{ code: string; n: number; failed?: true } | null>(null)
   useEffect(() => {
     if (!copied) return
     const timer = setTimeout(() => setCopied(null), 1500)
     return () => clearTimeout(timer)
   }, [copied])
-  const shown = copied?.code === code
+  // A write that lands after the block has gone changes nothing.
+  const here = useRef(true)
+  useEffect(() => {
+    here.current = true
+    return () => {
+      here.current = false
+    }
+  }, [])
+  const noted = copied?.code === code ? copied : null
+  const shown = !!noted && !noted.failed
+  const failed = !!noted?.failed
   // An icon on screen, so the button doesn't compete with the code; its words are
-  // for screen readers: the label, and "Copied" announced while the check shows.
+  // for screen readers: the label, and "Copied" (or that it couldn't) announced
+  // while the mark shows.
   return (
     <div className="code-block">
       <button
         type="button"
-        className={shown ? 'code-copy copied' : 'code-copy'}
+        className={shown ? 'code-copy copied' : failed ? 'code-copy failed' : 'code-copy'}
         aria-label={t('Copy')}
-        title={t('Copy')}
+        title={failed ? t("Couldn't copy") : t('Copy')}
         onClick={() =>
           void navigator.clipboard.writeText(code).then(
-            () => setCopied(c => ({ code, n: (c?.n ?? 0) + 1 })),
-            () => undefined
+            () => here.current && setCopied(c => ({ code, n: (c?.n ?? 0) + 1 })),
+            () => here.current && setCopied(c => ({ code, n: (c?.n ?? 0) + 1, failed: true }))
           )
         }
       >
-        <Icon name={shown ? 'check' : 'copy'} />
+        <Icon name={shown ? 'check' : failed ? 'close' : 'copy'} />
       </button>
       <span className="sr-only" aria-live="polite">
-        {shown ? t('Copied') : ''}
+        {shown ? t('Copied') : failed ? t("Couldn't copy") : ''}
       </span>
       <pre>{children}</pre>
     </div>
