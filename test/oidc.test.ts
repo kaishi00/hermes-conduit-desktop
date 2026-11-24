@@ -286,6 +286,20 @@ describe('native OAuth grant requests', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  it('treats a whitespace-only refresh handle as the access-token-only session it is (issue 436)', async () => {
+    // A handle that trims to nothing would otherwise be kept and fail at the next refresh round-trip.
+    const blank = { ...grant, refresh_token: '   ' }
+    const issued = await refreshOidc('https://dashboard.example', grant, async () => Response.json(blank))
+    expect(issued.refresh_token).toBe('')
+
+    const refreshImpl = vi.fn()
+    await expect(refreshOidc('https://dashboard.example', issued, refreshImpl))
+      .rejects.toMatchObject({ name: 'OidcError', status: 400, isRejected: true })
+    expect(refreshImpl).not.toHaveBeenCalled()
+    await expect(revokeOidc('https://dashboard.example', issued, refreshImpl)).resolves.toBeUndefined()
+    expect(refreshImpl).not.toHaveBeenCalled()
+  })
+
   it('skips revoke without a refresh handle', async () => {
     const fetchImpl = vi.fn()
     await expect(revokeOidc('https://dashboard.example', { ...grant, refresh_token: '' }, fetchImpl))

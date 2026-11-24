@@ -73,7 +73,10 @@ function parseGrant(value: unknown): OidcGrant {
   }
   const grant: OidcGrant = {
     access_token: row.access_token,
-    refresh_token: row.refresh_token,
+    // A handle that trims to nothing is no handle: an IdP that withheld one (or wrote blanks)
+    // leaves an access-token-only session, and the next refresh says "sign in again" instead of
+    // taking a round-trip the dashboard can only refuse (issue 436).
+    refresh_token: row.refresh_token.trim() ? row.refresh_token : '',
     expires_at: row.expires_at,
     provider: row.provider
   }
