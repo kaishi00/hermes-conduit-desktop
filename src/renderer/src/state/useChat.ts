@@ -428,7 +428,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     setQueue([])
     olderNow.current = null
     setOlder(null)
-    // A page read the last chat left on its way is no longer this pane's.
+    // A page read the last chat left on its way is no longer this pane's, nor the row it was read for.
+    wanted.current = null
     olderLoading.current = null
     setLoadingOlder(false)
     setChat(storedId || !folder ? { storedId, liveId: null } : { storedId, liveId: null, cwd: folder })
@@ -1264,7 +1265,34 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     }
   }, [profile, dispatch, transcriptRef])
 
+  /**
+   * A row a jump is after — a pin, an artifact's Show in Chat — that the pages
+   * read so far may not hold: `found` says whether the transcript has it. The
+   * pages before are read until it does or the chat has no more, starting once
+   * the chat is open, so a jump asked for as its chat opens waits for it. The
+   * caller jumps when its row turns up in the transcript; one wanted row at a
+   * time, the newest ask.
+   */
+  const wanted = useRef<((items: readonly TranscriptItem[]) => boolean) | null>(null)
+  const seekMore = useCallback(() => {
+    const found = wanted.current
+    if (!found) return
+    if (found(transcriptRef.current.items)) wanted.current = null
+    else if (olderNow.current && !olderNow.current.more) wanted.current = null
+    else void loadOlder()
+  }, [loadOlder, transcriptRef])
+  const seekRow = useCallback(
+    (found: (items: readonly TranscriptItem[]) => boolean) => {
+      wanted.current = found
+      seekMore()
+    },
+    [seekMore]
+  )
+  // Each page read, and the open itself, moves `older`: the wanted row is looked for again.
+  useEffect(() => seekMore(), [older, seekMore])
+
   return {
+    seekRow,
     transcriptStore,
     chat,
     react,

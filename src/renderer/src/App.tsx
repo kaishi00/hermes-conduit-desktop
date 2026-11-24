@@ -452,6 +452,7 @@ function Shell({
     resendLost,
     loadOlder,
     loadingOlder,
+    seekRow,
     react: reactTo
   } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '')
   // What this window shows of the transcript; the transcript itself is drawn by LiveTranscript, so a streaming
@@ -1094,7 +1095,7 @@ function Shell({
     writeWidth(PANEL_COLUMN, width)
   }
   // An artifact's Show in Chat (state/revealRow.ts).
-  const showInChat = useRevealRow(transcriptStore, selected.id, chat.storedId, key => requestAnimationFrame(() => revealMessage(chatPane.current, key)))
+  const showInChat = useRevealRow(transcriptStore, selected.id, chat.storedId, key => requestAnimationFrame(() => revealMessage(chatPane.current, key)), seekRow)
   const [modelOpen, setModelOpen] = useState(false)
   const closeModel = useCallback(() => setModelOpen(false), [])
   const [contextOpen, setContextOpen] = useState(false)
@@ -2519,6 +2520,7 @@ function Shell({
                       onReact={chat.liveId ? reactTo : undefined}
                       onBranch={chat.liveId && !running ? branchFrom : undefined}
                       onLoadOlder={loadOlder}
+                      onSeekRow={seekRow}
                       loadingOlder={loadingOlder}
                     />
                   </ConnectionActionsContext.Provider>
