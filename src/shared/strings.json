@@ -27104,6 +27104,21 @@
     "zh-Hans": "已保存，但网关没有重启：{error}",
     "zh-Hant": "已儲存，但閘道沒有重新啟動：{error}"
   },
+  "Saved, but the old gateway routing ({kind}.use_gateway) couldn't be removed: {error}": {
+    "de": "Gespeichert, aber das alte Gateway-Routing ({kind}.use_gateway) konnte nicht entfernt werden: {error}",
+    "es": "Guardado, pero no se pudo quitar el enrutamiento antiguo de la pasarela ({kind}.use_gateway): {error}",
+    "fr": "Enregistré, mais l’ancien routage de la passerelle ({kind}.use_gateway) n’a pas pu être supprimé : {error}",
+    "id": "Tersimpan, tetapi perutean gateway lama ({kind}.use_gateway) tidak dapat dihapus: {error}",
+    "it": "Salvato, ma non è stato possibile rimuovere il vecchio instradamento del gateway ({kind}.use_gateway): {error}",
+    "ja": "保存しましたが、古いゲートウェイのルーティング（{kind}.use_gateway）を削除できませんでした: {error}",
+    "ko": "저장했지만 이전 게이트웨이 라우팅({kind}.use_gateway)을 제거하지 못했습니다: {error}",
+    "pl": "Zapisano, ale nie udało się usunąć starego routingu bramy ({kind}.use_gateway): {error}",
+    "pt-BR": "Salvo, mas não foi possível remover o roteamento antigo do gateway ({kind}.use_gateway): {error}",
+    "ru": "Сохранено, но старую маршрутизацию шлюза ({kind}.use_gateway) удалить не удалось: {error}",
+    "tr": "Kaydedildi, ancak eski ağ geçidi yönlendirmesi ({kind}.use_gateway) kaldırılamadı: {error}",
+    "zh-Hans": "已保存，但无法移除旧的网关路由（{kind}.use_gateway）：{error}",
+    "zh-Hant": "已儲存，但無法移除舊的閘道路由（{kind}.use_gateway）：{error}"
+  },
   "Saved, but the old key couldn't be removed everywhere. A profile still using it says Old copy of the shared key.": {
     "de": "Gespeichert, aber der alte Schlüssel konnte nicht überall entfernt werden. Ein Profil, das ihn noch nutzt, zeigt „Alte Kopie des gemeinsamen Schlüssels“.",
     "es": "Guardada, pero la clave antigua no se pudo quitar en todas partes. Un perfil que aún la use muestra «Copia antigua de la clave compartida».",

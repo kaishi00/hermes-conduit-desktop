@@ -82,6 +82,8 @@ export function HermesSpeechSettings({ kind, profile }: { kind: SpeechKind; prof
       // Saved says so only once Hermes' answer shows what was saved.
       if ((await read()) && live.current) setSaved(true)
     } catch (e) {
+      // A write can fail part way (a pick saved, its stale routing left), so the page shows what Hermes holds now, then the error.
+      await read()
       if (live.current) setError(message(e))
     } finally {
       if (live.current) setBusy(false)

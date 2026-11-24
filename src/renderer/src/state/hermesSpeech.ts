@@ -319,7 +319,9 @@ export function saveProvider(http: Http, profile: string, kind: SpeechKind, id: 
     // After the save, so one that fails leaves the old provider with its routing. A plugin without the route leaves it, as before.
     if (valueAt(config, `${kind}.use_gateway`) !== undefined)
       await http('POST', withProfile(CONFIG_UNSET_PATH, profile), { keys: [`${kind}.use_gateway`] }).catch(e => {
-        if (!isMissingRoute(e)) throw e
+        if (isMissingRoute(e)) return
+        // The provider is saved by now, so the error says which half didn't happen.
+        throw new Error(t("Saved, but the old gateway routing ({kind}.use_gateway) couldn't be removed: {error}", { kind, error: e instanceof Error ? e.message : String(e) }))
       })
   })
 }

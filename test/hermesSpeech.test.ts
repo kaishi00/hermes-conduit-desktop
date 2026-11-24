@@ -136,7 +136,8 @@ describe('clearing a Hermes speech setting', () => {
     expect(old.file).toEqual({ stt: { provider: 'groq', use_gateway: true } })
     const failing = hermes({ stt: { provider: 'local', use_gateway: true } })
     const refuse: Http = (method, path, body) => (method === 'POST' ? Promise.reject(Object.assign(new Error('boom'), { code: 500 })) : failing.http(method, path, body))
-    await expect(saveProvider(refuse, 'default', 'stt', 'groq')).rejects.toThrow('boom')
+    await expect(saveProvider(refuse, 'default', 'stt', 'groq')).rejects.toThrow(/Saved, but the old gateway routing \(stt\.use_gateway\) couldn't be removed: boom/)
+    expect(failing.file).toEqual({ stt: { provider: 'groq', use_gateway: true } })
     // Asked only after the save, so a save that fails leaves the old provider with its routing.
     const unsaved = hermes({ stt: { provider: 'local', use_gateway: true } })
     const noSave: Http = (method, path, body) => (method === 'PUT' ? Promise.reject(new Error('refused')) : unsaved.http(method, path, body))
