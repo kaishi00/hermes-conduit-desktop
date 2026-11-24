@@ -246,6 +246,7 @@ export function ChatList({
   onHide
 }: Props) {
   const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const [menu, setMenu] = useState<{ row: ChatRow; x: number; y: number } | null>(null)
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null)
   const hasActions = !!(onPin || onRename || onArchive || onDelete || onStar)
@@ -631,6 +632,15 @@ export function ChatList({
     []
   )
   const today = startOfDay(Date.now())
+  // The wrapper is a div since the clear control joined the field (#420), so unlike the sibling
+  // fields' labels it no longer focuses the field by itself; forward its clicks, and leave the
+  // clear control's own press alone.
+  const focusSearch = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement
+    if (target === searchRef.current || target.closest('button')) return
+    e.preventDefault()
+    searchRef.current?.focus()
+  }
 
   return (
     <section className={`chatlist${showColumn ? ' has-column' : ''}`} aria-label={t('Chats')}>
@@ -687,16 +697,26 @@ export function ChatList({
         {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
       <div className="chatlist-searchrow">
-        <div className="chatlist-search">
+        <div className="chatlist-search" onMouseDown={focusSearch}>
           <Icon name="search" />
           <input
+            ref={searchRef}
             aria-label={t('Search chats')}
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder={t('Search chats')}
           />
           {query ? (
-            <button className="chatlist-search-clear" aria-label={t('Clear search')} title={t('Clear search')} onClick={() => setQuery('')}>
+            <button
+              className="chatlist-search-clear"
+              aria-label={t('Clear search')}
+              title={t('Clear search')}
+              // Clearing unmounts this button, which would drop focus to the body: keep it in the field.
+              onClick={() => {
+                setQuery('')
+                searchRef.current?.focus()
+              }}
+            >
               <Icon name="close" />
             </button>
           ) : null}
