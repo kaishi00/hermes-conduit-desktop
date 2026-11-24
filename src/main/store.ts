@@ -35,17 +35,28 @@ interface StoredFile {
 }
 
 /** Failed sign-outs, encrypted on their own: they outlive the host entry they came from. */
-const pendingPath = join(app.getPath('userData'), 'pending-signouts.json')
+// Read at use, as the other files here are: the folder can be set after this module loads.
+const pendingPath = () => join(app.getPath('userData'), 'pending-signouts.json')
+
+/** A kept sign-out's proxy headers: names to text, or none. */
+function pendingHeaders(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const entries = Object.entries(value as Record<string, unknown>).filter((pair): pair is [string, string] => typeof pair[1] === 'string')
+  return entries.length ? Object.fromEntries(entries) : undefined
+}
 
 function readPending(): PendingSignOut[] {
   try {
     if (!safeStorage.isEncryptionAvailable()) return []
-    const raw = JSON.parse(safeStorage.decryptString(Buffer.from(readFileSync(pendingPath, 'utf8'), 'base64'))) as unknown
+    const raw = JSON.parse(safeStorage.decryptString(Buffer.from(readFileSync(pendingPath(), 'utf8'), 'base64'))) as unknown
     if (!Array.isArray(raw)) return []
-    return raw.filter((item): item is PendingSignOut =>
-      !!item && typeof item === 'object' && typeof (item as PendingSignOut).url === 'string' &&
-      typeof (item as PendingSignOut).refreshToken === 'string' && typeof (item as PendingSignOut).expiresAt === 'number'
-    ).slice(-20)
+    return raw
+      .filter((item): item is PendingSignOut =>
+        !!item && typeof item === 'object' && typeof (item as PendingSignOut).url === 'string' &&
+        typeof (item as PendingSignOut).refreshToken === 'string' && typeof (item as PendingSignOut).expiresAt === 'number'
+      )
+      .map(({ url, refreshToken, expiresAt, headers }) => ({ url, refreshToken, expiresAt, ...(pendingHeaders(headers) ? { headers: pendingHeaders(headers) } : {}) }))
+      .slice(-20)
   } catch {
     return []
   }
@@ -53,7 +64,7 @@ function readPending(): PendingSignOut[] {
 
 function writePending(list: PendingSignOut[]): void {
   if (!safeStorage.isEncryptionAvailable()) return
-  writeFileAtomic(pendingPath, safeStorage.encryptString(JSON.stringify(list.slice(-20))).toString('base64'), 0o600)
+  writeFileAtomic(pendingPath(), safeStorage.encryptString(JSON.stringify(list.slice(-20))).toString('base64'), 0o600)
 }
 
 /** A host's own name and its Hermes' name (shared/hostNames.ts), where it has them. */

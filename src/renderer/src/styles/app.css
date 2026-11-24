@@ -3885,6 +3885,9 @@ html[data-window='quick'] body {
 .row-menu {
   position: fixed;
   min-width: 180px;
+  /* A list longer than the window (many projects under Move to Project) scrolls inside the menu. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 
 .host-menu button.danger {

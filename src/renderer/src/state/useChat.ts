@@ -403,6 +403,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   )
   useEffect(() => () => cancelFrame(), [])
   const [chat, setChat] = useState<OpenChat>({ storedId, liveId: null })
+  // Wherever a resume or a new chat lands the live session (an open, a re-read, a reaped runtime's resume, a first
+  // send), a question dismissed beside another chat finds its card by it (expiredQuestions).
+  useEffect(() => noteChatSession(chat.storedId, chat.liveId), [chat.storedId, chat.liveId])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const liveId = useRef<string | null>(null)

@@ -93,4 +93,84 @@ describe('a sign-out Hermes did not hear (issue 463)', () => {
     await until(() => store.pending().length === 0)
     expect(store.pending()).toEqual([])
   })
+
+  it('retries with the host’s proxy headers, once at a time, though launch, open and reconnect all ask', async () => {
+    const store = fakeStore()
+    store.setPending([{ url, refreshToken: 'kept', expiresAt: Date.now() + 60_000, headers: { 'CF-Access-Client-Id': 'id-1' } }])
+    const asked: (string | null)[] = []
+    let answer: (response: Response) => void = () => {}
+    const statuses: ConnectionStatus[] = []
+    const fetchImpl: Fetch = async (input, init = {}) => {
+      const path = new URL(String(input)).pathname
+      if (path === '/auth/logout') {
+        asked.push(new Headers(init.headers).get('cf-access-client-id'))
+        return new Promise<Response>(resolve => (answer = resolve))
+      }
+      if (path === '/api/auth/ws-ticket') return json({ ticket: 'T' })
+      if (path === '/api/profiles/sessions') return json({ sessions: [] })
+      return json({ ok: true })
+    }
+    const c = new Connection({ fetch: fetchImpl, store, createSocket: () => new Socket() as unknown as WebSocketLike, onStatus: status => statuses.push(status), onEvent: () => undefined })
+    void c.restore().catch(() => {})
+    // Launch, the host's open and its socket's open each ask for a retry.
+    for (let i = 0; i < 20; i++) await tick()
+    expect(asked).toEqual(['id-1'])
+    answer(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    await until(() => store.pending().length === 0)
+    expect(store.pending()).toEqual([])
+  })
+
+  it('keeps a failed sign-out’s proxy headers, and lets the handle go when the file can’t be written', async () => {
+    const store = fakeStore()
+    store.save({ url, method: 'oidc', oidc: grant, headers: { 'CF-Access-Client-Id': 'id-1' } })
+    const first = connection(store, () => new Response('busy', { status: 500 }))
+    void first.restore().catch(() => {})
+    first.signOut()
+    await until(() => store.pending().length === 1)
+    expect(store.pending()[0]).toMatchObject({ refreshToken: 'rt', headers: { 'CF-Access-Client-Id': 'id-1' } })
+
+    const full = fakeStore()
+    full.savePendingSignOut = () => {
+      throw new Error('ENOSPC')
+    }
+    const rejections: unknown[] = []
+    const onRejection = (reason: unknown) => rejections.push(reason)
+    process.on('unhandledRejection', onRejection)
+    try {
+      const second = connection(full, () => new Response('busy', { status: 500 }))
+      void second.restore().catch(() => {})
+      second.signOut()
+      for (let i = 0; i < 10; i++) await tick()
+    } finally {
+      process.off('unhandledRejection', onRejection)
+    }
+    expect(rejections).toEqual([])
+    expect(full.pending()).toEqual([])
+  })
+
+  it('opens a host though an expired sign-out can’t be cleared from the file', async () => {
+    const store = fakeStore()
+    store.setPending([{ url, refreshToken: 'old', expiresAt: Date.now() - 1 }])
+    store.clearPendingSignOut = () => {
+      throw new Error('EROFS')
+    }
+    const statuses: ConnectionStatus[] = []
+    const c = new Connection({
+      fetch: async input => {
+        const path = new URL(String(input)).pathname
+        return path === '/api/auth/ws-ticket' ? json({ ticket: 'T' }) : path === '/api/profiles/sessions' ? json({ sessions: [] }) : json({ ok: true })
+      },
+      store,
+      createSocket: () => new Socket() as unknown as WebSocketLike,
+      onStatus: status => statuses.push(status),
+      onEvent: () => undefined
+    })
+    let failed: unknown = null
+    void c.restore().catch(e => (failed = e))
+    await until(() => statuses.some(status => status.phase === 'connecting'))
+    await tick()
+    // The clear's failure stayed inside the retry: the launch went on to connect.
+    expect(failed).toBeNull()
+    expect(statuses.some(status => status.phase === 'connecting')).toBe(true)
+  })
 })

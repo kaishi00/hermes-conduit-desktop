@@ -77,6 +77,8 @@ export interface PendingSignOut {
   refreshToken: string
   /** Epoch ms after which the handle is assumed expired and the entry is dropped. */
   expiresAt: number
+  /** The host's proxy headers (Cloudflare Access and the like): the host is gone from the store by the retry. */
+  headers?: ProxyHeaders
 }
 
 /** How long a failed sign-out is retried; past it the handle's own lifetime has passed. */
@@ -850,28 +852,53 @@ export class Connection {
       await revokeOidc(saved.url, grant, this.fetchFor(saved))
     } catch {
       if (grant.refresh_token) {
-        this.deps.store.savePendingSignOut?.({
+        const entry: PendingSignOut = {
           url: saved.url,
           refreshToken: grant.refresh_token,
-          expiresAt: Date.now() + PENDING_SIGN_OUT_MS
-        })
+          expiresAt: Date.now() + PENDING_SIGN_OUT_MS,
+          ...(saved.headers && Object.keys(saved.headers).length ? { headers: saved.headers } : {})
+        }
+        this.pendingWrite(() => this.deps.store.savePendingSignOut?.(entry))
       }
     }
   }
 
+  /** A pending sign-out's file couldn't be written (a full disk): the handle is let go, as before there was a file. */
+  private pendingWrite(write: () => void): void {
+    try {
+      write()
+    } catch {
+      // Nothing to tell: the sign-out itself went through on this computer.
+    }
+  }
+
+  /** The sign-outs being retried now, so a launch, an open and a reconnect together ask once. */
+  private readonly retrying = new Set<string>()
+
   /** Retries sign-outs Hermes didn't hear, on launch and once a host reconnects. */
   private retryPendingSignOuts(url?: string): void {
-    for (const entry of this.deps.store.pendingSignOuts?.() ?? []) {
+    let pending: PendingSignOut[] = []
+    try {
+      pending = this.deps.store.pendingSignOuts?.() ?? []
+    } catch {
+      return
+    }
+    for (const entry of pending) {
       if (url && entry.url !== url) continue
+      const clear = () => this.pendingWrite(() => this.deps.store.clearPendingSignOut?.(entry.url, entry.refreshToken))
       if (entry.expiresAt <= Date.now()) {
-        this.deps.store.clearPendingSignOut?.(entry.url, entry.refreshToken)
+        clear()
         continue
       }
+      const key = `${entry.url}\0${entry.refreshToken}`
+      if (this.retrying.has(key)) continue
+      this.retrying.add(key)
       const grant: OidcGrant = { access_token: '', refresh_token: entry.refreshToken, expires_at: 0, provider: 'pending' }
-      const saved: SavedConnection = { url: entry.url, method: 'oidc', oidc: grant }
+      const saved: SavedConnection = { url: entry.url, method: 'oidc', oidc: grant, ...(entry.headers ? { headers: entry.headers } : {}) }
       void revokeOidc(entry.url, grant, this.fetchFor(saved))
-        .then(() => this.deps.store.clearPendingSignOut?.(entry.url, entry.refreshToken))
+        .then(clear)
         .catch(() => {})
+        .finally(() => this.retrying.delete(key))
     }
   }
 
