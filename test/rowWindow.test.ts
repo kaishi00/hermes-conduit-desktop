@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
 import {
+  heldStart,
+  rowKey,
   nearTop,
   olderStart,
   registerRowOpener,
@@ -105,5 +107,29 @@ describe('a jump to a row a window left out (desktop#291)', () => {
     expect(rowElement(container, 'b')).toBeNull()
     expect(asked).toEqual(['b'])
     off()
+  })
+})
+
+describe('a window when a stored page is read in above the chat (desktop#291)', () => {
+  const rows = (...keys: string[]) => keys.map(item)
+
+  it('stays on the rows it drew: it starts where its first row is now', () => {
+    const before = rows('c', 'd', 'e')
+    expect(heldStart(before, 1, rowKey(before[1]!))).toBe(1)
+    // Two rows read in above: every index moved down by two.
+    expect(heldStart(rows('a', 'b', 'c', 'd', 'e'), 1, 'd')).toBe(3)
+    // A window at the chat's first row holds that row, so the page is above it, not in it.
+    expect(heldStart(rows('a', 'b', 'c', 'd', 'e'), 0, 'c')).toBe(2)
+  })
+
+  it('finds its first row inside a run the page lengthened', () => {
+    const run: Row = { type: 'steps', id: 'older-step', items: [step('older-step'), step('first')], trailing: false }
+    expect(heldStart([item('a'), run, item('z')], 0, 'first')).toBe(1)
+  })
+
+  it("draws the chat's newest rows when the row is gone (another chat), and leaves an unmoved window alone", () => {
+    expect(heldStart(rows('x', 'y'), 1, 'd')).toBeNull()
+    expect(heldStart(rows('x', 'y'), null, undefined)).toBeNull()
+    expect(heldStart(rows('x', 'y'), 1, undefined)).toBe(1)
   })
 })

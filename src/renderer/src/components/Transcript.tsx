@@ -13,7 +13,7 @@ import type { ExpiredQuestion } from '../state/expiredQuestions'
 import { Icon, type IconName } from './icons'
 import { JumpToLatest } from './JumpToLatest'
 import { atEnd } from '../state/scrollEnd'
-import { nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowWindow, startAt } from '../state/rowWindow'
+import { heldStart, nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowKey, rowWindow, startAt } from '../state/rowWindow'
 import { WorkLinkCard, WorkLinks } from './WorkLinkCard'
 import { linkNamedRefs, linkSessionRefs, splitWorkLinks } from '../state/workLinks'
 import { Markdown, StreamingMarkdown } from './Markdown'
@@ -1056,7 +1056,9 @@ export function Transcript({
   pins,
   teammates,
   onReact,
-  onBranch
+  onBranch,
+  onLoadOlder,
+  loadingOlder = false
 }: {
   state: TranscriptState
   loading: boolean
@@ -1095,6 +1097,10 @@ export function Transcript({
   onReact?: (key: string, emoji: string | null) => void
   /** ⋯'s Branch on a reply; left out while a turn runs or the chat isn't open. */
   onBranch?: (key: string) => void
+  /** Reads the stored page before the rows the chat holds; a chat opened on its newest page has more behind it (desktop#291). */
+  onLoadOlder?: () => void
+  /** Whether that page is on its way, drawn as a line above the rows. */
+  loadingOlder?: boolean
 }) {
   const [thinkingShown, setThinkingShown] = useState(false)
   const showsThinking = display.thinking === 'show' || (display.thinking === 'on_request' && thinkingShown)
@@ -1127,43 +1133,60 @@ export function Transcript({
   // draws into its own row each frame instead of laying the whole history out again
   // (desktop#291).
   // Which chat the window belongs to: its id, since every chat's history rows carry the
-  // same keys (row-0, row-1, …), and its first row's key where the pane has no id.
-  const firstKey = `${chatId ?? ''}\n${state.items[0]?.key ?? ''}`
-  const [windowed, setWindowed] = useState<{ chat?: string; start: number | null }>({ start: null })
+  // same keys (row-0, row-1, …), and the row the window starts on (`anchor`), which a
+  // pane with no id tells its chats apart by.
+  const chatKey = chatId ?? ''
+  const [windowed, setWindowed] = useState<{ chat?: string; start: number | null; anchor?: string }>({ start: null })
   // Another chat opened: its own newest rows, not the window the last one was left at.
-  const start = windowed.chat === firstKey ? windowed.start : null
+  // Rows read in above the chat's (a page before the one it opened on) leave the window
+  // on the rows it drew: it starts where its first row is now.
+  const start = windowed.chat === chatKey ? heldStart(rows, windowed.start, windowed.anchor) : null
   const drawnWindow = rowWindow(rows.length, start)
   const drawn = drawnWindow.start > 0 ? rows.slice(drawnWindow.start, drawnWindow.end) : rows
   // What the scroll listener reads: the rows and the window as this frame has them.
-  const liveRows = useRef({ rows, start: drawnWindow.start, scrolledUp: start !== null, chat: firstKey })
+  const liveRows = useRef({ rows, start: drawnWindow.start, scrolledUp: start !== null, chat: chatKey })
   liveRows.current.rows = rows
   liveRows.current.start = drawnWindow.start
   liveRows.current.scrolledUp = start !== null
-  liveRows.current.chat = firstKey
+  liveRows.current.chat = chatKey
+  /** A window of this frame's rows starting at `from`, or the chat's newest rows (null). */
+  const windowAt = (from: number | null) => {
+    const { rows: thisFrame, chat } = liveRows.current
+    const first = from === null ? undefined : thisFrame[from]
+    return { chat, start: from, anchor: first ? rowKey(first) : undefined }
+  }
+  // The page before the chat's rows is read as the reader reaches the top of them (longChat.ts).
+  const older = useRef(onLoadOlder)
+  older.current = onLoadOlder
   const followedUpKeySet = useMemo(() => followedUpKeys(state.items, followedUp), [state.items, followedUp])
   const repliesToTeammates = useMemo(() => teammateReplies(state.items), [state.items])
   const summaries = useStepSummaries(state, sessionId, profile)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
-  /** The drawn height before the window took on rows above the reader, to keep their place. */
-  const grew = useRef<{ start: number; height: number } | null>(null)
+  // Another chat opens on its newest rows and follows them, wherever the last one was left (desktop#467).
+  const pinnedChat = useRef(chatKey)
+  if (pinnedChat.current !== chatKey) {
+    pinnedChat.current = chatKey
+    pinned.current = true
+  }
 
   // Follow the reply while the reader is at the bottom; leave them be once they scroll up.
   // At the top of what's drawn the window takes on the rows above it, and back at the
-  // bottom it gives them up again, so a long chat stays a window.
+  // bottom it gives them up again, so a long chat stays a window. Once the window holds
+  // the chat's first row, the top asks for the stored page before it.
   useEffect(() => {
     const el = scroller.current
     if (!el) return
     const onScroll = () => {
       pinned.current = atEnd(el)
-      const { rows: thisFrame, start: from, scrolledUp, chat } = liveRows.current
+      const { rows: thisFrame, start: from, scrolledUp } = liveRows.current
       if (pinned.current) {
         // Only a window the reader scrolled up gives rows back: at the bottom every
         // scroll (a streaming reply's each frame) would otherwise draw the chat again.
-        if (scrolledUp) setWindowed({ chat, start: null })
-      } else if (nearTop(el.scrollTop) && from !== 0) {
-        grew.current = { start: from, height: el.scrollHeight }
-        setWindowed({ chat, start: olderStart(from, thisFrame.length) })
+        if (scrolledUp) setWindowed(windowAt(null))
+      } else if (nearTop(el.scrollTop)) {
+        if (from !== 0) setWindowed(windowAt(olderStart(from, thisFrame.length)))
+        else older.current?.()
       }
     }
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -1178,7 +1201,7 @@ export function Transcript({
     return registerRowOpener(el, key => {
       const at = rowIndex(liveRows.current.rows, key)
       if (at < 0) return false
-      flushSync(() => setWindowed({ chat: liveRows.current.chat, start: startAt(at, liveRows.current.rows.length) }))
+      flushSync(() => setWindowed(windowAt(startAt(at, liveRows.current.rows.length))))
       return true
     })
   }, [])
@@ -1282,15 +1305,47 @@ export function Transcript({
     if (el && pinned.current) el.scrollTop = el.scrollHeight
   }, [state, requests, expired, drawnWindow.start])
 
-  // Rows the window took on above the reader keep their place: the chat grew above them,
-  // so the scroller moves down by just what was added (measured as they scrolled for them).
+  // Rows drawn above the reader keep their place, whether the window took them on or a
+  // stored page was read in: the chat grew above them, so the reader stays as far from its
+  // end as they were. That is read before the rows are drawn and set after, so it holds
+  // whether or not the browser's own scroll anchoring moved the scroller too.
+  const topKey = drawn[0] ? rowKey(drawn[0]) : undefined
+  const endKey = rows.length ? rowKey(rows[rows.length - 1]!) : undefined
+  const before = useRef<{ chat: string; top?: string; end?: string } | null>(null)
+  const fromEnd = useRef<number | null>(null)
+  {
+    const el = scroller.current
+    const last = before.current
+    const grewAbove = el && last && last.chat === chatKey && last.end === endKey && last.top !== topKey
+    fromEnd.current = grewAbove ? el.scrollHeight - el.scrollTop : null
+  }
   useLayoutEffect(() => {
     const el = scroller.current
-    const before = grew.current
-    if (!el || !before || drawnWindow.start >= before.start) return
-    grew.current = null
-    el.scrollTop += el.scrollHeight - before.height
+    if (el && fromEnd.current !== null && !pinned.current) el.scrollTop = el.scrollHeight - fromEnd.current
+    fromEnd.current = null
+    before.current = { chat: chatKey, top: topKey, end: endKey }
   })
+
+  // A page read in above the chat moved the window's start: the window keeps it from here
+  // on. A reader still at the top of the rows they had takes on the first of the page now,
+  // since a scroller at its top sends no scroll to ask with.
+  useLayoutEffect(() => {
+    if (windowed.chat !== chatKey || windowed.start === null || start === windowed.start) return
+    const el = scroller.current
+    const reading = start !== null && start > windowed.start && el && !pinned.current && nearTop(el.scrollTop)
+    setWindowed(windowAt(reading ? olderStart(start, rows.length) : start))
+  })
+
+  // Rows that leave the scroller at its very top — too few to fill it, a page that drew
+  // nothing new above the reader, a window that opened there — can't be scrolled for more,
+  // so the window takes on the rows above it, or the page before is asked for.
+  const itemCount = state.items.length
+  useEffect(() => {
+    const el = scroller.current
+    if (!el || !itemCount || loading || el.scrollTop > 0) return
+    if (drawnWindow.start === 0) older.current?.()
+    else if (!pinned.current) setWindowed(windowAt(olderStart(drawnWindow.start, liveRows.current.rows.length)))
+  }, [itemCount, loading, drawnWindow.start])
 
   // Pins: which reply each shows, the bar's order, and the row ids replies pinned as they arrived took.
   const pinList = pins?.list
@@ -1392,6 +1447,7 @@ export function Transcript({
       {pins && barPins.length ? <PinnedReplyBar pins={barPins} jump={jumpToPin} onUnpin={pins.unpin} onLabel={pins.label} onShowAll={pins.showAll} /> : null}
       <div className="transcript" ref={scroller} aria-live="polite" onContextMenu={onContextMenu}>
         <div className="transcript-inner">
+          {loadingOlder && drawnWindow.start === 0 ? <div className="notice">{t('Loading earlier messages…')}</div> : null}
           {loading ? <div className="notice">{t('Loading…')}</div> : null}
           {error ? <div className="notice error">{error}</div> : null}
           {!loading && !error && shown.length === 0 ? (

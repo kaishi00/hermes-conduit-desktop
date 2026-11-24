@@ -40,11 +40,17 @@ export function QuickAskShortcutSetting() {
       const accelerator = acceleratorFromEvent(event, platform === 'darwin')
       if (accelerator) void choose(accelerator)
     }
+    // The window hidden, minimized or left for another app stops listening, so Quick Ask's keys and the Mac's menu don't stay aside behind it.
+    const onBlur = () => setRecording(false)
     window.addEventListener('keydown', onKey, true)
+    window.addEventListener('blur', onBlur)
     window.conduit.setQuickAskRecording(true)
     return () => {
       window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('blur', onBlur)
       window.conduit.setQuickAskRecording(false)
+      // The keys were asked for again as listening ended: another app may have let go of them since, or taken them.
+      void window.conduit.quickAskShortcut().then(setShortcut)
     }
   }, [recording, platform])
   if (!shortcut) return null

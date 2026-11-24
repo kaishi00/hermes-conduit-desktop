@@ -1,0 +1,235 @@
+// @vitest-environment happy-dom
+import { beforeEach, describe, expect, it } from 'vitest'
+import { act } from 'react'
+import { renderHook, settle } from './hookHarness'
+import { useChat } from '../src/renderer/src/state/useChat'
+import { useTranscript } from '../src/renderer/src/state/transcriptStore'
+import { forgetTranscripts } from '../src/renderer/src/state/transcriptCache'
+import { olderRows, storedRow } from '../src/renderer/src/state/longChat'
+import { forgetChatLengths, noteChatLength } from '../src/renderer/src/state/chatLength'
+import { prependOlder } from '../src/renderer/src/state/transcript'
+import type { HistoryRow } from '../src/renderer/src/state/transcript'
+
+type Event = { type: string; session_id?: string; payload?: unknown }
+
+const row = (id: number, text: string): HistoryRow => ({ id, role: id % 2 ? 'assistant' : 'user', content: text } as HistoryRow)
+/** A stored page of `count` rows whose words are the ids: the newest page is the highest ids. */
+const page = (from: number, count: number): HistoryRow[] =>
+  Array.from({ length: count }, (_, i) => row(from + i, `message ${from + i}`))
+
+let paths: string[] = []
+let calls: { method: string; params: Record<string, unknown> }[] = []
+let pages: Record<number, HistoryRow[]> = {}
+let resumeRows: HistoryRow[] = []
+
+beforeEach(() => {
+  forgetTranscripts()
+  forgetChatLengths()
+  paths = []
+  calls = []
+  pages = {}
+  resumeRows = []
+  ;(window as unknown as { conduit: unknown }).conduit = {
+    rpcOutcome: (method: string, params: Record<string, unknown>) => {
+      calls.push({ method, params })
+      if (method !== 'session.resume') return Promise.resolve({ ok: true, result: {} })
+      if (params.omit_messages) return Promise.resolve({ ok: true, result: { session_id: 'live-big', stored_session_id: 'big', messages: [] } })
+      return Promise.resolve({ ok: true, result: { session_id: 'live-big', stored_session_id: 'big', messages: resumeRows } })
+    },
+    httpOutcome: async (_method: string, path: string) => {
+      paths.push(path)
+      const offset = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0)
+      return { ok: true, result: { messages: pages[offset] ?? [] } }
+    },
+    onEvent: (_listener: (event: Event) => void) => () => undefined
+  }
+})
+
+const words = (state: { items: { kind: string; text?: string }[] }) => state.items.map(i => i.text ?? i.kind)
+
+function mount(storedId: string) {
+  const hook = renderHook(({ id }: { id: string }) => {
+    const chat = useChat(id, undefined, false, true)
+    return { ...chat, transcript: useTranscript(chat.transcriptStore) }
+  }, { id: storedId })
+  return hook
+}
+
+describe('a chat opened on its newest stored page (desktop#291)', () => {
+  it('resumes without its messages and draws the newest page, reading further back on request', async () => {
+    pages[0] = page(501, 500)
+    pages[500] = page(1, 500)
+    const hook = mount('big')
+    await settle()
+    expect(calls.filter(c => c.method === 'session.resume').map(c => c.params.omit_messages === true)).toEqual([true])
+    const items = hook.result().transcript.items
+    expect(items.length).toBe(500)
+    // The newest rows, oldest first, with no note: the chat isn't too long, it's just read in pages.
+    expect(words(hook.result().transcript).slice(-2)).toEqual(['message 999', 'message 1000'])
+    expect(words(hook.result().transcript).slice(0, 2)).toEqual(['message 501', 'message 502'])
+
+    await act(async () => {
+      await hook.result().loadOlder()
+    })
+    const all = words(hook.result().transcript)
+    expect(all.length).toBe(1000)
+    expect(all[0]).toBe('message 1')
+    expect(new Set(hook.result().transcript.items.map(i => i.key)).size).toBe(1000)
+
+    // The page before that one is empty: the chat has no more, and asking again reads nothing.
+    await act(async () => {
+      await hook.result().loadOlder()
+    })
+    expect(words(hook.result().transcript).length).toBe(1000)
+    hook.unmount()
+  })
+
+  it('leaves a chat shorter than a page on the whole resume, with nothing to read back', async () => {
+    pages[0] = page(1, 12)
+    resumeRows = page(1, 12)
+    const hook = mount('small')
+    await settle()
+    expect(calls.filter(c => c.method === 'session.resume').map(c => c.params.omit_messages === true)).toEqual([false])
+    expect(hook.result().transcript.items.length).toBe(12)
+    const reads = paths.length
+    await act(async () => {
+      await hook.result().loadOlder()
+    })
+    expect(paths.length).toBe(reads)
+    hook.unmount()
+  })
+
+  it('resumes a chat the list says fits one page whole, with no page read first', async () => {
+    noteChatLength('small', 12)
+    resumeRows = page(1, 12)
+    const hook = mount('small')
+    await settle()
+    expect(paths.filter(p => p.includes('include_compacted=true'))).toEqual([])
+    expect(calls.filter(c => c.method === 'session.resume').map(c => c.params.omit_messages === true)).toEqual([false])
+    expect(hook.result().transcript.items.length).toBe(12)
+    hook.unmount()
+  })
+
+  it('reads the newest page for a chat the list says is past one, and for one a whole open found past one', async () => {
+    noteChatLength('big', 1000)
+    pages[0] = page(501, 500)
+    const hook = mount('big')
+    await settle()
+    expect(calls.filter(c => c.method === 'session.resume').map(c => c.params.omit_messages === true)).toEqual([true])
+    hook.unmount()
+  })
+
+  it("opens a chat on its newest page once a whole open found it long, whatever the list's count says", async () => {
+    // The list leaves out rows the chat compacted away; the resume carries them.
+    noteChatLength('big', 433)
+    resumeRows = page(1, 700)
+    pages[0] = page(201, 500)
+    const hook = mount('big')
+    await settle()
+    expect(hook.result().transcript.items.length).toBe(700)
+    noteChatLength('big', 433)
+    hook.rerender({ id: 'other' })
+    await settle()
+    calls = []
+    hook.rerender({ id: 'big' })
+    await settle()
+    expect(calls.filter(c => c.method === 'session.resume').map(c => c.params.omit_messages === true)).toEqual([true])
+    expect(hook.result().transcript.items.length).toBe(500)
+    hook.unmount()
+  })
+
+  it('reads on past a page that draws nothing new, so the top of the chat is never a dead end', async () => {
+    pages[0] = page(1001, 500)
+    // The page before holds only rows the chat already draws; the one before that has the words.
+    pages[500] = page(1001, 500)
+    pages[1000] = page(1, 300)
+    const hook = mount('big')
+    await settle()
+    await act(async () => {
+      await hook.result().loadOlder()
+    })
+    expect(paths.map(p => /offset=(\d+)/.exec(p)?.[1])).toEqual(['0', '500', '1000'])
+    expect(hook.result().transcript.items.length).toBe(800)
+    expect(words(hook.result().transcript)[0]).toBe('message 1')
+    hook.unmount()
+  })
+
+  it("ends the earlier-messages line when another chat opens while a page is on its way", async () => {
+    pages[0] = page(501, 500)
+    let release!: () => void
+    const conduit = (window as unknown as { conduit: { httpOutcome: (m: string, p: string) => Promise<unknown> } }).conduit
+    const base = conduit.httpOutcome
+    conduit.httpOutcome = (method, path) =>
+      path.includes('offset=500') ? new Promise(resolve => (release = () => resolve({ ok: true, result: { messages: page(1, 500) } }))) : base(method, path)
+    const hook = mount('big')
+    await settle()
+    act(() => void hook.result().loadOlder())
+    await settle()
+    expect(hook.result().loadingOlder).toBe(true)
+    noteChatLength('small', 2)
+    resumeRows = page(1, 2)
+    hook.rerender({ id: 'small' })
+    await settle()
+    expect(hook.result().loadingOlder).toBe(false)
+    // The page the last chat asked for lands late: it draws nothing here.
+    await act(async () => {
+      release()
+    })
+    await settle()
+    expect(hook.result().loadingOlder).toBe(false)
+    expect(hook.result().transcript.items.length).toBe(2)
+    hook.unmount()
+  })
+
+  it('draws the page once when the scroll asks twice while it is on its way', async () => {
+    pages[0] = page(201, 500)
+    pages[500] = page(1, 200)
+    const hook = mount('big')
+    await settle()
+    await act(async () => {
+      await Promise.all([hook.result().loadOlder(), hook.result().loadOlder()])
+    })
+    expect(paths.filter(p => p.includes('offset=500')).length).toBe(1)
+    expect(hook.result().transcript.items.length).toBe(700)
+    hook.unmount()
+  })
+})
+
+describe('the stored page before the drawn rows (desktop#291)', () => {
+  const http = async (_method: 'GET', path: string) => ({ messages: pages[Number(/offset=(\d+)/.exec(path)?.[1] ?? 0)] ?? [] })
+
+  it('reads one page by offset, and says whether the chat has more before it', async () => {
+    pages[500] = page(1, 500)
+    expect(await olderRows(http, 'big', undefined, 500)).toMatchObject({ more: true })
+    pages[500] = page(1, 40)
+    const short = await olderRows(http, 'big', undefined, 500)
+    expect(short.rows.length).toBe(40)
+    expect(short.more).toBe(false)
+  })
+
+  it('names a REST row as a resume does, so a row read twice draws once', () => {
+    expect(storedRow({ id: 7, role: 'tool', tool_name: 'terminal', content: 'ok' } as HistoryRow)).toMatchObject({
+      row_id: 7,
+      name: 'terminal'
+    })
+  })
+
+  it('draws the page above the chat, under the notes, and no row twice', () => {
+    const state = {
+      running: false,
+      items: [
+        { kind: 'notice', key: 'long-chat', text: 'note', tone: 'info' },
+        { kind: 'user', key: 'row-501', text: 'message 501' },
+        { kind: 'assistant', key: 'row-502', text: 'message 502' }
+      ]
+    } as unknown as Parameters<typeof prependOlder>[0]
+    const next = prependOlder(state, [
+      { kind: 'user', key: 'row-1', text: 'message 1' },
+      { kind: 'user', key: 'row-501', text: 'message 501' }
+    ] as Parameters<typeof prependOlder>[1])
+    expect(next.items.map(i => i.key)).toEqual(['long-chat', 'row-1', 'row-501', 'row-502'])
+    // Nothing new: the transcript is left as it is.
+    expect(prependOlder(next, [{ kind: 'user', key: 'row-1', text: 'message 1' }] as Parameters<typeof prependOlder>[1])).toBe(next)
+  })
+
+})

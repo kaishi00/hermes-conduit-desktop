@@ -475,7 +475,8 @@ function registerIpc(): void {
     const next: RailSection[] = [...new Set<RailSection>(valid.includes('chats') ? valid : [...valid, 'chats'])].slice(0, 6)
     if (next.length === currentRailSections.length && next.every((s, i) => s === currentRailSections[i])) return
     currentRailSections = next
-    if (isMac) Menu.setApplicationMenu(macMenu())
+    // Not while Settings listens for Quick Ask's keys: the menu stays aside, and comes back in this order when that ends.
+    if (isMac && !recordingIn) Menu.setApplicationMenu(macMenu())
   })
   ipcMain.handle(IPC.requests, event => connectionOf(event.sender.id)?.requests() ?? [])
   ipcMain.on(IPC.setWaiting, (_event, count: number) => tray.setWaiting(Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0))

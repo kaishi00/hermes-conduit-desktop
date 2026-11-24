@@ -17159,6 +17159,21 @@
     "zh-Hans": "正在加载你的机器人…",
     "zh-Hant": "正在載入你的機器人…"
   },
+  "Loading earlier messages…": {
+    "de": "Frühere Nachrichten werden geladen …",
+    "es": "Cargando mensajes anteriores…",
+    "fr": "Chargement des messages précédents…",
+    "id": "Memuat pesan sebelumnya…",
+    "it": "Caricamento dei messaggi precedenti…",
+    "ja": "以前のメッセージを読み込み中…",
+    "ko": "이전 메시지를 불러오는 중…",
+    "pl": "Wczytywanie wcześniejszych wiadomości…",
+    "pt-BR": "Carregando mensagens anteriores…",
+    "ru": "Загрузка предыдущих сообщений…",
+    "tr": "Önceki mesajlar yükleniyor…",
+    "zh-Hans": "正在载入更早的消息…",
+    "zh-Hant": "正在載入更早的訊息…"
+  },
   "Loading…": {
     "de": "Wird geladen …",
     "es": "Cargando…",
