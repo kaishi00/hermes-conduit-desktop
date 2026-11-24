@@ -201,7 +201,7 @@ import { SCALES, applyScale, nextScale, readScale, shortcutFor } from './state/s
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { SectionRail } from './components/SectionRail'
-import { fallbackAfterUnpin, pinnedSections, readRailLayout, resolveInitialSection, setSectionPinned, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
+import { fallbackAfterUnpin, launchInstead, pinnedSections, readRailLayout, resolveInitialSection, setSectionPinned, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
@@ -2883,7 +2883,7 @@ function Shell({
           />
         ) : (
           <Settings
-            opensHere={page => resolveInitialSection(page, railLayout)}
+            opensHere={page => launchInstead(page, railLayout)}
             onOpensOn={page => {
               // The page chosen to open on is pinned here too: an unpinned section opens the first pinned one instead.
               if (page !== 'settings' && railLayout.hidden.has(page)) changeRailLayout(setSectionPinned(railLayout, page, true))
@@ -3043,8 +3043,8 @@ function Settings({
   onOpensOn,
   opensHere
 }: {
-  /** The section a launch on a page shows here: another one when the rail has it unpinned. */
-  opensHere: (page: LaunchPage) => LaunchPage | RailSection
+  /** The section a launch on a page opens instead here, when the rail has it unpinned. */
+  opensHere: (page: LaunchPage) => RailSection | null
   /** Settings > Appearance > Open on chose a page. */
   onOpensOn: (page: LaunchPage) => void
   status: ConnectionStatus

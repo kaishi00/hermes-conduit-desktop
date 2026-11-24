@@ -51,7 +51,8 @@ function ChatPage({ first }: { first: ChatWindowRequest }) {
   return <ChatWindow key={chat.id} chat={chat} />
 }
 
-// The Mac's View menu follows the rail kept on this computer from the start, before a dashboard is connected and the rail shows.
+// Every page primes the Mac's View menu with the rail kept on this computer (they share one saved layout), so the menu is
+// right before a dashboard is connected and the rail shows.
 window.conduit.setRailSections?.(pinnedSections(readRailLayout()))
 
 createRoot(document.getElementById('root')!).render(

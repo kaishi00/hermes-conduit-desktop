@@ -5,6 +5,7 @@ import {
   canUnpinSection,
   fallbackAfterUnpin,
   isDefaultRailLayout,
+  launchInstead,
   moveRailSection,
   nudgeRailSection,
   parseRailLayout,
@@ -111,6 +112,15 @@ describe('railSections layout model', () => {
     expect(resolveInitialSection('bots', layout)).toBe('tasks')
     expect(resolveInitialSection('chats', layout)).toBe('chats')
     expect(resolveInitialSection('settings', layout)).toBe('settings')
+  })
+
+  it('names the section a launch opens instead only when the launch page is unpinned', () => {
+    const layout = parseRailLayout(['bots', 'chats', 'tasks', '-pulse', 'artifacts', 'needs'])
+    expect(launchInstead('pulse', layout)).toBe('bots')
+    expect(launchInstead('tasks', layout)).toBeNull()
+    // Settings isn't a rail section: it opens as chosen.
+    expect(launchInstead('settings', layout)).toBeNull()
+    expect(launchInstead('bots', parseRailLayout(['-bots', 'needs', 'chats']))).toBe('needs')
   })
 
   it('navigates away cleanly when the user unpins the section currently on screen', () => {

@@ -73,12 +73,13 @@ export function AppearancePage({
   onBack: () => void
   /** A page was chosen to open on: the window pins its section in the rail, where an unpinned one wouldn't open. */
   onOpensOn?: (page: LaunchPage) => void
-  /** The section a launch on `page` shows on this computer: another one when the rail has `page` unpinned. */
-  opensHere?: (page: LaunchPage) => LaunchPage | RailSection
+  /** The section a launch on `page` opens instead on this computer, when the rail has `page` unpinned; null when `page` opens. */
+  opensHere?: (page: LaunchPage) => RailSection | null
 }) {
   useMouseBack(onBack)
   const [opensOn, setOpensOn] = useState<LaunchPage>(() => launchPage(host))
   const [openFailed, setOpenFailed] = useState(false)
+  const opensInstead = opensHere?.(opensOn) ?? null
   const chooseOpensOn = (page: LaunchPage) => {
     const tabs = withFirstTab(keptTabs(host), page)
     setOpensOn(page)
@@ -116,11 +117,11 @@ export function AppearancePage({
               </button>
             ))}
           </div>
-          {opensHere && opensOn !== 'settings' && opensHere(opensOn) !== opensOn ? (
+          {opensInstead ? (
             <p className="meta">
               {t('{page} is unpinned from the rail on this computer, so Conduit opens on {other} here.', {
                 page: pageTitle(opensOn),
-                other: sectionTitle(opensHere(opensOn) as RailSection)
+                other: sectionTitle(opensInstead)
               })}
             </p>
           ) : null}

@@ -130,6 +130,12 @@ export function resolveInitialSection<T extends string>(candidate: T, layout: Ra
   return candidate
 }
 
+/** The section a launch on `page` opens instead, when the rail has `page` unpinned on this desktop; null when `page` itself opens. */
+export function launchInstead(page: string, layout: RailLayout): RailSection | null {
+  const opened = resolveInitialSection(page, layout)
+  return opened === page ? null : (opened as RailSection)
+}
+
 /** When the user unpins the section currently on screen, step to a pinned section so the icon leaves at once. */
 export function fallbackAfterUnpin<T extends string>(
   currentSection: T,
