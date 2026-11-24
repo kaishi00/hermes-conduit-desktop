@@ -93,6 +93,12 @@ export function keptAnswer(path: string, storage: Storage = localStorage): unkno
   return read(storage)[path]?.value
 }
 
+/** When that answer was kept, in ms since the epoch, or null when none is. */
+export function keptAt(path: string, storage: Storage = localStorage): number | null {
+  const entry = read(storage)[path]
+  return entry ? entry.at : null
+}
+
 /**
  * A function that keeps an answer on `path`, for the dashboard open now: an
  * answer that lands after a switch to another dashboard is dropped.

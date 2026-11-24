@@ -1,4 +1,4 @@
-import { answerKeeper, keptAnswer } from '../state/keptAnswers'
+import { answerKeeper, keptAnswer, keptAt } from '../state/keptAnswers'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { locale, t } from '@shared/i18n'
 import { gateway } from '../gateway'
@@ -32,6 +32,7 @@ import {
 import { ProviderLogo } from './ProviderLogo'
 import { Icon } from './icons'
 import { useMouseBack } from '../state/mouseBack'
+import { useSlowWait } from '../state/slowWait'
 import { Select } from './Select'
 
 interface Props {
@@ -155,6 +156,14 @@ function DailyBars({ report, language }: { report: UsageReport; language?: strin
 /** Where the quotas' `model.options` answer is kept: an RPC, so a name of its own. */
 const quotasKey = (profile?: string) => `rpc:model.options:quotas:${profile || 'default'}`
 
+/**
+ * How long a usage answer counts as current. The route takes ten seconds or more on a
+ * host with a large library (desktop#444), and what it sums — tokens and cost over days —
+ * barely moves in half a minute, so a pane reopened on the same period draws what it has
+ * and asks nothing. Refresh reads anyway.
+ */
+const FRESH_MS = 30_000
+
 export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
   useMouseBack(onBack)
   const language = locale()
@@ -165,43 +174,55 @@ export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
   const [failure, setFailure] = useState<UsageFailure | null>(null)
   const [loading, setLoading] = useState(false)
   const generation = useRef(0)
+  // "Loading…" for ten seconds reads as a frozen screen when the host's usage route is slow (desktop#444).
+  const slow = useSlowWait(loading)
 
   const load = useCallback(async () => {
     const mine = ++generation.current
     setLoading(true)
-    try {
-      const path = withProfile(`/api/analytics/usage?days=${days}`, profile)
-      const keep = answerKeeper(path)
-      const usage = await gateway.http('GET', path)
-      // The per-model route splits better, but the page stands without it.
-      const models = await gateway.http('GET', withProfile(`/api/analytics/models?days=${days}`, profile)).catch(() => null)
-      if (generation.current !== mine) return
-      setReport(parseUsage(usage, models, days))
-      keep({ usage, models })
-      setFailure(null)
-    } catch (e) {
-      if (generation.current !== mine) return
-      setFailure(usageFailure(e))
-    } finally {
-      if (generation.current === mine) setLoading(false)
-    }
+    const path = withProfile(`/api/analytics/usage?days=${days}`, profile)
+    const keep = answerKeeper(path)
     const params: Record<string, unknown> = { explicit_only: true }
     if (profile && profile !== 'default') params.profile = profile
     const keepQuotas = answerKeeper(quotasKey(profile))
-    const options = await gateway.rpc('model.options', params).catch(() => null)
+    // All three go out together: the usage route alone takes ten seconds or more on a
+    // host with a large library (desktop#444), and the models and quota reads never
+    // depended on it. The page draws as soon as the totals are in — the quota read is
+    // its own section and never holds them (it used to be the last of three waits).
+    const quotas = gateway
+      .rpc('model.options', params)
+      .then(answer => ({ answer }))
+      .catch(() => ({ answer: null as unknown }))
+    const [usage, models] = await Promise.allSettled([
+      gateway.http('GET', path),
+      gateway.http('GET', withProfile(`/api/analytics/models?days=${days}`, profile))
+    ])
+    if (generation.current !== mine) return
+    setLoading(false)
+    if (usage.status === 'fulfilled') {
+      const perModel = models.status === 'fulfilled' ? models.value : null
+      setReport(parseUsage(usage.value, perModel, days))
+      keep({ usage: usage.value, models: perModel })
+      setFailure(null)
+    } else setFailure(usageFailure(usage.reason))
+    const { answer } = await quotas
     if (generation.current !== mine) return
     // A quota that couldn't be read goes rather than stay up as current.
-    setQuotas(options ? parseQuotas(options) : null)
-    if (options) keepQuotas(options)
+    setQuotas(answer ? parseQuotas(answer) : null)
+    if (answer) keepQuotas(answer)
   }, [days, profile])
 
   useEffect(() => {
     // Another period or profile: never the old one's numbers under it, but its own from last time while Hermes answers.
-    const kept = keptAnswer(withProfile(`/api/analytics/usage?days=${days}`, profile)) as { usage?: unknown; models?: unknown } | undefined
+    const path = withProfile(`/api/analytics/usage?days=${days}`, profile)
+    const kept = keptAnswer(path) as { usage?: unknown; models?: unknown } | undefined
     setReport(kept?.usage ? parseUsage(kept.usage, kept.models ?? null, days) : null)
     const keptOptions = keptAnswer(quotasKey(profile))
     setQuotas(keptOptions ? parseQuotas(keptOptions) : null)
     setFailure(null)
+    // An answer read a moment ago is still what the slow route would answer: draw it, ask nothing (desktop#444).
+    const at = keptAt(path)
+    if (kept?.usage && at !== null && Date.now() - at < FRESH_MS) return
     void load()
   }, [load])
 
@@ -299,7 +320,7 @@ export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
           <p className="meta">{usageFailureText(failure)}</p>
         </section>
       ) : (
-        <p className="meta">{t('Loading…')}</p>
+        <p className="meta">{slow ? t('This is taking longer than usual.') : t('Loading…')}</p>
       )}
 
       {quotas ? (

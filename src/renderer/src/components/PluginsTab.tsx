@@ -20,6 +20,7 @@ import {
   type InstalledPlugin
 } from '../state/plugins'
 import { scoped } from '../state/capabilities'
+import { useSlowWait } from '../state/slowWait'
 import { settingsRow } from '../state/pluginSettings'
 import { PluginSettingsForm } from './PluginSettingsForm'
 import { ask, tell } from '../state/dialogs'
@@ -66,6 +67,9 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
   // Hermes' own plugin list, for each plugin's settings form; none on a Hermes without it.
   const [manage, setManage] = useState<unknown>(null)
   const canManage = profile === 'default'
+  // The hub route takes ten seconds or more on a host with a large library, and a bare
+  // "Loading…" for that long reads as a frozen tab (desktop#444).
+  const slow = useSlowWait(!installed && !error)
 
   const load = useCallback(async () => {
     setError(null)
@@ -160,7 +164,8 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
     })
   }
 
-  if (!installed && !error) return <p className="meta">{t('Loading…')}</p>
+  if (!installed && !error)
+    return <p className="meta">{slow ? t('This is taking longer than usual.') : t('Loading…')}</p>
   const shown = filterInstalled(installed ?? [], query)
   const available = filterCatalog(catalog ?? [], query)
   return (

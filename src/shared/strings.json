@@ -33809,6 +33809,21 @@
     "zh-Hans": "此邀请来自你自己的 Hermes。请把它发给你要关联的人。",
     "zh-Hant": "此邀請來自你自己的 Hermes。請把它傳給你要連結的人。"
   },
+  "This is taking longer than usual.": {
+    "de": "Das dauert länger als sonst.",
+    "es": "Esto está tardando más de lo habitual.",
+    "fr": "Cela prend plus de temps que d’habitude.",
+    "id": "Ini memakan waktu lebih lama dari biasanya.",
+    "it": "Sta impiegando più tempo del solito.",
+    "ja": "いつもより時間がかかっています。",
+    "ko": "평소보다 오래 걸리고 있습니다.",
+    "pl": "To trwa dłużej niż zwykle.",
+    "pt-BR": "Isso está demorando mais que o normal.",
+    "ru": "Это занимает больше времени, чем обычно.",
+    "tr": "Bu normalden uzun sürüyor.",
+    "zh-Hans": "这比平时花的时间更长。",
+    "zh-Hant": "這比平常花的時間更久。"
+  },
   "This isn’t a valid header name. Use letters, digits, and dashes.": {
     "de": "Das ist kein gültiger Header-Name. Verwende Buchstaben, Ziffern und Bindestriche.",
     "es": "No es un nombre de encabezado válido. Usa letras, dígitos y guiones.",
