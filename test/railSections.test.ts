@@ -6,6 +6,7 @@ import {
   fallbackAfterUnpin,
   isDefaultRailLayout,
   moveRailSection,
+  nudgeRailSection,
   parseRailLayout,
   pinnedSections,
   readRailLayout,
@@ -81,6 +82,19 @@ describe('railSections layout model', () => {
     expect(shownRailSections(layout, 'chats')).toEqual(['bots', 'chats', 'artifacts', 'needs'])
     expect(shownRailSections(layout, 'pulse')).toEqual(['bots', 'chats', 'pulse', 'artifacts', 'needs'])
     expect(shownRailSections(layout, null)).toEqual(['bots', 'chats', 'artifacts', 'needs'])
+  })
+
+  it('nudges a section past the shown neighbor, over hidden ones, and stops at the ends', () => {
+    const start = parseRailLayout(['bots', 'chats', '-tasks', 'pulse', 'artifacts', 'needs'])
+    expect(nudgeRailSection(start, 'bots', -1, null)).toBe(start)
+    expect(nudgeRailSection(start, 'needs', 1, null)).toBe(start)
+    expect(nudgeRailSection(start, 'tasks', 1, null)).toBe(start)
+    const down = nudgeRailSection(start, 'chats', 1, null)
+    expect(pinnedSections(down)).toEqual(['bots', 'pulse', 'chats', 'artifacts', 'needs'])
+    const up = nudgeRailSection(start, 'pulse', -1, null)
+    expect(pinnedSections(up)).toEqual(['bots', 'pulse', 'chats', 'artifacts', 'needs'])
+    // Tasks is on screen though unpinned: it is a neighbor like any other.
+    expect(shownRailSections(nudgeRailSection(start, 'pulse', -1, 'tasks'), 'tasks')).toEqual(['bots', 'chats', 'pulse', 'tasks', 'artifacts', 'needs'])
   })
 
   it('moves sections before and after targets and ignores no-ops', () => {

@@ -56,7 +56,7 @@ import { WAKE_EVENT, wakeBindings, wakeChat, wakeProfiles, type WakeBinding } fr
 import { forgetChatLists } from './state/savedChatList'
 import { forgetKeptAnswers, setKeptAnswersHost } from './state/keptAnswers'
 import { forgetHostCaches } from './state/hostCaches'
-import { keepTabs, launchPage, syncedTabs } from './state/launchTab'
+import { keepTabs, launchPage, syncedTabs, type LaunchPage } from './state/launchTab'
 import { PREFS_PATH } from './state/pinnedOrder'
 import { useFollowUps, usePredictions } from './state/usePredictions'
 import { SummaryHost } from './state/useStepSummaries'
@@ -200,7 +200,7 @@ import { muteOf, muteOfTarget, turnNotifies, useChatMute, type MuteTarget } from
 import { SCALES, applyScale, nextScale, readScale, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { SectionRail } from './components/SectionRail'
-import { fallbackAfterUnpin, pinnedSections, readRailLayout, resolveInitialSection, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
+import { fallbackAfterUnpin, pinnedSections, readRailLayout, resolveInitialSection, setSectionPinned, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
@@ -2882,6 +2882,10 @@ function Shell({
           />
         ) : (
           <Settings
+            onOpensOn={page => {
+              // The page chosen to open on is pinned here too: an unpinned section opens the first pinned one instead.
+              if (page !== 'settings' && railLayout.hidden.has(page)) changeRailLayout(setSectionPinned(railLayout, page, true))
+            }}
             status={status}
             onAddHost={() => {
               reopenSettings()
@@ -3033,8 +3037,11 @@ function Settings({
   linkRequest,
   onLinkRequestTaken,
   personPicture,
-  onNewChatWith
+  onNewChatWith,
+  onOpensOn
 }: {
+  /** Settings > Appearance > Open on chose a page. */
+  onOpensOn: (page: LaunchPage) => void
   status: ConnectionStatus
   onAddHost: () => void
   onEditHost: (host: HostSummary) => void
@@ -3201,7 +3208,7 @@ function Settings({
   if (page === 'appearance')
     return (
       <SettingsPane pane={pane}>
-        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} />
+        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} />
       </SettingsPane>
     )
   if (page === 'multiplayer' && status.url)

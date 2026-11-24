@@ -61,7 +61,16 @@ const rgb = (hex: string): [number, number, number] => [1, 3, 5].map(i => parseI
  * style, all kept on this computer, and the page Conduit opens on, kept with
  * the dashboard as the first tab of the phone's layout (launchTab.ts).
  */
-export function AppearancePage({ host, onBack }: { host: string; onBack: () => void }) {
+export function AppearancePage({
+  host,
+  onBack,
+  onOpensOn
+}: {
+  host: string
+  onBack: () => void
+  /** A page was chosen to open on: the window pins its section in the rail, where an unpinned one wouldn't open. */
+  onOpensOn?: (page: LaunchPage) => void
+}) {
   useMouseBack(onBack)
   const [opensOn, setOpensOn] = useState<LaunchPage>(() => launchPage(host))
   const [openFailed, setOpenFailed] = useState(false)
@@ -69,6 +78,7 @@ export function AppearancePage({ host, onBack }: { host: string; onBack: () => v
     const tabs = withFirstTab(keptTabs(host), page)
     setOpensOn(page)
     setOpenFailed(false)
+    onOpensOn?.(page)
     keepTabs(host, tabs)
     gateway
       .http('PUT', PREFS_PATH, { installation_id: installationId(), device: DEVICE_NAME, changes: { [TABS_SYNC_KEY]: tabs } })

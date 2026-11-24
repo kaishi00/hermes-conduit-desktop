@@ -5,6 +5,7 @@ import {
   canUnpinSection,
   isDefaultRailLayout,
   moveRailSection,
+  nudgeRailSection,
   pinnedSections,
   resetRailLayout,
   setSectionPinned,
@@ -52,6 +53,7 @@ interface MenuState {
  * The window's leading section rail: right-clicking anywhere on the rail opens
  * an Activity Bar–style checklist to pin or unpin sections (Chats and Settings
  * stay anchored), and dragging icons rearranges their order and ⌘1–⌘6 keys.
+ * A button's own menu has Move up and Move down, so the keyboard reorders too.
  */
 export function SectionRail({
   layout,
@@ -293,22 +295,39 @@ export function SectionRail({
           }}
         >
           {menu.target && canUnpinSection(menu.target) ? (
-            <>
-              <button
-                role="menuitem"
-                onClick={() => {
-                  const isPinned = !layout.hidden.has(menu.target!)
-                  onChangeLayout(setSectionPinned(layout, menu.target!, !isPinned))
-                  finishMenu()
-                }}
-              >
-                {!layout.hidden.has(menu.target)
-                  ? t('Unpin {name}', { name: sectionTitle(menu.target) })
-                  : t('Pin {name}', { name: sectionTitle(menu.target) })}
-              </button>
-              <div className="rail-menu-sep" role="separator" />
-            </>
+            <button
+              role="menuitem"
+              onClick={() => {
+                const isPinned = !layout.hidden.has(menu.target!)
+                onChangeLayout(setSectionPinned(layout, menu.target!, !isPinned))
+                finishMenu()
+              }}
+            >
+              {!layout.hidden.has(menu.target)
+                ? t('Unpin {name}', { name: sectionTitle(menu.target) })
+                : t('Pin {name}', { name: sectionTitle(menu.target) })}
+            </button>
           ) : null}
+          {menu.target
+            ? ([-1, 1] as const).map(by => {
+                const next = nudgeRailSection(layout, menu.target!, by, activeSection)
+                return (
+                  <button
+                    key={by}
+                    role="menuitem"
+                    disabled={next === layout}
+                    className="rail-menu-item"
+                    onClick={() => {
+                      onChangeLayout(next)
+                      finishMenu()
+                    }}
+                  >
+                    {by < 0 ? t('Move up') : t('Move down')}
+                  </button>
+                )
+              })
+            : null}
+          {menu.target ? <div className="rail-menu-sep" role="separator" /> : null}
           {layout.order.map(section => {
             const isPinned = !layout.hidden.has(section)
             const locked = !canUnpinSection(section)

@@ -72,6 +72,11 @@ describe('SectionRail context menu and customization', () => {
       document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: name, shiftKey, bubbles: true, cancelable: true }))
     })
     key('F10', true)
+    // Chats can't be unpinned, but it moves: its menu opens on Move up.
+    expect(document.activeElement?.textContent).toBe('Move up')
+    key('ArrowDown')
+    expect(document.activeElement?.textContent).toBe('Move down')
+    key('ArrowDown')
     expect(document.activeElement?.textContent).toContain('Bots')
     key('ArrowDown') // Chats is locked, so move to Tasks.
     expect(document.activeElement?.textContent).toContain('Tasks')
@@ -159,7 +164,20 @@ describe('SectionRail context menu and customization', () => {
     expect(topItem.textContent).toBe('Pin Pulse')
     expect(menu.textContent).toContain('Reset Sections')
 
-    const resetBtn = [...menu.querySelectorAll('[role="menuitem"]')].find(b => b.textContent === 'Reset Sections')!
+    // The keyboard's way to reorder: Move up puts Pulse before Tasks.
+    const moveUp = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(b => b.textContent === 'Move up')!
+    expect(moveUp.disabled).toBe(false)
+    act(() => {
+      moveUp.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(latest.order).toEqual(['bots', 'chats', 'pulse', 'tasks', 'artifacts', 'needs'])
+    expect(host.querySelector('[role="menu"]')).toBeNull()
+    act(() => {
+      pulseBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 120 }))
+    })
+    const reopened = host.querySelector('[role="menu"]') as HTMLElement
+
+    const resetBtn = [...reopened.querySelectorAll('[role="menuitem"]')].find(b => b.textContent === 'Reset Sections')!
     act(() => {
       resetBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })

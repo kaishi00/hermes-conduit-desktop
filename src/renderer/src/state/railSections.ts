@@ -107,6 +107,17 @@ export function moveRailSection(layout: RailLayout, source: RailSection, target:
   return { ...layout, order: nextOrder }
 }
 
+/**
+ * `section` one place up or down among the buttons the rail shows, for the menu's Move up and Move down
+ * (dragging needs a mouse). The layout as it was when there is no shown neighbor on that side.
+ */
+export function nudgeRailSection(layout: RailLayout, section: RailSection, by: -1 | 1, active: RailSection | null): RailLayout {
+  const shown = shownRailSections(layout, active)
+  const neighbor = shown[shown.indexOf(section) + by]
+  if (!shown.includes(section) || !neighbor) return layout
+  return moveRailSection(layout, section, neighbor, by < 0 ? 'before' : 'after')
+}
+
 export function resetRailLayout(): RailLayout {
   return parseRailLayout(undefined)
 }
