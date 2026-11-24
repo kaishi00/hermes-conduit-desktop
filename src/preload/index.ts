@@ -168,6 +168,7 @@ const api: ConduitApi = {
   setQuickAskShortcut: accelerator => ipcRenderer.invoke(IPC.setQuickAskShortcut, accelerator),
   setQuickAskRecording: on => ipcRenderer.send(IPC.quickAskRecording, on),
   onMenu: listener => listen<MenuAction>(IPC.menu, listener),
+  setRailSections: sections => ipcRenderer.send(IPC.setRailSections, [...sections]),
   takeLinkUrl: () => ipcRenderer.invoke(IPC.takeLinkUrl),
   onLinkUrl: listener => listen<string>(IPC.linkUrl, listener),
   window: {

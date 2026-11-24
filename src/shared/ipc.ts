@@ -393,6 +393,8 @@ export interface ConduitApi {
   setWaiting(count: number): void
   /** A menu bar command (the Mac's File > New Chat). */
   onMenu(listener: (action: MenuAction) => void): () => void
+  /** Updates the sections the Mac's View menu binds to ⌘1–⌘6, in rail order. */
+  setRailSections(sections: readonly RailSection[]): void
   /** A Link invite opened from another app before the window could take it, taken once. */
   takeLinkUrl(): Promise<string | null>
   /** A Link invite opened from another app while Conduit runs. */
@@ -405,6 +407,11 @@ export interface ConduitApi {
     show(): void
   }
 }
+
+/** The sections in the window's leading rail. */
+export type RailSection = 'bots' | 'chats' | 'tasks' | 'pulse' | 'artifacts' | 'needs'
+
+export const DEFAULT_RAIL_SECTIONS: readonly RailSection[] = ['bots', 'chats', 'tasks', 'pulse', 'artifacts', 'needs']
 
 /** Commands the menu bar sends the window. */
 export type MenuAction =
@@ -423,6 +430,7 @@ export type MenuAction =
   | 'go-3'
   | 'go-4'
   | 'go-5'
+  | 'go-6'
 
 export interface OpenChatRequest {
   storedId: string
@@ -476,6 +484,7 @@ export interface ChatWindowRequest {
 
 export const IPC = {
   menu: 'conduit:menu',
+  setRailSections: 'conduit:set-rail-sections',
   takeLinkUrl: 'conduit:take-link-url',
   linkUrl: 'conduit:link-url',
   requests: 'conduit:requests',

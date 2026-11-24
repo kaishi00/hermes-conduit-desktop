@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { glyphs, nextScale, shortcutFor, shortcutGroups, SCALES } from '../src/renderer/src/state/shortcuts'
+import { glyphs, nextScale, shortcutFor, shortcutForSection, shortcutGroups, SCALES } from '../src/renderer/src/state/shortcuts'
 
 const key = (k: string, mods: { ctrl?: boolean; meta?: boolean; alt?: boolean } = {}) => ({
   key: k,
@@ -19,8 +19,8 @@ describe('shortcutFor', () => {
 
   it('maps the sections, text size, Stop, Search and the list', () => {
     expect(shortcutFor(key('1', { ctrl: true }), false)).toBe('go-1')
-    expect(shortcutFor(key('5', { ctrl: true }), false)).toBe('go-5')
-    expect(shortcutFor(key('6', { ctrl: true }), false)).toBeNull()
+    expect(shortcutFor(key('6', { ctrl: true }), false)).toBe('go-6')
+    expect(shortcutFor(key('7', { ctrl: true }), false)).toBeNull()
     expect(shortcutFor(key('=', { ctrl: true }), false)).toBe('text-bigger')
     expect(shortcutFor(key('+', { ctrl: true }), false)).toBe('text-bigger')
     expect(shortcutFor(key('-', { ctrl: true }), false)).toBe('text-smaller')
@@ -49,13 +49,31 @@ describe('glyphs and groups', () => {
     expect(glyphs('toggle-sidebar', false)).toBe('Ctrl+\\')
   })
 
-  it('lists every section and Settings under Go to', () => {
+  it('lists every pinned section in rail order and Settings under Go to', () => {
     const go = shortcutGroups(true)[1]
-    expect(go.rows.map(r => r.keys[0])).toEqual(['⌘1', '⌘2', '⌘3', '⌘4', '⌘5', '⌘,'])
+    expect(go.rows.map(r => [r.title, r.keys[0]])).toEqual([
+      ['Bots', '⌘1'],
+      ['Chats', '⌘2'],
+      ['Tasks', '⌘3'],
+      ['Pulse', '⌘4'],
+      ['Artifacts', '⌘5'],
+      ['Needs you', '⌘6'],
+      ['Settings', '⌘,']
+    ])
+
+    const custom = shortcutGroups(false, ['chats', 'tasks', 'needs'])[1]
+    expect(custom.rows.map(r => [r.title, r.keys[0]])).toEqual([
+      ['Chats', 'Ctrl+1'],
+      ['Tasks', 'Ctrl+2'],
+      ['Needs you', 'Ctrl+3'],
+      ['Settings', 'Ctrl+,']
+    ])
+    expect(shortcutForSection('tasks', ['chats', 'tasks', 'needs'], true)).toBe('⌘2')
+    expect(shortcutForSection('pulse', ['chats', 'tasks', 'needs'], true)).toBeNull()
   })
 
   it('lists Quick Ask with its keys, and leaves it out without any', () => {
-    expect(shortcutGroups(true, '⌥Space')[0].rows.at(-1)?.keys).toEqual(['⌥Space'])
+    expect(shortcutGroups(true, undefined, '⌥Space')[0].rows.at(-1)?.keys).toEqual(['⌥Space'])
     expect(shortcutGroups(true)[0].rows).toHaveLength(5)
   })
 })

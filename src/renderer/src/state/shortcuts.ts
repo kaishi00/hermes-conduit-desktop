@@ -5,11 +5,11 @@
  * has no menu bar, so the window reads Ctrl and the same key.
  */
 import { t } from '../../../shared/i18n'
-import type { MenuAction } from '../../../shared/ipc'
+import { DEFAULT_RAIL_SECTIONS, type MenuAction, type RailSection } from '../../../shared/ipc'
 
-export type GoTo = 'bots' | 'chats' | 'tasks' | 'pulse' | 'needs'
-/** ⌘1 to ⌘5, in the sidebar's order. */
-export const GO_TO: GoTo[] = ['bots', 'chats', 'tasks', 'pulse', 'needs']
+export type GoTo = RailSection
+/** ⌘1 to ⌘6, in the rail's default order. */
+export const GO_TO: GoTo[] = [...DEFAULT_RAIL_SECTIONS]
 
 /** The key a shortcut takes, as KeyboardEvent.key; the first is the one shown. */
 const KEYS: Partial<Record<MenuAction, string[]>> = {
@@ -26,7 +26,8 @@ const KEYS: Partial<Record<MenuAction, string[]>> = {
   'go-2': ['2'],
   'go-3': ['3'],
   'go-4': ['4'],
-  'go-5': ['5']
+  'go-5': ['5'],
+  'go-6': ['6']
 }
 
 /** Ctrl (or ⌘ on a Mac, where the menu bar normally answers first) and a key, as the action it runs. */
@@ -57,9 +58,18 @@ export function sectionTitle(section: GoTo): string {
       return t('Tasks')
     case 'pulse':
       return t('Pulse')
+    case 'artifacts':
+      return t('Artifacts')
     default:
       return t('Needs you')
   }
+}
+
+/** The shortcut glyph for `section` among `pinned` (⌘1–⌘6 or Ctrl+1–Ctrl+6), or null when unpinned. */
+export function shortcutForSection(section: GoTo, pinned: readonly GoTo[], mac: boolean): string | null {
+  const index = pinned.indexOf(section)
+  if (index < 0 || index >= 6) return null
+  return glyphs(`go-${index + 1}` as MenuAction, mac)
 }
 
 export interface ShortcutRow {
@@ -67,8 +77,8 @@ export interface ShortcutRow {
   keys: string[]
 }
 
-/** The list ⌘/ opens, grouped as the phone's sheet is. */
-export function shortcutGroups(mac: boolean, quickAsk?: string | null): { title: string; rows: ShortcutRow[] }[] {
+/** The list ⌘/ opens, grouped as the phone's sheet is, with Go to following the pinned rail order. */
+export function shortcutGroups(mac: boolean, sections: readonly GoTo[] = GO_TO, quickAsk?: string | null): { title: string; rows: ShortcutRow[] }[] {
   const row = (title: string, action: MenuAction): ShortcutRow => ({ title, keys: [glyphs(action, mac)] })
   return [
     {
@@ -85,7 +95,7 @@ export function shortcutGroups(mac: boolean, quickAsk?: string | null): { title:
     },
     {
       title: t('Go to'),
-      rows: [...GO_TO.map((section, i) => row(sectionTitle(section), `go-${i + 1}` as MenuAction)), row(t('Settings'), 'settings')]
+      rows: [...sections.slice(0, 6).map((section, i) => row(sectionTitle(section), `go-${i + 1}` as MenuAction)), row(t('Settings'), 'settings')]
     },
     {
       title: t('Chat text size'),

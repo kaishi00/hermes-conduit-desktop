@@ -50,6 +50,20 @@ describe("quick ask's shortcut", () => {
     taken.clear()
   })
 
+  it('takes the saved keys back on a refused change, when another app had them at launch and let go since', () => {
+    const quick = new QuickAsk()
+    taken.add('Alt+Space')
+    expect(quick.register('Alt+Space')).toBe(false)
+    taken.clear()
+    taken.add('Ctrl+Space')
+    expect(quick.change('Ctrl+Space')).toBe(false)
+    expect(quick.accelerator).toBe('Alt+Space')
+    expect(quick.registered).toBe(true)
+    expect([...held]).toEqual(['Alt+Space'])
+    quick.unregister()
+    taken.clear()
+  })
+
   it('lets go of its keys while Settings listens for new ones, and takes them back', () => {
     const quick = new QuickAsk()
     quick.register('Alt+Space')

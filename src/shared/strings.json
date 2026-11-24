@@ -46033,5 +46033,20 @@
     "tr": "Kopyalanamadı",
     "zh-Hans": "无法拷贝",
     "zh-Hant": "無法拷貝"
+  },
+  "Reset Sections": {
+    "de": "Bereiche zurücksetzen",
+    "es": "Restablecer secciones",
+    "fr": "Réinitialiser les sections",
+    "id": "Atur ulang bagian",
+    "it": "Reimposta sezioni",
+    "ja": "セクションをリセット",
+    "ko": "섹션 재설정",
+    "pl": "Resetuj sekcje",
+    "pt-BR": "Redefinir seções",
+    "ru": "Сбросить разделы",
+    "tr": "Bölümleri sıfırla",
+    "zh-Hans": "重置分区",
+    "zh-Hant": "重設區段"
   }
 }
