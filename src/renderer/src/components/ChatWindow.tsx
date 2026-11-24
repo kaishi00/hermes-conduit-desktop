@@ -137,6 +137,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     sendQueuedNow,
     discardLost,
     resendLost,
+    loadOlder,
+    loadingOlder,
     react,
     noteCorrection
   } = useChat(request.fresh ? null : request.id, profile, status.sessionAuthority === true, connected, botChat, undefined, host)
@@ -531,6 +533,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 display={display}
                 sessionId={chat.liveId ?? undefined}
                 onReact={chat.liveId ? react : undefined}
+                onLoadOlder={loadOlder}
+                loadingOlder={loadingOlder}
               />
             </ConnectionActionsContext.Provider>
           </WorkLinks.Provider>

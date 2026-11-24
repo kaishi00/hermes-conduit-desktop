@@ -55,6 +55,26 @@ export function rowIndex(rows: readonly Row[], key: string): number {
   return -1
 }
 
+/** The key a row is known by: its item's, or its run's first. */
+export function rowKey(row: Row): string {
+  return row.type === 'item' ? row.item.key : row.id
+}
+
+/**
+ * Where a window that started at `start`, on the row `anchor`, starts now.
+ * Rows read in above the chat's (a stored page before the one it opened on)
+ * push every index down, and the window stays on the rows it drew: it starts
+ * on the row holding `anchor`, wherever that is. Null, the chat's newest
+ * rows, when the chat no longer has that row: another chat in the same pane.
+ */
+export function heldStart(rows: readonly Row[], start: number | null, anchor: string | undefined): number | null {
+  if (start === null || anchor === undefined) return start
+  const first = rows[start]
+  if (first && (first.type === 'item' ? first.item.key === anchor : first.items.some(item => item.key === anchor))) return start
+  const at = rowIndex(rows, anchor)
+  return at < 0 ? null : at
+}
+
 /** The start a window takes on to draw the row at `index` near its middle: a jump to a row the window left out. */
 export function startAt(index: number, count: number): number {
   const newest = Math.max(0, count - WINDOW_ROWS)

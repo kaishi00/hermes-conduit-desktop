@@ -41,11 +41,13 @@ import {
   toolAnswers,
   toolNames,
   applyingReaction,
+  prependOlder,
   reactionTarget,
   reactionsFrom,
   setReactions,
   type Reaction,
   type HistoryRow,
+  type TranscriptItem,
   type TranscriptState
 } from './transcript'
 import type { GatewayEventMessage } from '../../../shared/ipc'
@@ -58,7 +60,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, longChatItems, newestRows, rowsSince, settleRunning } from './longChat'
+import { isResumeTooLong, LONG_CHAT_PAGE, newestPageItems, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
 
 type Action =
   | { type: 'reset'; state: TranscriptState }
@@ -73,6 +75,8 @@ type Action =
   | { type: 'withdrawn' }
   /** A reply's reactions, painted at once and then as Hermes saved them. */
   | { type: 'reactions'; key: string; reactions: Reaction[]; rowId?: number }
+  /** The stored page before the chat's rows, drawn above them. */
+  | { type: 'older'; items: TranscriptItem[] }
   | { type: 'output'; command?: string; text: string; format: 'plain' | 'markdown' }
   | { type: 'notice'; text: string; tone?: 'error' | 'info' }
 
@@ -89,23 +93,35 @@ async function loadBoards(state: TranscriptState, storedId: string, profile: str
   }
 }
 
+/** A chat's open: its resume, the rows it draws instead of the resume's own messages, and how far back those reach. */
+interface OpenTranscript {
+  result: ResumeResult
+  /** The newest stored rows, oldest first; null when the resume carried the chat's messages. */
+  rows: HistoryRow[] | null
+  /** Rows the chat has before the ones drawn, unread until the reader scrolls up. */
+  older?: { offset: number; more: boolean }
+  /** Hermes refused the whole resume (4130), so the rows stand under a note saying why. */
+  tooLong?: boolean
+}
+
 /**
- * A chat's resume. One Hermes refuses to resume whole (past
- * `sessions.max_resume_messages`) resumes compact, which still takes
- * messages, and brings its newest stored rows; without them the refusal
- * stands, since it says what to do.
+ * A chat's resume, and the rows it opens on. A resume carries the chat's whole
+ * history — up to `sessions.max_resume_messages` rows — which the renderer then
+ * lays out in one go, so a chat past one stored page opens on that page and
+ * reads the pages before it as the reader scrolls up (boundedOpen,
+ * longChat.ts). One Hermes refuses to resume whole (4130) falls back to the
+ * compact resume under a note, which still takes messages, and brings its
+ * newest stored rows; without them the refusal stands, since it says what to do.
  */
-async function resumeChat(
-  params: Record<string, unknown>,
-  storedId: string,
-  profile: string | undefined
-): Promise<{ result: ResumeResult; rows: HistoryRow[] | null }> {
+async function resumeChat(params: Record<string, unknown>, storedId: string, profile: string | undefined): Promise<OpenTranscript> {
+  const http = (method: 'GET', path: string) => gateway.http(method, path)
+  const bounded = await boundedOpen(http, params, storedId, profile).catch(() => null)
+  if (bounded) return bounded
   try {
     return { result: await gateway.rpc<ResumeResult>('session.resume', params), rows: null }
   } catch (e) {
     if (!isResumeTooLong(e)) throw e
     const compact = { ...params, omit_messages: true }
-    const http = (method: 'GET', path: string) => gateway.http(method, path)
     const result = await gateway.rpc<ResumeResult>('session.resume', compact)
     const stored = result.stored_session_id ?? storedId
     const rows = await newestRows(http, stored, profile).catch(() => [] as HistoryRow[])
@@ -113,20 +129,44 @@ async function resumeChat(
     if (!rows.length) throw e
     // Read again after its pages, so its turn and its rows are as they are now (longChat.ts).
     if (result.running)
-      return settleRunning(
-        () => gateway.rpc<ResumeResult>('session.resume', compact),
-        held => rowsSince(http, held, stored, profile),
-        result,
-        rows
-      )
-    return { result, rows }
+      return {
+        ...(await settleRunning(() => gateway.rpc<ResumeResult>('session.resume', compact), held => rowsSince(http, held, stored, profile), result, rows)),
+        tooLong: true
+      }
+    return { result, rows, tooLong: true }
   }
 }
 
-/** The transcript a resume draws: its rows, or a too-long chat's newest stored rows with their tool details. */
-function resumedTranscript(result: ResumeResult, rows: HistoryRow[] | null): TranscriptState {
+/**
+ * A chat past one stored page, opened on that page: its newest rows are read
+ * from the REST transcript first, and only then does the chat resume without
+ * its messages, so the renderer never lays out a whole history to show the
+ * newest (desktop#291). A shorter chat — or one with nothing stored yet, or a
+ * gateway that won't resume compact — answers null, and the whole resume runs
+ * as it did.
+ */
+async function boundedOpen(
+  http: (method: 'GET', path: string) => Promise<unknown>,
+  params: Record<string, unknown>,
+  storedId: string,
+  profile: string | undefined
+): Promise<OpenTranscript | null> {
+  const rows = await newestRows(http, storedId, profile)
+  if (rows.length < LONG_CHAT_PAGE) return null
+  const compact = { ...params, omit_messages: true }
+  const result = await gateway.rpc<ResumeResult>('session.resume', compact)
+  const stored = result.stored_session_id ?? storedId
+  const older = { offset: rows.length, more: rows.length >= LONG_CHAT_PAGE }
+  if (!result.running) return { result, rows, older }
+  // Read again after its pages, so its turn and its rows are as they are now (longChat.ts).
+  const settled = await settleRunning(() => gateway.rpc<ResumeResult>('session.resume', compact), held => rowsSince(http, held, stored, profile), result, rows)
+  return { result: settled.result, rows: settled.rows, older: { ...older, offset: settled.rows.length } }
+}
+
+/** The transcript a resume draws: its rows, or a chat opened on its newest stored rows with their tool details. */
+function resumedTranscript(result: ResumeResult, rows: HistoryRow[] | null, tooLong = false): TranscriptState {
   const state: TranscriptState = {
-    items: rows ? longChatItems(rows) : fromHistory(result.messages ?? []),
+    items: rows ? newestPageItems(rows, tooLong) : fromHistory(result.messages ?? []),
     running: result.running === true,
     plan: parsePlan(result.todo_state)
   }
@@ -161,6 +201,8 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
       return addNotice(state, action.text, action.tone)
     case 'reactions':
       return setReactions(state, action.key, action.reactions, action.rowId)
+    case 'older':
+      return prependOlder(state, action.items)
   }
 }
 
@@ -347,6 +389,13 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const [queue, setQueue] = useState<QueuedPrompt[]>([])
   const queueRef = useRef(queue)
   queueRef.current = queue
+  /** The stored rows before the open chat's drawn ones, and whether it has more (longChat.ts). */
+  const [older, setOlder] = useState<{ offset: number; more: boolean } | null>(null)
+  const olderNow = useRef<{ offset: number; more: boolean } | null>(null)
+  olderNow.current = older
+  /** Whether the page before the chat's drawn rows is on its way. */
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const olderLoading = useRef(false)
 
   // Resume when the chat (or the connection) changes.
   useEffect(() => {
@@ -369,6 +418,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     setLoading(false)
     setTakeover(null)
     setQueue([])
+    olderNow.current = null
+    setOlder(null)
     setChat(storedId || !folder ? { storedId, liveId: null } : { storedId, liveId: null, cwd: folder })
     setError(null)
     if (!storedId) {
@@ -392,8 +443,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // The transcript without every stored picture's bytes; the session authority refuses the flag.
     if (!sessionAuthority) params.inline_images = false
     openingChat.current = resumeChat(params, storedId, profile)
-      .then(({ result, rows }) => {
+      .then(open => {
         if (ticket !== request.current) return
+        const { result, rows } = open
         liveId.current = result.session_id
         setChat({
           storedId: result.stored_session_id ?? storedId,
@@ -401,8 +453,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           title: result.info?.title,
           ...chatSettings(result.info)
         })
+        // The rows the pages before this one still hold are read as the reader scrolls up.
+        olderNow.current = open.older ?? null
+        setOlder(open.older ?? null)
         // The tool answers the kept copy had come along, so only new ones are read (desktop#293).
-        let state = withKeptDetails(resumedTranscript(result, rows), cached)
+        let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), cached)
         if (result.running && result.inflight?.assistant) {
           state = applyEvent(state, { type: 'message.delta', payload: { text: result.inflight.assistant } })
         }
@@ -536,12 +591,15 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (profile) params.profile = profile
     if (!sessionAuthority) params.inline_images = false
     try {
-      const { result, rows } = await resumeChat(params, stored, profile)
+      const open = await resumeChat(params, stored, profile)
       if (ticket !== request.current) return
+      const { result, rows } = open
       liveId.current = result.session_id
       setChat(c => ({ ...c, liveId: result.session_id, title: result.info?.title ?? c.title }))
       setError(null)
-      const state = withPendingConnection(resumedTranscript(result, rows), result)
+      olderNow.current = open.older ?? null
+      setOlder(open.older ?? null)
+      const state = withPendingConnection(resumedTranscript(result, rows, open.tooLong), result)
       dispatch({ type: 'reset', state })
       setQueue(queueFrom(result.pending) ?? [])
       if (!rows) void loadBoards(state, result.stored_session_id ?? stored, profile, () => ticket === request.current, dispatch)
@@ -1157,6 +1215,34 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     }
   }, [])
 
+  /**
+   * The stored page before the chat's drawn rows, drawn above them: the reader
+   * scrolling to the top of a chat opened bounded asks for it (longChat.ts). A
+   * chat opened whole, or one whose pages are all drawn, does nothing.
+   */
+  const loadOlder = useCallback(async () => {
+    const at = olderNow.current
+    const stored = chatRef.current.storedId
+    if (!at?.more || !stored || olderLoading.current) return
+    olderLoading.current = true
+    setLoadingOlder(true)
+    const ticket = request.current
+    try {
+      const page = await olderRows((method, path) => gateway.http(method, path), stored, profile, at.offset)
+      if (ticket !== request.current) return
+      // The chat may have written since: a row the page serves twice is drawn once (transcript.ts).
+      const next = { offset: at.offset + page.rows.length, more: page.more }
+      olderNow.current = next
+      setOlder(next)
+      if (page.rows.length) dispatch({ type: 'older', items: fromHistory(page.rows) })
+    } catch {
+      // The rows stay as they are; the next scroll to the top asks again.
+    } finally {
+      olderLoading.current = false
+      if (ticket === request.current) setLoadingOlder(false)
+    }
+  }, [profile, dispatch])
+
   return {
     transcriptStore,
     chat,
@@ -1182,6 +1268,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     editQueued,
     sendQueuedNow,
     discardLost,
-    resendLost
+    resendLost,
+    loadOlder,
+    loadingOlder
   }
 }

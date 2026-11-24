@@ -253,7 +253,9 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
     await settle()
     expect(paths.map(p => /offset=(\d+)/.exec(p)?.[1])).toEqual(['0', '500'])
     const items = hook.result().transcript.items
-    expect(items[1]).toMatchObject({ kind: 'user', text: 'New mail arrived' })
+    // A chat past one stored page opens on its newest page by itself (desktop#291): no note saying why.
+    expect(items[0]).toMatchObject({ kind: 'user', text: 'New mail arrived' })
+    expect(items.some(i => i.kind === 'notice')).toBe(false)
     const tool = items.find(i => i.kind === 'tool') as { name: string; result?: string } | undefined
     expect(tool?.name).toBe('terminal')
     expect(tool?.result).toBe('ok')
@@ -380,7 +382,8 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
     const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })
     await settle()
     expect(hook.result().error).toBe(TOO_LONG)
-    expect(paths).toEqual([])
+    // The newest page is read first, before any resume (desktop#291): it came back empty, so the refusal stands.
+    expect(paths).toHaveLength(1)
   })
 })
 
@@ -509,15 +512,17 @@ describe('tool answers on opening a chat again (desktop#293)', () => {
     resumes[id] = { messages: [{ role: 'user', content: 'list' }, { role: 'tool', tool_call_id: 'c1', name: 'terminal', content: '' }] }
     const hook = mount(chatInApp, { storedId: id, connected: true, url: 'h1' })
     await settle()
+    const boardReads = () => paths.filter(p => p.includes(`/api/sessions/${id}/messages`) && !p.includes('include_compacted=true'))
     const tool = () => hook.result().transcript.items.find(i => i.kind === 'tool') as { result?: string } | undefined
     expect(tool()?.result).toBe('a.txt')
-    expect(paths.filter(p => p.includes(`/api/sessions/${id}/messages`))).toHaveLength(1)
+    // The page read to size the chat up (desktop#291) isn't a tool-answers read.
+    expect(boardReads()).toHaveLength(1)
     hook.rerender({ storedId: 'b', connected: true, url: 'h1' })
     await settle()
     hook.rerender({ storedId: id, connected: true, url: 'h1' })
     await settle()
     expect(tool()?.result).toBe('a.txt')
-    expect(paths.filter(p => p.includes(`/api/sessions/${id}/messages`))).toHaveLength(reads)
+    expect(boardReads()).toHaveLength(reads)
   })
 })
 

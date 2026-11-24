@@ -1,12 +1,16 @@
 /**
- * A chat past Hermes' `sessions.max_resume_messages` (20,000 rows by
- * default). A resume carrying its whole transcript is refused (4130, "This
- * session is too long to reload safely"), while the compact one
- * (`omit_messages`) counts only the rows the model still holds, so a chat
- * that compacts in place, like a long-running inbox bot's, still opens and
- * still takes messages. The chat opens compact and draws its newest stored
- * rows from the REST transcript, as the phone does (hermes-conduit's map
- * entry "A chat while it opens").
+ * A chat too big to draw at once, and what it opens on. A resume carries
+ * the chat's whole history — up to Hermes' `sessions.max_resume_messages`
+ * (20,000 rows by default) — and the renderer then lays every row out in one
+ * go (desktop#291), so a chat past one stored page (500 rows) opens on its
+ * newest page instead and reads the pages before it as the reader scrolls up
+ * (`olderRows`). A resume carrying the whole transcript is refused (4130,
+ * "This session is too long to reload safely") past that limit, while the
+ * compact one (`omit_messages`) counts only the rows the model still holds,
+ * so a chat that compacts in place, like a long-running inbox bot's, still
+ * opens and still takes messages. That one opens compact too, under a note
+ * saying why, and draws its newest stored rows from the REST transcript, as
+ * the phone does (hermes-conduit's map entry "A chat while it opens").
  */
 import { GatewayError } from '../gateway'
 import { t } from '../../../shared/i18n'
@@ -86,9 +90,32 @@ export function joinRows(older: HistoryRow[], newer: HistoryRow[]): HistoryRow[]
   return [...older.filter(row => row.row_id == null || !seen.has(row.row_id)), ...newer]
 }
 
-/** What a too-long chat draws: the note saying why only its newest messages show, then them. */
-export function longChatItems(rows: HistoryRow[]): TranscriptItem[] {
-  return [{ kind: 'notice', key: 'long-chat', text: t('This chat is too long to open whole, so Conduit shows its newest messages.'), tone: 'info' }, ...fromHistory(rows)]
+/** The stored page before `offset` rows from the newest, oldest first, and whether the chat has rows before it. */
+export async function olderRows(
+  http: Http,
+  storedId: string,
+  profile: string | undefined,
+  offset: number
+): Promise<{ rows: HistoryRow[]; more: boolean }> {
+  const answer = (await http('GET', pagePath(storedId, profile, offset))) as { messages?: unknown } | null
+  const rows = Array.isArray(answer?.messages) ? (answer.messages as HistoryRow[]).map(storedRow) : []
+  return { rows, more: rows.length === LONG_CHAT_PAGE }
+}
+
+/** Whether the chat grew above what the reader sees — rows read in earlier — rather than below it or into another chat. */
+export function grewAbove(
+  before: { first?: string; last?: string; length: number },
+  now: { first?: string; last?: string; length: number }
+): boolean {
+  return now.length > before.length && now.last === before.last && now.first !== before.first
+}
+
+/** What a chat opened on its newest stored page draws above them: the note saying why, when Hermes refused the whole resume, then the rows. */
+export function newestPageItems(rows: HistoryRow[], tooLong = false): TranscriptItem[] {
+  const note: TranscriptItem[] = tooLong
+    ? [{ kind: 'notice', key: 'long-chat', text: t('This chat is too long to open whole, so Conduit shows its newest messages.'), tone: 'info' }]
+    : []
+  return [...note, ...fromHistory(rows)]
 }
 
 /** What a running long chat's open reads again: a resume's turn, its queue and a card waiting on the user. */
