@@ -315,8 +315,11 @@ export function saveFields(http: Http, profile: string, fields: SpeechField[], v
 export function saveProvider(http: Http, profile: string, kind: SpeechKind, id: string): Promise<void> {
   return inTurn(async () => {
     const config = await readConfig(http, profile)
-    // A plugin without the route leaves it, as before.
-    if (valueAt(config, `${kind}.use_gateway`) !== undefined) await http('POST', withProfile(CONFIG_UNSET_PATH, profile), { keys: [`${kind}.use_gateway`] }).catch(() => undefined)
+    // A plugin without the route leaves it, as before; any other failure fails the pick.
+    if (valueAt(config, `${kind}.use_gateway`) !== undefined)
+      await http('POST', withProfile(CONFIG_UNSET_PATH, profile), { keys: [`${kind}.use_gateway`] }).catch(e => {
+        if (!isMissingRoute(e)) throw e
+      })
     await http('PUT', configPath(profile), { config: withProvider(config, kind, id), profile })
   })
 }
