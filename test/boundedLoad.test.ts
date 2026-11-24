@@ -181,6 +181,37 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     hook.unmount()
   })
 
+  it('reads pages back until the row a jump is after is in the transcript, and no further', async () => {
+    pages[0] = page(1501, 500)
+    pages[500] = page(1001, 500)
+    pages[1000] = page(501, 500)
+    pages[1500] = page(1, 500)
+    const hook = mount('big')
+    await settle()
+    const has = (key: string) => (items: readonly { key: string }[]) => items.some(i => i.key === key)
+    act(() => hook.result().seekRow(has('row-700')))
+    await settle()
+    await settle()
+    expect(paths.map(p => /offset=(\d+)/.exec(p)?.[1])).toEqual(['0', '500', '1000'])
+    expect(hook.result().transcript.items.some(i => i.key === 'row-700')).toBe(true)
+    expect(hook.result().loadingOlder).toBe(false)
+    hook.unmount()
+  })
+
+  it('looks for a row asked for while the chat is still opening, and stops at the first page when the chat has none', async () => {
+    pages[0] = page(501, 500)
+    pages[500] = page(1, 500)
+    const hook = mount('big')
+    // Asked before the open settles: the pages are read once it has.
+    act(() => hook.result().seekRow(items => items.some(i => i.key === 'row-9999')))
+    await settle()
+    await settle()
+    await settle()
+    expect(paths.map(p => /offset=(\d+)/.exec(p)?.[1])).toEqual(['0', '500', '1000'])
+    expect(hook.result().transcript.items.length).toBe(1000)
+    hook.unmount()
+  })
+
   it('draws the page once when the scroll asks twice while it is on its way', async () => {
     pages[0] = page(201, 500)
     pages[500] = page(1, 200)

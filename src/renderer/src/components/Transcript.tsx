@@ -1028,6 +1028,9 @@ function ReviewRun({ count, children }: { count: number; children: React.ReactNo
   )
 }
 
+/** How long a jump's smooth scroll to its row may take, in ms. */
+const JUMP_MS = 1500
+
 /**
  * The open chat's transcript, from its store: only this runs as a reply
  * streams, not the window around it (desktop#212).
@@ -1058,7 +1061,8 @@ export function Transcript({
   onReact,
   onBranch,
   onLoadOlder,
-  loadingOlder = false
+  loadingOlder = false,
+  onSeekRow
 }: {
   state: TranscriptState
   loading: boolean
@@ -1101,6 +1105,8 @@ export function Transcript({
   onLoadOlder?: () => void
   /** Whether that page is on its way, drawn as a line above the rows. */
   loadingOlder?: boolean
+  /** Reads the pages before until `found` says the chat holds the row a jump is after (useChat's seekRow). */
+  onSeekRow?: (found: (items: readonly TranscriptItem[]) => boolean) => void
 }) {
   const [thinkingShown, setThinkingShown] = useState(false)
   const showsThinking = display.thinking === 'show' || (display.thinking === 'on_request' && thinkingShown)
@@ -1163,11 +1169,14 @@ export function Transcript({
   const summaries = useStepSummaries(state, sessionId, profile)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  /** Until when a jump to a row the window left out is scrolling to it. */
+  const jumpUntil = useRef(0)
   // Another chat opens on its newest rows and follows them, wherever the last one was left (desktop#467).
   const pinnedChat = useRef(chatKey)
   if (pinnedChat.current !== chatKey) {
     pinnedChat.current = chatKey
     pinned.current = true
+    jumpUntil.current = 0
   }
 
   // Follow the reply while the reader is at the bottom; leave them be once they scroll up.
@@ -1178,6 +1187,8 @@ export function Transcript({
     const el = scroller.current
     if (!el) return
     const onScroll = () => {
+      // A jump to a row is on its way there: the window it drew stays, and nothing follows the end.
+      if (performance.now() < jumpUntil.current) return void (pinned.current = false)
       pinned.current = atEnd(el)
       const { rows: thisFrame, start: from, scrolledUp } = liveRows.current
       if (pinned.current) {
@@ -1201,6 +1212,10 @@ export function Transcript({
     return registerRowOpener(el, key => {
       const at = rowIndex(liveRows.current.rows, key)
       if (at < 0) return false
+      // The jump scrolls to the row smoothly: until it lands, a reader who was at the end
+      // isn't taken to be there still, which would give the window's rows back mid-jump.
+      pinned.current = false
+      jumpUntil.current = performance.now() + JUMP_MS
       flushSync(() => setWindowed(windowAt(startAt(at, liveRows.current.rows.length))))
       return true
     })
@@ -1316,7 +1331,9 @@ export function Transcript({
   {
     const el = scroller.current
     const last = before.current
-    const grewAbove = el && last && last.chat === chatKey && last.end === endKey && last.top !== topKey
+    // Not for a jump, which scrolls to its row itself.
+    const jumping = performance.now() < jumpUntil.current
+    const grewAbove = !jumping && el && last && last.chat === chatKey && last.end === endKey && last.top !== topKey
     fromEnd.current = grewAbove ? el.scrollHeight - el.scrollTop : null
   }
   useLayoutEffect(() => {
@@ -1358,23 +1375,38 @@ export function Transcript({
     const next = refreshed(pinList, state.items)
     if (next) refreshPins?.(next)
   }, [pinList, state.items, state.running, refreshPins])
+  // A pin from the bar whose reply is in a page not read yet: it jumps once that page is (desktop#486).
+  const [barReveal, setBarReveal] = useState<{ id: string; passage?: string } | null>(null)
   const jumpToPin = (pin: { id: string; passage?: string }) => {
+    if (!pinKeys.has(pin.id) && onSeekRow) return setBarReveal({ id: pin.id, passage: pin.passage })
+    // This jump is the one asked for now: a pin still being read for doesn't take the reader away later.
+    setBarReveal(null)
     pinned.current = false
     if (pin.passage) revealPassage(scroller.current, pinKeys.get(pin.id), pin.passage)
     else revealMessage(scroller.current, pinKeys.get(pin.id))
   }
-  // A pin opened from the list scrolls to its reply once the chat has it.
-  const reveal = pins?.reveal
+  // A pin opened from the list, or from the bar, scrolls to its reply once the chat has it;
+  // a chat opened on its newest stored page reads the pages before for it.
+  const listReveal = pins?.reveal
+  const reveal = listReveal ?? barReveal
   const onRevealed = pins?.onRevealed
   useEffect(() => {
     if (!reveal || loading) return
     const key = pinKeys.get(reveal.id)
-    if (!key) return
+    if (!key) {
+      const pin = pinList?.find(p => p.id === reveal.id)
+      if (pin) onSeekRow?.(items => resolved([pin], items as TranscriptItem[]).has(pin.id))
+      else if (!listReveal) setBarReveal(null)
+      return
+    }
     pinned.current = false
     const passage = reveal.passage
     requestAnimationFrame(() => (passage ? revealPassage(scroller.current, key, passage) : revealMessage(scroller.current, key)))
-    onRevealed?.()
-  }, [reveal, pinKeys, loading, onRevealed])
+    if (listReveal) onRevealed?.()
+    else setBarReveal(null)
+  }, [reveal, listReveal, pinKeys, pinList, loading, onRevealed, onSeekRow])
+  // Another chat: a bar pin still being read for isn't this chat's.
+  useEffect(() => setBarReveal(null), [chatKey])
 
   // What reactionTarget allows, without a walk of the chat per reply.
   const newestReply = useMemo(() => [...state.items].reverse().find(i => i.kind === 'assistant')?.key, [state.items])
@@ -1488,7 +1520,12 @@ export function Transcript({
             </div>
           ) : null}
         </div>
-        <JumpToLatest scroller={scroller} onJump={() => (pinned.current = true)} />
+        <JumpToLatest scroller={scroller} onJump={() => {
+            // Back to the latest: a jump's hold is over, and replies are followed again.
+            jumpUntil.current = 0
+            pinned.current = true
+          }}
+        />
       </div>
       {selectionMenu ? <SelectionMenu at={selectionMenu} items={selectionItems(selectionMenu)} onClose={closeSelectionMenu} /> : null}
     </PictureProfile.Provider>

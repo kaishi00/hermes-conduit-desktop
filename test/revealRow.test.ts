@@ -65,4 +65,22 @@ describe('useRevealRow', () => {
     act(() => store.set(rows(5)))
     expect(reveal).not.toHaveBeenCalled()
   })
+
+  it('asks for the pages before when the open chat holds no row that far back, and not for another chat', () => {
+    // A chat opened on its newest stored page: rows 500 and up.
+    const store = new TranscriptStore(rows(500, 501))
+    const reveal = vi.fn()
+    const seek = vi.fn()
+    const hook = renderHook((p: Props) => useRevealRow(store, p.selected, p.stored, reveal, seek), { selected: 'a', stored: 'a' })
+    act(() => hook.result()('b', 40))
+    expect(seek).not.toHaveBeenCalled()
+    act(() => hook.result()('a', 40))
+    expect(seek).toHaveBeenCalledTimes(1)
+    const found = seek.mock.calls[0]![0] as (items: readonly TranscriptItem[]) => boolean
+    expect(found(rows(500, 501).items)).toBe(false)
+    expect(found(rows(38, 40, 500).items)).toBe(true)
+    // The page arrives: the row is revealed.
+    act(() => store.set(rows(38, 40, 500, 501)))
+    expect(reveal).toHaveBeenCalledWith('row-40')
+  })
 })

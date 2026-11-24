@@ -79,6 +79,7 @@ import { RECONNECT_ATTEMPTS, isRefusalClose, isResumptionLost, reconnectDelayMs,
 import { LiveHandoff } from '@shared/liveHandoff'
 import { askedQuestionsForCall } from '../state/askedForCalls'
 import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
+import { ECHO_TAIL_MS, SpeakerGate, echoDelay, micLatency, talksOver } from '../state/speakerGate'
 
 interface Props {
   profile?: string
@@ -142,8 +143,6 @@ const END_TIMEOUT_MS = 8000
 const SEND_STALL_MS = 20_000
 /** Conduit's own messages wait this long after the user last spoke. */
 const USER_QUIET_MS = 2000
-/** The microphone stays closed this long after the model's audio ends, so its tail isn't heard back. */
-const ECHO_TAIL_MS = 300
 
 /**
  * A Gemini Live call in the open chat, after the phone's GeminiLiveConversationController:
@@ -221,6 +220,10 @@ export function GeminiLiveCall({
   const processor = useRef<ScriptProcessorNode | null>(null)
   const sources = useRef(new Set<AudioBufferSourceNode>())
   const playUntil = useRef(0)
+  // The microphone on the speakers: closed while the model's turn arrives and plays.
+  const gate = useRef<SpeakerGate>(null!)
+  gate.current ??= new SpeakerGate(talksOver())
+  const echo = useRef(0)
   const ended = useRef(false)
   const ending = useRef(false)
   const ready = useRef(false)
@@ -523,7 +526,7 @@ export function GeminiLiveCall({
       case 'audio':
         if (ended.current) return
         modelTurn.current = true
-        play(event.pcm)
+        if (gate.current.audio()) play(event.pcm)
         return
       case 'input':
         userSpokeAt.current = Date.now()
@@ -534,6 +537,7 @@ export function GeminiLiveCall({
       case 'output':
         modelTurn.current = true
         askFirst.current.modelSpoke()
+        if (!gate.current.words()) return
         if (heard.current.trim()) {
           keep('user', heard.current)
           heard.current = ''
@@ -544,10 +548,12 @@ export function GeminiLiveCall({
       case 'interrupted':
         // The user cut in: playback stops now.
         stopPlayback()
+        gate.current.replyEnded()
         userSpokeAt.current = Date.now()
         return
       case 'turnComplete':
         modelTurn.current = false
+        gate.current.replyEnded()
         keep('user', heard.current)
         keep('assistant', spoken.current)
         heard.current = ''
@@ -575,7 +581,7 @@ export function GeminiLiveCall({
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (ended.current || !ready.current) return
-      const speaking = playing()
+      const speaking = playing() || gate.current.replying
       if (!ending.current) setPhase(current => (current === 'failed' ? current : speaking ? 'speaking' : 'listening'))
       const quiet = !modelTurn.current && !speaking && Date.now() - userSpokeAt.current > USER_QUIET_MS
       if (quiet && !ending.current && updates.current.length) send(textTurn(updates.current.shift()!))
@@ -655,6 +661,8 @@ export function GeminiLiveCall({
       if (ready.current) {
         ready.current = false
         if (qwen || !resumeHandle.current) stopPlayback()
+        // The turn that was arriving has no end coming on this connection.
+        gate.current.replyEnded()
         setPhase('reconnecting')
         trace.current?.step(resumeHandle.current && !qwen ? 'Connection lost: resuming the session' : 'Connection lost: opening a new session')
       }
@@ -833,12 +841,17 @@ export function GeminiLiveCall({
         // The microphone, as 16 kHz PCM, while the call listens.
         const source = input.createMediaStreamSource(stream)
         const node = input.createScriptProcessor(1024, 1, 1)
+        echo.current = echoDelay(speaker.current ?? input, micLatency(stream), node.bufferSize / input.sampleRate)
+        trace.current?.step(
+          gate.current.talkOver
+            ? 'Microphone open while a reply plays (talk over it on the speaker)'
+            : `Microphone closed while a reply arrives and plays, and ${Math.round(echo.current * 1000 + ECHO_TAIL_MS)} ms after`
+        )
         processor.current = node
         node.onaudioprocess = event => {
           if (!ready.current || ended.current || ending.current || mutedRef.current) return
           // While the model talks on the speakers, its own voice isn't sent back.
-          const out = speaker.current
-          if (out && out.currentTime < playUntil.current + ECHO_TAIL_MS / 1000) return
+          if (gate.current.holds(speaker.current, playUntil.current, echo.current)) return
           const samples = event.inputBuffer.getChannelData(0)
           trace.current?.audio(samples, INPUT_RATE)
           send(audioMessage(samples))
@@ -907,6 +920,16 @@ export function GeminiLiveCall({
     }
   }, [requests])
 
+  // The microphone is closed while the model talks, so this is how the user cuts in. Only what plays here
+  // stops: the server keeps no microphone gate of its own, and the rest of this turn isn't played.
+  const interrupt = () => {
+    if (!gate.current.replying && !playing()) return
+    trace.current?.step('Interrupt pressed')
+    stopPlayback()
+    gate.current.interrupt()
+    setPhase(current => (current === 'speaking' ? 'listening' : current))
+  }
+
   const toggleMute = () => {
     const next = !muted
     setMuted(next)
@@ -967,6 +990,11 @@ export function GeminiLiveCall({
           {phase === 'failed' ? (
             <button className="secondary" onClick={onClassic}>
               {t('Classic voice')}
+            </button>
+          ) : null}
+          {phase === 'speaking' ? (
+            <button className="secondary" onClick={interrupt}>
+              {t('Interrupt')}
             </button>
           ) : null}
           <button

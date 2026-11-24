@@ -12,6 +12,8 @@ let reads: string[] = []
 let resumes: unknown[] = []
 /** The chat's newest stored row, as its REST transcript names it. */
 let newest: number | null = null
+/** Holds the next `session.resume` answers until it is let go. */
+let resumeGate: Promise<void> | null = null
 
 const emit = (event: { type: string; session_id?: string; payload?: unknown }) => act(() => listeners.forEach(l => l(event)))
 const resumeCalls = () => calls.filter(c => c.method === 'session.resume').length
@@ -22,12 +24,16 @@ beforeEach(() => {
   reads = []
   resumes = []
   newest = null
+  resumeGate = null
   ;(window as unknown as { conduit: unknown }).conduit = {
     platform: 'win32',
     rpcOutcome: async (method: string, params?: Record<string, unknown>) => {
       calls.push({ method, params })
       if (method === 'session.create') return { ok: true, result: { session_id: 'live-1', stored_session_id: 's1' } }
-      if (method === 'session.resume') return { ok: true, result: resumes.length > 1 ? resumes.shift() : resumes[0] }
+      if (method === 'session.resume') {
+        if (resumeGate) await resumeGate
+        return { ok: true, result: resumes.length > 1 ? resumes.shift() : resumes[0] }
+      }
       if (method === 'prompt.submit') return { ok: true, result: { status: 'queued' } }
       return { ok: false, error: 'not here', code: 404 }
     },
@@ -193,4 +199,31 @@ describe('rows another process wrote into the open chat (desktop#432)', () => {
     expect(texts(hook)).toEqual(['Hi', 'The whole reply.'])
     hook.unmount()
   }, 15_000)
+
+  it('keeps a message sent while a catch-up read runs, and reads the chat again once its turn ends', async () => {
+    const before = [{ role: 'user', text: 'Hi', row_id: 1 }, { role: 'assistant', text: 'Hello.', row_id: 2 }]
+    const note = { role: 'assistant', text: 'A note.', row_id: 3 }
+    resumes = [stored(before), stored([...before, note]), stored([...before, note, { role: 'user', text: 'More', row_id: 4 }, { role: 'assistant', text: 'Sure.', row_id: 5 }])]
+    const hook = open({ id: 's3', connected: true })
+    await until(() => texts(hook).length === 2, 'the chat opening')
+    let letGo = () => {}
+    resumeGate = new Promise(resolve => (letGo = resolve))
+    newest = 3
+    emit({ type: 'sessions.changed' })
+    await until(() => resumeCalls() === 2, 'the catch-up read starting')
+    // The message goes out while that read is still on its way.
+    await act(async () => void hook.result().send('More'))
+    resumeGate = null
+    await act(async () => letGo())
+    await settle()
+    expect(texts(hook)).toContain('More')
+    expect(texts(hook)).not.toContain('A note.')
+    // Its turn runs and ends: the read is made again, with the note.
+    emit({ type: 'message.start', session_id: 'live-3' })
+    emit({ type: 'message.complete', session_id: 'live-3', payload: { text: 'Sure.' } })
+    await until(() => resumeCalls() === 3, 'the chat being read again')
+    await settle()
+    expect(texts(hook)).toEqual(['Hi', 'Hello.', 'A note.', 'More', 'Sure.'])
+    hook.unmount()
+  }, 20_000)
 })

@@ -35924,6 +35924,21 @@
     "zh-Hans": "请更新 Hermes 主机上的 Conduit 插件以使用 Local Live。",
     "zh-Hant": "請更新 Hermes 主機上的 Conduit 外掛程式以使用 Local Live。"
   },
+  "Update the Conduit plugin on your Hermes host to clear this setting.": {
+    "de": "Aktualisiere das Conduit-Plug-in auf deinem Hermes-Host, um diese Einstellung zu löschen.",
+    "es": "Actualiza el plugin de Conduit en tu host de Hermes para borrar este ajuste.",
+    "fr": "Mettez à jour le plugin Conduit sur votre hôte Hermes pour effacer ce réglage.",
+    "id": "Perbarui plugin Conduit di host Hermes Anda untuk mengosongkan pengaturan ini.",
+    "it": "Aggiorna il plugin Conduit sul tuo host Hermes per cancellare questa impostazione.",
+    "ja": "この設定を消去するには、Hermes ホストの Conduit プラグインをアップデートしてください。",
+    "ko": "이 설정을 지우려면 Hermes 호스트의 Conduit 플러그인을 업데이트하세요.",
+    "pl": "Zaktualizuj wtyczkę Conduit na swoim hoście Hermes, aby wyczyścić to ustawienie.",
+    "pt-BR": "Atualize o plugin do Conduit no seu host do Hermes para limpar este ajuste.",
+    "ru": "Обновите плагин Conduit на вашем хосте Hermes, чтобы очистить эту настройку.",
+    "tr": "Bu ayarı temizlemek için Hermes ana makinenizdeki Conduit eklentisini güncelleyin.",
+    "zh-Hans": "请更新 Hermes 主机上的 Conduit 插件，以清除此设置。",
+    "zh-Hant": "請更新 Hermes 主機上的 Conduit 外掛，以清除此設定。"
+  },
   "Update the Conduit plugin on your Hermes host to use a fast model.": {
     "de": "Aktualisiere das Conduit-Plugin auf deinem Hermes-Host, um ein schnelles Modell zu nutzen.",
     "es": "Actualiza el plugin de Conduit en tu host de Hermes para usar un modelo rápido.",
@@ -46108,5 +46123,35 @@
     "tr": "Kendi penceresinde açık",
     "zh-Hans": "已在独立窗口中打开",
     "zh-Hant": "已在獨立視窗中開啟"
+  },
+  "Talk over it on the speaker": {
+    "de": "Über Lautsprecher dazwischenreden",
+    "es": "Interrumpir con el altavoz",
+    "fr": "Parler par-dessus sur haut-parleur",
+    "id": "Sela lewat speaker",
+    "it": "Interrompi parlando in vivavoce",
+    "ja": "スピーカー使用時も割り込む",
+    "ko": "스피커에서도 끼어들기",
+    "pl": "Przerywanie na głośniku",
+    "pt-BR": "Falar por cima no alto-falante",
+    "ru": "Перебивать при громкой связи",
+    "tr": "Hoparlörde sözünü kes",
+    "zh-Hans": "在扬声器上也可打断",
+    "zh-Hant": "用揚聲器時可插話"
+  },
+  "Experimental. Keeps the microphone open while the call talks on your computer's speakers, with the app's echo cancellation, so you can cut in by speaking. On headphones it's safe to turn on. Turn it off if replies keep cutting themselves off. With it off, the microphone is closed while a reply speaks, and Interrupt on the call stops it. Shared by Gemini Live, Qwen Live, Grok Live and Local Live. Applies to the next conversation.": {
+    "de": "Experimentell. Hält das Mikrofon offen, während der Anruf über die Lautsprecher deines Computers spricht, mit der Echounterdrückung der App, sodass du durch Sprechen unterbrechen kannst. Mit Kopfhörern kannst du es bedenkenlos einschalten. Schalte es aus, wenn sich Antworten immer wieder selbst abschneiden. Ist es aus, bleibt das Mikrofon geschlossen, während eine Antwort gesprochen wird, und „Unterbrechen“ im Anruf stoppt sie. Gilt für Gemini Live, Qwen Live, Grok Live und Local Live gemeinsam. Gilt ab dem nächsten Gespräch.",
+    "es": "Experimental. Mantiene el micrófono abierto mientras la llamada habla por los altavoces del ordenador, con la cancelación de eco de la app, para que puedas interrumpir hablando. Con auriculares puedes activarlo sin problema. Desactívalo si las respuestas se cortan solas una y otra vez. Desactivado, el micrófono se cierra mientras se dice una respuesta, e Interrumpir en la llamada la detiene. Lo comparten Gemini Live, Qwen Live, Grok Live y Local Live. Se aplica a la próxima conversación.",
+    "fr": "Expérimental. Garde le micro ouvert pendant que l’appel parle sur les haut-parleurs de l’ordinateur, avec l’annulation d’écho de l’app, pour que vous puissiez l’interrompre en parlant. Avec un casque, vous pouvez l’activer sans risque. Désactivez-le si les réponses se coupent toutes seules. Désactivé, le micro est fermé pendant qu’une réponse est prononcée, et Interrompre dans l’appel l’arrête. Partagé par Gemini Live, Qwen Live, Grok Live et Local Live. S’applique à la prochaine conversation.",
+    "id": "Eksperimental. Mikrofon tetap terbuka saat panggilan berbicara lewat speaker komputer, dengan peredam gema aplikasi, sehingga Anda bisa menyela dengan berbicara. Dengan headphone, aman untuk dinyalakan. Matikan jika balasan terus terpotong sendiri. Saat mati, mikrofon ditutup selama balasan diucapkan, dan Interupsi di panggilan menghentikannya. Dipakai bersama oleh Gemini Live, Qwen Live, Grok Live, dan Local Live. Berlaku untuk percakapan berikutnya.",
+    "it": "Sperimentale. Tiene aperto il microfono mentre la chiamata parla dagli altoparlanti del computer, con la cancellazione dell’eco dell’app, così puoi interrompere parlando. Con le cuffie puoi attivarlo senza problemi. Disattivalo se le risposte continuano a interrompersi da sole. Da disattivato, il microfono resta chiuso mentre viene pronunciata una risposta, e Interrompi nella chiamata la ferma. Condiviso da Gemini Live, Qwen Live, Grok Live e Local Live. Vale dalla prossima conversazione.",
+    "ja": "試験的な機能です。通話がコンピュータのスピーカーで話している間もマイクを開いたままにし、アプリのエコーキャンセルを使うので、話しかけて割り込めます。ヘッドフォンなら安心してオンにできます。返答が自分で途切れてしまう場合はオフにしてください。オフのときは、返答が話されている間マイクが閉じ、通話の「中断」で止められます。Gemini Live、Qwen Live、Grok Live、Local Liveで共通の設定です。次の会話から適用されます。",
+    "ko": "실험적 기능입니다. 통화가 컴퓨터 스피커로 말하는 동안에도 마이크를 열어 두고 앱의 에코 제거를 사용해, 말로 끼어들 수 있습니다. 헤드폰을 쓰면 안심하고 켤 수 있습니다. 답변이 계속 스스로 끊기면 끄세요. 꺼 두면 답변이 나오는 동안 마이크가 닫히고, 통화의 ‘중단’으로 멈출 수 있습니다. Gemini Live, Qwen Live, Grok Live, Local Live가 함께 사용합니다. 다음 대화부터 적용됩니다.",
+    "pl": "Eksperymentalne. Mikrofon pozostaje otwarty, gdy rozmowa mówi przez głośniki komputera, z redukcją echa aplikacji, więc możesz przerwać, odzywając się. Na słuchawkach można to bezpiecznie włączyć. Wyłącz, jeśli odpowiedzi same się urywają. Gdy wyłączone, mikrofon jest zamknięty, kiedy odpowiedź jest wypowiadana, a Przerwij w rozmowie ją zatrzymuje. Wspólne dla Gemini Live, Qwen Live, Grok Live i Local Live. Obowiązuje od następnej rozmowy.",
+    "pt-BR": "Experimental. Mantém o microfone aberto enquanto a chamada fala pelos alto-falantes do computador, com o cancelamento de eco do app, para você interromper falando. Com fones de ouvido, pode ativar sem receio. Desative se as respostas ficarem se cortando sozinhas. Desativado, o microfone fica fechado enquanto uma resposta é falada, e Interromper na chamada a para. Compartilhado por Gemini Live, Qwen Live, Grok Live e Local Live. Vale a partir da próxima conversa.",
+    "ru": "Экспериментальная функция. Микрофон остаётся открытым, пока звонок говорит через динамики компьютера, с эхоподавлением приложения, так что можно перебить голосом. В наушниках её можно спокойно включать. Выключите, если ответы сами себя обрывают. Когда она выключена, микрофон закрыт, пока звучит ответ, а «Прервать» в звонке останавливает его. Общая для Gemini Live, Qwen Live, Grok Live и Local Live. Применяется со следующего разговора.",
+    "tr": "Deneysel. Arama bilgisayarınızın hoparlörlerinden konuşurken mikrofonu açık tutar ve uygulamanın yankı gidermesini kullanır; böylece konuşarak araya girebilirsiniz. Kulaklıkla gönül rahatlığıyla açabilirsiniz. Yanıtlar kendi kendini kesip duruyorsa kapatın. Kapalıyken yanıt söylenirken mikrofon kapalıdır ve aramadaki Yarıda Kes onu durdurur. Gemini Live, Qwen Live, Grok Live ve Local Live tarafından paylaşılır. Bir sonraki konuşmada geçerli olur.",
+    "zh-Hans": "实验性功能。通话通过电脑扬声器说话时保持麦克风开启，并使用应用的回声消除，这样你可以开口打断。戴耳机时可以放心开启。如果回复总是自己中断，请关闭它。关闭时，回复播放期间麦克风保持关闭，可用通话中的“中断”停止回复。Gemini Live、Qwen Live、Grok Live 和 Local Live 共用此设置。下次对话时生效。",
+    "zh-Hant": "實驗性功能。通話透過電腦揚聲器說話時保持麥克風開啟，並使用 App 的回音消除，讓你可以開口插話。戴耳機時可以放心開啟。如果回覆總是自己中斷，請關閉它。關閉時，回覆播放期間麥克風保持關閉，可用通話中的「中斷」停止回覆。Gemini Live、Qwen Live、Grok Live 和 Local Live 共用此設定。下次對話時生效。"
   }
 }

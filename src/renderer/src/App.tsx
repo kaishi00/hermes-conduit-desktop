@@ -197,7 +197,7 @@ import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply }
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isUnread, type ChatMarks } from './state/chatMarks'
 import { isDone, useChatDone } from './state/chatDone'
-import { muteOf, muteOfTarget, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
+import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
@@ -453,6 +453,7 @@ function Shell({
     resendLost,
     loadOlder,
     loadingOlder,
+    seekRow,
     react: reactTo
   } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '')
   // What this window shows of the transcript; the transcript itself is drawn by LiveTranscript, so a streaming
@@ -1104,7 +1105,7 @@ function Shell({
     writeWidth(PANEL_COLUMN, width)
   }
   // An artifact's Show in Chat (state/revealRow.ts).
-  const showInChat = useRevealRow(transcriptStore, selected.id, chat.storedId, key => requestAnimationFrame(() => revealMessage(chatPane.current, key)))
+  const showInChat = useRevealRow(transcriptStore, selected.id, chat.storedId, key => requestAnimationFrame(() => revealMessage(chatPane.current, key)), seekRow)
   const [modelOpen, setModelOpen] = useState(false)
   const closeModel = useCallback(() => setModelOpen(false), [])
   const [contextOpen, setContextOpen] = useState(false)
@@ -1228,7 +1229,7 @@ function Shell({
   // list shows and every bot's, so one with no listed rows is asked too
   // (hermes-conduit #3143).
   const muteProfilesRef = useRef<string[]>([])
-  muteProfilesRef.current = [...new Set([...doneProfiles, ...glowBots.map(b => b.name || 'default')])].sort()
+  muteProfilesRef.current = muteProfilesToAsk(doneProfiles, glowBots)
   const [marks, setMarks] = useState<ChatMarks>(() => loadMarks(markHost))
   useEffect(() => setMarks(loadMarks(markHost)), [markHost])
   const updateMarks = useCallback(
@@ -2530,6 +2531,7 @@ function Shell({
                       onReact={chat.liveId ? reactTo : undefined}
                       onBranch={chat.liveId && !running ? branchFrom : undefined}
                       onLoadOlder={loadOlder}
+                      onSeekRow={seekRow}
                       loadingOlder={loadingOlder}
                     />
                   </ConnectionActionsContext.Provider>

@@ -10,9 +10,16 @@
  * Hermes' own provider route, which writes the config (a managed Nous row
  * becomes what that Hermes understands); only a provider Hermes lists
  * without a row is written into the config directly, and Nous never is.
+ *
+ * Hermes' PUT /api/config merges what it's sent over the file, so a key a
+ * save leaves out keeps its old value: a blanked field and a pick's stale
+ * gateway routing are taken out by the plugin's /config/unset (plugin
+ * 0.195.8, hermes-conduit issue 3155), in the same turn as the save.
  */
 import { t } from '../../../shared/i18n'
-import { withValue, valueAt } from './profileConfig'
+import { withProfile } from './callSettings'
+import { configPath, inTurn, readConfig, withValue, valueAt, type Http } from './profileConfig'
+import { isMissingRoute } from './providers'
 
 type Row = Record<string, unknown>
 const object = (v: unknown): Row | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Row) : null)
@@ -22,6 +29,8 @@ export type SpeechKind = 'stt' | 'tts'
 
 export const toolsetPath = (kind: SpeechKind) => `/api/tools/toolsets/${kind}/config`
 export const providerPath = (kind: SpeechKind) => `/api/tools/toolsets/${kind}/provider`
+/** The plugin's route that takes keys under stt and tts out of a profile's config. */
+export const CONFIG_UNSET_PATH = '/api/plugins/conduit_push/config/unset'
 
 export interface SpeechKey {
   key: string
@@ -276,4 +285,38 @@ export function withFields(config: Row, fields: SpeechField[], values: Record<st
 /** A provider Hermes lists without a row, written as its section's provider, with any stale gateway routing taken out. */
 export function withProvider(config: Row, kind: SpeechKind, id: string): Row {
   return without(withValue(config, `${kind}.provider`, id), `${kind}.use_gateway`)
+}
+
+/** The fields a save blanks: their keys leave Hermes' config, so its defaults apply. */
+export const clearedKeys = (fields: SpeechField[], values: Record<string, string>): string[] =>
+  fields.filter(f => f.key in values && !values[f.key]!.trim()).map(f => f.key)
+
+/**
+ * Saves the typed fields, in turn with every config save: the blanked ones
+ * are taken out by the plugin, then the rest are PUT. A plugin without the
+ * route can't clear one (Hermes' own save would keep it), and says so.
+ */
+export function saveFields(http: Http, profile: string, fields: SpeechField[], values: Record<string, string>): Promise<void> {
+  return inTurn(async () => {
+    const config = await readConfig(http, profile)
+    const cleared = clearedKeys(fields, values)
+    if (cleared.length) {
+      try {
+        await http('POST', withProfile(CONFIG_UNSET_PATH, profile), { keys: cleared })
+      } catch (e) {
+        throw isMissingRoute(e) ? new Error(t('Update the Conduit plugin on your Hermes host to clear this setting.')) : e
+      }
+    }
+    if (fields.some(f => f.key in values && values[f.key]!.trim())) await http('PUT', configPath(profile), { config: withFields(config, fields, values), profile })
+  })
+}
+
+/** Saves a provider Hermes lists without a row, in turn with every config save; stale gateway routing is taken out where the plugin can. */
+export function saveProvider(http: Http, profile: string, kind: SpeechKind, id: string): Promise<void> {
+  return inTurn(async () => {
+    const config = await readConfig(http, profile)
+    // A plugin without the route leaves it, as before.
+    if (valueAt(config, `${kind}.use_gateway`) !== undefined) await http('POST', withProfile(CONFIG_UNSET_PATH, profile), { keys: [`${kind}.use_gateway`] }).catch(() => undefined)
+    await http('PUT', configPath(profile), { config: withProvider(config, kind, id), profile })
+  })
 }

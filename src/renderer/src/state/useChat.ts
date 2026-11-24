@@ -475,7 +475,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     setQueue([])
     olderNow.current = null
     setOlder(null)
-    // A page read the last chat left on its way is no longer this pane's.
+    // A page read the last chat left on its way is no longer this pane's, nor the row it was read for.
+    wanted.current = null
     olderLoading.current = null
     setLoadingOlder(false)
     setChat(storedId || !folder ? { storedId, liveId: null } : { storedId, liveId: null, cwd: folder })
@@ -659,8 +660,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       const open = await resumeChat(params, stored, profile)
       if (ticket !== request.current) return
       // A send that started while a catch-up's read ran drew its own row: the read isn't drawn over it,
-      // and the store's next move asks again.
-      if (keepOlder && readOver(transcriptRef.current)) return
+      // and is made again once the chat is at rest (its turn is followed live, so its tip alone wouldn't ask).
+      if (keepOlder && readOver(transcriptRef.current)) {
+        gapPending.current = true
+        return
+      }
       const { result, rows } = open
       liveId.current = result.session_id
       setChat(c => ({ ...c, liveId: result.session_id, title: result.info?.title ?? c.title }))
@@ -713,7 +717,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       } finally {
         catchingUp.current = false
       }
-      return null
+      return gapPending.current ? CATCH_UP_SETTLE_MS : null
     }
     const ticket = request.current
     catchingUp.current = true
@@ -734,7 +738,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       await reloadHistory(true)
       // Counted from the read's end too, so a slow read of a long chat isn't followed by another at once.
       reloadedAt.current = Date.now()
-      return null
+      return gapPending.current ? CATCH_UP_SETTLE_MS : null
     } catch {
       // The next change asks again.
       return null
@@ -763,7 +767,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       // A message on its way or waiting in the queue's dock isn't in what Hermes stored yet, and a reload
       // would drop it: the store's next move reads the chat in once it is.
       else if (event.type === 'session.replay_gap' && event.session_id && event.session_id === liveId.current) {
-        if (!readOver(transcriptRef.current)) void reloadHistory(true)
+        if (!readOver(transcriptRef.current)) void reloadHistory(true).then(() => gapPending.current && soon(CATCH_UP_SETTLE_MS))
         else {
           gapPending.current = true
           soon(CATCH_UP_SETTLE_MS)
@@ -1430,7 +1434,35 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     }
   }, [profile, dispatch, transcriptRef])
 
+  /**
+   * A row a jump is after — a pin, an artifact's Show in Chat — that the pages
+   * read so far may not hold: `found` says whether the transcript has it. The
+   * pages before are read until it does or the chat has no more, starting once
+   * the chat is open, so a jump asked for as its chat opens waits for it. The
+   * caller jumps when its row turns up in the transcript; one wanted row at a
+   * time, the newest ask.
+   */
+  const wanted = useRef<((items: readonly TranscriptItem[]) => boolean) | null>(null)
+  const seekMore = useCallback(() => {
+    const found = wanted.current
+    if (!found) return
+    if (found(transcriptRef.current.items)) wanted.current = null
+    // No pages to read: the chat's first row is in, or it opened whole (or too long to page back).
+    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null) wanted.current = null
+    else void loadOlder()
+  }, [loadOlder, transcriptRef])
+  const seekRow = useCallback(
+    (found: (items: readonly TranscriptItem[]) => boolean) => {
+      wanted.current = found
+      seekMore()
+    },
+    [seekMore]
+  )
+  // Each page read, and the open itself, moves `older`: the wanted row is looked for again.
+  useEffect(() => seekMore(), [older, seekMore])
+
   return {
+    seekRow,
     transcriptStore,
     chat,
     react,

@@ -173,6 +173,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     resendLost,
     loadOlder,
     loadingOlder,
+    seekRow,
     react,
     noteCorrection
   } = useChat(request.fresh ? null : request.id, profile, status.sessionAuthority === true, connected, botChat, undefined, host)
@@ -275,7 +276,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     [cwd, openTab]
   )
   // An artifact's Show in Chat: its message, here.
-  const showInChat = useRevealRow(transcriptStore, chatId, chat.storedId, key => requestAnimationFrame(() => revealMessage(pane.current, key)))
+  const showInChat = useRevealRow(transcriptStore, chatId, chat.storedId, key => requestAnimationFrame(() => revealMessage(pane.current, key)), seekRow)
   // Docked, the chat's call (components/ChatCall.tsx), running here on the chat's own dashboard.
   const endCallRef = useRef<() => void>(() => undefined)
   const chatCall = useChatCall({
@@ -568,6 +569,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 sessionId={chat.liveId ?? undefined}
                 onReact={chat.liveId ? react : undefined}
                 onLoadOlder={loadOlder}
+                onSeekRow={seekRow}
                 loadingOlder={loadingOlder}
               />
             </ConnectionActionsContext.Provider>

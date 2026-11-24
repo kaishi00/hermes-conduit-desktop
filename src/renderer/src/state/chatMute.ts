@@ -114,6 +114,20 @@ export async function readMutedTarget(http: Http, target: MuteTarget, profiles: 
 }
 
 /**
+ * The profiles a chat whose profile isn't known is asked of: those the list
+ * shows and every bot's, each once by its key. The default profile's bot can
+ * carry another name, and is still the default profile.
+ */
+export function muteProfilesToAsk(listed: string[], bots: { name: string; isDefault: boolean }[]): string[] {
+  const byKey = new Map<string, string>()
+  for (const name of [...listed, ...bots.map(bot => (bot.isDefault ? 'default' : bot.name))]) {
+    const key = profileKey(name)
+    if (!byKey.has(key)) byKey.set(key, name)
+  }
+  return [...byKey.values()].sort()
+}
+
+/**
  * Whether a chat's finished turn notifies here: not while it's muted, as the
  * plugin doesn't push it, by the mutes read so far, and then asked at once
  * for a mute set on another device since. Approvals and questions don't come
