@@ -71,6 +71,17 @@ export interface SavedConnection {
   hermesName?: string
 }
 
+/** A sign-out Hermes didn't hear, kept encrypted until a later launch or reconnect retries it. */
+export interface PendingSignOut {
+  url: string
+  refreshToken: string
+  /** Epoch ms after which the handle is assumed expired and the entry is dropped. */
+  expiresAt: number
+}
+
+/** How long a failed sign-out is retried; past it the handle's own lifetime has passed. */
+export const PENDING_SIGN_OUT_MS = 30 * 24 * 3_600_000
+
 export interface ConnectionStore {
   /** The open host. */
   load(): SavedConnection | null
@@ -93,6 +104,12 @@ export interface ConnectionStore {
   setHermesName?(url: string, name: string): boolean
   /** Edit Connection: puts `connection` where `from` was, keeping its place and its group, and makes it the open one. */
   replace?(from: string, connection: SavedConnection): void
+  /** Sign-outs Hermes has not answered yet, kept across launches. */
+  pendingSignOuts?(): PendingSignOut[]
+  /** Keeps a sign-out for a later retry; the same handle replaces its older entry. */
+  savePendingSignOut?(entry: PendingSignOut): void
+  /** Drops a sign-out once Hermes took it or its handle ran out. */
+  clearPendingSignOut?(url: string, refreshToken: string): void
 }
 
 /** The Conduit plugin's capabilities route (renderer state/plugin.ts STATUS_PATH). */
@@ -215,6 +232,8 @@ export class Connection {
     if (this.locked) return
     if (options.askWhich && this.hosts().length > 1) return this.setStatus({ phase: 'signed-out', hosts: this.hosts(), choosing: true })
     const saved = this.deps.store.load()
+    // Launch: try every sign-out Hermes didn't hear, even when no host is signed in locally.
+    this.retryPendingSignOuts()
     if (!saved) return
     this.saved = saved
     const generation = ++this.generation
@@ -451,6 +470,7 @@ export class Connection {
   private open(saved: SavedConnection): void {
     const generation = ++this.generation
     this.teardown()
+    this.retryPendingSignOuts(saved.url)
     this.saved = saved
     this.openToken = null
     this.attempt = 0
@@ -706,6 +726,8 @@ export class Connection {
         this.openedAt = Date.now()
         this.setStatus({ ...this.identity(), phase: 'open', sessionAuthority: this.status.sessionAuthority })
         void this.readHermesName()
+        // A reconnect is the other point where Hermes can be reached again.
+        if (this.saved) this.retryPendingSignOuts(this.saved.url)
       } else if ((state === 'closed' || state === 'error') && this.status.phase === 'open') {
         if (isStableOpen(this.openedAt)) this.attempt = 0
         this.openedAt = null
@@ -816,9 +838,40 @@ export class Connection {
     const store = this.deps.oidcStore ?? this.deps.store
     const current = this.newOidc.has(saved) ? undefined : store.get?.(saved.url)?.oidc
     invalidateOidc(store, saved.url)
-    if (saved.oidc) void revokeOidc(saved.url, saved.oidc, this.fetchFor(saved)).catch(() => {})
+    if (saved.oidc) void this.revokeForget(saved, saved.oidc)
     if (current && current.refresh_token !== saved.oidc?.refresh_token) {
-      void revokeOidc(saved.url, current, this.fetchFor(saved)).catch(() => {})
+      void this.revokeForget(saved, current)
+    }
+  }
+
+  /** A failed revoke is kept encrypted; the local grant is cleared either way. */
+  private async revokeForget(saved: SavedConnection, grant: OidcGrant): Promise<void> {
+    try {
+      await revokeOidc(saved.url, grant, this.fetchFor(saved))
+    } catch {
+      if (grant.refresh_token) {
+        this.deps.store.savePendingSignOut?.({
+          url: saved.url,
+          refreshToken: grant.refresh_token,
+          expiresAt: Date.now() + PENDING_SIGN_OUT_MS
+        })
+      }
+    }
+  }
+
+  /** Retries sign-outs Hermes didn't hear, on launch and once a host reconnects. */
+  private retryPendingSignOuts(url?: string): void {
+    for (const entry of this.deps.store.pendingSignOuts?.() ?? []) {
+      if (url && entry.url !== url) continue
+      if (entry.expiresAt <= Date.now()) {
+        this.deps.store.clearPendingSignOut?.(entry.url, entry.refreshToken)
+        continue
+      }
+      const grant: OidcGrant = { access_token: '', refresh_token: entry.refreshToken, expires_at: 0, provider: 'pending' }
+      const saved: SavedConnection = { url: entry.url, method: 'oidc', oidc: grant }
+      void revokeOidc(entry.url, grant, this.fetchFor(saved))
+        .then(() => this.deps.store.clearPendingSignOut?.(entry.url, entry.refreshToken))
+        .catch(() => {})
     }
   }
 

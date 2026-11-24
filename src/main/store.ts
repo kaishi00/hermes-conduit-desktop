@@ -9,7 +9,7 @@ import { app, safeStorage } from 'electron'
 import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { keepUnreadable, writeFileAtomic } from './atomicWrite'
-import type { ConnectionStore, SavedConnection } from './connection'
+import type { ConnectionStore, PendingSignOut, SavedConnection } from './connection'
 import { createHostList } from './hosts'
 import { storedGrant } from './oidc'
 
@@ -32,6 +32,28 @@ interface StoredFile {
   version: 2
   active: string | null
   hosts: StoredHost[]
+}
+
+/** Failed sign-outs, encrypted on their own: they outlive the host entry they came from. */
+const pendingPath = join(app.getPath('userData'), 'pending-signouts.json')
+
+function readPending(): PendingSignOut[] {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return []
+    const raw = JSON.parse(safeStorage.decryptString(Buffer.from(readFileSync(pendingPath, 'utf8'), 'base64'))) as unknown
+    if (!Array.isArray(raw)) return []
+    return raw.filter((item): item is PendingSignOut =>
+      !!item && typeof item === 'object' && typeof (item as PendingSignOut).url === 'string' &&
+      typeof (item as PendingSignOut).refreshToken === 'string' && typeof (item as PendingSignOut).expiresAt === 'number'
+    ).slice(-20)
+  } catch {
+    return []
+  }
+}
+
+function writePending(list: PendingSignOut[]): void {
+  if (!safeStorage.isEncryptionAvailable()) return
+  writeFileAtomic(pendingPath, safeStorage.encryptString(JSON.stringify(list.slice(-20))).toString('base64'), 0o600)
 }
 
 /** A host's own name and its Hermes' name (shared/hostNames.ts), where it has them. */
@@ -128,6 +150,13 @@ export function createFileStore(): ConnectionStore {
     setCombined: (url, on) => hosts().setCombined!(url, on),
     rename: (url, name) => hosts().rename!(url, name),
     setHermesName: (url, name) => hosts().setHermesName!(url, name),
-    replace: (from, connection) => hosts().replace!(from, connection)
+    replace: (from, connection) => hosts().replace!(from, connection),
+    pendingSignOuts: () => readPending(),
+    savePendingSignOut: entry => {
+      const list = readPending().filter(p => !(p.url === entry.url && p.refreshToken === entry.refreshToken))
+      writePending([...list, entry])
+    },
+    clearPendingSignOut: (url, refreshToken) =>
+      writePending(readPending().filter(p => !(p.url === url && p.refreshToken === refreshToken)))
   }
 }
