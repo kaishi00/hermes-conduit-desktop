@@ -153,7 +153,7 @@ for a dashboard that asks for a sign-in).
 
 builds an installer for the platform you're on, in `release/`. CI builds the
 Windows installer, the Mac dmg and the Linux AppImage, unsigned, for every
-pull request.
+pull request that changes code or configuration (docs-only PRs skip CI).
 
 The screenshots in `docs/media/` come from a demo Hermes with a scripted
 model (the iPhone app's `scripts/app-store/start-demo-hermes.sh`), not a real
