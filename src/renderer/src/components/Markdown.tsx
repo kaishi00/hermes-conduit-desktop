@@ -3,6 +3,7 @@ import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markd
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import { looksLikePath } from '../state/workspace'
+import { faviconFailed, faviconUrl, fileType } from '../state/linkMarks'
 import { remarkDesktopCards } from '../state/desktopCards'
 import { markdownBlocks } from '../state/markdownBlocks'
 import { DesktopCard } from './DesktopCard'
@@ -17,28 +18,70 @@ const plugins = [remarkGfm, remarkBreaks, remarkDesktopCards]
 /** Opens a file path a reply names in inline code, in the Folder; null where there's no folder. */
 export const FileLinks = createContext<((path: string) => void) | null>(null)
 
-/** Inline code: a link when it names a file and there's a Folder to open it in. */
+/** A file's type beside its name (issue 455): its extension in capitals, the type's name on hover. */
+function FileType({ path }: { path: string }) {
+  const type = fileType(path)
+  return type ? (
+    <span className="file-type" title={type.name} aria-hidden="true">
+      {type.label}
+    </span>
+  ) : null
+}
+
+/** Inline code: a link when it names a file and there's a Folder to open it in; a file's name carries its type. */
 function Code({ className, children }: { className?: string; children?: ReactNode }) {
   const open = useContext(FileLinks)
   const text = typeof children === 'string' ? children : Array.isArray(children) && children.every(c => typeof c === 'string') ? children.join('') : null
   // A block's code ends with its newline, and carries its language.
-  if (open && text && !className && !text.includes('\n') && looksLikePath(text)) {
+  const path = text && !className && !text.includes('\n') && looksLikePath(text) ? text : null
+  if (open && path) {
     return (
       <code
         className="file-link"
         role="link"
         tabIndex={0}
-        title={text}
-        onClick={() => open(text)}
+        title={path}
+        onClick={() => open(path)}
         onKeyDown={e => {
-          if (e.key === 'Enter') open(text)
+          if (e.key === 'Enter') open(path)
         }}
       >
-        {text}
+        <FileType path={path} />
+        {path}
+      </code>
+    )
+  }
+  if (path) {
+    return (
+      <code className={className}>
+        <FileType path={path} />
+        {children}
       </code>
     )
   }
   return <code className={className}>{children}</code>
+}
+
+/** A site's own icon before a link to it (issue 455); nothing where it has none, or can't be asked. */
+function Favicon({ href }: { href?: string }) {
+  const [failed, setFailed] = useState(false)
+  const src = failed ? null : faviconUrl(href)
+  return src ? (
+    <img
+      className="link-favicon"
+      src={src}
+      alt=""
+      width={14}
+      height={14}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => {
+        faviconFailed(href)
+        setFailed(true)
+      }}
+    />
+  ) : null
 }
 
 /** The text inside a node, as a code block's children hold it. */
@@ -137,6 +180,7 @@ const components: Components = {
       <ChatLink href={href}>{children}</ChatLink>
     ) : (
       <a href={href} target="_blank" rel="noreferrer">
+        <Favicon href={href} />
         {children}
       </a>
     ),

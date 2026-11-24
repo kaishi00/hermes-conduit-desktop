@@ -5250,6 +5250,32 @@ code.file-link:hover {
   color: var(--accent);
 }
 
+/* A file's type beside its name, and a site's icon beside a link to it (issue 455). */
+.file-type {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  opacity: 0.75;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+  vertical-align: 0.08em;
+  text-decoration: none;
+  user-select: none;
+}
+
+.link-favicon {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  border-radius: 3px;
+  vertical-align: -2px;
+  user-select: none;
+}
+
 /* Boards: the cards conduit_show showed */
 .shown {
   display: flex;
