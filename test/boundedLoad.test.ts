@@ -135,6 +135,33 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     hook.unmount()
   })
 
+  it("ends the earlier-messages line when another chat opens while a page is on its way", async () => {
+    pages[0] = page(501, 500)
+    let release!: () => void
+    const conduit = (window as unknown as { conduit: { httpOutcome: (m: string, p: string) => Promise<unknown> } }).conduit
+    const base = conduit.httpOutcome
+    conduit.httpOutcome = (method, path) =>
+      path.includes('offset=500') ? new Promise(resolve => (release = () => resolve({ ok: true, result: { messages: page(1, 500) } }))) : base(method, path)
+    const hook = mount('big')
+    await settle()
+    act(() => void hook.result().loadOlder())
+    await settle()
+    expect(hook.result().loadingOlder).toBe(true)
+    noteChatLength('small', 2)
+    resumeRows = page(1, 2)
+    hook.rerender({ id: 'small' })
+    await settle()
+    expect(hook.result().loadingOlder).toBe(false)
+    // The page the last chat asked for lands late: it draws nothing here.
+    await act(async () => {
+      release()
+    })
+    await settle()
+    expect(hook.result().loadingOlder).toBe(false)
+    expect(hook.result().transcript.items.length).toBe(2)
+    hook.unmount()
+  })
+
   it('draws the page once when the scroll asks twice while it is on its way', async () => {
     pages[0] = page(201, 500)
     pages[500] = page(1, 200)

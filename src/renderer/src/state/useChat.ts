@@ -402,7 +402,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   olderNow.current = older
   /** Whether the page before the chat's drawn rows is on its way. */
   const [loadingOlder, setLoadingOlder] = useState(false)
-  const olderLoading = useRef(false)
+  /** The open (`request`) whose page read is on its way, so one a chat switch left behind can't end the next chat's. */
+  const olderLoading = useRef<number | null>(null)
 
   // Resume when the chat (or the connection) changes.
   useEffect(() => {
@@ -427,6 +428,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     setQueue([])
     olderNow.current = null
     setOlder(null)
+    // A page read the last chat left on its way is no longer this pane's.
+    olderLoading.current = null
+    setLoadingOlder(false)
     setChat(storedId || !folder ? { storedId, liveId: null } : { storedId, liveId: null, cwd: folder })
     setError(null)
     if (!storedId) {
@@ -1230,10 +1234,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const loadOlder = useCallback(async () => {
     const at = olderNow.current
     const stored = chatRef.current.storedId
-    if (!at?.more || !stored || olderLoading.current) return
-    olderLoading.current = true
-    setLoadingOlder(true)
+    if (!at?.more || !stored || olderLoading.current !== null) return
     const ticket = request.current
+    olderLoading.current = ticket
+    setLoadingOlder(true)
     try {
       // A page that draws nothing (hidden rows, or ones the chat already has) reads the one
       // before it, since the reader at the top has no further scroll to ask with.
@@ -1252,7 +1256,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     } catch {
       // The rows stay as they are; the next scroll to the top asks again.
     } finally {
-      olderLoading.current = false
+      if (olderLoading.current === ticket) olderLoading.current = null
       if (ticket === request.current) setLoadingOlder(false)
     }
   }, [profile, dispatch, transcriptRef])
