@@ -86,6 +86,7 @@ import { dashboardProfilePath, dashboardProfileQuery } from '../state/dashboardP
 import { RECONNECT_ATTEMPTS, isRefusalClose, reconnectDelayMs } from '@shared/liveReconnect'
 import { NO_PHONE_READS, loadPhoneReads, phoneTool, readPhone, type PhoneReads } from '../state/phoneReads'
 import { ECHO_TAIL_MS, SpeakerGate, echoDelay, micLatency, talksOver } from '../state/speakerGate'
+import { ReplyRecord } from '../state/replyRecord'
 
 interface Props {
   profile?: string
@@ -232,14 +233,16 @@ export function LocalLiveCall({
   const gate = useRef<SpeakerGate>(null!)
   gate.current ??= new SpeakerGate(talksOver())
   const echo = useRef(0)
-  /** The words shown of the reply now arriving. */
-  const shown = useRef('')
-  /** Interrupt cut the response now arriving: its saved turn is what was heard, whenever its transcript ends. */
-  const cut = useRef(false)
-  /** What was heard of a reply that ended without its whole transcript is its saved turn. */
+  /** What the call saves of the reply now arriving: the words heard, if it is cut. */
+  const reply = useRef<ReplyRecord>(null!)
+  reply.current ??= new ReplyRecord()
+  const closeReplyLine = () => setLines(current => current.map(line => (line.open && line.who === 'assistant' ? { ...line, open: false } : line)))
+  /** The reply ended without its whole transcript: what was heard of it is its saved turn. */
   const keepHeard = () => {
-    keep('assistant', shown.current)
-    shown.current = ''
+    const heard = reply.current.ended()
+    if (!heard) return
+    keep('assistant', heard)
+    closeReplyLine()
   }
   const ended = useRef(false)
   const ready = useRef(false)
@@ -283,6 +286,8 @@ export function LocalLiveCall({
   const save = () => {
     if (saved.current) return
     saved.current = true
+    // A reply still arriving when the call ends is saved as what was heard of it.
+    keep('assistant', reply.current.ended())
     void saveCall(profile, callId.current, 'local-live', record.current, live.current.chatId, resumed.current?.from ?? 0)
   }
 
@@ -703,6 +708,7 @@ export function LocalLiveCall({
     if (!checking.current && stopsPlayback(text)) {
       stopPlayback()
       gate.current.replyEnded()
+      reply.current.cancelled()
     }
     const event = decode(text)
     if (!event) return
@@ -723,7 +729,7 @@ export function LocalLiveCall({
         if (checking.current) return
         responding.current = true
         gate.current.replyStarted()
-        cut.current = false
+        keep('assistant', reply.current.started())
         return
       case 'responseDone':
         if (checking.current) {
@@ -745,6 +751,8 @@ export function LocalLiveCall({
         userSpeaking.current = true
         userSpokeAt.current = Date.now()
         trace.current?.speechStarted()
+        // The server heard the user over a reply: it drops the rest, and the saved turn is what was heard.
+        if (responding.current || gate.current.replying || playing()) reply.current.cancelled()
         stopPlayback()
         gate.current.replyEnded()
         return
@@ -765,21 +773,17 @@ export function LocalLiveCall({
       case 'output':
         askFirst.current.modelSpoke()
         if (checking.current || !gate.current.words(responding.current)) return
-        shown.current += event.text
+        reply.current.words(event.text)
         assistantLine(event.text)
         return
       case 'outputDone': {
         if (checking.current) return
-        // Interrupted: the line and the saved call keep what was heard of it, not the words nobody played. The
-        // server may have ended the response already, so the cut is the response's, not the gate's.
-        if (cut.current || gate.current.dropped) {
-          keepHeard()
-          setLines(current => current.map(line => (line.open && line.who === 'assistant' ? { ...line, open: false } : line)))
-          return
-        }
-        shown.current = ''
-        keep('assistant', event.text)
-        assistantLine(event.text, true)
+        // Cut (Interrupt, or the server heard the user): the line and the saved call keep what was heard of it,
+        // not the words nobody played, and a response that ended first has saved it already.
+        const turn = reply.current.transcript(event.text)
+        if (turn) keep('assistant', turn.keep)
+        if (turn?.whole) assistantLine(event.text, true)
+        else closeReplyLine()
         return
       }
       default:
@@ -866,7 +870,6 @@ export function LocalLiveCall({
         stopPlayback()
         gate.current.replyEnded()
         keepHeard()
-        cut.current = false
         setPhase('reconnecting')
         trace.current?.step('Connection lost: opening a new session')
       }
@@ -1045,7 +1048,7 @@ export function LocalLiveCall({
     trace.current?.step('Interrupt pressed')
     stopPlayback()
     gate.current.interrupt()
-    cut.current = gate.current.dropped
+    if (gate.current.dropped) reply.current.cancelled()
     // Sent even when the reply has ended and only its tail plays: a server that shut its own microphone for the
     // reply can't know the playback stopped (the phone's ruling, hermes-conduit #1331).
     send(RESPONSE_CANCEL)
