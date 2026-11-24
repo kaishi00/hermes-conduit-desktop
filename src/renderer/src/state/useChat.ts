@@ -123,7 +123,7 @@ async function resumeChat(params: Record<string, unknown>, storedId: string, pro
   try {
     const result = await gateway.rpc<ResumeResult>('session.resume', params)
     // What it carried is the chat's length, for the next open: one that grew past a page is read in pages then.
-    noteChatLength(storedId, result.messages?.length)
+    noteChatLength(storedId, result.messages?.length, true)
     return { result, rows: null }
   } catch (e) {
     if (!isResumeTooLong(e)) throw e

@@ -1163,6 +1163,12 @@ export function Transcript({
   const summaries = useStepSummaries(state, sessionId, profile)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  // Another chat opens on its newest rows and follows them, wherever the last one was left (desktop#467).
+  const pinnedChat = useRef(chatKey)
+  if (pinnedChat.current !== chatKey) {
+    pinnedChat.current = chatKey
+    pinned.current = true
+  }
 
   // Follow the reply while the reader is at the bottom; leave them be once they scroll up.
   // At the top of what's drawn the window takes on the rows above it, and back at the
@@ -1330,12 +1336,15 @@ export function Transcript({
     setWindowed(windowAt(reading ? olderStart(start, rows.length) : start))
   })
 
-  // Rows that leave the scroller at its top — too few to fill it, or a page that drew
-  // nothing new above the reader — can't be scrolled for more, so the page before is asked for.
+  // Rows that leave the scroller at its very top — too few to fill it, a page that drew
+  // nothing new above the reader, a window that opened there — can't be scrolled for more,
+  // so the window takes on the rows above it, or the page before is asked for.
   const itemCount = state.items.length
   useEffect(() => {
     const el = scroller.current
-    if (el && itemCount && !loading && drawnWindow.start === 0 && el.scrollTop <= 0) older.current?.()
+    if (!el || !itemCount || loading || el.scrollTop > 0) return
+    if (drawnWindow.start === 0) older.current?.()
+    else if (!pinned.current) setWindowed(windowAt(olderStart(drawnWindow.start, liveRows.current.rows.length)))
   }, [itemCount, loading, drawnWindow.start])
 
   // Pins: which reply each shows, the bar's order, and the row ids replies pinned as they arrived took.

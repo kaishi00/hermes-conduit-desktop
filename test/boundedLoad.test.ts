@@ -119,6 +119,25 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     hook.unmount()
   })
 
+  it("opens a chat on its newest page once a whole open found it long, whatever the list's count says", async () => {
+    // The list leaves out rows the chat compacted away; the resume carries them.
+    noteChatLength('big', 433)
+    resumeRows = page(1, 700)
+    pages[0] = page(201, 500)
+    const hook = mount('big')
+    await settle()
+    expect(hook.result().transcript.items.length).toBe(700)
+    noteChatLength('big', 433)
+    hook.rerender({ id: 'other' })
+    await settle()
+    calls = []
+    hook.rerender({ id: 'big' })
+    await settle()
+    expect(calls.filter(c => c.method === 'session.resume').map(c => c.params.omit_messages === true)).toEqual([true])
+    expect(hook.result().transcript.items.length).toBe(500)
+    hook.unmount()
+  })
+
   it('reads on past a page that draws nothing new, so the top of the chat is never a dead end', async () => {
     pages[0] = page(1001, 500)
     // The page before holds only rows the chat already draws; the one before that has the words.
