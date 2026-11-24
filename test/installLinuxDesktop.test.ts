@@ -214,7 +214,8 @@ describe.skipIf(process.platform !== 'linux')('Linux source launcher', () => {
     expect(existsSync(join(real, 'older.desktop'))).toBe(true)
   })
 
-  it('refuses to install beside an entry it cannot read', () => {
+  // Root reads a file whatever its mode, so the entry can't be made unreadable to it.
+  it.skipIf(process.getuid?.() === 0)('refuses to install beside an entry it cannot read', () => {
     const f = fixture()
     mkdirSync(join(f.data, 'applications'), { recursive: true })
     const locked = join(f.data, 'applications/old-source.desktop')
