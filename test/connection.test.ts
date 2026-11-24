@@ -260,9 +260,6 @@ describe('the connection', () => {
     expect(store.get?.(url)).toBeNull()
   })
 
-
-
-
   describe('browser sign-in leftovers (#414, #417)', () => {
     const url = 'https://hermes.example.com'
     const fresh = () => Date.now() / 1000 + 3600
