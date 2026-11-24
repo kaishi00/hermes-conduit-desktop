@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act } from 'react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
 
@@ -44,7 +44,6 @@ beforeEach(() => {
     }
   }
 })
-afterEach(() => undefined)
 
 type Props = { id: string | null; connected: boolean }
 const open = (props: Props) => renderHook(({ id, connected }: Props) => useChat(id, undefined, false, connected, false, undefined, 'https://h'), props)

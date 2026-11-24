@@ -397,6 +397,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     draftOverrides.current = {}
     drawnTip.current = null
     followedLive.current = false
+    reloadedAt.current = 0
     // A create still out belongs to the chat that just left: a pick in this one mustn't wait on it and be dropped.
     creating.current = null
     // A resume this re-run abandons can't clear it any more: its finally is fenced by the ticket.
@@ -654,7 +655,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     const off = window.conduit.onEvent(event => {
       if (event.type === 'sessions.changed') soon(CATCH_UP_SETTLE_MS)
       // The events between two sockets couldn't be replayed: the chat as Hermes has it now.
-      else if (event.type === 'session.replay_gap' && event.session_id && event.session_id === liveId.current) void reloadHistory()
+      // A message waiting in the queue's dock isn't in what Hermes stored yet, and a reload would drop it:
+      // the store's next move reads the chat in once the dock is empty.
+      else if (event.type === 'session.replay_gap' && event.session_id && event.session_id === liveId.current) {
+        if (!transcriptRef.current.held?.length) void reloadHistory()
+      }
     })
     const forward = () => {
       if (document.visibilityState !== 'visible' || Date.now() - asked < CATCH_UP_FOCUS_MS) return

@@ -14,7 +14,7 @@ import {
   type MenuItemConstructorOptions
 } from 'electron'
 import { registerWake } from './wake'
-import { handleUncaught } from './socketOptionErrors'
+import { handleUncaught } from './uncaughtErrors'
 import { EventRouter } from './eventRouting'
 import { join, resolve } from 'node:path'
 import WebSocket from 'ws'
@@ -242,7 +242,7 @@ function sendToFarWindows(url: string, channel: string, payload: unknown, sessio
     page.send(channel, payload)
   }
 }
-// A refused socket option is logged, not shown; anything else gets Electron's own dialog (socketOptionErrors.ts).
+// A refused socket option is logged, not shown; anything else gets Electron's own dialog (uncaughtErrors.ts).
 process.on('uncaughtException', error => {
   handleUncaught(error, { log: message => console.warn(message), showError: (title, body) => dialog.showErrorBox(title, body) })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { handleUncaught, isRefusedSocketOption } from '../src/main/socketOptionErrors'
+import { handleUncaught, isRefusedSocketOption } from '../src/main/uncaughtErrors'
 
 const refused = () => Object.assign(new Error('setTypeOfService EINVAL'), { code: 'EINVAL', syscall: 'setTypeOfService', errno: -22 })
 
