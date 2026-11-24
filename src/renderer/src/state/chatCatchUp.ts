@@ -10,7 +10,7 @@
  * stored counts).
  */
 import { storedRow } from './longChat'
-import type { HistoryRow } from './transcript'
+import type { HistoryRow, TranscriptState } from './transcript'
 
 type Http = (method: 'GET', path: string) => Promise<unknown>
 
@@ -54,4 +54,12 @@ export function catchUpStep(tip: number | null, drawn: number | null, followedLi
   if (drawn === null) return 'adopt'
   if (tip <= drawn) return 'none'
   return followedLive ? 'adopt' : 'reload'
+}
+
+/**
+ * Whether reading the chat again would draw over something the stored rows don't have yet: a turn
+ * running here is followed live, and a send on its way or waiting in the queue's dock draws its own row.
+ */
+export function readOver(state: TranscriptState): boolean {
+  return state.running || !!state.held?.length || state.items.some(item => item.kind === 'user' && item.pending)
 }

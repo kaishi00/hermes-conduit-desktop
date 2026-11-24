@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { catchUpStep, newestRowId, tipOf } from '../src/renderer/src/state/chatCatchUp'
+import { catchUpStep, newestRowId, readOver, tipOf } from '../src/renderer/src/state/chatCatchUp'
+import { emptyTranscript, olderPagesOf, prependOlder } from '../src/renderer/src/state/transcript'
 
 describe('tipOf', () => {
   it('is the newest row id, whatever order the rows come in', () => {
@@ -53,5 +54,37 @@ describe('catchUpStep', () => {
     expect(catchUpStep(12, null, false)).toBe('adopt')
     expect(catchUpStep(null, 10, false)).toBe('none')
     expect(catchUpStep(null, null, true)).toBe('none')
+  })
+})
+
+describe('readOver', () => {
+  const row = (key: string, pending = false) => ({ kind: 'user' as const, key, text: key, at: 0, ...(pending ? { pending } : {}) })
+
+  it('says a chat at rest can be read again', () => {
+    expect(readOver({ ...emptyTranscript, items: [row('row-1')] })).toBe(false)
+  })
+
+  it('leaves a running turn, a message in the dock and a send on its way alone', () => {
+    expect(readOver({ ...emptyTranscript, running: true })).toBe(true)
+    expect(readOver({ ...emptyTranscript, held: [{ admission: 'a1', item: row('q1') }] })).toBe(true)
+    expect(readOver({ ...emptyTranscript, items: [row('u1', true)] })).toBe(true)
+  })
+})
+
+describe('olderPagesOf', () => {
+  const note = { kind: 'notice' as const, key: 'long-chat', text: 'long', tone: 'info' as const }
+  const rows = (...ids: number[]) => ids.map(id => ({ kind: 'user' as const, key: `row-${id}`, text: String(id), at: 0 }))
+
+  it('keeps the pages read above the newest page, and lands them under the note', () => {
+    const kept = { ...emptyTranscript, items: [note, ...rows(1, 2, 3, 4)] }
+    const fresh = { ...emptyTranscript, items: [note, ...rows(3, 4, 5)] }
+    const pages = olderPagesOf(kept, fresh)
+    expect(pages.map(item => item.key)).toEqual(['row-1', 'row-2'])
+    expect(prependOlder(fresh, pages).items.map(item => item.key)).toEqual(['long-chat', 'row-1', 'row-2', 'row-3', 'row-4', 'row-5'])
+  })
+
+  it('keeps nothing of a chat with no pages read, or one the new page no longer reaches', () => {
+    expect(olderPagesOf({ ...emptyTranscript, items: rows(3, 4) }, { ...emptyTranscript, items: rows(3, 4, 5) })).toEqual([])
+    expect(olderPagesOf({ ...emptyTranscript, items: rows(1, 2) }, { ...emptyTranscript, items: rows(8, 9) })).toEqual([])
   })
 })

@@ -729,6 +729,18 @@ export function prependOlder(state: TranscriptState, items: TranscriptItem[]): T
   return { ...state, items: [...state.items.slice(0, at), ...fresh, ...state.items.slice(at)] }
 }
 
+/**
+ * The rows `kept` draws above the first one `state` draws too: the pages a
+ * reader scrolled up through, when the chat is read again on its newest
+ * page. Nothing when the two share no row, since rows between them would
+ * be missing.
+ */
+export function olderPagesOf(kept: TranscriptState, state: TranscriptState): TranscriptItem[] {
+  const drawn = new Set(state.items.map(item => item.key))
+  const at = kept.items.findIndex(item => item.key !== 'long-chat' && drawn.has(item.key))
+  return at <= 0 ? [] : kept.items.slice(0, at).filter(item => item.key !== 'long-chat')
+}
+
 function confirmPending(items: TranscriptItem[]): TranscriptItem[] {
   if (!items.some(item => item.kind === 'user' && item.pending)) return items
   return items.map(item => (item.kind === 'user' && item.pending ? { ...item, pending: false } : item))

@@ -41,6 +41,7 @@ import {
   toolAnswers,
   toolNames,
   applyingReaction,
+  olderPagesOf,
   prependOlder,
   reactionTarget,
   reactionsFrom,
@@ -62,7 +63,7 @@ import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
 import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, newestPageItems, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
 import { knownChatLength, noteChatLength } from './chatLength'
-import { CATCH_UP_FOCUS_MS, CATCH_UP_RELOAD_MS, CATCH_UP_SETTLE_MS, catchUpStep, newestRowId, tipOf } from './chatCatchUp'
+import { CATCH_UP_FOCUS_MS, CATCH_UP_RELOAD_MS, CATCH_UP_SETTLE_MS, catchUpStep, newestRowId, readOver, tipOf } from './chatCatchUp'
 
 type Action =
   | { type: 'reset'; state: TranscriptState }
@@ -637,10 +638,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   }, [makeSession])
 
   /** The chat's history read again, after a command changed it (/undo, /retry, /compress). */
-  const reloadHistory = useCallback(async () => {
+  const reloadHistory = useCallback(async (keepOlder = false) => {
     const stored = chatRef.current.storedId
     if (!stored) return
     const ticket = ++request.current
+    const olderWas = olderNow.current
     const params: Record<string, unknown> = { session_id: stored, cols: 96, source: 'desktop' }
     if (profile) params.profile = profile
     if (!sessionAuthority) params.inline_images = false
@@ -651,10 +653,18 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       liveId.current = result.session_id
       setChat(c => ({ ...c, liveId: result.session_id, title: result.info?.title ?? c.title }))
       setError(null)
-      olderNow.current = open.older ?? null
-      setOlder(open.older ?? null)
       // The details the rows on screen already had come along, so only new ones are read.
       let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), transcriptRef.current)
+      // A reader pages back in a long chat keeps the pages they read, and where they are in them. Rows
+      // were only added, so the next page asked for can serve rows already drawn, never skip one.
+      let olderAt = open.older ?? null
+      const pages = keepOlder && olderWas && olderAt ? olderPagesOf(transcriptRef.current, state) : []
+      if (pages.length && olderWas && olderAt) {
+        state = prependOlder(state, pages)
+        olderAt = { offset: Math.max(olderAt.offset, olderWas.offset), more: olderWas.more }
+      }
+      olderNow.current = olderAt
+      setOlder(olderAt)
       if (result.running && result.inflight?.assistant) state = applyEvent(state, { type: 'message.delta', payload: { text: result.inflight.assistant } })
       state = withPendingConnection(state, result)
       dispatch({ type: 'reset', state })
@@ -675,11 +685,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const catchUp = useCallback(async (): Promise<number | null> => {
     const stored = chatRef.current.storedId
     if (!stored || !liveId.current || openingChat.current || catchingUp.current) return null
-    // A turn running here is followed live, and a send on its way draws its own row: neither is read over.
-    const busy = () => {
-      const state = transcriptRef.current
-      return state.running || !!state.held?.length || state.items.some(item => item.kind === 'user' && item.pending)
-    }
+    const busy = () => readOver(transcriptRef.current)
     if (busy()) return null
     const ticket = request.current
     catchingUp.current = true
@@ -697,7 +703,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       const wait = reloadedAt.current + CATCH_UP_RELOAD_MS - Date.now()
       if (wait > 0) return wait
       reloadedAt.current = Date.now()
-      await reloadHistory()
+      await reloadHistory(true)
       return null
     } catch {
       // The next change asks again.
@@ -724,10 +730,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     const off = window.conduit.onEvent(event => {
       if (event.type === 'sessions.changed') soon(CATCH_UP_SETTLE_MS)
       // The events between two sockets couldn't be replayed: the chat as Hermes has it now.
-      // A message waiting in the queue's dock isn't in what Hermes stored yet, and a reload would drop it:
-      // the store's next move reads the chat in once the dock is empty.
+      // A message on its way or waiting in the queue's dock isn't in what Hermes stored yet, and a reload
+      // would drop it: the store's next move reads the chat in once it is.
       else if (event.type === 'session.replay_gap' && event.session_id && event.session_id === liveId.current) {
-        if (!transcriptRef.current.held?.length) void reloadHistory()
+        if (!readOver(transcriptRef.current)) void reloadHistory(true)
+        else soon(CATCH_UP_SETTLE_MS)
       }
     })
     const forward = () => {
