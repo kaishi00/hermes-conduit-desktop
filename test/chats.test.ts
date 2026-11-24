@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatListPath, isLegacyKanbanWorker, keepSameRows, mergeRows, refreshFirstPage, responseCount, rowsFromResponse, sameRow, sectionRows, toMillis, unreadProfiles, type ChatRow } from '../src/renderer/src/state/chats'
+import { chatListPath, foldedKeyForSelection, isLegacyKanbanWorker, keepSameRows, mergeRows, refreshFirstPage, responseCount, rowsFromResponse, sameRow, sectionFolded, sectionRows, toMillis, unreadProfiles, type ChatRow } from '../src/renderer/src/state/chats'
 
 const now = new Date(2026, 10, 18, 15, 0).getTime()
 const hoursAgo = (h: number) => (now - h * 3_600_000) / 1000
@@ -52,6 +52,7 @@ describe('chat rows', () => {
         { id: 'week', title: 'Week', last_active: hoursAgo(24 * 4) }
       ]
     })
+    expect(sectionRows(rows, now).map(s => s.key)).toEqual(['date:pinned', 'date:today', 'date:yesterday', 'date:week', 'date:older'])
     expect(sectionRows(rows, now).map(s => [s.title, s.rows.map(r => r.id)])).toEqual([
       ['Pinned', ['pin']],
       ['Today', ['today']],
@@ -59,6 +60,21 @@ describe('chat rows', () => {
       ['Previous 7 days', ['week']],
       ['Older', ['old']]
     ])
+  })
+})
+
+describe('folded sections', () => {
+  it('stays folded while browsing but never hides a search match', () => {
+    expect(sectionFolded('today', ['today'], false)).toBe(true)
+    expect(sectionFolded('today', ['today'], true)).toBe(false)
+    expect(sectionFolded('older', ['today'], false)).toBe(false)
+    const sections = [
+      { key: 'date:today', title: 'Today', rows: [{ id: 'a' }] },
+      { key: 'date:older', title: 'Older', rows: [{ id: 'b' }] }
+    ]
+    expect(foldedKeyForSelection(sections, 'b')).toBe('date:older')
+    expect(foldedKeyForSelection(sections, null)).toBeNull()
+    expect(foldedKeyForSelection(sections, 'missing')).toBeNull()
   })
 })
 
