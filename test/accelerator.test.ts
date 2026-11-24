@@ -34,6 +34,7 @@ describe('a global shortcut from a key press', () => {
     expect(acceleratorFromEvent(press('k', 'KeyK'), false)).toBeNull()
     expect(acceleratorFromEvent(press('K', 'KeyK', { shiftKey: true }), false)).toBeNull()
     expect(acceleratorFromEvent(press('Escape', 'Escape', { ctrlKey: true }), false)).toBeNull()
+    expect(acceleratorFromEvent(press('1', 'Numpad1', { ctrlKey: true }), false)).toBeNull()
   })
 })
 

@@ -55,6 +55,8 @@ type Press = Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'altKey' | 'shiftK
  */
 export function acceleratorFromEvent(event: Press, mac: boolean): string | null {
   // The letter the layout types, so Ctrl+Z is Z on a QWERTZ keyboard too; Option on a Mac types a symbol, so then the key's place.
+  // The number pad's keys aren't the top row's: a shortcut picked there wouldn't answer to the press that picked it.
+  if (event.code.startsWith('Numpad')) return null
   const typed = /^[a-z0-9]$/i.test(event.key) ? event.key.toUpperCase() : null
   const placed = /^Key[A-Z]$/.test(event.code) ? event.code.slice(3) : /^Digit\d$/.test(event.code) ? event.code.slice(5) : /^F\d{1,2}$/.test(event.code) ? event.code : (CODES[event.code] ?? null)
   const key = typed ?? placed

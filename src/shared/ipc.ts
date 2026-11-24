@@ -387,6 +387,8 @@ export interface ConduitApi {
   quickAskShortcut(): Promise<QuickAskShortcut>
   /** Other keys for quick ask, or null for none. `changed` is false when the system refused them (another app has them): the ones before stay. */
   setQuickAskShortcut(accelerator: string | null): Promise<QuickAskShortcut & { changed: boolean }>
+  /** Settings is listening for quick ask's new keys (true) or stopped: meanwhile the Mac's menu bar and the keys held now stand aside, so any keys can be picked. */
+  setQuickAskRecording(on: boolean): void
   /** How many things wait on the user, for the tray and the Dock's badge. */
   setWaiting(count: number): void
   /** A menu bar command (the Mac's File > New Chat). */
@@ -500,6 +502,7 @@ export const IPC = {
   quickAskExpanded: 'conduit:quick-ask-expanded',
   quickAskShortcut: 'conduit:quick-ask-shortcut',
   setQuickAskShortcut: 'conduit:set-quick-ask-shortcut',
+  quickAskRecording: 'conduit:quick-ask-recording',
   windowShow: 'conduit:window-show',
   probe: 'conduit:probe',
   signIn: 'conduit:sign-in',

@@ -597,11 +597,36 @@ function registerIpc(): void {
   ipcMain.handle(IPC.setQuickAskShortcut, (_event, accelerator: unknown) => {
     const next = accelerator === null ? null : validAccelerator(accelerator) ? accelerator : undefined
     const changed = next !== undefined && quickAsk.change(next)
-    if (changed) {
-      chooseQuickAskAccelerator(next)
-      tray.setQuickAsk(quickAsk.registered ? next : null)
-    }
+    if (changed) chooseQuickAskAccelerator(next)
+    // Also after a refusal: taking the keys before back may have just worked where it hadn't at launch.
+    tray.setQuickAsk(quickAsk.registered ? quickAsk.accelerator : null)
     return { ...quickAskShortcut(), changed }
+  })
+  // Settings is listening for new keys: the Mac's menu bar would take ⌘N and the rest first, and the keys held now would open Quick Ask.
+  let recordingIn: Electron.WebContents | null = null
+  const endRecording = () => {
+    if (!recordingIn) return
+    if (!recordingIn.isDestroyed()) {
+      recordingIn.off('destroyed', endRecording)
+      recordingIn.off('did-navigate', endRecording)
+    }
+    recordingIn = null
+    if (isMac) Menu.setApplicationMenu(macMenu())
+    quickAsk.resume()
+    tray.setQuickAsk(quickAsk.registered ? quickAsk.accelerator : null)
+  }
+  ipcMain.on(IPC.quickAskRecording, (event, on: unknown) => {
+    if (on !== true) {
+      if (recordingIn === event.sender) endRecording()
+      return
+    }
+    endRecording()
+    recordingIn = event.sender
+    // A window closed or reloaded mid-pick gives the menu and the keys back.
+    recordingIn.once('destroyed', endRecording)
+    recordingIn.once('did-navigate', endRecording)
+    if (isMac) Menu.setApplicationMenu(null)
+    quickAsk.suspend()
   })
   ipcMain.handle(IPC.answerRequest, (event, id: string, result: Record<string, unknown>) => connectionOf(event.sender.id)?.answerRequest(id, result) ?? false)
   ipcMain.handle(IPC.dismissRequest, (event, id: string) => connectionOf(event.sender.id)?.dropRequest(id))

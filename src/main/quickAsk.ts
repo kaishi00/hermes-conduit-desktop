@@ -51,6 +51,15 @@ export class QuickAsk {
     return false
   }
 
+  /** While Settings listens for new keys, the ones held now are let go, so pressing them picks them instead of opening the window. */
+  suspend(): void {
+    this.unregister()
+  }
+
+  resume(): void {
+    if (!this.registered) this.register(this.accelerator)
+  }
+
   unregister(): void {
     if (this.registered && this.accelerator) globalShortcut.unregister(this.accelerator)
     this.registered = false

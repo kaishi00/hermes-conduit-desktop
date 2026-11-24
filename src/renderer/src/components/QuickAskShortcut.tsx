@@ -41,7 +41,11 @@ export function QuickAskShortcutSetting() {
       if (accelerator) void choose(accelerator)
     }
     window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
+    window.conduit.setQuickAskRecording(true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.conduit.setQuickAskRecording(false)
+    }
   }, [recording, platform])
   if (!shortcut) return null
   const { accelerator, registered } = shortcut
@@ -77,7 +81,8 @@ export function QuickAskShortcutSetting() {
             >
               {t('Change')}
             </button>
-            {accelerator !== DEFAULT_QUICK_ASK_ACCELERATOR ? (
+            {/* Also with the default keys another app had first: Reset asks for them again. */}
+            {accelerator !== DEFAULT_QUICK_ASK_ACCELERATOR || !registered ? (
               <button className="link" onClick={() => void choose(DEFAULT_QUICK_ASK_ACCELERATOR)}>
                 {t('Reset')}
               </button>
