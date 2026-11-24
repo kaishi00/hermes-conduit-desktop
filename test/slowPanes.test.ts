@@ -131,6 +131,38 @@ describe('Settings > Usage', () => {
     }
   })
 
+  it('drops a read for the period left when the period come back to draws its kept answer', async () => {
+    const view = await mount(USAGE_PANE, 'UsagePage', { bots: [{ name: 'default', title: 'Hermes' }], profile: 'default', onBack: () => {} })
+    await settle()
+    try {
+      await act(async () => {
+        pending.get('/api/analytics/usage?days=30')!({ totals: { total_input: 1000, total_output: 500 } })
+        pending.get('/api/analytics/models?days=30')!({ models: [] })
+        pending.get('rpc:model.options')!({ options: [] })
+      })
+      await settle()
+      const radios = () => [...view.host.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+      const thirty = radios().findIndex(radio => radio.getAttribute('aria-checked') === 'true')
+      const other = radios().findIndex((_, index) => index !== thirty)
+      // Away to another period, whose read stays out, and back inside the window.
+      act(() => radios()[other]!.click())
+      await settle()
+      act(() => radios()[thirty]!.click())
+      await settle()
+      const shown = text(view.host)
+      const late = [...pending.keys()].find(key => key.startsWith('/api/analytics/usage?days=') && !key.endsWith('=30'))!
+      await act(async () => {
+        pending.get(late)!({ totals: { total_input: 987_654_321, total_output: 1 } })
+      })
+      await settle()
+      expect(text(view.host)).toBe(shown)
+      const refresh = [...view.host.querySelectorAll('button')].find(button => button.textContent?.includes('Refresh'))!
+      expect(refresh.disabled).toBe(false)
+    } finally {
+      view.unmount()
+    }
+  })
+
   it('draws the totals while the per-model route is still out', async () => {
     const view = await mount(USAGE_PANE, 'UsagePage', { bots: [{ name: 'default', title: 'Hermes' }], profile: 'default', onBack: () => {} })
     await settle()

@@ -189,7 +189,7 @@ export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
     // host with a large library (desktop#444), and the models and quota reads never
     // depended on it. The page draws as soon as the totals are in — the quota read is
     // its own section and never holds them (it used to be the last of three waits).
-    const quotas = gateway
+    const quotasRead = gateway
       .rpc('model.options', params)
       .then(answer => ({ answer }))
       .catch(() => ({ answer: null as unknown }))
@@ -214,7 +214,7 @@ export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
       setReport(parseUsage(usageRead.value, perModel, days))
       keep({ usage: usageRead.value, models: perModel })
     }
-    const { answer } = await quotas
+    const { answer } = await quotasRead
     if (generation.current !== mine) return
     // A quota that couldn't be read goes rather than stay up as current.
     setQuotas(answer ? parseQuotas(answer) : null)
@@ -231,7 +231,13 @@ export function UsagePage({ bots, profile: initialProfile, onBack }: Props) {
     setFailure(null)
     // An answer read a moment ago is still what the slow route would answer: draw it, ask nothing (desktop#444).
     const at = keptAt(path)
-    if (kept?.usage && at !== null && Date.now() - at < FRESH_MS) return
+    if (kept?.usage && at !== null && Date.now() - at < FRESH_MS) {
+      // A read still out for the period or profile just left is dropped when it lands,
+      // as a new read would have dropped it.
+      generation.current++
+      setLoading(false)
+      return
+    }
     void load()
   }, [load])
 

@@ -1,5 +1,5 @@
 import { answerKeeper, keptAnswer } from '../state/keptAnswers'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { startRestart } from '../state/hostActions'
@@ -71,7 +71,12 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
   // "Loading…" for that long reads as a frozen tab (desktop#444).
   const slow = useSlowWait(!installed && !error)
 
+  const generation = useRef(0)
+
   const load = useCallback(async () => {
+    // Another profile's answer landing late is dropped, not drawn under this one.
+    const mine = ++generation.current
+    const current = () => generation.current === mine
     setError(null)
     const keepHub = answerKeeper(scoped(HUB_PATH, profile))
     // The catalog is the same for every profile: kept once per dashboard.
@@ -81,6 +86,7 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
     // (desktop#444).
     const hubRead = gateway.http('GET', scoped(HUB_PATH, profile)).then(
       value => {
+        if (!current()) return
         try {
           setInstalled(parseInstalled(value))
           keepHub(value)
@@ -88,7 +94,9 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
           setError(t("Couldn't load agent plugins"))
         }
       },
-      reason => setError(`${t("Couldn't load agent plugins")} ${message(reason)}`)
+      reason => {
+        if (current()) setError(`${t("Couldn't load agent plugins")} ${message(reason)}`)
+      }
     )
     const catalogRead = gateway.http('GET', CATALOG_PATH, undefined, 30_000).then(
       value => {
@@ -103,8 +111,12 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
       () => setCatalogFailed(true)
     )
     const manageRead = gateway.rpc('plugins.manage', { action: 'list', profile }).then(
-      value => setManage(value),
-      () => setManage(null)
+      value => {
+        if (current()) setManage(value)
+      },
+      () => {
+        if (current()) setManage(null)
+      }
     )
     await Promise.allSettled([hubRead, catalogRead, manageRead])
   }, [profile])
@@ -274,6 +286,7 @@ export function PluginsTab({ profile, query, host }: { profile: string; query: s
         <h2>{t('Plugin catalog')}</h2>
         <p className="meta">{t("Reviewed plugins from Hermes' catalog.")}</p>
         {catalogFailed && !catalog ? <p className="meta">{t("Couldn't load the catalog.")}</p> : null}
+        {!catalog && !catalogFailed ? <p className="meta">{t('Loading…')}</p> : null}
         {catalog && !available.length ? <p className="meta">{t('No matching plugins')}</p> : null}
         {available.map(entry => {
           const expanded = open === `c:${entry.name}`
