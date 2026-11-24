@@ -686,7 +686,8 @@ export function missingDetails(state: TranscriptState): boolean {
  * their answers by tool call id (the REST transcript has them). A call made
  * through the deferred `tool_call` wrapper resumes under that name, while its
  * answer's row names the tool that ran (`conduit_show`), so the board is read
- * from the answer's tool name when the page has one (desktop#389).
+ * and the row shown under the tool it ran — as the live events and the phone
+ * do (desktop#389).
  */
 export function attachBoards(
   state: TranscriptState,
@@ -697,13 +698,14 @@ export function attachBoards(
   let changed = false
   const items = state.items.map(item => {
     if (item.kind !== 'tool') return item
+    const named = names.get(item.toolId)
     const answer = answers.get(item.toolId)
-    const board = item.board ?? (answer === undefined ? null : boardFrom(names.get(item.toolId) ?? item.name, answer, undefined))
+    const board = item.board ?? (answer === undefined ? null : boardFrom(named ?? item.name, answer, undefined))
     const result = item.result ?? (answer === undefined ? undefined : toolDetail(answer))
     const given = item.args ?? (args.has(item.toolId) ? toolDetail(args.get(item.toolId)) : undefined)
-    if (board === (item.board ?? null) && result === item.result && given === item.args) return item
+    if ((!named || named === item.name) && board === (item.board ?? null) && result === item.result && given === item.args) return item
     changed = true
-    return { ...item, ...(board ? { board } : {}), result, args: given }
+    return { ...item, ...(named && named !== item.name ? { name: named } : {}), ...(board ? { board } : {}), result, args: given }
   })
   return changed ? { ...state, items } : state
 }

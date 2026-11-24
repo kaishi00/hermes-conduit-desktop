@@ -81,10 +81,42 @@ describe('boards from the REST transcript', () => {
     }
     expect(toolNames(page)).toEqual(new Map([['w1', 'conduit_show'], ['w2', 'terminal']]))
     const next = attachBoards(state, toolAnswers(page), toolArgs(page), toolNames(page))
-    expect(next.items[0]).toMatchObject({ board: { cards: [{ type: 'callout', title: 'Heads up', text: 'Hi' }], tabs: false, next: [] } })
+    // The wrapped rows are shown under the tool they ran, as the live events are.
+    expect(next.items[0]).toMatchObject({ name: 'conduit_show', board: { cards: [{ type: 'callout', title: 'Heads up', text: 'Hi' }], tabs: false, next: [] } })
     // Another tool's answer is no board, whatever its text says.
+    expect(next.items[1]).toMatchObject({ name: 'terminal' })
     expect(next.items[1]).not.toHaveProperty('board')
     expect(attachBoards(next, toolAnswers(page), toolArgs(page), toolNames(page))).toBe(next)
+  })
+
+  it('leaves rows alone when the page carries no names', async () => {
+    const { attachBoards } = await import('../src/renderer/src/state/transcript')
+    const state = {
+      items: [{ kind: 'tool' as const, key: 'a', toolId: 'w1', name: 'tool_call', status: 'done' as const }],
+      running: false
+    }
+    expect(attachBoards(state, new Map(), new Map(), new Map())).toBe(state)
+  })
+
+  it("renames only what the page's answer names, and keeps a matching name's row identical", async () => {
+    const { attachBoards, toolNames } = await import('../src/renderer/src/state/transcript')
+    const page = {
+      messages: [
+        { role: 'tool', tool_call_id: 'w1', tool_name: 'conduit_show', content: '' },
+        { role: 'tool', tool_call_id: 'w2', tool_name: 'tool_call', content: '' }
+      ]
+    }
+    const state = {
+      items: [
+        { kind: 'tool' as const, key: 'a', toolId: 'w1', name: 'tool_call', status: 'done' as const },
+        { kind: 'tool' as const, key: 'b', toolId: 'w2', name: 'tool_call', status: 'done' as const }
+      ],
+      running: false
+    }
+    const next = attachBoards(state, new Map(), new Map(), toolNames(page))
+    expect(next.items[0]).toMatchObject({ name: 'conduit_show' })
+    // The page names w2 the wrapper too: nothing to change, so the row stays the same object.
+    expect(next.items[1]).toBe(state.items[1])
   })
 })
 
