@@ -17,6 +17,12 @@ export interface DialogOptions {
   destructive?: boolean
   /** askText's longest answer. */
   maxLength?: number
+  /**
+   * Cancels the dialog when it aborts, as Esc would: for a question whose
+   * asker can leave the screen while it's up, so no dialog outlives the
+   * thing it asks about.
+   */
+  signal?: AbortSignal
 }
 
 export type Dialog =
@@ -42,28 +48,33 @@ export function dialogText(message: string): { title: string; body: string[] } {
   return { title: parts[0] ?? '', body: parts.slice(1) }
 }
 
-function open<T>(make: (id: number, settle: (value: T) => void) => Dialog): Promise<T> {
+function open<T>(cancelled: T, signal: AbortSignal | undefined, make: (id: number, settle: (value: T) => void) => Dialog): Promise<T> {
   return new Promise<T>(resolve => {
+    // Its asker has already gone: nothing is drawn.
+    if (signal?.aborted) return resolve(cancelled)
     const id = ++ids
+    const onAbort = () => settle(cancelled)
     const settle = (value: T) => {
+      signal?.removeEventListener('abort', onAbort)
       publish(queue.filter(dialog => dialog.id !== id))
       resolve(value)
     }
+    signal?.addEventListener('abort', onAbort)
     publish([...queue, make(id, settle)])
   })
 }
 
 /** OK or Cancel: true for OK. */
 export const ask = (message: string, options: DialogOptions = {}) =>
-  open<boolean>((id, settle) => ({ id, kind: 'ask', ...dialogText(message), options, settle }))
+  open<boolean>(false, options.signal, (id, settle) => ({ id, kind: 'ask', ...dialogText(message), options, settle }))
 
 /** A notice with OK. */
 export const tell = (message: string, options: DialogOptions = {}) =>
-  open<void>((id, settle) => ({ id, kind: 'tell', ...dialogText(message), options, settle: () => settle(undefined) }))
+  open<void>(undefined, options.signal, (id, settle) => ({ id, kind: 'tell', ...dialogText(message), options, settle: () => settle(undefined) }))
 
 /** A line of text, or null when cancelled. */
 export const askText = (message: string, initial = '', options: DialogOptions = {}) =>
-  open<string | null>((id, settle) => ({ id, kind: 'text', ...dialogText(message), initial, options, settle }))
+  open<string | null>(null, options.signal, (id, settle) => ({ id, kind: 'text', ...dialogText(message), initial, options, settle }))
 
 /** The dialog in front, if any. */
 export function useFrontDialog(): Dialog | null {

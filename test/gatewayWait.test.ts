@@ -158,7 +158,7 @@ describe("Restart Gateway's GatewayWait (desktop#378)", () => {
   it('capabilities handed down mid-drain end the asking', async () => {
     http.mockImplementation(async () => deferred().promise)
 
-    const { render, button } = await mount()
+    const { root, render, button } = await mount()
     expect(asks()).toBe(1)
     expect(button()).toBeNull()
 
@@ -168,5 +168,26 @@ describe("Restart Gateway's GatewayWait (desktop#378)", () => {
     await flush(POLL_MS * 3)
     expect(asks()).toBe(1)
     expect(button()).not.toBeNull()
+    act(() => root.unmount())
+  })
+
+  it('a slow answer holds the next asks back: one ask is out at a time (#385)', async () => {
+    const slow = deferred()
+    let seen = 0
+    http.mockImplementation(async (_method: string, path: string) => {
+      if (path !== STATUS_PATH) return {}
+      return seen++ === 0 ? slow.promise : { version: '0.178.0', capabilities: [] }
+    })
+
+    const { root } = await mount()
+    expect(asks()).toBe(1)
+    // The answer is still out through three waits: nothing piles up behind it.
+    await flush(POLL_MS * 3)
+    expect(asks()).toBe(1)
+    // Unreadable, so the next wait asks again.
+    slow.resolve(null)
+    await flush(POLL_MS)
+    expect(asks()).toBe(2)
+    act(() => root.unmount())
   })
 })

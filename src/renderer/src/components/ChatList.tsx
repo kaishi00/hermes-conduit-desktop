@@ -566,10 +566,13 @@ export function ChatList({
     const box = scroller.current
     const state = edge.current
     state.frame = 0
-    if (!box || performance.now() - state.at > 200) return
+    // Still for as long as the board allows between dragovers (useBoardScroll's 400 ms).
+    if (!box || performance.now() - state.at > 400) return
     const rect = box.getBoundingClientRect()
     const step = edgeScrollStep(state.y, rect.top, rect.bottom)
-    if (step) box.scrollTop += step
+    // Away from both edges the loop ends, as the board's does: the next dragover starts it again.
+    if (!step) return
+    box.scrollTop += step
     state.frame = requestAnimationFrame(edgeScroll)
   }
   const dragOverList = (e: React.DragEvent<HTMLDivElement>) => {

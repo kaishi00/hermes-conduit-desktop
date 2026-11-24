@@ -51,12 +51,19 @@ export function GatewayWait({ capabilities }: { capabilities?: string[] | null }
     // good. A 404 (`missing`) is definitive mid-drain — the gateway has gone — so it stops the
     // asking too; only an unreadable answer (`unknown`) asks again (desktop#378).
     let live = true
-    const ask = () =>
-      void readStatus().then(status => {
-        if (!live) return
-        if (status.state === 'reported') setAsked(status.capabilities)
-        else if (status.state === 'missing') setAsked([])
-      })
+    // One ask at a time, as the work read below: an answer can take longer than the wait between asks.
+    let asking = false
+    const ask = () => {
+      if (asking) return
+      asking = true
+      void readStatus()
+        .then(status => {
+          if (!live) return
+          if (status.state === 'reported') setAsked(status.capabilities)
+          else if (status.state === 'missing') setAsked([])
+        })
+        .finally(() => (asking = false))
+    }
     ask()
     const again = setInterval(ask, POLL_MS)
     return () => {

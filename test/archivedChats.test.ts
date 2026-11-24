@@ -387,18 +387,54 @@ describe('Archived chats', () => {
     expect(button(sheet.host, 'Restore: Third host chat').disabled).toBe(false)
   })
 
-  it('never starts a delete after its confirmation outlives the host', async () => {
+  it('closes a delete confirmation when the host changes, and never starts that delete', async () => {
     http.mockResolvedValueOnce({ sessions: [rawRow('one', 'Old chat')] }).mockResolvedValueOnce({ sessions: [rawRow('one', 'New chat')] })
     const remove = vi.fn().mockResolvedValue(true)
     const sheet = render({ onDelete: remove })
     await settle()
     act(() => button(sheet.host, 'Delete: Old chat').click())
+    expect(sheet.host.querySelector('.conduit-dialog')).not.toBeNull()
     sheet.draw({ host: 'https://second.example' })
     await settle()
-    act(() => button(sheet.host, 'Delete').click())
-    await settle()
+    // The question was about the old dashboard's chat: it goes with it (#415).
+    expect(sheet.host.querySelector('.conduit-dialog')).toBeNull()
     expect(remove).not.toHaveBeenCalled()
     expect(sheet.host.textContent).toContain('New chat')
+    expect(button(sheet.host, 'Delete: New chat').disabled).toBe(false)
+  })
+
+  it('closes a delete confirmation when the sheet unmounts under it', async () => {
+    http.mockResolvedValue({ sessions: [rawRow('one', 'A chat')] })
+    const remove = vi.fn().mockResolvedValue(true)
+    const dialogHost = document.createElement('div')
+    document.body.appendChild(dialogHost)
+    const dialogRoot = createRoot(dialogHost)
+    mounted.push({ root: dialogRoot, host: dialogHost })
+    act(() => dialogRoot.render(createElement(DialogHost)))
+    // The sheet alone, as the app draws it: the dialog host lives above it and outlives it.
+    const sheetHost = document.createElement('div')
+    document.body.appendChild(sheetHost)
+    const sheetRoot = createRoot(sheetHost)
+    act(() =>
+      sheetRoot.render(
+        createElement(ArchivedChats, {
+          host: 'https://first.example',
+          profile: null,
+          onClose: () => undefined,
+          onRestore: async () => true,
+          onDelete: remove
+        } as Props)
+      )
+    )
+    await settle()
+    act(() => button(sheetHost, 'Delete: A chat').click())
+    expect(dialogHost.querySelector('.conduit-dialog')).not.toBeNull()
+    // A section shortcut or a dropped connection takes the sheet away with the question still up.
+    act(() => sheetRoot.unmount())
+    sheetHost.remove()
+    await settle()
+    expect(dialogHost.querySelector('.conduit-dialog')).toBeNull()
+    expect(remove).not.toHaveBeenCalled()
   })
 
   it('stops a page read after the sheet is unmounted', async () => {

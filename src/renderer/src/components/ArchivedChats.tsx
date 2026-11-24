@@ -41,6 +41,8 @@ type Life = {
   voiceLoading: Set<string>
   voiceErrors: Set<string>
   voiceVersions: Map<string, number>
+  /** Aborts when this read's sheet closes or its dashboard changes: a question still up goes with it. */
+  left: AbortController
 }
 type View = {
   host: string
@@ -260,13 +262,16 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
   useEffect(() => {
     const ticket: Life = {
       host, active: true, read: 0, loading: false, offset: 0, hasMore: false, pending: new Set(), removed: new Set(),
-      voice: { tags: new Map(), callChats: new Map() }, voiceLoading: new Set(), voiceErrors: new Set(), voiceVersions: new Map()
+      voice: { tags: new Map(), callChats: new Map() }, voiceLoading: new Set(), voiceErrors: new Set(), voiceVersions: new Map(),
+      left: new AbortController()
     }
     life.current = ticket
     setView(emptyView(host))
     void load(ticket)
     return () => {
       ticket.active = false
+      // A delete confirmation still up would confirm nothing now, so it closes with the sheet.
+      ticket.left.abort()
     }
   }, [host])
 
@@ -301,7 +306,8 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
       if (action === 'delete') {
         const confirmed = await ask(`${t('Delete conversation?')}\n\n${row.title}\n${t('This permanently deletes the conversation and cannot be undone.')}`, {
           confirm: t('Delete'),
-          destructive: true
+          destructive: true,
+          signal: ticket.left.signal
         })
         if (!isCurrent(ticket)) return
         if (!confirmed) cancelled = true
