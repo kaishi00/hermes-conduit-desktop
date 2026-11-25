@@ -3,6 +3,47 @@ import { AskFirst, adding } from '../src/renderer/src/state/askFirst'
 import { REQUEST_WORDS_MARKER as MARKER, REQUEST_WORDS_MAX, RequestWords, modelWords, withUserWords } from '../src/renderer/src/state/requestWords'
 import { jobTitle } from '../src/renderer/src/state/voiceJobs'
 
+describe('leftovers of #525 and #528 (issue 529)', () => {
+  it('keeps both lines after two model-speech transitions in one settle window', () => {
+    const words = new RequestWords(() => 0)
+    words.heard('Yes', true)
+    words.mark()
+    words.modelSpoke()
+    words.heard('and order a cab', true)
+    words.modelSpoke()
+    words.heard(' for eight')
+    // The yes and what followed it before the answer was read were the last request's;
+    // both later lines are the next request's.
+    words.skip(true)
+    expect(words.pending()).toEqual(['and order a cab', 'for eight'])
+  })
+
+  it('strips a yes already read from a whole line rewritten after the model spoke', () => {
+    const words = new RequestWords(() => 0)
+    words.heard('Yes', true)
+    words.mark()
+    words.modelSpoke()
+    words.heard('Yes and a cab', true)
+    expect(words.pending()).toEqual(['and a cab'])
+  })
+
+  it('does not eat the start of a later request that repeats the earlier answer', () => {
+    const words = new RequestWords(() => 0)
+    words.heard('Yes', true)
+    words.mark()
+    // The answer is read without a whole-line rewrite firing the consumed branch.
+    words.skip()
+    words.modelSpoke()
+    words.heard('Yes please', true)
+    expect(words.pending()).toEqual(['Yes please'])
+  })
+
+  it('compares unspaced scripts without adding the marker for words the request already carries', () => {
+    expect(withUserWords(['好的'], '好的帮我订车')).toBe('好的帮我订车')
+    expect(withUserWords(['是的'], '好的，帮我订车')).toBe('好的，帮我订车' + MARKER + '是的')
+  })
+})
+
 describe("the user's own words with a live call's request (hermes-conduit issue 3236)", () => {
   it('adds them under the marker only when they add something', () => {
     expect(withUserWords([' Brand only. ', ''], 'Post them.')).toBe('Post them.' + MARKER + 'Brand only.')

@@ -303,6 +303,8 @@ export class AskFirst {
   private async wholeAnswer(first: HeldAnswer): Promise<HeldAnswer> {
     let answer = first
     this.nextLineBegan = false
+    // Words done at this point were this request's; any line closed after it is the next one's.
+    this.words.mark()
     // Words written before the model spoke again are the same answer, revised
     // or grown; words written after it are their next line, left for the
     // next request, and the yes already read stands.
