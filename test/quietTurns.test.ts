@@ -46,6 +46,15 @@ describe('quiet turns', () => {
     expect(await keptQuiet(answers({ turn: null }, turn(true, 1)).http, ['s'], [undefined], 5_000, now, noWait)).toBe(true)
   })
 
+  it("sets the decision's age against the turn's length, with half a second for the start event's trip", async () => {
+    const now = () => 10_000
+    // Started 5 s ago: a decision 5.4 s old is this turn's, one 5.6 s old the turn before's (asked again, then notified).
+    expect(await keptQuiet(answers(turn(true, 5.4)).http, ['s'], [undefined], 5_000, now, noWait)).toBe(true)
+    const before = answers(turn(true, 5.6))
+    expect(await keptQuiet(before.http, ['s'], [undefined], 5_000, now, noWait)).toBe(false)
+    expect(before.asked).toHaveLength(2)
+  })
+
   it('lets the notification through when the plugin is older or the chat unknown, with no wait', async () => {
     const old = answers(new Error('404'))
     expect(await keptQuiet(old.http, ['s'], [undefined], 5_000, Date.now, noWait)).toBe(false)
