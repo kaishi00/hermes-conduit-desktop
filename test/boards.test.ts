@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { boardFrom, dialable, mailtoLink, people, placeBoards, sameBoards, share, smsLink, textRecipient } from '../src/renderer/src/state/boards'
 import { namingFiles, splitReply, withoutBoardLines } from '../src/renderer/src/state/media'
-import { copyableReply } from '../src/renderer/src/state/quote'
+import { copyableReply, sameQuotedText } from '../src/renderer/src/state/quote'
 
 const stats = { type: 'stats', title: 'Today', stats: [{ label: 'Steps', value: '8,412' }] }
 const map = { type: 'map', title: 'Route', places: [] }
@@ -128,6 +128,12 @@ describe('boards', () => {
     expect(withoutBoardLines('```\n' + line + '\n```')).toBe('```\n' + line + '\n```')
     expect(copyableReply(`First.\n\n${line}\n\nThen.`)).toBe('First.\n\nThen.')
     expect(namingFiles(`First.\n${line}`)).toBe('First.')
+    // A quote of the reply is found again by the reply's words without the line.
+    const raw = `First.\n\n${line}\n\nThen.`
+    expect(sameQuotedText(withoutBoardLines(raw), withoutBoardLines(raw))).toBe(true)
+    expect(sameQuotedText(raw, withoutBoardLines(raw))).toBe(false)
+    // A line in a quote or a table stays, as the reply draws it.
+    expect(withoutBoardLines(`> ${line}`)).toBe(`> ${line}`)
     // The first call of a turn to name an id keeps it.
     const again = { ...row, key: 't2' }
     expect([...placeBoards([user, row, again, reply('a1', line)]).hidden]).toEqual(['t1'])

@@ -235,7 +235,8 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
     case 'held':
       return holdSent(state, action.key, action.admission)
     case 'released':
-      return releaseHeld(state, action.admission)
+      // Only Send now releases a message this way: it steers the running turn.
+      return releaseHeld(state, action.admission, true)
     case 'dropped':
       return dropHeld(state, action.admission)
     case 'edited':

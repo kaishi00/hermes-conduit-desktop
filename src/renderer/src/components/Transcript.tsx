@@ -1281,8 +1281,10 @@ export function Transcript({
     if (!onCommand || state.running) return { retryKey, editTurns, followUpKey }
     const items = state.items
     // Nothing sent since the last turn's last board: a follow-up asks the next question.
-    for (let i = items.length - 1; i >= 0 && items[i]!.kind !== 'user'; i--) {
+    // A steer is part of the turn it steers, so the walk goes past it.
+    for (let i = items.length - 1; i >= 0; i--) {
       const row = items[i]!
+      if (row.kind === 'user' && !row.steer) break
       if (row.kind === 'tool' && row.board) {
         if (row.board.next.length) followUpKey = row.key
         break
@@ -1327,7 +1329,7 @@ export function Transcript({
   const stable = useMemo(
     () => ({
       jump: (quote: string) => {
-        const target = latest.current.state.items.find(i => i.kind === 'assistant' && sameQuotedText(i.text, quote))
+        const target = latest.current.state.items.find(i => i.kind === 'assistant' && sameQuotedText(withoutBoardLines(i.text), quote))
         if (!target) return undefined
         return () => {
           // As a pin's jump does: the window it opens isn't given back as the reader at the bottom's.

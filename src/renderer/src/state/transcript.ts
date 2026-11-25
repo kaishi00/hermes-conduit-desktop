@@ -651,7 +651,8 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       // Sent from another client of this chat (the phone).
       const item = userRow(nextKey('u'), str(payload.text) ?? '', Date.now())
       if (!item) return state
-      return { ...state, items: [...seal(state.items), item] }
+      const steer = item.kind === 'user' && str(payload.display_kind) === 'steer'
+      return { ...state, items: [...seal(state.items), steer ? { ...item, steer: true } : item] }
     }
     case 'review.summary': {
       const review = reviewFromText(str(payload.text) ?? str(payload.content) ?? '', true)
@@ -957,11 +958,14 @@ export function holdSent(state: TranscriptState, key: string, admission: string)
   }
 }
 
-/** Its turn started (or it went into the running one): the message comes back, after what's there. */
-export function releaseHeld(state: TranscriptState, admission: string): TranscriptState {
+/**
+ * Its turn started (or it went into the running one): the message comes back, after what's there. `steer`: it
+ * went into the running turn (Send now), so it is part of that turn.
+ */
+export function releaseHeld(state: TranscriptState, admission: string, steer = false): TranscriptState {
   const held = state.held?.find(h => h.admission === admission)
   if (!held) return state
-  return { ...state, items: [...seal(state.items), { ...held.item, at: Date.now() }], held: state.held!.filter(h => h !== held) }
+  return { ...state, items: [...seal(state.items), { ...held.item, at: Date.now(), ...(steer ? { steer: true as const } : {}) }], held: state.held!.filter(h => h !== held) }
 }
 
 /** Withdrawn or discarded: it never runs, so it never comes back. */

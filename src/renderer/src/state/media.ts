@@ -261,7 +261,8 @@ export const fileName = (path: string) => path.split(/[\\/]/).filter(Boolean).po
 
 /**
  * A reply without its `::conduit-board{…}` lines, for what leaves the transcript (Copy, a quote, a live model's
- * text): the line draws a board here and means nothing anywhere else. A line in a fence or a code span is kept.
+ * text): the line draws a board here and means nothing anywhere else. A line in a fence, a code span, a quote or
+ * a table is kept, as the reply draws it.
  */
 export function withoutBoardLines(text: string): string {
   if (!text.includes('::conduit-board{')) return text
@@ -272,7 +273,7 @@ export function withoutBoardLines(text: string): string {
     if (fence) {
       if (fenceMatch && fenceMatch[1]!.startsWith(fence)) fence = null
     } else if (fenceMatch) fence = fenceMatch[1]!
-    else if (line.includes('::conduit-board{')) {
+    else if (line.includes('::conduit-board{') && !line.trim().startsWith('>') && !line.includes('|')) {
       let words = line
       const found = [...line.matchAll(BOARD_LINE)].filter(match => {
         const index = match.index ?? 0
