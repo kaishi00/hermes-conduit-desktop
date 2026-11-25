@@ -196,7 +196,8 @@ import { parseProjects, type Project, type ProjectChat } from './state/projects'
 import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
-import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isStarred, isUnread, type ChatMarks } from './state/chatMarks'
+import { loadMarks, saveMarks, toggleStar, isStarred, isUnread, type ChatMarks } from './state/chatMarks'
+import { useOpenChatRead } from './state/openChatRead'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor, wheelSteps } from './state/shortcuts'
@@ -1272,19 +1273,8 @@ function Shell({
   }, [])
   const openId = chat.storedId ?? selected.id
   const openRow = openId ? list.rows?.find(row => row.id === openId) : undefined
-  useEffect(() => {
-    if (!openRow) return
-    updateMarks(current => markRead(current, openRow))
-    if (openRow.unread) writeUnread(openRow, false)
-  }, [openRow?.id, openRow?.activeAt, openRow?.unread, updateMarks, writeUnread])
-  const toggleRead = useCallback(
-    (row: ChatRow) => {
-      const unread = isUnread(marks, row)
-      updateMarks(current => (unread ? markRead(current, row) : markUnread(current, row)))
-      if (unread ? row.unread : !row.unread) writeUnread(row, !unread)
-    },
-    [marks, updateMarks, writeUnread]
-  )
+  // The open chat reads as read, unless it was marked unread while open (state/openChatRead).
+  const toggleRead = useOpenChatRead(openId, openRow, marks, updateMarks, writeUnread)
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
     [respondConnection, reissueConnection, wakeConnection]
