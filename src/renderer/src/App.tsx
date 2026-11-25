@@ -37,6 +37,19 @@ import { setKanbanHost } from './state/useKanban'
 import { setPictureHost } from './state/gatewayPictures'
 import { LIST_COLUMN, PANEL_COLUMN, besideChatFits, readListHidden, readWidth, shownListWidth, shownPanelWidth, writeListHidden, writeWidth } from './state/columnWidths'
 import { BesideChatPane, type BesideChat } from './components/BesideChat'
+import { WorkspaceTabStrip, type TabLabel } from './components/WorkspaceTabStrip'
+import {
+  NO_WORKSPACE_TABS,
+  closeWorkspaceTab,
+  dropChatTabs,
+  followChat,
+  openInNewTab,
+  showsTabStrip,
+  stepTab,
+  tabTarget,
+  type WorkspaceTab,
+  type WorkspaceTabs
+} from './state/workspaceTabs'
 import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
 import { absolutePath, pathForDraft } from './state/workspace'
 import { FileLinks } from './components/Markdown'
@@ -1033,6 +1046,83 @@ function Shell({
   useEffect(() => {
     if (selected.id && chatWindowIds.includes(selected.id)) window.conduit.closeChatWindows([selected.id])
   }, [selected.id, chatWindowIds])
+  // The tabs over the chat column (issue 423): the shown tab follows the chat on screen, so a chat opened from
+  // anywhere opens in it, or in its own tab when one holds it. A Bot Chat is the bots sidebar's, held by no tab.
+  const [tabs, setTabs] = useState<WorkspaceTabs>(NO_WORKSPACE_TABS)
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
+  const tabCount = useRef(0)
+  const nextTabKey = () => `tab-${++tabCount.current}`
+  useEffect(() => {
+    if (selected.botChat) return
+    setTabs(current => followChat(current, { id: selected.id, profile: selected.profile, title: selected.title, folder: selected.folder }, nextTabKey()))
+  }, [selected.id, selected.profile, selected.title, selected.folder, selected.botChat])
+  // A chat with a window of its own shows only there, so its tab closes.
+  useEffect(() => {
+    if (!chatWindowIds.length) return
+    setTabs(current => {
+      let next = current
+      for (const tab of current.tabs) if (tab.chat.id && chatWindowIds.includes(tab.chat.id) && tab.key !== current.active) next = dropChatTabs(next, tab.chat).tabs
+      return next
+    })
+  }, [chatWindowIds])
+  /**
+   * Shows a tab's chat, and that tab: a new chat's tab is told apart by its key alone, so the tab picked is the one
+   * shown, never the one that was shown taking its new chat.
+   */
+  const showTab = (tab: WorkspaceTab) => {
+    setTabs(current => (current.active === tab.key || !current.tabs.some(t => t.key === tab.key) ? current : { ...current, active: tab.key }))
+    setSection('chats')
+    setSelected(tabTarget(tab))
+  }
+  /** Open in New Tab, from a row's menu or a middle or ⌘/Ctrl click on it: the chat in a tab of its own beside the shown one. */
+  const openRowInTab = (row: ChatRow) => {
+    if (chatWindowIds.includes(row.id)) {
+      void window.conduit.openChatWindow({ id: row.id, profile: row.profile, title: row.title })
+      return
+    }
+    const target = { id: row.id, profile: row.profile, title: row.title }
+    const current = selected.botChat ? undefined : { chat: { id: selected.id, profile: selected.profile, title: selected.title }, key: nextTabKey() }
+    setTabs(tabs => openInNewTab(tabs, target, nextTabKey(), current))
+    setSection('chats')
+    setSelected(target)
+  }
+  const closeTab = (tab: WorkspaceTab) => {
+    const closed = closeWorkspaceTab(tabsRef.current, tab.key)
+    setTabs(closed.tabs)
+    if (closed.show) showTab(closed.show)
+  }
+  /** The strip's +: a new chat, in the profile the list shows, in a tab of its own. */
+  const newTab = () => {
+    const profile = chatProfileRef.current ?? selected.profile
+    setTabs(tabs => openInNewTab(tabs, { id: null, profile }, nextTabKey()))
+    newChat(profile)
+  }
+  /**
+   * Whether the transcript keeps the reader's place in a chat: one left while the strip shows, so tabs are in use, and
+   * opens there while it holds a tab, also once the others have closed. A lone tab keeps none, as before tabs.
+   */
+  const keepsPlace = useCallback(
+    (chat: string, leaving: boolean) => (!leaving || showsTabStrip(tabs)) && tabs.tabs.some(tab => tab.chat.id === chat),
+    [tabs]
+  )
+  // Ctrl+Tab and Ctrl+Shift+Tab step through the tabs, a Mac's too, as a browser's do.
+  const stepTabs = useRef<(by: 1 | -1) => boolean>(() => false)
+  stepTabs.current = by => {
+    if (section !== 'chats' || selected.botChat || dockedRef.current || !showsTabStrip(tabs)) return false
+    const next = stepTab(tabs, by)
+    if (!next) return false
+    showTab(next)
+    return true
+  }
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || !event.ctrlKey || event.metaKey || event.altKey) return
+      if (stepTabs.current(event.shiftKey ? -1 : 1)) event.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // Bots home: a bot opens its Bot Chat (or a new chat in its profile); Ask sends there once it's open.
   const lastBot = useRef<string | null>(null)
   const openBot = useCallback((bot: Bot) => {
@@ -1070,7 +1160,13 @@ function Shell({
               .filter(b => !sameProfileAs(b.name, target.profile) && (!b.botChatId || (b.botChatId !== target.id && !chatWindowIds.includes(b.botChatId))))
               .sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0))[0]
           : undefined
+      // A chat in a tab gives its place to the tab beside it, as closing that tab would.
+      const besideTab = onScreen && !nextBot ? dropChatTabs(tabsRef.current, target).show : undefined
       if (nextBot) openBot(nextBot)
+      else if (besideTab) {
+        setTabs(current => ({ ...current, active: besideTab.key }))
+        setSelected(tabTarget(besideTab))
+      }
       else if (onScreen) setSelected({ id: null, profile: selected.profile })
       const opened = await window.conduit.openChatWindow({
         id: target.id,
@@ -1161,7 +1257,14 @@ function Shell({
   const chatAction = useCallback(
     async (row: ChatRow, patch: { pinned?: boolean; title?: string } | null) => {
       list.patchRow(row.id, patch)
-      if (patch === null && (selected.id === row.id || chat.storedId === row.id)) newChat()
+      // A deleted chat's tab closes; on screen, the tab beside it shows in its place.
+      const tabsBefore = tabsRef.current
+      const dropped = patch === null ? dropChatTabs(tabsBefore, row) : undefined
+      if (dropped) setTabs(dropped.tabs)
+      if (patch === null && (selected.id === row.id || chat.storedId === row.id)) {
+        if (dropped?.show) setSelected(tabTarget(dropped.show))
+        else newChat()
+      }
       if (patch === null) setBeside(current => (current?.id === row.id ? null : current))
       if (patch === null) window.conduit.closeChatWindows([row.id])
       // A deleted chat's pins go with it.
@@ -1171,6 +1274,8 @@ function Shell({
       } catch (e) {
         void tell(t('Couldn’t change “{title}”: {reason}', { title: row.title, reason: e instanceof Error ? e.message : String(e) }))
         list.refresh()
+        // A refused delete gives the chat its tab back, where nothing else changed the tabs meanwhile.
+        if (dropped && dropped.tabs !== tabsBefore) setTabs(current => (current.tabs === dropped.tabs.tabs ? { ...tabsBefore, active: current.active } : current))
         return false
       }
       list.refresh()
@@ -1715,7 +1820,13 @@ function Shell({
   const expiredQuestions = useExpiredQuestions(chat.liveId)
   // Running and Needs approval on the list's rows: the gateway's live registry while the list shows, the
   // plugin's waiting list, and the open chat's own turn and requests.
-  const liveProfiles = useMemo(() => (chatProfile ? [chatProfile] : profiles.slice(0, 8)), [chatProfile, profiles])
+  // The open tabs' bots too, so a tab whose chat runs says so whichever bot the list shows (issue 423).
+  const tabProfiles = showsTabStrip(tabs) ? [...new Set(tabs.tabs.map(tab => tab.chat.profile ?? 'default'))].sort().join('\n') : ''
+  const liveProfiles = useMemo(() => {
+    const base = chatProfile ? [chatProfile] : profiles.slice(0, 8)
+    const more = tabProfiles ? tabProfiles.split('\n').filter(name => !base.some(b => sameProfileAs(b, name))) : []
+    return more.length ? [...base, ...more] : base
+  }, [chatProfile, profiles, tabProfiles])
   const liveStatus = useLiveStatus(connected && section === 'chats' && !projectsOpen, liveProfiles, `${turnsDone}\t${list.rows?.length ?? 0}`)
   const runningIds = useMemo(() => {
     const ids = new Set<string>()
@@ -1773,9 +1884,13 @@ function Shell({
       if (!archiveHostMounted.current || statusUrlRef.current !== host) return false
       if (archived !== false) {
         list.patchRow(row.id, null)
+        // An archived chat's tab closes, as a deleted one's does; on screen, the tab beside it shows.
+        const dropped = dropChatTabs(tabsRef.current, row)
+        if (dropped.tabs !== tabsRef.current) setTabs(dropped.tabs)
+        const next = dropped.show ? tabTarget(dropped.show) : { id: null, profile: chatProfileRef.current ?? undefined }
         setSelected(current => sameProfileAs(current.profile, row.profile) &&
           (current.id === row.id || (current === selected && chat.storedId === row.id))
-          ? { id: null, profile: chatProfileRef.current ?? undefined }
+          ? next
           : current)
         setBeside(current => current?.id === row.id && sameProfileAs(current.profile, row.profile) ? null : current)
         window.conduit.closeChatWindows([row.id])
@@ -1806,6 +1921,23 @@ function Shell({
     if (openRequests.length && chat.storedId) ids.add(chat.storedId)
     return ids
   }, [liveStatus, waiting.rows, openRequests.length, chat.storedId])
+  // What each tab shows: its chat's title as the list has it (the open chat's as its header has it), its bot, and
+  // whether it works or waits on you, as its row does.
+  const tabLabel = (tab: WorkspaceTab): TabLabel => {
+    const { id, profile } = tab.chat
+    const row = id ? list.rows?.find(r => r.id === id && sameProfileAs(r.profile, profile)) : undefined
+    const shown = tab.key === tabs.active && !selected.botChat
+    const named = (shown ? title : '') || cleanTitle(row?.title || tab.chat.title || '') || (id ? t('Chat') : t('New chat'))
+    return {
+      title: named,
+      bot: roster.bots?.find(b => sameProfileAs(b.name, profile))?.title,
+      running: !!id && runningIds.has(id),
+      waits: !!id && waitingIds.has(id)
+    }
+  }
+ // A new chat's draft is its tab's own, so two new chats in tabs keep their words apart (ids come once they're sent).
+  const newChatTabDraft = !selected.botChat && tabs.active ? `new\u0000${tabs.active}` : null
+  const tabsSpanBots = new Set(tabs.tabs.map(tab => (tab.chat.profile ?? 'default').toLowerCase())).size > 1
 
   /** The chats this window opened, by live id: a request's card outside its chat, and a notification's click. */
   const chats = useRef(new Map<string, ChatRef>())
@@ -2469,6 +2601,7 @@ function Shell({
                   runningStatus={runningStatus}
                   onSelect={selectRow}
                   onOpenBeside={besideFits ? openBeside : undefined}
+                  onOpenInTab={openRowInTab}
                   onOpenInWindow={row => void popOut({ id: row.id, profile: row.profile, title: row.title, host: (row as Partial<OtherChatRow>).host })}
                   windowIds={chatWindowIds}
                   canOpenBeside={row => row.id !== selected.id && row.id !== beside?.id && sameProfileAs(row.profile, selected.profile)}
@@ -2525,6 +2658,9 @@ function Shell({
             {dockedChat ? <DockedChatPane key={dockedChat.host} chat={dockedChat} frame={dockedFrame} shown={dockedShown} onMoved={closeDocked} onCall={setDockedCalling} /> : null}
             {/* Kept while another dashboard's chat is docked over it, so coming back to it doesn't open it again. */}
             <main className="chat" ref={chatPane} style={dockedChat ? { display: 'none' } : undefined}>
+              {showsTabStrip(tabs) && !selected.botChat ? (
+                <WorkspaceTabStrip tabs={tabs} label={tabLabel} showBots={tabsSpanBots} onPick={showTab} onClose={closeTab} onNewTab={newTab} />
+              ) : null}
               <ChatHeader
                 title={title}
                 workItem={workItem}
@@ -2582,6 +2718,7 @@ function Shell({
                     <LiveTranscript
                       store={transcriptStore}
                       chatId={selected.id || undefined}
+                      keepsPlace={keepsPlace}
                       loading={loading}
                       error={error}
                       requests={openRequests}
@@ -2729,7 +2866,7 @@ function Shell({
                 onSuggestion={text => void onSend(text, [])}
                 onStop={() => void stop()}
                 focusKey={selected.id ?? 'new'}
-                draftKey={chatDraft(selected.profile, selected.id)}
+                draftKey={chatDraft(selected.profile, selected.id ?? newChatTabDraft)}
                 canAttach
                 dropZone={chatPane}
                 voice={calling ? undefined : { profile: selected.profile }}
