@@ -1329,7 +1329,7 @@ export function Transcript({
   const stable = useMemo(
     () => ({
       jump: (quote: string) => {
-        const target = latest.current.state.items.find(i => i.kind === 'assistant' && sameQuotedText(withoutBoardLines(i.text), quote))
+        const target = latest.current.state.items.find(i => i.kind === 'assistant' && sameQuotedText(withoutBoardLines(i.text), withoutBoardLines(quote)))
         if (!target) return undefined
         return () => {
           // As a pin's jump does: the window it opens isn't given back as the reader at the bottom's.

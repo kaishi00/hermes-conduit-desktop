@@ -12,6 +12,7 @@
  * any other pin.
  */
 import { copyableReply } from './quote'
+import { withoutBoardLines } from './media'
 
 export interface PinnedReply {
   id: string
@@ -50,7 +51,7 @@ export function folded(text: string, limit: number): string {
 
 /** A reply's start as a pin keeps it: its words without the files and boards it carries. */
 export function excerptOf(text: string): string {
-  return folded(copyableReply(text), EXCERPT_LENGTH) || folded(text, EXCERPT_LENGTH)
+  return folded(copyableReply(text), EXCERPT_LENGTH) || folded(withoutBoardLines(text), EXCERPT_LENGTH)
 }
 
 /** A label on one line; undefined when blank, which clears it. */
