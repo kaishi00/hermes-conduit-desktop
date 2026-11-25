@@ -1437,7 +1437,12 @@ export function Transcript({
   const listReveal = pins?.reveal
   const onRevealed = pins?.onRevealed
   const jumpToPin = (pin: { id: string; passage?: string }) => {
-    if (!pinKeys.has(pin.id) && onSeekRow) return setBarReveal({ id: pin.id, passage: pin.passage })
+    if (!pinKeys.has(pin.id) && onSeekRow) {
+      // A bar jump to a pin still being read must end a pending pins-list reveal too:
+      // `reveal` prefers listReveal, so leaving it set would jump back to its pin later.
+      if (listReveal) onRevealed?.()
+      return setBarReveal({ id: pin.id, passage: pin.passage })
+    }
     // This jump is the one asked for now: a pin still being read for, from the bar or the pins list, doesn't take the reader away later.
     setBarReveal(null)
     if (listReveal) onRevealed?.()

@@ -21,6 +21,8 @@ let paths: string[] = []
 let calls: { method: string; params: Record<string, unknown> }[] = []
 let pages: Record<number, HistoryRow[]> = {}
 let resumeRows: HistoryRow[] = []
+let resumeError: string | null = null
+let morePages = false
 
 beforeEach(() => {
   forgetTranscripts()
@@ -29,17 +31,20 @@ beforeEach(() => {
   calls = []
   pages = {}
   resumeRows = []
+  resumeError = null
+  morePages = false
   ;(window as unknown as { conduit: unknown }).conduit = {
     rpcOutcome: (method: string, params: Record<string, unknown>) => {
       calls.push({ method, params })
       if (method !== 'session.resume') return Promise.resolve({ ok: true, result: {} })
+      if (resumeError) return Promise.resolve({ ok: false, error: resumeError })
       if (params.omit_messages) return Promise.resolve({ ok: true, result: { session_id: 'live-big', stored_session_id: 'big', messages: [] } })
       return Promise.resolve({ ok: true, result: { session_id: 'live-big', stored_session_id: 'big', messages: resumeRows } })
     },
     httpOutcome: async (_method: string, path: string) => {
       paths.push(path)
       const offset = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0)
-      return { ok: true, result: { messages: pages[offset] ?? [] } }
+      return { ok: true, result: { messages: pages[offset] ?? [], more: morePages && pages[offset + 500] !== undefined } }
     },
     onEvent: (_listener: (event: Event) => void) => () => undefined
   }
@@ -240,6 +245,42 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     hook.unmount()
   })
 
+  it("answers a seek missed when the chat’s open has failed", async () => {
+    resumeError = 'Hermes is offline'
+    const hook = mount('broken')
+    await settle()
+    // The open itself reads its newest page; a seek after the failure must not read more.
+    const readSoFar = paths.length
+    let missed = 0
+    act(() => void hook.result().seekRow(items => items.some(i => i.key === 'row-9999'), () => missed++))
+    await settle()
+    expect(missed).toBe(1)
+    expect(paths.length).toBe(readSoFar)
+    hook.unmount()
+  })
+
+  it('stops a dropped seek after one page even when the pages repeat rows already drawn', async () => {
+    morePages = true
+    const duplicate = page(2001, 500)
+    pages[0] = duplicate
+    // Pages that only repeat the rows already drawn add nothing, but report more.
+    pages[500] = duplicate
+    pages[1000] = duplicate
+    pages[1500] = duplicate
+    pages[2000] = duplicate
+    const hook = mount('big')
+    await settle()
+    const before = paths.length
+    let drop!: () => void
+    act(() => void (drop = hook.result().seekRow(items => items.some(i => i.key === 'row-9999'))))
+    act(() => drop())
+    await settle()
+    await settle()
+    await settle()
+    expect(paths.length).toBe(before + 1)
+    hook.unmount()
+  })
+
   it('stops reading pages for a jump that is dropped', async () => {
     pages[0] = page(1501, 500)
     pages[500] = page(1001, 500)
@@ -247,6 +288,8 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     pages[1500] = page(1, 500)
     const hook = mount('big')
     await settle()
+    // The newest page is read while opening; dropping the seek stops after the page in flight.
+    const before = paths.length
     let missed = 0
     let drop!: () => void
     act(() => void (drop = hook.result().seekRow(items => items.some(i => i.key === 'row-9999'), () => missed++)))
@@ -255,7 +298,8 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     await settle()
     await settle()
     await settle()
-    expect(paths.map(p => /offset=(\d+)/.exec(p)?.[1])).toEqual(['0', '500'])
+    // The page already in flight lands; the dropped seek adds no further page.
+    expect(paths.length).toBe(before + 1)
     expect(missed).toBe(0)
     hook.unmount()
   })

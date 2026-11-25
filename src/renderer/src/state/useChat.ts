@@ -1460,11 +1460,15 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     const ticket = request.current
     olderLoading.current = ticket
     setLoadingOlder(true)
+    // A seek that is dropped while a page is in flight must not read the rest of the
+    // back-log: `seekMore` clears `wanted` as soon as it finds the row or is dropped.
+    const seek = wanted.current
     try {
       // A page that draws nothing (hidden rows, or ones the chat already has) reads the one
       // before it, since the reader at the top has no further scroll to ask with.
       let next = at
       for (let page = 0; page < LONG_CHAT_PAGES && next.more; page++) {
+        if (seek?.dropped) break
         const got = await olderRows((method, path) => gateway.http(method, path), stored, profile, next.offset)
         // Another chat, a reload, or the pane closed: the rest of the pages are nobody's to draw.
         if (ticket !== request.current || gone.current) return
@@ -1497,24 +1501,31 @@ export function useChat(storedId: string | null, profile: string | undefined, se
    * such row. The answer drops the seek, so a jump no longer wanted stops
    * the pages being read for it.
    */
-  const wanted = useRef<{ found: (items: readonly TranscriptItem[]) => boolean; missed?: () => void } | null>(null)
+  const wanted = useRef<{ found: (items: readonly TranscriptItem[]) => boolean; missed?: () => void; dropped?: boolean } | null>(null)
   const seekMore = useCallback(() => {
     const seek = wanted.current
     if (!seek) return
     if (seek.found(transcriptRef.current.items)) wanted.current = null
     // No pages to read: the chat's first row is in, or it opened whole (or too long to page back).
-    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null) {
+    // While the open is still in flight, wait: its first page or a live id can still settle.
+    // Once it has settled without either (a failed open), there are no pages to read and
+    // the jump must be answered, not left pending until another jump or a chat switch.
+    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null || (error !== null && !loading)) {
       wanted.current = null
       seek.missed?.()
     } else void loadOlder()
-  }, [loadOlder, transcriptRef])
+  }, [loadOlder, transcriptRef, error, loading])
   const seekRow = useCallback(
     (found: (items: readonly TranscriptItem[]) => boolean, missed?: () => void) => {
-      const seek = { found, missed }
+      const seek: NonNullable<typeof wanted.current> = { found, missed }
       wanted.current = seek
       seekMore()
       return () => {
-        if (wanted.current === seek) wanted.current = null
+        if (wanted.current === seek) {
+          // The page loop checks this flag: a dropped jump stops after the page in flight.
+          seek.dropped = true
+          wanted.current = null
+        }
       }
     },
     [seekMore]
