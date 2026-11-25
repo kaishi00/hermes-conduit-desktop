@@ -4319,6 +4319,21 @@
     "zh-Hans": "对话字号",
     "zh-Hant": "聊天文字大小"
   },
+  "Zoom the chat text with the wheel": {
+    "de": "Chat-Text mit dem Mausrad zoomen",
+    "es": "Ampliar el texto del chat con la rueda del ratón",
+    "fr": "Agrandir le texte du chat avec la molette",
+    "id": "Perbesar teks obrolan dengan roda mouse",
+    "it": "Ingrandisci il testo della chat con la rotellina",
+    "ja": "ホイールでチャットの文字を拡大",
+    "ko": "휠로 채팅 글자 확대",
+    "pl": "Powiększ tekst czatu kółkiem myszy",
+    "pt-BR": "Ampliar o texto do chat com a roda do mouse",
+    "ru": "Увеличить текст чата колёсиком мыши",
+    "tr": "Sohbet metnini tekerlekle büyüt",
+    "zh-Hans": "用滚轮放大聊天文字",
+    "zh-Hant": "用滾輪放大聊天文字"
+  },
   "Chat text style": {
     "de": "Chat-Schriftstil",
     "es": "Estilo del texto del chat",
