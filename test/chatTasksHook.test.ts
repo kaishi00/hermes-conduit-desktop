@@ -56,4 +56,17 @@ describe('a chat’s Kanban tasks hook (desktop#553)', () => {
     expect(ids(hook)).toEqual([])
     hook.unmount()
   })
+  it('keeps a finished task it saw open across a reconnect', async () => {
+    boards.a = [{ id: 't1', status: 'running' }]
+    type C = { connected: boolean }
+    const hook = renderHook(({ connected }: C) => useChatTasks('a', undefined, connected, false), { connected: true })
+    await settle()
+    expect(ids(hook)).toEqual(['t1'])
+    hook.rerender({ connected: false })
+    boards.a = [{ id: 't1', status: 'done' }]
+    hook.rerender({ connected: true })
+    await settle()
+    expect(hook.result().tasks.map(t => [t.id, t.status])).toEqual([['t1', 'done']])
+    hook.unmount()
+  })
 })

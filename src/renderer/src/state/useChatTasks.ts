@@ -33,9 +33,12 @@ export function useChatTasks(sessionId: string | null, profile: string | undefin
     }
   }, [profile])
 
+  // Another chat (or profile) starts with none; a reconnect keeps what this one has seen open.
   useEffect(() => {
     seenOpen.current = new Set()
     setTasks([])
+  }, [scope])
+  useEffect(() => {
     if (sessionId && connected) void read()
   }, [scope, sessionId, connected, read])
 

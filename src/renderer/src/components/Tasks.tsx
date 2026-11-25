@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { t } from '@shared/i18n'
 import type { Bot } from '../state/bots'
 import type { MixedTile } from '../state/botOrder'
@@ -43,6 +43,12 @@ export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, ho
       // Kept for this window only.
     }
   }
+  // A chat's task opens on Board, whichever segment Tasks last showed.
+  const focusN = focus?.n
+  useEffect(() => {
+    if (focusN !== undefined) pick('board')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusN])
   const switcher = (
     <div className="segmented tasks-segment" role="tablist" aria-label={t('Tasks')}>
       <button role="tab" aria-selected={segment === 'board'} className={segment === 'board' ? 'on' : undefined} onClick={() => pick('board')}>
