@@ -70,4 +70,23 @@ describe('the Folder’s file tabs', () => {
     expect(next.active).toBe('/r/new/a')
     expect(next.files[1]).toBe(tabs.files[1])
   })
+
+  it('never drops another tab of the same file that has changes; it shows it instead', () => {
+    let tabs = showTab(NO_TABS as FolderTabs<F>, file('/r/x.txt', { draft: 'typed' }))
+    tabs = showTab(tabs, file('/r/dir'))
+    const next = showTab(tabs, file('/r/x.txt'), true)
+    expect(next.files.map(f => f.draft)).toEqual(['typed', undefined])
+    expect(paths(next)).toEqual(['/r/x.txt', '/r/dir'])
+    expect(next.active).toBe('/r/x.txt')
+  })
+
+  it('a rename closes a folder’s tab under it and forgets walks through it', () => {
+    type G = F & { entry: F['entry'] & { isDirectory?: boolean }; back?: { path: string }[] }
+    const dir: G = { entry: { path: '/r/dir', name: 'dir', isDirectory: true } }
+    const walked: G = { entry: { path: '/r/other/y', name: 'y' }, back: [{ path: '/r/dir' }] }
+    let tabs = showTab(showTab(NO_TABS as FolderTabs<G>, walked), dir)
+    tabs = renameTabs(tabs, '/r/dir', '/r/new')
+    expect(tabs.files).toEqual([{ ...walked, back: [] }])
+    expect(tabs.active).toBe('/r/other/y')
+  })
 })

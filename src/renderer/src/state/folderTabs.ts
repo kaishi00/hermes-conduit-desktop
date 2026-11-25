@@ -29,6 +29,9 @@ export function showTab<T extends FolderTab>(tabs: FolderTabs<T>, file: T, inPla
   const path = file.entry.path
   const at = inPlace && tabs.active !== null ? tabs.files.findIndex(f => f.entry.path === tabs.active) : -1
   let files: T[]
+  // A tab with changes for this file is never dropped: it's shown instead.
+  const withChanges = tabs.files.find(f => f.entry.path === path && f.draft !== undefined)
+  if (withChanges && withChanges !== file) return { files: tabs.files, active: path }
   if (at >= 0) {
     files = tabs.files.map((f, i) => (i === at ? file : f)).filter((f, i) => i === at || f.entry.path !== path)
   } else {
@@ -67,13 +70,28 @@ export function closeTabsUnder<T extends FolderTab>(tabs: FolderTabs<T>, path: s
   return next
 }
 
-/** After a rename: the tabs of `from` and everything under it follow it to `to`, drafts kept. */
-export function renameTabs<T extends FolderTab & { entry: { path: string; name: string } }>(tabs: FolderTabs<T>, from: string, to: string): FolderTabs<T> {
+/**
+ * After a rename: the file tabs of `from` and everything under it follow it to
+ * `to`, drafts kept; a folder's tab under it closes (its listing names the old
+ * paths), and a walk back through renamed folders is forgotten.
+ */
+export function renameTabs<T extends FolderTab & { entry: { path: string; name: string; isDirectory?: boolean }; back?: { path: string }[] }>(
+  tabs: FolderTabs<T>,
+  from: string,
+  to: string
+): FolderTabs<T> {
   const base = from.replace(/[\\/]+$/, '')
-  const moved = (p: string) => (p === base ? to : p.startsWith(`${base}/`) || p.startsWith(`${base}\\`) ? to + p.slice(base.length) : p)
+  const under = (p: string) => p === base || p.startsWith(`${base}/`) || p.startsWith(`${base}\\`)
+  const moved = (p: string) => (under(p) ? to + p.slice(base.length) : p)
   const name = (p: string) => p.split(/[\\/]/).pop() ?? p
+  let next: FolderTabs<T> = tabs
+  for (const f of tabs.files) if (f.entry.isDirectory && under(f.entry.path)) next = closeTab(next, f.entry.path)
   return {
-    files: tabs.files.map(f => (moved(f.entry.path) === f.entry.path ? f : { ...f, entry: { ...f.entry, path: moved(f.entry.path), name: name(moved(f.entry.path)) } })),
-    active: tabs.active === null ? null : moved(tabs.active)
+    files: next.files.map(f => {
+      const back = f.back?.some(b => under(b.path)) ? [] : f.back
+      if (!under(f.entry.path)) return back === f.back ? f : { ...f, back }
+      return { ...f, back, entry: { ...f.entry, path: moved(f.entry.path), name: name(moved(f.entry.path)) } }
+    }),
+    active: next.active === null ? null : moved(next.active)
   }
 }

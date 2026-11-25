@@ -82,6 +82,8 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
   // The open files, a tab each (issue 454); `open` is the one shown, none while the tree shows.
   const [files, setFiles] = useState<FolderTabs<OpenFile>>(NO_TABS)
   const open = files.files.find(f => f.entry.path === files.active) ?? null
+  const filesRef = useRef(files)
+  filesRef.current = files
   const setTab = (path: string, change: (file: OpenFile) => OpenFile) => setFiles(current => updateTab(current, path, change))
   const [menu, setMenu] = useState<Menu | null>(null)
   const menuFit = useFittedMenu(menu)
@@ -142,9 +144,18 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
 
   const refresh = useCallback(() => {
     for (const path of expanded) void list(path)
+    // A folder shown in a tab (one a reply named) lists again too.
+    for (const tab of filesRef.current.files) {
+      if (!tab.folder) continue
+      const path = tab.entry.path
+      gateway
+        .http('GET', fsListPath(path, profile))
+        .then(raw => setTab(path, current => ({ ...current, folder: parseListing(raw), error: undefined })))
+        .catch(() => undefined)
+    }
     // The agent may have changed an open file: a tab without changes reads it again when it's next picked.
     setFiles(current => ({ ...current, files: current.files.map(f => (f.draft === undefined && !f.entry.isDirectory ? { ...f, stale: true } : f)) }))
-  }, [expanded, list])
+  }, [expanded, list, profile])
 
   // After a reply: the open folders again.
   const firstRefresh = useRef(true)
@@ -217,9 +228,11 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
   const openFile = async (entry: WorkspaceEntry, back: WorkspaceEntry[] = [], inPlace = false) => {
     if (entry.isDirectory) return openFolder(entry, back, inPlace)
     // A file already open goes back to its tab and the text read for it, unless a reply ended since.
-    const kept = inPlace ? undefined : files.files.find(f => f.entry.path === entry.path && !f.entry.isDirectory)
+    // Opened from a reply's folder too: a tab with changes is never read over (#549 review).
+    const kept = files.files.find(f => f.entry.path === entry.path && !f.entry.isDirectory)
     if (kept && (!kept.stale || kept.draft !== undefined) && !kept.error) return setFiles(current => ({ ...current, active: entry.path }))
-    setFiles(current => showTab(current, { entry, preview: null, back }, inPlace))
+    // A stale tab read again keeps the folders it was walked through.
+    setFiles(current => showTab(current, { entry, preview: null, back: kept && !inPlace ? (kept.back ?? []) : back }, inPlace && !kept))
     try {
       if (isImage(entry.name)) {
         const raw = (await gateway.http('GET', dataUrlPath(entry.path, profile))) as { data_url?: unknown; dataUrl?: unknown } | null

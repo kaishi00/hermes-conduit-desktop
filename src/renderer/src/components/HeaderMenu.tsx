@@ -75,12 +75,19 @@ export function HeaderMenu({ menu, items, title }: { menu: ReturnType<typeof use
   const [at, setAt] = useState<{ left: number; top: number } | null>(null)
   // Kept inside the window by its measured size, which changes as it shows another line's lines.
   useLayoutEffect(() => {
-    if (!open || !box.current) return setAt(null)
-    const { width, height } = box.current.getBoundingClientRect()
-    setAt({
-      left: Math.max(8, Math.min(open.fromRight ? open.x - width : open.x, window.innerWidth - width - 8)),
-      top: Math.max(8, Math.min(open.y, window.innerHeight - height - 8))
-    })
+    if (!open) return setAt(null)
+    const fit = () => {
+      if (!box.current) return setAt(null)
+      const { width, height } = box.current.getBoundingClientRect()
+      setAt({
+        left: Math.max(8, Math.min(open.fromRight ? open.x - width : open.x, window.innerWidth - width - 8)),
+        top: Math.max(8, Math.min(open.y, window.innerHeight - height - 8))
+      })
+    }
+    fit()
+    // A window made smaller while it's open keeps it inside.
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
   }, [open])
   if (!open) return null
   const inside = open.inside
