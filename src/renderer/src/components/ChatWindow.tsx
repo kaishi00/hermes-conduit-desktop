@@ -526,7 +526,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
               try {
                 await mutateSession(gateway.http, storedId, profile, null)
                 // A deleted chat's pinned replies go with it, as from its row; the main window reads them again when this one closes.
-                const pinHost = host ?? status.url ?? ''
+                const pinHost = host
                 savePins(pinHost, withoutChat(loadPins(pinHost), profile, storedId))
                 window.close()
               } catch (e) {

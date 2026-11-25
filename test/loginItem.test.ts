@@ -109,6 +109,17 @@ describe('the other copies', () => {
     expect(electron.shell.openExternal).toHaveBeenCalledWith('ms-settings:startupapps')
   })
 
+  it('a Startup apps page that won’t open is left at that', async () => {
+    onPlatform('win32', true)
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    electron.shell.openExternal.mockRejectedValueOnce(new Error('no handler'))
+    openStartupSettings()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    process.off('unhandledRejection', unhandled)
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
   it('a run from source and Linux register nothing', () => {
     onPlatform('linux')
     expect(setLoginItem(true)).toEqual({ kind: 'none', on: false })

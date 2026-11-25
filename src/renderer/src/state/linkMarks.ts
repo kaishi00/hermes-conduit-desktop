@@ -24,14 +24,19 @@ export function faviconUrl(href: string | undefined): string | null {
   // A name may end in a dot (`nas.local.`): the same host, so the same answer.
   const host = url.hostname.toLowerCase().replace(/\.+$/, '')
   if (!host.includes('.') || /^[\d.]+$/.test(host) || host.startsWith('[') || /\.(local|lan|internal|home|test|localhost)$/.test(host)) return null
-  if (noIcon.has(url.host)) return null
+  if (noIcon.has(iconKey(url))) return null
   return `https://${url.host}/favicon.ico`
+}
+
+/** A host as the failed icons are kept: lowercase, without a closing dot, with its port. */
+function iconKey(url: URL): string {
+  return url.hostname.toLowerCase().replace(/\.+$/, '') + (url.port ? `:${url.port}` : '')
 }
 
 /** A link whose icon failed: its host gets none from here on. */
 export function faviconFailed(href: string | undefined): void {
   try {
-    if (href) noIcon.add(new URL(href).host)
+    if (href) noIcon.add(iconKey(new URL(href)))
   } catch {
     // Not a link: nothing to forget.
   }

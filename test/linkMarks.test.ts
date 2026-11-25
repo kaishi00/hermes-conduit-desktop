@@ -59,6 +59,7 @@ describe('a site’s icon for a link', () => {
   it('is not asked again of a host whose icon failed', () => {
     faviconFailed('https://example.com/a')
     expect(faviconUrl('https://example.com/other')).toBeNull()
+    expect(faviconUrl('https://example.com./other')).toBeNull()
     expect(faviconUrl('https://example.org/')).toBe('https://example.org/favicon.ico')
   })
 })

@@ -120,6 +120,19 @@ describe('the chat header’s menu', () => {
     expect(labels()).toEqual([])
   })
 
+  it('closes with its chat: the menu taken away and given back stays shut', async () => {
+    const path = '../src/renderer/src/components/ChatHeader.tsx'
+    const { ChatHeader } = (await import(/* @vite-ignore */ path)) as { ChatHeader: unknown }
+    const menu = chatMenuItems({ pinned: false }, { rename: () => {} })
+    await renderHeader({ menu })
+    click(more())
+    expect(labels()).toEqual(['Rename'])
+    act(() => root!.render(createElement(ChatHeader as never, { title: 'Trip plan' } as never)))
+    expect(labels()).toEqual([])
+    act(() => root!.render(createElement(ChatHeader as never, { title: 'Trip plan', menu } as never)))
+    expect(labels()).toEqual([])
+  })
+
   it('opens on a right-click of the title', async () => {
     await renderHeader({ menu: chatMenuItems({ pinned: false }, { rename: () => {} }) })
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 20 })
