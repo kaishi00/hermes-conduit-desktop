@@ -356,4 +356,14 @@ describe('WorkPanel right-click context menu', () => {
     })
     expect(document.activeElement?.textContent).toBe('Copy Branch')
   })
+
+  it('keeps a clipboard failure through a refresh that changes the card', async () => {
+    const write = vi.fn().mockImplementation(() => { throw new Error('Clipboard unavailable') })
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true })
+    await renderPanel()
+    rightClick(cardByRef('W37'))
+    await act(async () => { menuButton('Copy Branch').click() })
+    await renderPanel({ snapshot: { ...snapshot, items: snapshot.items.map(i => (i.ref === 'W37' ? { ...i, updatedAt: i.updatedAt + 1000 } : i)) } })
+    expect(cardByRef('W37').querySelector('[role="alert"]')?.textContent).toContain('Clipboard unavailable')
+  })
 })

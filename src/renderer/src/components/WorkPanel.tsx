@@ -436,7 +436,7 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
   })
   const [busyByRef, setBusyByRef] = useState<Record<string, boolean>>({})
   // A refusal is kept with what its card looked like, and drops once a refresh changes the card.
-  const [problemByRef, setProblemByRef] = useState<Record<string, { text: string; stamp: string }>>({})
+  const [problemByRef, setProblemByRef] = useState<Record<string, { text: string; stamp: string | null }>>({})
   const busyRefs = useRef(new Set<string>())
   const [menu, setMenu] = useState<{ ref: string; x: number; y: number } | null>(null)
   const menuFit = useFittedMenu<HTMLDivElement>(menu)
@@ -469,22 +469,34 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
     })
   }
 
-  const refuse = (ref: string, error: unknown) => {
-    const item = [...(resolved ?? []), ...(snapshot?.items ?? [])].find(row => row.ref === ref)
-    setProblemByRef(current => ({ ...current, [ref]: { text: workRefusal(error), stamp: item ? workStamp(item) : '' } }))
+  // stamp null: a clipboard failure, which no refresh makes stale; it stays until the next try.
+  const refuse = (ref: string, error: unknown, stamp: string | null) => {
+    setProblemByRef(current => ({ ...current, [ref]: { text: workRefusal(error), stamp } }))
   }
 
   const problemOf = (item: WorkItem): string | null => {
     const problem = problemByRef[item.ref]
-    return problem && (!problem.stamp || problem.stamp === workStamp(item)) ? problem.text : null
+    return problem && (problem.stamp === null || problem.stamp === workStamp(item)) ? problem.text : null
   }
+
+  // A card that leaves both lists takes its refusal with it.
+  useEffect(() => {
+    const refs = new Set([...(snapshot?.items ?? []), ...(resolved ?? [])].map(item => item.ref))
+    setProblemByRef(current => {
+      const gone = Object.keys(current).filter(ref => !refs.has(ref))
+      if (!gone.length) return current
+      const next = { ...current }
+      for (const ref of gone) delete next[ref]
+      return next
+    })
+  }, [snapshot, resolved])
 
   const copyBranch = async (item: WorkItem) => {
     clearProblem(item.ref)
     try {
       await navigator.clipboard.writeText(item.branch)
     } catch (e) {
-      refuse(item.ref, e)
+      refuse(item.ref, e, null)
     }
   }
 
@@ -493,12 +505,15 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
     busyRefs.current.add(ref)
     setBusyByRef(current => ({ ...current, [ref]: true }))
     clearProblem(ref)
+    // What the card looked like when it was asked: a refusal is about that state.
+    const asked = [...(resolved ?? []), ...(snapshot?.items ?? [])].find(row => row.ref === ref)
+    const stamp = asked ? workStamp(asked) : ''
     try {
       await gateway.http('POST', workPath(`${WORK}/${encodeURIComponent(ref)}/${action}`, profile), body)
       changed()
       return true
     } catch (e) {
-      refuse(ref, e)
+      refuse(ref, e, stamp)
       return false
     } finally {
       busyRefs.current.delete(ref)
