@@ -2865,6 +2865,7 @@ function Shell({
             onOpenBoard={() => setSection('tasks')}
             chips={pulseHostChips}
             onPickHost={pickPulseHost}
+            bots={roster.bots}
           />
         ) : section === 'room' && shownCopy && shownCopyRoom ? (
           <RoomView
@@ -3312,7 +3313,7 @@ function Settings({
   if (page === 'pulse')
     return (
       <SettingsPane pane={pane}>
-        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} />
+        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} bots={bots} />
       </SettingsPane>
     )
   if (page === 'chat')

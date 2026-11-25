@@ -35,7 +35,16 @@ const NOTE_LIMIT = 1500
  * scenes. Each change saves at once, as the phone's does; the note saves on
  * Save.
  */
-export function PulseSettings({ onBack, onChanged }: { onBack: () => void; onChanged: () => void }) {
+export function PulseSettings({
+  onBack,
+  onChanged,
+  bots
+}: {
+  onBack: () => void
+  onChanged: () => void
+  /** The host's bots, to name the profile Pulse runs in as the rest of the app does. */
+  bots?: readonly { name: string; title: string }[] | null
+}) {
   useMouseBack(onBack)
   // Opens on Pulse's state as it last answered on this dashboard (Screens that open on their last answer).
   const [state, setState] = useState<State | null>(() => {
@@ -352,7 +361,8 @@ export function PulseSettings({ onBack, onChanged }: { onBack: () => void; onCha
                 onChange={picked => void change({ report_profiles: picked })}
               >
                 <option value="all">{t('Every profile')}</option>
-                <option value="this">{t('This profile only')}</option>
+                {/* Named: it is the profile Pulse runs in, whichever one the app is on (hermes-conduit issue 3241). */}
+                <option value="this">{t('Only {name}', { name: bots?.find(b => b.name === state.profile)?.title ?? state.profile })}</option>
               </Select>
             </div>
             <label className="toggle">

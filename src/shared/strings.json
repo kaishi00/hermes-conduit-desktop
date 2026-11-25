@@ -34049,20 +34049,20 @@
     "zh-Hans": "此配置有 {count} 个 {name} 密钥。某个密钥达到上限时，Hermes 会换用另一个。",
     "zh-Hant": "此設定檔有 {count} 把 {name} 金鑰。某把金鑰達到上限時，Hermes 會換用另一把。"
   },
-  "This profile only": {
-    "de": "Nur dieses Profil",
-    "es": "Solo este perfil",
-    "fr": "Ce profil uniquement",
-    "id": "Hanya profil ini",
-    "it": "Solo questo profilo",
-    "ja": "このプロフィールのみ",
-    "ko": "이 프로필만",
-    "pl": "Tylko ten profil",
-    "pt-BR": "Somente este perfil",
-    "ru": "Только этот профиль",
-    "tr": "Yalnızca bu profil",
-    "zh-Hans": "仅此配置文件",
-    "zh-Hant": "僅此設定檔"
+  "Only {name}": {
+    "de": "Nur {name}",
+    "es": "Solo {name}",
+    "fr": "{name} uniquement",
+    "id": "Hanya {name}",
+    "it": "Solo {name}",
+    "ja": "{name}のみ",
+    "ko": "{name}만",
+    "pl": "Tylko {name}",
+    "pt-BR": "Somente {name}",
+    "ru": "Только {name}",
+    "tr": "Yalnızca {name}",
+    "zh-Hans": "仅 {name}",
+    "zh-Hant": "僅 {name}"
   },
   "This profile still uses a shared key that was replaced since.": {
     "de": "Dieses Profil nutzt noch einen gemeinsamen Schlüssel, der inzwischen ersetzt wurde.",
