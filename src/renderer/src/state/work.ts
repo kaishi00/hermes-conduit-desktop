@@ -374,6 +374,31 @@ export function manageTitle(manage: WorkManage, botName: string): string {
   }
 }
 
+export type WorkMenuItem =
+  | { kind: 'manage'; action: WorkManage; label: string }
+  | { kind: 'action'; action: Exclude<WorkAction, 'send'>; label: string }
+  | { kind: 'open'; label: string }
+  | { kind: 'copy-branch'; branch: string; label: string }
+
+/** The right-click menu for a Work panel card, after the phone's card contextMenu plus its run actions. */
+export function workMenuItems(item: WorkItem, botName: string): WorkMenuItem[] {
+  const out: WorkMenuItem[] = item.manage.map(action => ({
+    kind: 'manage',
+    action,
+    label: manageTitle(action, botName)
+  }))
+  for (const action of item.actions) {
+    if (action !== 'send') out.push({ kind: 'action', action, label: actionTitle(action) })
+  }
+  if (item.kind === 'workstream' && item.sessionId) {
+    out.push({ kind: 'open', label: t('Open {ref}’s chat', { ref: item.ref }) })
+  }
+  if (item.branch) {
+    out.push({ kind: 'copy-branch', branch: item.branch, label: t('Copy Branch') })
+  }
+  return out
+}
+
 /** A refused action's words: the plugin's note, else its code. */
 export function workRefusal(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
