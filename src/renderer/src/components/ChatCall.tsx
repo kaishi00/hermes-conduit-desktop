@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import type { PendingRequest } from '@shared/ipc'
 import { VOICE_MODE_EVENT, setVoiceMode, voiceMode, type VoiceMode } from '../state/gptLive'
-import { AFTER_CALL_STALL_MS, afterCallStep, afterFailedSend, chatOfCall, leftByCall, type AfterCall } from '../state/afterCall'
+import { AFTER_CALL_STALL_MS, afterCallStep, afterFailedSend, callChatId, leftByCall, type AfterCall } from '../state/afterCall'
 import { consented, isLive } from '../state/consent'
 import type { CallResume } from '../state/voiceSave'
 import type { CallTranscript } from '../state/voiceCalls'
@@ -47,7 +47,7 @@ export interface ChatCallOptions {
 export interface ChatCallView {
   requests: PendingRequest[]
   /** The chat's send: a call's words go as the user's, spoken, taking the chat over. */
-  onSend: (text: string, attachments: StagedAttachment[], options: { takeOver?: boolean; spoken?: boolean }) => Promise<boolean | void>
+  onSend: (text: string, attachments: StagedAttachment[], options: { takeOver?: boolean; spoken?: boolean }) => Promise<boolean | string | void>
 }
 
 export interface ChatCallState {
@@ -171,7 +171,7 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     setPictureNote({ id: ++pictureIds.current, kind: picture.kind, change: 'removed', frame: null })
   }
   /** A call's request to Hermes: the waiting picture goes with it, once. */
-  const sayToChat = async (words: string): Promise<boolean> => {
+  const sayToChat = async (words: string, fromCall: { count: number }): Promise<boolean> => {
     const picture = waitingPicture.current
     if (picture) {
       waitingPicture.current = null
@@ -180,6 +180,10 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     const send = late.current?.onSend
     if (!send) return false
     const sent = await send(words, picture ? [picture.attachment] : [], { takeOver: true, spoken: true }).catch(() => false as const)
+    // A new chat the call made names itself in the answer: remember that id, not whatever
+    // chat the user opened next (issue 550).
+    // The send can resolve after this call ended: only its own generation may write the id.
+    if (typeof sent === 'string' && callSent.current === fromCall) sentCreated.current = sent
     // The chat didn't open, or was left while it opened: the call says the words didn't go.
     if (sent === false) tell(t('That didn’t reach the chat. Try again.'))
     return sent !== false
@@ -187,10 +191,12 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
   // Whether this call sent the chat a request: a new chat gets its id from the first one.
   // A send the chat refused doesn't count; each call has its own count, so a late answer can't touch the next call's.
   const callSent = useRef({ count: 0 })
+  /** The id this call's own send created, when it created one. */
+  const sentCreated = useRef<string | null>(null)
   const callSay = (words: string) => {
     const sent = callSent.current
     sent.count += 1
-    void sayToChat(words).then(reached => {
+    void sayToChat(words, sent).then(reached => {
       if (!reached) sent.count -= 1
     })
   }
@@ -235,8 +241,11 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
   // kept here: the one it started in (with the id a new chat got from it), not the chat whose opening
   // ended the call.
   const callChat = useRef({ chatId, calling: false })
-  if (calling && !callChat.current.calling) callSent.current = { count: 0 }
-  callChat.current = { chatId: chatOfCall(callChat.current.chatId, callChat.current.calling, calling, chatId, callSent.current.count > 0), calling }
+  if (calling && !callChat.current.calling) {
+    callSent.current = { count: 0 }
+    sentCreated.current = null
+  }
+  callChat.current = { chatId: callChatId(callChat.current.chatId, callChat.current.calling, calling, chatId, sentCreated.current), calling }
   const callLeft = (requests: string[]) => setLeft(kept => leftByCall(kept, callChat.current.chatId, requests))
   // Drawn again once a send no reply followed has been waited on long enough.
   const [stallTick, setStallTick] = useState(0)
@@ -250,7 +259,7 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     }
     // One the chat didn't take: the rest would wait on a reply that never comes, so they go with it.
     const sentFrom = step.left
-    void sayToChat(step.send).then(sent => {
+    void sayToChat(step.send, callSent.current).then(sent => {
       if (!sent) setLeft(now => afterFailedSend(now, sentFrom))
     })
   }, [left, chatId, calling, running, turnsDone, stallTick])

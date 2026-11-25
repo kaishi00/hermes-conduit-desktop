@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AFTER_CALL_STALL_MS, afterCallStep, afterFailedSend, chatOfCall, leftByCall } from '../src/renderer/src/state/afterCall'
+import { AFTER_CALL_STALL_MS, afterCallStep, afterFailedSend, callChatId, chatOfCall, leftByCall } from '../src/renderer/src/state/afterCall'
 
 const free = { chatId: 'chat', calling: false, running: false, turnsDone: 3, at: 1000 }
 
@@ -60,6 +60,11 @@ describe('requests a call left unsent (hermes-conduit issue 3185)', () => {
     }
     // A new chat the call sent nothing: another chat opening isn't the call's.
     expect(chatOfCall(null, true, true, 'other', false)).toBeNull()
+
+    // Only the id this call's own send created is its chat; a chat opened meanwhile is foreign.
+    expect(callChatId(null, true, true, 'B', null)).toBeNull()
+    expect(callChatId(null, true, true, 'B', 'A')).toBeNull()
+    expect(callChatId(null, true, true, 'A', 'A')).toBe('A')
     expect(afterCallStep(leftByCall(null, null, ['and a car']), { ...free, chatId: 'other' })).toEqual({ left: null })
     // The next call takes the chat open as it starts.
     expect(chatOfCall('A', false, true, 'B')).toBe('B')

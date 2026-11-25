@@ -1328,7 +1328,8 @@ function Shell({
         setSelected(s => ({ ...s, id: created }))
         void list.refresh()
       }
-      return true
+      // Hand the created id back to a call: it must not claim a chat that opened meanwhile.
+      return created || true
     },
     [send, command, notice, commands, newChat, list, botTitle, roster.bots, selected.profile, selected.botChat, openBotChat, chat.liveId]
   )
