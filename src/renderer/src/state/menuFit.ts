@@ -29,9 +29,16 @@ export function useFittedMenu<E extends HTMLElement = HTMLDivElement>(anchor: { 
   const ref = useRef<E>(null)
   const [at, setAt] = useState<{ left: number; top: number } | null>(null)
   useLayoutEffect(() => {
-    if (!anchor || !ref.current) return setAt(null)
-    const { width, height } = ref.current.getBoundingClientRect()
-    setAt(fitMenu(anchor, { width, height }, { width: window.innerWidth, height: window.innerHeight }))
+    if (!anchor) return setAt(null)
+    const fit = () => {
+      if (!ref.current) return setAt(null)
+      const { width, height } = ref.current.getBoundingClientRect()
+      setAt(fitMenu(anchor, { width, height }, { width: window.innerWidth, height: window.innerHeight }))
+    }
+    fit()
+    // A window made smaller while the menu is open keeps it inside.
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
   }, [anchor])
   const style: CSSProperties | undefined = !anchor ? undefined : at ?? { left: anchor.x, top: anchor.y, visibility: 'hidden' }
   return { ref, style }

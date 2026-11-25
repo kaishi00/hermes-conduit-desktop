@@ -741,8 +741,9 @@ export function ChatList({
           aria-expanded={newChatIn.length > 1 ? !!newChatMenu.open : undefined}
           onClick={e => {
             if (newChatIn.length < 2) return onNewChat(newChatIn[0]?.name)
-            // The window's click closes the menu; this one opens it.
+            // The window's click closes the menu; this one opens it, so it closes a row's menu itself.
             e.stopPropagation()
+            setMenu(null)
             const box = e.currentTarget.getBoundingClientRect()
             newChatMenu.setOpen(current => (current ? null : { x: box.right, y: box.bottom + 6, fromRight: true }))
           }}
