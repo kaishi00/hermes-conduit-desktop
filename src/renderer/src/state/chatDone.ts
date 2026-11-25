@@ -30,7 +30,12 @@ export const donePath = (profile?: string | null) =>
   profile && profile !== 'default' ? `${DONE_PATH}?profile=${encodeURIComponent(profile)}` : DONE_PATH
 
 /** The ids a mark is kept under: the lineage root first, then the row's own. */
-export const doneIds = (row: ChatRow): string[] => [...new Set([row.lineageRoot, row.id].filter((id): id is string => !!id))].slice(0, MAX_IDS)
+/** The ids a done mark covers: the compacted root then this chat, without a Set per row. */
+export const doneIds = (row: ChatRow): string[] => {
+  const root = row.lineageRoot
+  if (!root || root === row.id) return [row.id].slice(0, MAX_IDS)
+  return [root, row.id].slice(0, MAX_IDS)
+}
 
 /** `marks` with `key`'s replaced by `done`; `marks` itself when they say the same. */
 export function withProfileMarks(marks: DoneMarks, key: string, done: DoneMark[]): DoneMarks {

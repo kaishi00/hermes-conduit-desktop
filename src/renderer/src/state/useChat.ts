@@ -63,7 +63,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, newestPageItems, newestPages, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
+import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, mergedOlderAt, newestPageItems, newestPages, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
 import { knownChatLength, noteChatLength } from './chatLength'
 import { CATCH_UP_FOCUS_MS, CATCH_UP_RELOAD_MS, CATCH_UP_SETTLE_MS, catchUpStep, newestRowId, readOver, tipOf } from './chatCatchUp'
 
@@ -562,7 +562,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         const pages = keptCopy && keptOlder && olderAt ? olderPagesOf(keptCopy, state) : []
         if (pages.length && keptOlder && olderAt) {
           state = prependOlder(state, pages)
-          olderAt = { offset: Math.max(olderAt.offset, keptOlder.offset), more: keptOlder.more }
+          olderAt = mergedOlderAt(olderAt, keptOlder)
         }
         olderNow.current = olderAt
         setOlder(olderAt)
@@ -726,7 +726,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       const pages = keepOlder && olderWas && olderAt ? olderPagesOf(transcriptRef.current, state) : []
       if (pages.length && olderWas && olderAt) {
         state = prependOlder(state, pages)
-        olderAt = { offset: Math.max(olderAt.offset, olderWas.offset), more: olderWas.more }
+        olderAt = mergedOlderAt(olderAt, olderWas)
       }
       olderNow.current = olderAt
       setOlder(olderAt)
