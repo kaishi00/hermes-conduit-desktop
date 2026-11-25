@@ -50,6 +50,13 @@ describe('the tab strip over the chat column', () => {
     expect(onClose).toHaveBeenCalledWith(tabs.tabs[0])
     act(() => host.querySelector<HTMLElement>('.ws-tab-new')!.click())
     expect(onNewTab).toHaveBeenCalledTimes(1)
+    // ← and → pick the neighbour, round the strip; only the shown tab is in the Tab order.
+    expect(shown.map(tab => tab.getAttribute('tabindex'))).toEqual(['0', '-1'])
+    onPick.mockClear()
+    act(() => shown[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })))
+    expect(onPick).toHaveBeenLastCalledWith(tabs.tabs[1])
+    act(() => shown[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })))
+    expect(onPick).toHaveBeenLastCalledWith(tabs.tabs[0])
     act(() => root.unmount())
   })
 })

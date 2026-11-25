@@ -1098,8 +1098,14 @@ function Shell({
     setTabs(tabs => openInNewTab(tabs, { id: null, profile }, nextTabKey()))
     newChat(profile)
   }
-  /** Whether a chat holds a tab, so the transcript keeps the reader's place in it. */
-  const keepsPlace = useCallback((chat: string) => showsTabStrip(tabs) && tabs.tabs.some(tab => tab.chat.id === chat), [tabs])
+  /**
+   * Whether the transcript keeps the reader's place in a chat: one left while the strip shows, so tabs are in use, and
+   * opens there while it holds a tab, also once the others have closed. A lone tab keeps none, as before tabs.
+   */
+  const keepsPlace = useCallback(
+    (chat: string, leaving: boolean) => (!leaving || showsTabStrip(tabs)) && tabs.tabs.some(tab => tab.chat.id === chat),
+    [tabs]
+  )
   // Ctrl+Tab and Ctrl+Shift+Tab step through the tabs, a Mac's too, as a browser's do.
   const stepTabs = useRef<(by: 1 | -1) => boolean>(() => false)
   stepTabs.current = by => {
@@ -1814,7 +1820,13 @@ function Shell({
   const expiredQuestions = useExpiredQuestions(chat.liveId)
   // Running and Needs approval on the list's rows: the gateway's live registry while the list shows, the
   // plugin's waiting list, and the open chat's own turn and requests.
-  const liveProfiles = useMemo(() => (chatProfile ? [chatProfile] : profiles.slice(0, 8)), [chatProfile, profiles])
+  // The open tabs' bots too, so a tab whose chat runs says so whichever bot the list shows (issue 423).
+  const tabProfiles = showsTabStrip(tabs) ? [...new Set(tabs.tabs.map(tab => tab.chat.profile ?? 'default'))].sort().join('\n') : ''
+  const liveProfiles = useMemo(() => {
+    const base = chatProfile ? [chatProfile] : profiles.slice(0, 8)
+    const more = tabProfiles ? tabProfiles.split('\n').filter(name => !base.some(b => sameProfileAs(b, name))) : []
+    return more.length ? [...base, ...more] : base
+  }, [chatProfile, profiles, tabProfiles])
   const liveStatus = useLiveStatus(connected && section === 'chats' && !projectsOpen, liveProfiles, `${turnsDone}\t${list.rows?.length ?? 0}`)
   const runningIds = useMemo(() => {
     const ids = new Set<string>()
@@ -1923,6 +1935,8 @@ function Shell({
       waits: !!id && waitingIds.has(id)
     }
   }
+ // A new chat's draft is its tab's own, so two new chats in tabs keep their words apart (ids come once they're sent).
+  const newChatTabDraft = !selected.botChat && tabs.active ? `new\u0000${tabs.active}` : null
   const tabsSpanBots = new Set(tabs.tabs.map(tab => (tab.chat.profile ?? 'default').toLowerCase())).size > 1
 
   /** The chats this window opened, by live id: a request's card outside its chat, and a notification's click. */
@@ -2852,7 +2866,7 @@ function Shell({
                 onSuggestion={text => void onSend(text, [])}
                 onStop={() => void stop()}
                 focusKey={selected.id ?? 'new'}
-                draftKey={chatDraft(selected.profile, selected.id)}
+                draftKey={chatDraft(selected.profile, selected.id ?? newChatTabDraft)}
                 canAttach
                 dropZone={chatPane}
                 voice={calling ? undefined : { profile: selected.profile }}

@@ -1174,7 +1174,7 @@ export function Transcript({
    */
   onSeekRow?: (found: (items: readonly TranscriptItem[]) => boolean, missed?: () => void) => (() => void) | void
   /** Whether a chat holds a tab (issue 423): left, it keeps the reader's place, and back, opens there (chatPlaces.ts). */
-  keepsPlace?: (chat: string) => boolean
+  keepsPlace?: (chat: string, leaving: boolean) => boolean
 }) {
   const [thinkingShown, setThinkingShown] = useState(false)
   const showsThinking = display.thinking === 'show' || (display.thinking === 'on_request' && thinkingShown)
@@ -1229,7 +1229,7 @@ export function Transcript({
   // What the scroll listener reads: the rows and the window as the last frame had them, until this one's are set below.
   const liveRows = useRef<{ rows: Row[]; start: number; scrolledUp: boolean; chat: string }>({ rows: [], start: 0, scrolledUp: false, chat: chatKey })
   /** A tab's chat coming back to the place it was left at, until its rows are drawn there. */
-  const restoring = useRef<ChatPlace | null>(null)
+  const restoring = useRef<(ChatPlace & { from: TranscriptState }) | null>(null)
   // Another chat opens on its newest rows and follows them, wherever the last one was left (desktop#467);
   // a chat that holds a tab opens where it was left (issue 423).
   const pinnedChat = useRef(chatKey)
@@ -1237,13 +1237,15 @@ export function Transcript({
     const left = pinnedChat.current
     const el = scroller.current
     const was = liveRows.current
-    if (keepsPlace?.(left)) {
+    if (keepsPlace?.(left, true)) {
       const first = was.chat === left ? was.rows[was.start] : undefined
       chatPlaces.keep(left, el && first && !pinned.current ? { start: was.start, anchor: rowKey(first), top: el.scrollTop } : null)
     }
     pinnedChat.current = chatKey
-    const back = keepsPlace?.(chatKey) ? chatPlaces.take(chatKey) : undefined
-    restoring.current = back ?? null
+    const back = keepsPlace?.(chatKey, false) ? chatPlaces.take(chatKey) : undefined
+    // The rows drawn as it opens are still the last chat's until its transcript is read (useChat resets it after this
+    // render), so a place whose row they lack waits for the chat's own rather than giving up.
+    restoring.current = back ? { ...back, from: state } : null
     pinned.current = !back
     jumpUntil.current = 0
     if (back) setWindowed({ chat: chatKey, start: back.start, anchor: back.anchor })
@@ -1422,7 +1424,8 @@ export function Transcript({
     const el = scroller.current
     if (!back || !el || windowed.chat !== chatKey) return
     if (start === null) {
-      if (loading || !rows.length) return
+      // Not before this chat's own rows are read: the last chat's, still drawn as it opens, may just lack the row.
+      if (state === back.from || loading || !rows.length) return
       restoring.current = null
       pinned.current = true
       setWindowed(windowAt(null))

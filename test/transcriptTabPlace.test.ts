@@ -42,8 +42,8 @@ const rows = (chat: string, count: number): TranscriptState => ({
   items: Array.from({ length: count }, (_, n) => ({ key: `row-${n}`, kind: 'user', text: `${chat} ${n}` }) as unknown as TranscriptItem)
 })
 
-function show(chatId: string, keepsPlace?: (chat: string) => boolean) {
-  act(() => root!.render(createElement(Transcript as never, { state: rows(chatId, 12), loading: false, error: null, chatId, keepsPlace })))
+function show(chatId: string, keepsPlace?: (chat: string, leaving: boolean) => boolean, state = rows(chatId, 12)) {
+  act(() => root!.render(createElement(Transcript as never, { state, loading: false, error: null, chatId, keepsPlace })))
 }
 
 function readUpTo(scroller: HTMLElement, top: number) {
@@ -88,6 +88,42 @@ describe('a chat in a tab keeps the reader’s place (issue 423)', () => {
     const keepsPlace = () => true
     show('a', keepsPlace)
     const scroller = host.querySelector<HTMLElement>('.transcript')!
+    show('b', keepsPlace)
+    show('a', keepsPlace)
+    expect(scroller.scrollTop).toBe(1500)
+  })
+
+  it('waits for the chat’s own rows, though the last chat’s shorter rows are still drawn as it opens', () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    const keepsPlace = () => true
+    const long = rows('a', 300)
+    show('a', keepsPlace, long)
+    const scroller = host.querySelector<HTMLElement>('.transcript')!
+    readUpTo(scroller, 320)
+    const short = rows('b', 5)
+    show('b', keepsPlace, short)
+    // Back to a: its transcript isn't read yet, so b's five rows are what's drawn for a frame.
+    show('a', keepsPlace, short)
+    show('a', keepsPlace, long)
+    expect(scroller.scrollTop).toBe(320)
+  })
+
+  it('keeps a place left while tabs show once the other tabs close, and none left with a lone tab', () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    let strip = true
+    const keepsPlace = (chat: string, leaving: boolean) => (!leaving || strip) && chat === 'a'
+    show('a', keepsPlace)
+    const scroller = host.querySelector<HTMLElement>('.transcript')!
+    readUpTo(scroller, 320)
+    show('b', keepsPlace)
+    strip = false
+    show('a', keepsPlace)
+    expect(scroller.scrollTop).toBe(320)
+    readUpTo(scroller, 200)
     show('b', keepsPlace)
     show('a', keepsPlace)
     expect(scroller.scrollTop).toBe(1500)
