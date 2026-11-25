@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { boardFrom, dialable, mailtoLink, people, placeBoards, sameBoards, share, smsLink, textRecipient } from '../src/renderer/src/state/boards'
-import { splitReply } from '../src/renderer/src/state/media'
+import { namingFiles, splitReply, withoutBoardLines } from '../src/renderer/src/state/media'
+import { copyableReply } from '../src/renderer/src/state/quote'
 
 const stats = { type: 'stats', title: 'Today', stats: [{ label: 'Steps', value: '8,412' }] }
 const map = { type: 'map', title: 'Route', places: [] }
@@ -110,6 +111,26 @@ describe('boards', () => {
       { kind: 'markdown', text: `more\n${line}` }
     ])
     expect(splitReply(line, boards)).toEqual([{ kind: 'board', id }])
+    // Two boards on one line: the words between them stay between them.
+    const other = 'cb-0123456789ff'
+    expect(splitReply(`A ${line} mid ::conduit-board{id="${other}"} end`, new Set([id, other]))).toEqual([
+      { kind: 'markdown', text: 'A' },
+      { kind: 'board', id },
+      { kind: 'markdown', text: 'mid' },
+      { kind: 'board', id: other },
+      { kind: 'markdown', text: 'end' }
+    ])
+  })
+
+  it('leaves the line out of what is copied, quoted or handed to a live model', () => {
+    expect(withoutBoardLines(`First.\n\n${line}\n\nThen.`)).toBe('First.\n\nThen.')
+    expect(withoutBoardLines(`See ${line} here`)).toBe('See here')
+    expect(withoutBoardLines('```\n' + line + '\n```')).toBe('```\n' + line + '\n```')
+    expect(copyableReply(`First.\n\n${line}\n\nThen.`)).toBe('First.\n\nThen.')
+    expect(namingFiles(`First.\n${line}`)).toBe('First.')
+    // The first call of a turn to name an id keeps it.
+    const again = { ...row, key: 't2' }
+    expect([...placeBoards([user, row, again, reply('a1', line)]).hidden]).toEqual(['t1'])
     expect(splitReply(`Before\n${line}`)).toEqual([{ kind: 'markdown', text: `Before\n${line}` }])
   })
 

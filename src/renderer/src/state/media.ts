@@ -183,11 +183,17 @@ export function splitReply(text: string, boards?: ReadonlySet<string>): ReplyBlo
     if (placed.length) {
       // Each board once: a second line naming it stays text, which the Markdown hides.
       const first = placed.filter(board => left!.delete(board.id))
-      let words = trimmed
-      for (const board of [...first].reverse()) words = words.slice(0, board.index) + words.slice(board.index + board.length)
       flush()
-      if (words.trim()) blocks.push(...splitReply(words.replace(/[^\S\n]{2,}/g, ' ').trim()))
-      for (const board of first) blocks.push({ kind: 'board', id: board.id })
+      // The words before each board stay before it; a line naming a board again keeps that as text.
+      let cursor = 0
+      for (const board of first) {
+        const before = trimmed.slice(cursor, board.index).trim()
+        if (before) blocks.push(...splitReply(before))
+        blocks.push({ kind: 'board', id: board.id })
+        cursor = board.index + board.length
+      }
+      const after = trimmed.slice(cursor).trim()
+      if (after) run.push(after)
       continue
     }
     const drawn = trimmed.startsWith('>') ? [] : previews(trimmed)
@@ -254,11 +260,43 @@ function insideCode(line: string, index: number): boolean {
 export const fileName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path
 
 /**
+ * A reply without its `::conduit-board{…}` lines, for what leaves the transcript (Copy, a quote, a live model's
+ * text): the line draws a board here and means nothing anywhere else. A line in a fence or a code span is kept.
+ */
+export function withoutBoardLines(text: string): string {
+  if (!text.includes('::conduit-board{')) return text
+  const kept: string[] = []
+  let fence: string | null = null
+  for (const line of text.split('\n')) {
+    const fenceMatch = /^\s*(```+|~~~+)/.exec(line)
+    if (fence) {
+      if (fenceMatch && fenceMatch[1]!.startsWith(fence)) fence = null
+    } else if (fenceMatch) fence = fenceMatch[1]!
+    else if (line.includes('::conduit-board{')) {
+      let words = line
+      const found = [...line.matchAll(BOARD_LINE)].filter(match => {
+        const index = match.index ?? 0
+        const ticks = (line.slice(0, index).match(/`/g) ?? []).length
+        return !(ticks % 2 === 1 && line.indexOf('`', index) >= 0)
+      })
+      for (const match of found.reverse()) words = words.slice(0, match.index ?? 0) + words.slice((match.index ?? 0) + match[0].length)
+      if (found.length) {
+        if (words.trim()) kept.push(words.replace(/[^\S\n]{2,}/g, ' ').trimEnd())
+        continue
+      }
+    }
+    kept.push(line)
+  }
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
  * A reply as a voice model gets it, after the phone's GatewayMediaTags.namingFiles:
  * each delivered file or preview named, never given by its path (live models
  * are told of a file by name, #1449).
  */
-export function namingFiles(text: string): string {
+export function namingFiles(given: string): string {
+  const text = withoutBoardLines(given)
   const blocks = splitReply(text)
   if (blocks.length === 1 && blocks[0]!.kind === 'markdown') return blocks[0]!.text
   return blocks

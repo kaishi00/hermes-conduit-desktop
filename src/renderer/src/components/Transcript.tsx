@@ -1,6 +1,6 @@
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { flushSync } from 'react-dom'
-import { mediaKind, splitReply } from '../state/media'
+import { mediaKind, splitReply, withoutBoardLines } from '../state/media'
 import { PagePreview } from './PagePreview'
 import { baseName, type Attachment } from '../state/text'
 import { displayName } from '../state/attachments'
@@ -847,7 +847,7 @@ const Item = memo(function Item({
               text={item.text}
               react={onReact ? { reactions: item.reactions ?? [], onPick: onReact } : undefined}
               menu={[
-                ...(onQuote ? [{ label: t('Quote'), onSelect: () => onQuote(quoteRequest({ reply: { author, text: item.text } })) }] : []),
+                ...(onQuote ? [{ label: t('Quote'), onSelect: () => onQuote(quoteRequest({ reply: { author, text: withoutBoardLines(item.text) } })) }] : []),
                 ...(onBranch ? [{ label: t('Branch'), onSelect: onBranch }] : []),
                 ...(onRetry ? [{ label: t('Retry'), onSelect: onRetry }] : []),
                 ...(pinToggle ? [pinToggle] : []),
@@ -1170,18 +1170,21 @@ export function Transcript({
             ? showsThinking
             : item.kind === 'tool' && !item.board
               ? display.toolCards
-              : item.kind === 'tool'
-                ? !placement.hidden.has(item.key)
-                : item.kind === 'review'
+              : item.kind === 'review'
                   ? display.showReviews
                   : true
         ),
         calls ?? [],
         heldFrom
       ),
-    [state.items, showsThinking, display.toolCards, display.showReviews, calls, heldFrom, placement]
+    [state.items, showsThinking, display.toolCards, display.showReviews, calls, heldFrom]
   )
-  const rows = useMemo(() => foldRuns(shown), [shown])
+  // A placed board's row goes after the fold, so the steps either side of it stay the runs they were.
+  const rows = useMemo(() => {
+    const folded = foldRuns(shown)
+    if (!placement.hidden.size) return folded
+    return folded.filter(row => !(row.type === 'item' && row.item.kind === 'tool' && placement.hidden.has(row.item.key)))
+  }, [shown, placement])
   // A chat past a window's worth of rows draws a window of them — its newest, and the
   // rows above them as the reader scrolls up (rowWindow.ts) — so a streaming reply
   // draws into its own row each frame instead of laying the whole history out again

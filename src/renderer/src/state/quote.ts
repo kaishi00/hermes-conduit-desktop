@@ -14,7 +14,7 @@
  * and the quote and the name are defanged so only the user's own words
  * mention anyone.
  */
-import { splitReply } from './media'
+import { splitReply, withoutBoardLines } from './media'
 
 /** Protocol text, not translated: Hermes and its model read it, and every Conduit parses it. */
 export const REPLY_MARKER = '[Replying to your earlier message]'
@@ -123,7 +123,7 @@ export function parseRoomReply(content: string): { author: string; quote: string
 
 /** A reply as Copy puts it on the clipboard: its words, and each file it delivered by its path. */
 export function copyableReply(text: string): string {
-  return splitReply(text)
+  return splitReply(withoutBoardLines(text))
     .map(block => (block.kind === 'markdown' ? block.text.trim() : block.kind === 'board' ? '' : block.path))
     .filter(Boolean)
     .join('\n\n')
