@@ -160,4 +160,16 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     words.heard('Do it', true)
     expect(words.pending()).toEqual(['Do it'])
   })
+
+  it('reads a yes taken back in the same breath as a no', async () => {
+    let t = 1_000_000
+    const ask = new AskFirst(true, () => t, 0, 600)
+    ask.heard('Book a table', true)
+    await ask.ask('ask_thread', 'Book a table for two.')
+    ask.modelSpoke()
+    t += 3000
+    ask.heard('Yes', true)
+    setTimeout(() => ask.heard('actually no', true), 100)
+    expect((await ask.release()).send).toBe(false)
+  })
 })

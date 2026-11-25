@@ -154,6 +154,8 @@ export class AskFirst {
   private lineOpen = false
   /** What the user said that no request carried yet. */
   private readonly words: RequestWords
+  /** How often the model spoke: a yes being read tells the user's next line from the same one revised. */
+  private modelTurns = 0
 
   constructor(
     on: boolean,
@@ -181,6 +183,7 @@ export class AskFirst {
   /** The model spoke: the user's next words start a new line. */
   modelSpoke(): void {
     this.lineOpen = false
+    this.modelTurns += 1
     this.words.modelSpoke()
   }
 
@@ -297,10 +300,11 @@ export class AskFirst {
     let answer = first
     for (let waited = 0; waited < this.wordsWaitMs; waited += 250) {
       const line = this.line
+      const turns = this.modelTurns
       await new Promise(resolve => setTimeout(resolve, 250))
       if (this.line === line) break
-      // The model spoke meanwhile and their next words began a new line: the yes already read stands.
-      if (!this.line.startsWith(line)) break
+      // The model spoke meanwhile, so what came since is their next line: the yes already read stands.
+      if (this.modelTurns !== turns) break
       answer = heldRequestAnswer(this.line)
     }
     return answer
