@@ -11,8 +11,12 @@
 export const QUIET_TURNS_PATH = '/api/plugins/conduit_push/notifications/quiet-turns'
 /** A decision not on hand yet (a slow disk, a hook still running) is asked for once more after this. */
 export const QUIET_RETRY_MS = 1_500
-/** How long before the turn's start, by the host's clock against ours, a decision still counts as this turn's. */
-const CLOCK_SLACK_S = 2
+/**
+ * The decision's age (the host's own clock) is set against the turn's length (ours): both are durations, so
+ * the two clocks' offset doesn't matter, only the start event's trip here. A turn queued right behind another
+ * starts within moments of the last one's decision, so this stays well under a second.
+ */
+const CLOCK_SLACK_S = 0.5
 /** A turn whose start this window never saw: a decision this recent is taken as its own. */
 const UNSEEN_TURN_S = 30
 
