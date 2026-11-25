@@ -74,12 +74,33 @@ export function writeGroupByProfile(on: boolean): void {
   }
 }
 
+const DATE_DEFAULTS_KEY = 'conduit.chatList.dateSectionDefaults'
+/** The date sections closed until they're opened, as on the phone: Previous 7 days and Older. */
+export const DATE_SECTIONS_CLOSED_AT_FIRST = ['date:week', 'date:older']
+
+/**
+ * The closed sections: profiles by name, hosts as `host:<url>`, date
+ * sections as `date:<bucket>`. The first read closes the two oldest date
+ * sections, as the phone's first launch does; after that the list is the
+ * user's own.
+ */
 export function readClosedSections(): string[] {
+  let closed: string[] = []
   try {
     const list = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '[]')
-    return Array.isArray(list) ? list.filter((p): p is string => typeof p === 'string') : []
+    closed = Array.isArray(list) ? list.filter((p): p is string => typeof p === 'string') : []
   } catch {
-    return []
+    closed = []
+  }
+  try {
+    if (localStorage.getItem(DATE_DEFAULTS_KEY) === '1') return closed
+    closed = [...closed, ...DATE_SECTIONS_CLOSED_AT_FIRST.filter(key => !closed.includes(key))]
+    localStorage.setItem(DATE_DEFAULTS_KEY, '1')
+    localStorage.setItem(CLOSED_KEY, JSON.stringify(closed))
+    return closed
+  } catch {
+    // Storage is off: the defaults, for this window only.
+    return [...closed, ...DATE_SECTIONS_CLOSED_AT_FIRST.filter(key => !closed.includes(key))]
   }
 }
 

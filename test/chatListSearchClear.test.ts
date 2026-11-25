@@ -16,7 +16,7 @@ beforeEach(() => {
   )
 })
 
-const row = (id: string, title: string) => ({ id, title, activeAt: 1_000, pinned: false })
+const row = (id: string, title: string) => ({ id, title, activeAt: Date.now(), pinned: false })
 const type = (input: HTMLInputElement, text: string) => {
   // React reads the value through its own listener: set the DOM value the way a keystroke would.
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!

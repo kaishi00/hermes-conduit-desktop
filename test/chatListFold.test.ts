@@ -40,7 +40,7 @@ describe('folded chat-list groups', () => {
 
     act(() => root.render(createElement(ChatList as never, props({ selectedId: 'a' }) as never)))
     expect(host.textContent).toContain('Alpha')
-    expect(JSON.parse(localStorage.getItem('conduit.allProfiles.closedSections') ?? '[]')).toEqual([])
+    expect(JSON.parse(localStorage.getItem('conduit.allProfiles.closedSections') ?? '[]')).toEqual(['date:week', 'date:older'])
 
     // Folding the open chat's group again holds through the list's next refresh.
     act(() => (host.querySelector('button.sect') as HTMLButtonElement).click())
@@ -48,6 +48,31 @@ describe('folded chat-list groups', () => {
     act(() => root.render(createElement(ChatList as never, props({ rows: [row('a', 'Alpha'), row('b', 'Beta')], selectedId: 'a' }) as never)))
     expect(host.textContent).not.toContain('Alpha')
     act(() => root.unmount())
+  })
+
+  it('starts with the two oldest date groups closed, once', async () => {
+    const path = '../src/renderer/src/components/ChatList.tsx'
+    const { ChatList } = (await import(/* @vite-ignore */ path)) as { ChatList: unknown }
+    const day = 86_400_000
+    const rows = [row('a', 'Alpha'), row('b', 'Beta', Date.now() - 4 * day), row('c', 'Gamma', Date.now() - 40 * day)]
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    act(() => root.render(createElement(ChatList as never, props({ rows }) as never)))
+    expect(host.textContent).toContain('Alpha')
+    expect(host.textContent).not.toContain('Beta')
+    expect(host.textContent).not.toContain('Gamma')
+    // Opened by hand, they stay open on the next start.
+    for (const heading of [...host.querySelectorAll('button.sect')].slice(1)) act(() => (heading as HTMLButtonElement).click())
+    expect(host.textContent).toContain('Gamma')
+    act(() => root.unmount())
+    const again = document.createElement('div')
+    document.body.append(again)
+    const next = createRoot(again)
+    act(() => next.render(createElement(ChatList as never, props({ rows }) as never)))
+    expect(again.textContent).toContain('Beta')
+    expect(again.textContent).toContain('Gamma')
+    act(() => next.unmount())
   })
 
   it('keeps a folded group open for a Starred lookup, but not for a plain browse', async () => {
