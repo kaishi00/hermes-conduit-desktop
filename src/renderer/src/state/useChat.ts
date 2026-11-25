@@ -63,7 +63,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, newestPageItems, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
+import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, newestPageItems, newestPages, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
 import { knownChatLength, noteChatLength } from './chatLength'
 import { CATCH_UP_FOCUS_MS, CATCH_UP_RELOAD_MS, CATCH_UP_SETTLE_MS, catchUpStep, newestRowId, readOver, tipOf } from './chatCatchUp'
 
@@ -199,12 +199,13 @@ async function boundedOpen(
   storedId: string,
   profile: string | undefined
 ): Promise<OpenTranscript | null> {
-  const rows = await newestRows(http, storedId, profile)
+  const { rows, more } = await newestPages(http, storedId, profile)
   if (rows.length < LONG_CHAT_PAGE) return null
   const compact = { ...params, omit_messages: true }
   const result = await resumeSettled(compact)
   const stored = result.stored_session_id ?? storedId
-  const older = { offset: rows.length, more: rows.length >= LONG_CHAT_PAGE }
+  // A last page that came back short reached the chat's first row: nothing is asked for past it.
+  const older = { offset: rows.length, more }
   if (!result.running) return { result, rows, older }
   // Read again after its pages, so its turn and its rows are as they are now (longChat.ts).
   const settled = await settleRunning(() => gateway.rpc<ResumeResult>('session.resume', compact), held => rowsSince(http, held, stored, profile), result, rows)
@@ -1444,6 +1445,13 @@ export function useChat(storedId: string | null, profile: string | undefined, se
    * scrolling to the top of a chat opened bounded asks for it (longChat.ts). A
    * chat opened whole, or one whose pages are all drawn, does nothing.
    */
+  const gone = useRef(false)
+  useEffect(() => {
+    gone.current = false
+    return () => {
+      gone.current = true
+    }
+  }, [])
   const loadOlder = useCallback(async () => {
     const at = olderNow.current
     const stored = chatRef.current.storedId
@@ -1457,7 +1465,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       let next = at
       for (let page = 0; page < LONG_CHAT_PAGES && next.more; page++) {
         const got = await olderRows((method, path) => gateway.http(method, path), stored, profile, next.offset)
-        if (ticket !== request.current) return
+        // Another chat, a reload, or the pane closed: the rest of the pages are nobody's to draw.
+        if (ticket !== request.current || gone.current) return
         // The chat may have written since: a row the page serves twice is drawn once (transcript.ts).
         next = { offset: next.offset + got.rows.length, more: got.more }
         olderNow.current = next
@@ -1469,7 +1478,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     } catch {
       // The rows stay as they are; the next scroll to the top asks again.
     } finally {
-      // Still this read's line to end: a chat switch took it over, a reload of this chat (/undo, /retry) didn't.
+      // Still this read's line to end: a chat switch took it over, a reload of this chat (/undo, /retry, /compress, /compact) didn't.
       if (olderLoading.current === ticket) {
         olderLoading.current = null
         setLoadingOlder(false)
@@ -1483,21 +1492,29 @@ export function useChat(storedId: string | null, profile: string | undefined, se
    * pages before are read until it does or the chat has no more, starting once
    * the chat is open, so a jump asked for as its chat opens waits for it. The
    * caller jumps when its row turns up in the transcript; one wanted row at a
-   * time, the newest ask.
+   * time, the newest ask. `missed` runs when the chat has no page left and no
+   * such row. The answer drops the seek, so a jump no longer wanted stops
+   * the pages being read for it.
    */
-  const wanted = useRef<((items: readonly TranscriptItem[]) => boolean) | null>(null)
+  const wanted = useRef<{ found: (items: readonly TranscriptItem[]) => boolean; missed?: () => void } | null>(null)
   const seekMore = useCallback(() => {
-    const found = wanted.current
-    if (!found) return
-    if (found(transcriptRef.current.items)) wanted.current = null
+    const seek = wanted.current
+    if (!seek) return
+    if (seek.found(transcriptRef.current.items)) wanted.current = null
     // No pages to read: the chat's first row is in, or it opened whole (or too long to page back).
-    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null) wanted.current = null
-    else void loadOlder()
+    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null) {
+      wanted.current = null
+      seek.missed?.()
+    } else void loadOlder()
   }, [loadOlder, transcriptRef])
   const seekRow = useCallback(
-    (found: (items: readonly TranscriptItem[]) => boolean) => {
-      wanted.current = found
+    (found: (items: readonly TranscriptItem[]) => boolean, missed?: () => void) => {
+      const seek = { found, missed }
+      wanted.current = seek
       seekMore()
+      return () => {
+        if (wanted.current === seek) wanted.current = null
+      }
     },
     [seekMore]
   )
@@ -1507,10 +1524,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   return {
     /**
      * Whether the chat has stored rows before the ones it holds. While it opens, that isn't
-     * read yet: a chat long enough to open on its newest page is taken to have them, so the
-     * copy kept from its last open draws as it will once the open settles.
+     * read yet: a chat long enough to open on its newest page, or one whose length isn't
+     * known (it opens that way too, resumeChat), is taken to have them, so the copy kept
+     * from its last open draws as it will once the open settles.
      */
-    olderRows: older ? older.more : loading && !!chat.storedId && (knownChatLength(chat.storedId) ?? 0) >= LONG_CHAT_PAGE,
+    olderRows: older ? older.more : loading && !!chat.storedId && (knownChatLength(chat.storedId) ?? LONG_CHAT_PAGE) >= LONG_CHAT_PAGE,
     seekRow,
     transcriptStore,
     chat,

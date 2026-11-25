@@ -3,6 +3,7 @@ import {
   AuthError,
   absorbCookies,
   browserSession,
+  browserSignedOut,
   cookieHeader,
   isSignIn,
   isSignInPath,
@@ -337,6 +338,14 @@ describe('a dashboard behind Cloudflare Access', () => {
 describe('a dashboard behind a sign-in page', () => {
   const html = (status = 200) => new Response('<html>sign in</html>', { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   const redirect = (location: string) => new Response(null, { status: 302, headers: { Location: location } })
+
+  it('reads a redirect somewhere, or a 401, as signed out, and a 3xx with nowhere to go as not', () => {
+    expect(browserSignedOut(redirect('https://accounts.google.com/login'))).toBe(true)
+    expect(browserSignedOut(new Response(null, { status: 401 }))).toBe(true)
+    // Not Modified carries no Location: the cookies still pass.
+    expect(browserSignedOut(new Response(null, { status: 304 }))).toBe(false)
+    expect(browserSignedOut(new Response('{}', { status: 200 }))).toBe(false)
+  })
 
   it('knows a sign-in page as the phone does', () => {
     for (const path of ['/login', '/hermes/login', '/signin', '/sign_in', '/Sign-In', '/oauth2/start', '/oauth2/sign_in']) expect(isSignInPath(path), path).toBe(true)

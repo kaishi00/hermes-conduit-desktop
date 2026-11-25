@@ -13,7 +13,7 @@ import type { ExpiredQuestion } from '../state/expiredQuestions'
 import { Icon, type IconName } from './icons'
 import { JumpToLatest } from './JumpToLatest'
 import { atEnd } from '../state/scrollEnd'
-import { heldStart, nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowKey, rowWindow, startAt } from '../state/rowWindow'
+import { heldStart, nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowKey, rowWindow, scrollStep, startAt } from '../state/rowWindow'
 import { WorkLinkCard, WorkLinks } from './WorkLinkCard'
 import { linkNamedRefs, linkSessionRefs, splitWorkLinks } from '../state/workLinks'
 import { Markdown, StreamingMarkdown } from './Markdown'
@@ -23,7 +23,8 @@ import { readDataUrlPath } from '../state/gatewayPictures'
 import { saveHostFile, sayIfFailed } from '../state/saveMedia'
 import { formatDate, locale, t } from '@shared/i18n'
 import { blockquote, copyableReply, excerpt, parseReplyEnvelope, sameQuotedText, type QuoteRequest } from '../state/quote'
-import { BoardView } from './BoardView'
+import { BoardFollowUps, BoardView } from './BoardView'
+import { placeBoards, sameBoards, type PlacedBoard } from '../state/boards'
 import { DEFAULT_DISPLAY, type ChatDisplay } from '../state/display'
 import { readAloud, stopReading, useReadingKey } from '../state/readAloud'
 import { VOICE_FILE_PREFIX, parseVoiceMessage } from '../state/voice'
@@ -460,7 +461,16 @@ function AttachmentChips({ attachments }: { attachments: Attachment[] }) {
 }
 
 /** A reply's Markdown, with each `MEDIA:` file as a card where the tag stood. */
-export const Reply = memo(function Reply({ text, streaming = false }: { text: string; streaming?: boolean }) {
+export const Reply = memo(function Reply({
+  text,
+  streaming = false,
+  boards
+}: {
+  text: string
+  streaming?: boolean
+  /** The boards its `::conduit-board` lines place, drawn where the lines are (boards.ts placeBoards). */
+  boards?: readonly PlacedBoard[]
+}) {
   // Its links to its work become cards under it, and Hermes' references to chats links to them (workLinks).
   const links = useContext(WorkLinks)
   // Only where a card can open its chat: elsewhere (a chat beside, a window, a room) the reply stays as written.
@@ -471,7 +481,8 @@ export const Reply = memo(function Reply({ text, streaming = false }: { text: st
     const referred = linkSessionRefs(words, links.titleOf, t('Open chat'))
     return links.chatOf ? linkNamedRefs(referred, links.chatOf) : referred
   }, [split, text, links])
-  const blocks = useMemo(() => splitReply(shown), [shown])
+  const boardIds = boards?.map(board => board.id).join(' ') ?? ''
+  const blocks = useMemo(() => splitReply(shown, boardIds ? new Set(boardIds.split(' ')) : undefined), [shown, boardIds])
   // While it streams, its markdown parses in blocks, only the open last one again per delta (desktop#198).
   const Text = streaming ? StreamingMarkdown : Markdown
   return (
@@ -479,6 +490,8 @@ export const Reply = memo(function Reply({ text, streaming = false }: { text: st
       {blocks.map((block, i) =>
         block.kind === 'markdown' ? (
           <Text key={i} text={block.text} />
+        ) : block.kind === 'board' ? (
+          <PlacedBoardView key={block.id} board={boards?.find(board => board.id === block.id)} />
         ) : block.kind === 'preview' ? (
           <PagePreview key={i} path={block.path} name={baseName(block.path)} fallback={<FileCard path={block.path} />} />
         ) : mediaKind(block.path) === 'image' ? (
@@ -502,7 +515,17 @@ export const Reply = memo(function Reply({ text, streaming = false }: { text: st
       ) : null}
     </>
   )
-})
+}, sameReply)
+
+/** A reply redraws for its words or its boards, not for a new list of the same boards. */
+function sameReply(a: { text: string; streaming?: boolean; boards?: readonly PlacedBoard[] }, b: typeof a): boolean {
+  return a.text === b.text && a.streaming === b.streaming && sameBoards(a.boards, b.boards)
+}
+
+/** A board where its reply's line placed it; its follow-ups go under the reply. */
+function PlacedBoardView({ board }: { board?: PlacedBoard }) {
+  return board ? <BoardView board={board.board} /> : null
+}
 
 export function clock(ms?: number): string {
   return ms ? formatDate(ms, { hour: 'numeric', minute: '2-digit' }) : ''
@@ -549,6 +572,10 @@ interface ItemProps {
   onEdit?: () => void
   /** A board's follow-up, sent as the user's message: on the last turn's last board. */
   onFollowUp?: (text: string) => void
+  /** On a reply: the boards its `::conduit-board` lines place, drawn where the lines are. */
+  boards?: readonly PlacedBoard[]
+  /** On a reply: the follow-ups of the board it placed, while that is the last turn's last board. */
+  followUps?: string[]
   /** ⋯'s Show thinking or Hide thinking, on a reply while Thinking is On request. */
   thinkingToggle?: { label: string; onSelect: () => void }
   /** Settings > Chat > Keep tool cards expanded. */
@@ -706,6 +733,8 @@ function sameItemProps(a: ItemProps, b: ItemProps): boolean {
     a.jump === b.jump &&
     a.face === b.face &&
     a.newest === b.newest &&
+    sameBoards(a.boards, b.boards) &&
+    a.followUps === b.followUps &&
     sameTeammates(a.teammates, b.teammates) &&
     a.thinkingToggle?.label === b.thinkingToggle?.label &&
     a.pinToggle?.label === b.pinToggle?.label &&
@@ -731,6 +760,8 @@ const Item = memo(function Item({
   onRetry,
   onEdit,
   onFollowUp,
+  boards,
+  followUps,
   thinkingToggle,
   expandTools,
   onOpenCall,
@@ -807,7 +838,8 @@ const Item = memo(function Item({
               {t('Hermes followed up')}
             </span>
           ) : null}
-          <Reply text={item.text} streaming={item.streaming} />
+          <Reply text={item.text} streaming={item.streaming} boards={boards} />
+          {onFollowUp && followUps?.length ? <BoardFollowUps next={followUps} onFollowUp={onFollowUp} /> : null}
           <ReactionChips reactions={item.reactions ?? []} author={author} onPick={onReact} />
           {!item.streaming && item.text.trim() ? (
             <ReplyActions
@@ -1110,8 +1142,11 @@ export function Transcript({
   loadingOlder?: boolean
   /** Whether the chat has stored rows before the ones it holds: a call from before them is drawn once its page is read. */
   olderRows?: boolean
-  /** Reads the pages before until `found` says the chat holds the row a jump is after (useChat's seekRow). */
-  onSeekRow?: (found: (items: readonly TranscriptItem[]) => boolean) => void
+  /**
+   * Reads the pages before until `found` says the chat holds the row a jump is after (useChat's seekRow);
+   * `missed` runs when the chat has no page left and no such row. The answer drops the seek.
+   */
+  onSeekRow?: (found: (items: readonly TranscriptItem[]) => boolean, missed?: () => void) => (() => void) | void
 }) {
   const [thinkingShown, setThinkingShown] = useState(false)
   const showsThinking = display.thinking === 'show' || (display.thinking === 'on_request' && thinkingShown)
@@ -1122,6 +1157,8 @@ export function Transcript({
   // A chat with stored rows before the ones it holds draws a call once its page is read:
   // the first stored row's time, whether or not that row is drawn.
   const heldFrom = useMemo(() => (olderRows ? firstTime(state.items) : undefined), [olderRows, state.items])
+  // A board its reply's line places is drawn there, and its own row draws nothing (phone issue 3215).
+  const placement = useMemo(() => placeBoards(state.items), [state.items])
   const shown = useMemo(
     () =>
       withCalls(
@@ -1133,14 +1170,16 @@ export function Transcript({
             ? showsThinking
             : item.kind === 'tool' && !item.board
               ? display.toolCards
-              : item.kind === 'review'
-                ? display.showReviews
-                : true
+              : item.kind === 'tool'
+                ? !placement.hidden.has(item.key)
+                : item.kind === 'review'
+                  ? display.showReviews
+                  : true
         ),
         calls ?? [],
         heldFrom
       ),
-    [state.items, showsThinking, display.toolCards, display.showReviews, calls, heldFrom]
+    [state.items, showsThinking, display.toolCards, display.showReviews, calls, heldFrom, placement]
   )
   const rows = useMemo(() => foldRuns(shown), [shown])
   // A chat past a window's worth of rows draws a window of them — its newest, and the
@@ -1196,18 +1235,18 @@ export function Transcript({
     const el = scroller.current
     if (!el) return
     const onScroll = () => {
-      // A jump to a row is on its way there: the window it drew stays, and nothing follows the end.
-      if (performance.now() < jumpUntil.current) return void (pinned.current = false)
-      pinned.current = atEnd(el)
       const { rows: thisFrame, start: from, scrolledUp } = liveRows.current
-      if (pinned.current) {
-        // Only a window the reader scrolled up gives rows back: at the bottom every
-        // scroll (a streaming reply's each frame) would otherwise draw the chat again.
-        if (scrolledUp) setWindowed(windowAt(null))
-      } else if (nearTop(el.scrollTop)) {
-        if (from !== 0) setWindowed(windowAt(olderStart(from, thisFrame.length)))
-        else older.current?.()
-      }
+      const step = scrollStep({
+        jumping: performance.now() < jumpUntil.current,
+        atEnd: atEnd(el),
+        scrollTop: el.scrollTop,
+        start: from,
+        count: thisFrame.length,
+        scrolledUp
+      })
+      pinned.current = step.follows
+      if (step.start !== undefined) setWindowed(windowAt(step.start))
+      if (step.older) older.current?.()
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
@@ -1390,25 +1429,32 @@ export function Transcript({
   }, [pinList, state.items, state.running, refreshPins])
   // A pin from the bar whose reply is in a page not read yet: it jumps once that page is (desktop#486).
   const [barReveal, setBarReveal] = useState<{ id: string; passage?: string } | null>(null)
+  const listReveal = pins?.reveal
+  const onRevealed = pins?.onRevealed
   const jumpToPin = (pin: { id: string; passage?: string }) => {
     if (!pinKeys.has(pin.id) && onSeekRow) return setBarReveal({ id: pin.id, passage: pin.passage })
-    // This jump is the one asked for now: a pin still being read for doesn't take the reader away later.
+    // This jump is the one asked for now: a pin still being read for, from the bar or the pins list, doesn't take the reader away later.
     setBarReveal(null)
+    if (listReveal) onRevealed?.()
     pinned.current = false
     if (pin.passage) revealPassage(scroller.current, pinKeys.get(pin.id), pin.passage)
     else revealMessage(scroller.current, pinKeys.get(pin.id))
   }
   // A pin opened from the list, or from the bar, scrolls to its reply once the chat has it;
   // a chat opened on its newest stored page reads the pages before for it.
-  const listReveal = pins?.reveal
   const reveal = listReveal ?? barReveal
-  const onRevealed = pins?.onRevealed
+  /** Drops the seek the last reveal asked for, so its pages stop being read once it is no longer wanted. */
+  const dropSeek = useRef<(() => void) | null>(null)
   useEffect(() => {
+    dropSeek.current?.()
+    dropSeek.current = null
     if (!reveal || loading) return
     const key = pinKeys.get(reveal.id)
     if (!key) {
       const pin = pinList?.find(p => p.id === reveal.id)
-      if (pin) onSeekRow?.(items => resolved([pin], items as TranscriptItem[]).has(pin.id))
+      // A bar pin whose reply no page holds (deleted since) stops waiting; the pins list's is its chat's to end.
+      const missed = listReveal ? undefined : () => setBarReveal(current => (current?.id === reveal.id ? null : current))
+      if (pin) dropSeek.current = onSeekRow?.(items => resolved([pin], items as TranscriptItem[]).has(pin.id), missed) ?? null
       else if (!listReveal) setBarReveal(null)
       return
     }
@@ -1420,6 +1466,20 @@ export function Transcript({
   }, [reveal, listReveal, pinKeys, pinList, loading, onRevealed, onSeekRow])
   // Another chat: a bar pin still being read for isn't this chat's.
   useEffect(() => setBarReveal(null), [chatKey])
+  // A pin opened from the pins list is the jump asked for now: one from the bar still being read for gives way.
+  useEffect(() => {
+    if (listReveal) setBarReveal(null)
+  }, [listReveal])
+
+  // The follow-ups of a board its reply placed go under that reply, while it is the last turn's last board.
+  const placedFollowUp = useMemo(() => {
+    if (!actions.followUpKey || !placement.hidden.has(actions.followUpKey)) return undefined
+    for (const [reply, boards] of placement.placed) {
+      const board = boards.find(placed => placed.key === actions.followUpKey)
+      if (board) return { reply, next: board.board.next }
+    }
+    return undefined
+  }, [placement, actions.followUpKey])
 
   // What reactionTarget allows, without a walk of the chat per reply.
   const newestReply = useMemo(() => state.items.findLast(i => i.kind === 'assistant')?.key, [state.items])
@@ -1436,7 +1496,9 @@ export function Transcript({
       jump={jump}
       onRetry={actions.retryKey.has(item.key) ? stable.retry : undefined}
       onEdit={actions.editTurns.has(item.key) ? forItem(item.key).edit : undefined}
-      onFollowUp={actions.followUpKey === item.key && onCommand ? stable.command : undefined}
+      onFollowUp={(actions.followUpKey === item.key || placedFollowUp?.reply === item.key) && onCommand ? stable.command : undefined}
+      boards={item.kind === 'assistant' ? placement.placed.get(item.key) : undefined}
+      followUps={placedFollowUp?.reply === item.key ? placedFollowUp.next : undefined}
       thinkingToggle={item.kind === 'assistant' ? thinkingToggle : undefined}
       expandTools={display.expandTools}
       onOpenCall={onOpenCall ? stable.openCall : undefined}

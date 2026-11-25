@@ -90,6 +90,16 @@ export function hostOrder(response: unknown): string[] | null {
   return [...new Set(ids)]
 }
 
+/** `orders` without `row`'s place; the same orders when it had none. */
+export function without(orders: PinnedOrders, row: ChatRow): PinnedOrders {
+  const profile = profileOf(row)
+  const id = pinIdOf(row)
+  const mine = orders.byProfile[profile] ?? []
+  const key = mixedKey(row)
+  if (!mine.includes(id) && !orders.mixed.includes(key)) return orders
+  return { byProfile: { ...orders.byProfile, [profile]: mine.filter(x => x !== id) }, mixed: orders.mixed.filter(k => k !== key) }
+}
+
 export const prefsPath = (profile: string) => (profile && profile !== 'default' ? `${PREFS_PATH}?profile=${encodeURIComponent(profile)}` : PREFS_PATH)
 
 const storageKey = (host: string) => `conduit.pinnedChatOrder.${host}`
@@ -133,6 +143,32 @@ type Http = (method: 'GET' | 'PUT', path: string, body?: unknown) => Promise<unk
 
 export const DEVICE_NAME = 'Conduit for desktop'
 
+/** Sent on the window when a host's saved orders changed outside the list, with the host: the list reads them again. */
+export const ORDERS_CHANGED = 'conduit:pinned-order'
+
+const sendOrder = (http: Http, name: string, ids: string[] | undefined) =>
+  void http('PUT', prefsPath(name), {
+    installation_id: installationId(),
+    device: DEVICE_NAME,
+    changes: { [SYNC_KEY]: ids?.length ? ids : null }
+  }).catch(() => undefined)
+
+/**
+ * A chat unpinned or archived from outside the list (the open chat's header
+ * menu) leaves the saved order as one unpinned from its row does, so pinning
+ * it again puts it on top (desktop#503): saved here, sent to the host when
+ * its profile's order changed, and the list is told to read it again.
+ */
+export function dropFromSavedOrder(host: string, row: ChatRow, http: Http): void {
+  const orders = loadOrders(host)
+  const next = without(orders, row)
+  if (next === orders) return
+  saveOrders(host, next)
+  const profile = profileOf(row)
+  if ((orders.byProfile[profile] ?? []).length !== (next.byProfile[profile] ?? []).length) sendOrder(http, row.profile || profile, next.byProfile[profile])
+  window.dispatchEvent(new CustomEvent(ORDERS_CHANGED, { detail: host }))
+}
+
 /**
  * The host's orders for the list: read from this computer, then each
  * profile with pinned chats takes the host's synced copy once per launch,
@@ -145,6 +181,12 @@ export function usePinnedOrder(host: string, rows: ChatRow[] | null, http: Http)
   useEffect(() => {
     setOrders(loadOrders(host))
     asked.current = new Set()
+    // The open chat's header menu changed what's saved (dropFromSavedOrder).
+    const changed = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === host) setOrders(loadOrders(host))
+    }
+    window.addEventListener(ORDERS_CHANGED, changed)
+    return () => window.removeEventListener(ORDERS_CHANGED, changed)
   }, [host])
   // Each profile's name as Hermes lists it, for its synced copy's address; orders are kept by its lowercase.
   const names = useRef(new Map<string, string>())
@@ -178,12 +220,7 @@ export function usePinnedOrder(host: string, rows: ChatRow[] | null, http: Http)
   }, [host, profiles, http])
   const send = useCallback(
     (next: PinnedOrders, changed: string[]) => {
-      for (const profile of changed)
-        void http('PUT', prefsPath(nameOf(profile)), {
-          installation_id: installationId(),
-          device: DEVICE_NAME,
-          changes: { [SYNC_KEY]: next.byProfile[profile]?.length ? next.byProfile[profile] : null }
-        }).catch(() => undefined)
+      for (const profile of changed) sendOrder(http, nameOf(profile), next.byProfile[profile])
     },
     [http]
   )
@@ -200,15 +237,12 @@ export function usePinnedOrder(host: string, rows: ChatRow[] | null, http: Http)
   /** An unpinned chat leaves the order, so pinning it again puts it on top. */
   const drop = useCallback(
     (row: ChatRow) => {
+      const next = without(orders, row)
+      if (next === orders) return
       const profile = profileOf(row)
-      const id = pinIdOf(row)
-      const mine = orders.byProfile[profile] ?? []
-      const key = mixedKey(row)
-      if (!mine.includes(id) && !orders.mixed.includes(key)) return
-      const next = { byProfile: { ...orders.byProfile, [profile]: mine.filter(x => x !== id) }, mixed: orders.mixed.filter(k => k !== key) }
       setOrders(next)
       saveOrders(host, next)
-      if (mine.includes(id)) send(next, [profile])
+      if ((orders.byProfile[profile] ?? []).includes(pinIdOf(row))) send(next, [profile])
     },
     [orders, host, send]
   )

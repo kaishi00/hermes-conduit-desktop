@@ -12,12 +12,14 @@ import {
   budgets,
   checkTitle,
   dayIn,
+  excludedAfter,
   kindTitle,
   nextTime,
   nudgeDetail,
   nudgeTitle,
   parseMemory,
   parseSettings,
+  profileChoices,
   sortedKinds,
   weekdays,
   type MemoryItem,
@@ -35,7 +37,16 @@ const NOTE_LIMIT = 1500
  * scenes. Each change saves at once, as the phone's does; the note saves on
  * Save.
  */
-export function PulseSettings({ onBack, onChanged }: { onBack: () => void; onChanged: () => void }) {
+export function PulseSettings({
+  onBack,
+  onChanged,
+  bots
+}: {
+  onBack: () => void
+  onChanged: () => void
+  /** The host's bots, to name the profile Pulse runs in as the rest of the app does. */
+  bots?: readonly { name: string; title: string }[] | null
+}) {
   useMouseBack(onBack)
   // Opens on Pulse's state as it last answered on this dashboard (Screens that open on their last answer).
   const [state, setState] = useState<State | null>(() => {
@@ -127,6 +138,7 @@ export function PulseSettings({ onBack, onChanged }: { onBack: () => void; onCha
   const today = dayIn(zone, Date.now())
   const computerZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const remembered = Object.values(state.memoryCounts).reduce((a, b) => a + b, 0)
+  const leaveOut = profileChoices(state)
 
   return (
     <div className="pset">
@@ -352,9 +364,34 @@ export function PulseSettings({ onBack, onChanged }: { onBack: () => void; onCha
                 onChange={picked => void change({ report_profiles: picked })}
               >
                 <option value="all">{t('Every profile')}</option>
-                <option value="this">{t('This profile only')}</option>
+                {/* Named: it is the profile Pulse runs in, whichever one the app is on (hermes-conduit issue 3241). */}
+                <option value="this">{t('Only {name}', { name: bots?.find(b => b.name === state.profile)?.title ?? state.profile })}</option>
               </Select>
             </div>
+            {leaveOut.length > 0 ? (
+              <>
+                {/* While it reads every profile, single ones can be left out (hermes-conduit issue 3241). */}
+                <div className="pset-leave-out" role="group" aria-label={t('Leave out')}>
+                  <span className="meta">{t('Leave out')}</span>
+                  {leaveOut.map(choice => (
+                    <label className="toggle" key={choice.name}>
+                      <input
+                        type="checkbox"
+                        checked={choice.leftOut}
+                        disabled={saving}
+                        onChange={e => void change({ excluded_profiles: excludedAfter(state, choice.name, e.target.checked) })}
+                      />
+                      {bots?.find(b => b.name === choice.name)?.title ?? choice.name}
+                    </label>
+                  ))}
+                </div>
+                <p className="meta">
+                  {t(
+                    "Pulse doesn't read the chats, memories or scheduled jobs of a profile you leave out. What it already remembers from one stays until you remove it."
+                  )}
+                </p>
+              </>
+            ) : null}
             <label className="toggle">
               <input type="checkbox" checked={state.memory} disabled={saving} onChange={e => void change({ memory: e.target.checked })} />
               {t('Memory')}

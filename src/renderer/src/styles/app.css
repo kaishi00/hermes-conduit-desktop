@@ -5640,6 +5640,15 @@ code.file-link:hover {
   resize: vertical;
 }
 
+/* The profiles Pulse can leave out, under the Profiles choice. */
+.pset-leave-out {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 24px;
+  font-size: 14px;
+}
+
 .pset-times {
   display: flex;
   flex-direction: column;

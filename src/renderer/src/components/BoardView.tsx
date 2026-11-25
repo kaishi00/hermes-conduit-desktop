@@ -34,15 +34,20 @@ export function BoardView({ board, onFollowUp }: { board: Board; onFollowUp?: (t
           <Markdown text={board.markdown} />
         </div>
       ) : null}
-      {onFollowUp && board.next.length ? (
-        <div className="shown-next">
-          {board.next.map(next => (
-            <button key={next} className="chip" onClick={() => onFollowUp(next)}>
-              {next}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {onFollowUp && board.next.length ? <BoardFollowUps next={board.next} onFollowUp={onFollowUp} /> : null}
+    </div>
+  )
+}
+
+/** A board's follow-ups: under the board at its own row, or under the reply that placed it. */
+export function BoardFollowUps({ next, onFollowUp }: { next: string[]; onFollowUp: (text: string) => void }) {
+  return (
+    <div className="shown-next">
+      {next.map(text => (
+        <button key={text} className="chip" onClick={() => onFollowUp(text)}>
+          {text}
+        </button>
+      ))}
     </div>
   )
 }

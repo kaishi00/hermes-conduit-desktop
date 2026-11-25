@@ -1,5 +1,26 @@
-import { describe, expect, it } from 'vitest'
-import { arrangePinned, EDGE_MAX_STEP, EDGE_ZONE, edgeScrollDecision, edgeScrollStep, hostOrder, moved, ordered, pinIdOf, prefsPath, type PinnedOrders } from '../src/renderer/src/state/pinnedOrder'
+// @vitest-environment happy-dom
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act } from 'react'
+import { renderHook } from './hookHarness'
+import {
+  arrangePinned,
+  dropFromSavedOrder,
+  EDGE_MAX_STEP,
+  EDGE_ZONE,
+  edgeScrollDecision,
+  edgeScrollStep,
+  hostOrder,
+  loadOrders,
+  moved,
+  ordered,
+  pinIdOf,
+  prefsPath,
+  saveOrders,
+  SYNC_KEY,
+  usePinnedOrder,
+  without,
+  type PinnedOrders
+} from '../src/renderer/src/state/pinnedOrder'
 import type { ChatRow } from '../src/renderer/src/state/chats'
 
 const row = (id: string, profile?: string, lineageRoot?: string): ChatRow => ({ id, title: id, pinned: true, profile, lineageRoot })
@@ -71,5 +92,38 @@ describe('edge scrolling while dragging', () => {
   })
   it('does nothing in a list too short to have a middle', () => {
     expect(edgeScrollStep(10, 0, 0)).toBe(0)
+  })
+})
+
+describe("a chat unpinned or archived from the open chat's menu (desktop#503)", () => {
+  const host = 'https://hermes.example.com'
+  beforeEach(() => localStorage.clear())
+
+  it('leaves the saved order, and orders without it are left as they are', () => {
+    const orders: PinnedOrders = { byProfile: { default: ['a', 'b'], furina: ['f1'] }, mixed: ['default\u001fa', 'furina\u001ff1', 'default\u001fb'] }
+    expect(without(orders, row('a'))).toEqual({ byProfile: { default: ['b'], furina: ['f1'] }, mixed: ['furina\u001ff1', 'default\u001fb'] })
+    expect(without(orders, row('zz'))).toBe(orders)
+  })
+
+  it('saves it here, sends the profile to the host, and the list reads it again', async () => {
+    saveOrders(host, { byProfile: { furina: ['f1', 'f2'] }, mixed: [] })
+    const http = vi.fn(async (_method: 'GET' | 'PUT', _path: string, _body?: unknown) => ({}))
+    const list = renderHook(() => usePinnedOrder(host, [], http), undefined)
+    expect(list.result().orders.byProfile.furina).toEqual(['f1', 'f2'])
+    act(() => dropFromSavedOrder(host, row('f1', 'Furina'), http))
+    expect(loadOrders(host).byProfile.furina).toEqual(['f2'])
+    expect(list.result().orders.byProfile.furina).toEqual(['f2'])
+    expect(http).toHaveBeenCalledWith('PUT', prefsPath('Furina'), expect.objectContaining({ changes: { [SYNC_KEY]: ['f2'] } }))
+    // A chat with no place in the order changes nothing and sends nothing.
+    http.mockClear()
+    act(() => dropFromSavedOrder(host, row('other', 'Furina'), http))
+    expect(http).not.toHaveBeenCalled()
+    // Another dashboard's list doesn't read this one's change.
+    const elsewhere = renderHook(() => usePinnedOrder('https://other.example.com', [], http), undefined)
+    act(() => dropFromSavedOrder(host, row('f2', 'Furina'), http))
+    expect(elsewhere.result().orders.byProfile.furina).toBeUndefined()
+    expect(http).toHaveBeenCalledWith('PUT', prefsPath('Furina'), expect.objectContaining({ changes: { [SYNC_KEY]: null } }))
+    list.unmount()
+    elsewhere.unmount()
   })
 })

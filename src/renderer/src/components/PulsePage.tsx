@@ -50,6 +50,8 @@ interface Props {
   /** Combined dashboards: a chip per host, the one shown picked; another shows that host's feed in place (a docked frame on its kept connection). */
   chips?: PulseChip[]
   onPickHost?: (url: string) => void
+  /** The host's bots, for Pulse's settings to name its profile. */
+  bots?: readonly { name: string; title: string }[] | null
 }
 
 type Menu = { kind: 'down' | 'later'; card: PulseCard; x: number; y: number }
@@ -59,7 +61,7 @@ type Menu = { kind: 'down' | 'later'; card: PulseCard; x: number; y: number }
  * earlier cards, and Done and cleared, each card with its Why?, Do it, Done,
  * Not now and thumbs. Opening it marks every card seen.
  */
-export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHost }: Props) {
+export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHost, bots }: Props) {
   const { feed, error, availability } = pulse
   const language = locale()
   // The cards unseen when the screen opened stay New until it's left.
@@ -434,7 +436,7 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
         {view !== 'feed' ? (
           <div className="needs-inner">
             {view === 'settings' ? (
-              <PulseSettings onBack={() => setView('feed')} onChanged={() => void pulse.reload()} />
+              <PulseSettings onBack={() => setView('feed')} onChanged={() => void pulse.reload()} bots={bots} />
             ) : view === 'learned' ? (
               <PulseLearnedView onBack={() => setView('feed')} onChanged={() => void pulse.reload()} />
             ) : (

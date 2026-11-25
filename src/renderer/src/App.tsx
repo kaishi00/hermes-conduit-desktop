@@ -58,7 +58,7 @@ import { forgetChatLists } from './state/savedChatList'
 import { forgetKeptAnswers, setKeptAnswersHost } from './state/keptAnswers'
 import { forgetHostCaches } from './state/hostCaches'
 import { keepTabs, launchPage, syncedTabs, type LaunchPage } from './state/launchTab'
-import { PREFS_PATH } from './state/pinnedOrder'
+import { dropFromSavedOrder, PREFS_PATH } from './state/pinnedOrder'
 import { useFollowUps, usePredictions } from './state/usePredictions'
 import { SummaryHost } from './state/useStepSummaries'
 import { chatDraft, composerDrafts } from './state/composerDrafts'
@@ -1327,8 +1327,17 @@ function Shell({
   const headerMenu =
     openRow && section === 'chats' && !dockedChat
       ? chatMenuItems(openRow, {
-          archive: connected ? () => void changeArchived(openRow, true) : undefined,
-          pin: () => void chatAction(openRow, { pinned: !openRow.pinned }),
+          // An unpinned or archived chat leaves the saved pinned order, as from its row's menu (desktop#503).
+          archive: connected
+            ? () =>
+                void changeArchived(openRow, true).then(archived => {
+                  if (archived && openRow.pinned) dropFromSavedOrder(markHost, openRow, prefsHttp)
+                })
+            : undefined,
+          pin: () => {
+            if (openRow.pinned) dropFromSavedOrder(markHost, openRow, prefsHttp)
+            void chatAction(openRow, { pinned: !openRow.pinned })
+          },
           star: { on: isStarred(marks, openRow), toggle: () => updateMarks(current => toggleStar(current, openRow)) },
           done: chatDone.available ? { on: isRowDone(openRow), toggle: () => chatDone.toggle(openRow) } : undefined,
           mute: chatMute.available ? { now: rowMute(openRow), set: seconds => chatMute.setMute(openRow, seconds) } : undefined,
@@ -2856,6 +2865,7 @@ function Shell({
             onOpenBoard={() => setSection('tasks')}
             chips={pulseHostChips}
             onPickHost={pickPulseHost}
+            bots={glowBots}
           />
         ) : section === 'room' && shownCopy && shownCopyRoom ? (
           <RoomView
@@ -2955,6 +2965,7 @@ function Shell({
               onEditHost(host)
             }}
             bots={(roster.bots ?? []).map(bot => ({ name: bot.name, title: bot.title }))}
+            pulseBots={glowBots}
             profile={settingsProfile}
             profileTiles={profileTiles ?? []}
             tileBadge={tileBadge}
@@ -3081,6 +3092,7 @@ function Settings({
   onAddHost,
   onEditHost,
   bots,
+  pulseBots,
   profile,
   profileTiles,
   tileBadge,
@@ -3108,6 +3120,8 @@ function Settings({
   onAddHost: () => void
   onEditHost: (host: HostSummary) => void
   bots: { name: string; title: string }[]
+  /** Every bot, hidden ones too: Pulse can run in a hidden bot's profile, and its settings name it. */
+  pulseBots: readonly { name: string; title: string }[]
   profile: string
   /** Every profile Settings can switch to, every combined dashboard's included, in the Chats list's order. */
   profileTiles: readonly MixedTile[]
@@ -3303,7 +3317,7 @@ function Settings({
   if (page === 'pulse')
     return (
       <SettingsPane pane={pane}>
-        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} />
+        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} bots={pulseBots} />
       </SettingsPane>
     )
   if (page === 'chat')

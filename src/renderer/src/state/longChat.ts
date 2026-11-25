@@ -61,14 +61,26 @@ export async function newestRows(
   profile?: string,
   enough: (rows: HistoryRow[]) => boolean = hasWords
 ): Promise<HistoryRow[]> {
+  return (await newestPages(http, storedId, profile, enough)).rows
+}
+
+/** `newestRows`, and whether the chat has rows before them: the last page read came back full. */
+export async function newestPages(
+  http: Http,
+  storedId: string,
+  profile?: string,
+  enough: (rows: HistoryRow[]) => boolean = hasWords
+): Promise<{ rows: HistoryRow[]; more: boolean }> {
   let rows: HistoryRow[] = []
+  let more = false
   for (let page = 0; page < LONG_CHAT_PAGES; page++) {
     const answer = (await http('GET', pagePath(storedId, profile, page * LONG_CHAT_PAGE))) as { messages?: unknown } | null
     const got = Array.isArray(answer?.messages) ? (answer.messages as HistoryRow[]).map(storedRow) : []
     rows = joinRows(got, rows)
-    if (got.length < LONG_CHAT_PAGE || enough(rows)) break
+    more = got.length === LONG_CHAT_PAGE
+    if (!more || enough(rows)) break
   }
-  return rows
+  return { rows, more }
 }
 
 /**

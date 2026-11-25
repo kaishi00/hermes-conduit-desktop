@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { boardFrom, dialable, mailtoLink, people, share, smsLink, textRecipient } from '../src/renderer/src/state/boards'
+import { boardFrom, dialable, mailtoLink, people, placeBoards, sameBoards, share, smsLink, textRecipient } from '../src/renderer/src/state/boards'
+import { splitReply } from '../src/renderer/src/state/media'
 
 const stats = { type: 'stats', title: 'Today', stats: [{ label: 'Steps', value: '8,412' }] }
 const map = { type: 'map', title: 'Route', places: [] }
@@ -59,5 +60,62 @@ describe('boards', () => {
     expect(smsLink('+447700900123')).toBe('sms:+447700900123')
     expect(smsLink('a@b.c&body=hi')).toBe('sms:a@b.c%26body%3Dhi')
     expect(mailtoLink('a@b.c?cc=x')).toBe('mailto:a@b.c%3Fcc%3Dx')
+  })
+
+  // Phone issue 3215: conduit_show's answer names its board's line, and a reply that writes it draws the board there.
+  const id = 'cb-0123456789ab'
+  const line = `::conduit-board{id="${id}"}`
+  const shown = boardFrom('conduit_show', { ok: true, directive: line, cards: [stats], next: ['More'], markdown: '**Today**' }, undefined)!
+  const user = { kind: 'user', key: 'u1', text: 'Compare them' }
+  const row = { kind: 'tool', key: 't1', board: shown }
+  const reply = (key: string, text: string) => ({ kind: 'assistant', key, text })
+
+  it('reads the line a board’s answer names', () => {
+    expect(shown.line).toBe(id)
+    expect(boardFrom('conduit_show', { ok: true, cards: [stats] }, undefined)!.line).toBeUndefined()
+    expect(boardFrom('conduit_show', { ok: true, directive: '::conduit-board{id="nope"}', cards: [stats] }, undefined)!.line).toBeUndefined()
+  })
+
+  it('gives a board to the reply of its turn that writes its line, and leaves its row out', () => {
+    const placement = placeBoards([user, row, reply('a1', `First the plan.\n\n${line}\n\nThen the rest.`)])
+    expect([...placement.hidden]).toEqual(['t1'])
+    expect(placement.placed.get('a1')).toEqual([{ id, board: shown, key: 't1' }])
+    // While the line is still being written the board stays at its row.
+    expect(placeBoards([user, row, reply('a1', 'First the plan.\n\n::conduit-board{id="cb-0123')]).hidden.size).toBe(0)
+    // The first reply of the turn to name it takes it.
+    const twice = placeBoards([user, row, reply('a1', line), reply('a2', `Again ${line}`)])
+    expect([...twice.placed.keys()]).toEqual(['a1'])
+  })
+
+  it('leaves a board at its row without the line, for a later turn’s line, or for an example', () => {
+    expect(placeBoards([user, row, reply('a1', 'Here it is.')]).hidden.size).toBe(0)
+    expect(placeBoards([user, row, reply('a1', 'Here.'), { kind: 'user', key: 'u2', text: 'And?' }, reply('a2', line)]).hidden.size).toBe(0)
+    for (const example of ['```\n' + line + '\n```', `> ${line}`, `\`${line}\``, `| ${line} | x |`])
+      expect(placeBoards([user, row, reply('a1', example)]).hidden.size).toBe(0)
+  })
+
+  it('cuts the reply where the line was, the words on that line before the board', () => {
+    const boards = new Set([id])
+    expect(splitReply(`First the plan.\n\n${line}\n\nThen the rest.`, boards)).toEqual([
+      { kind: 'markdown', text: 'First the plan.\n' },
+      { kind: 'board', id },
+      { kind: 'markdown', text: '\nThen the rest.' }
+    ])
+    expect(splitReply(`See ${line}\nmore\n${line}`, boards)).toEqual([
+      { kind: 'markdown', text: 'See' },
+      { kind: 'board', id },
+      { kind: 'markdown', text: `more\n${line}` }
+    ])
+    expect(splitReply(line, boards)).toEqual([{ kind: 'board', id }])
+    expect(splitReply(`Before\n${line}`)).toEqual([{ kind: 'markdown', text: `Before\n${line}` }])
+  })
+
+  it('tells two lists of the same placed boards as one', () => {
+    const one = placeBoards([user, row, reply('a1', line)]).placed.get('a1')
+    const two = placeBoards([user, row, reply('a1', line)]).placed.get('a1')
+    expect(one).not.toBe(two)
+    expect(sameBoards(one, two)).toBe(true)
+    expect(sameBoards(one, undefined)).toBe(false)
+    expect(sameBoards(undefined, undefined)).toBe(true)
   })
 })

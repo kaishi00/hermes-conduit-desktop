@@ -28,6 +28,11 @@ export interface PulseSettings {
   note: string
   reportProfiles: 'all' | 'this'
   otherProfiles: string[]
+  /**
+   * The other profiles left out by name while Pulse reads every profile
+   * (hermes-conduit issue 3241), or null on a plugin that can't leave any out.
+   */
+  excludedProfiles: string[] | null
   memory: boolean
   memoryCounts: Record<string, number>
   followups: boolean
@@ -76,6 +81,7 @@ export function parseSettings(raw: unknown): PulseSettings {
     note: str(s.note),
     reportProfiles: s.report_profiles === 'all' ? 'all' : 'this',
     otherProfiles: Array.isArray(s.other_profiles) ? s.other_profiles.filter((v): v is string => typeof v === 'string') : [],
+    excludedProfiles: Array.isArray(s.excluded_profiles) ? s.excluded_profiles.filter((v): v is string => typeof v === 'string') : null,
     memory: s.memory === true,
     memoryCounts: counts,
     followups: s.followups === true,
@@ -90,6 +96,25 @@ export function parseSettings(raw: unknown): PulseSettings {
       .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
       .map(row => ({ at: num(row.at), kind: str(row.kind), state: str(row.state), detail: str(row.detail) }))
   }
+}
+
+/**
+ * The other profiles Pulse can leave out, each with whether it is: the ones
+ * it reads and the ones left out, by name. Empty unless it reads every
+ * profile on a plugin that takes the list.
+ */
+export function profileChoices(state: Pick<PulseSettings, 'reportProfiles' | 'otherProfiles' | 'excludedProfiles'>): { name: string; leftOut: boolean }[] {
+  if (state.reportProfiles !== 'all' || !state.excludedProfiles) return []
+  const leftOut = new Set(state.excludedProfiles)
+  return [...new Set([...state.otherProfiles, ...state.excludedProfiles])]
+    .sort((a, b) => Number(b === 'default') - Number(a === 'default') || a.localeCompare(b)) // the plugin's order: the default profile first
+    .map(name => ({ name, leftOut: leftOut.has(name) }))
+}
+
+/** `excluded_profiles` as it is sent once ``name`` is left out, or read again. */
+export function excludedAfter(state: Pick<PulseSettings, 'excludedProfiles'>, name: string, leftOut: boolean): string[] {
+  const others = (state.excludedProfiles ?? []).filter(kept => kept !== name)
+  return leftOut ? [...others, name] : others
 }
 
 export const NUDGES = ['gentle', 'balanced', 'eager']

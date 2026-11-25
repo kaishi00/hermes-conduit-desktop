@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cookieJarOf, isWebPage, pastSignIn, plainUserAgent, signInPartition } from '../src/main/browserSignInRules'
+import { CHECK_WAIT_MAX_MS, checkWait, cookieJarOf, isWebPage, pastSignIn, plainUserAgent, signInPartition } from '../src/main/browserSignInRules'
 
 describe('the sign-in window’s rules', () => {
   it('keeps one browser session per dashboard address, apart from every other', () => {
@@ -41,5 +41,13 @@ describe('the sign-in window’s rules', () => {
     expect(isWebPage('https://accounts.google.com/')).toBe(true)
     expect(isWebPage('http://192.168.1.20:9119/')).toBe(true)
     for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'conduit://pair', 'not a url']) expect(isWebPage(url), url).toBe(false)
+  })
+})
+
+describe('a dashboard that keeps failing the sign-in window’s check (desktop#511)', () => {
+  it('is asked at the usual pace a few times, then less and less often, up to half a minute', () => {
+    expect([1, 2].map(failures => checkWait(failures, 1_500))).toEqual([0, 0])
+    expect([3, 4, 5].map(failures => checkWait(failures, 1_500))).toEqual([3_000, 6_000, 12_000])
+    expect(checkWait(40, 1_500)).toBe(CHECK_WAIT_MAX_MS)
   })
 })

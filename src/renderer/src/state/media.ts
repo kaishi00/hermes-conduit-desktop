@@ -6,7 +6,27 @@
  * Tags inside code or a blockquote are examples, not files.
  */
 
-export type ReplyBlock = { kind: 'markdown'; text: string } | { kind: 'media'; path: string; alt?: string } | { kind: 'preview'; path: string }
+export type ReplyBlock =
+  | { kind: 'markdown'; text: string }
+  | { kind: 'media'; path: string; alt?: string }
+  | { kind: 'preview'; path: string }
+  /** A conduit_show board, where the reply's `::conduit-board{id="cb-…"}` line places it (boards.ts placeBoards). */
+  | { kind: 'board'; id: string }
+
+/** The plugin's board line, after the phone's TranscriptDirectives: at a word's start, its id `cb-` and 12 hex digits. */
+const BOARD_LINE = /(?:^|(?<=\s))::conduit-board\{\s*id="(cb-[0-9a-f]{12})"\s*\}/g
+
+/** The board lines in a line that name one of `ids`, each with where it stands; none inside a code span. */
+function boardLines(line: string, ids: ReadonlySet<string>): { index: number; length: number; id: string }[] {
+  const found: { index: number; length: number; id: string }[] = []
+  for (const match of line.matchAll(BOARD_LINE)) {
+    const index = match.index ?? 0
+    const ticks = (line.slice(0, index).match(/`/g) ?? []).length
+    if (ticks % 2 === 1 && line.indexOf('`', index) >= 0) continue
+    if (ids.has(match[1]!)) found.push({ index, length: match[0].length, id: match[1]! })
+  }
+  return found
+}
 
 /**
  * Hermes Desktop's `::preview{file="…"}`, after the phone's TranscriptDirectives: the directive starts a
@@ -126,9 +146,14 @@ export function mediaKind(path: string): MediaKind {
   return 'file'
 }
 
-/** Splits a reply into Markdown runs and the files it delivers. */
-export function splitReply(text: string): ReplyBlock[] {
-  if (!/MEDIA:/i.test(text) && !text.includes('::preview') && !DIRECTIVES.some(d => text.includes(d))) return [{ kind: 'markdown', text }]
+/**
+ * Splits a reply into Markdown runs and the files it delivers. With `boards`, the ids of the boards the reply
+ * places, it is also cut at the first line naming each (phone issue 3215): the words on that line stay before
+ * the board, and a line in a fence, a quote or a table is never a cut.
+ */
+export function splitReply(text: string, boards?: ReadonlySet<string>): ReplyBlock[] {
+  const left = boards?.size && text.includes('::conduit-board{') ? new Set(boards) : null
+  if (!left && !/MEDIA:/i.test(text) && !text.includes('::preview') && !DIRECTIVES.some(d => text.includes(d))) return [{ kind: 'markdown', text }]
   const blocks: ReplyBlock[] = []
   let run: string[] = []
   const flush = () => {
@@ -154,6 +179,17 @@ export function splitReply(text: string): ReplyBlock[] {
     for (const directive of DIRECTIVES) line = line.split(directive).join('')
     const trimmed = line.trim()
     if (hadDirective && !trimmed) continue
+    const placed = left?.size && !trimmed.startsWith('>') && !trimmed.includes('|') ? boardLines(trimmed, left) : []
+    if (placed.length) {
+      // Each board once: a second line naming it stays text, which the Markdown hides.
+      const first = placed.filter(board => left!.delete(board.id))
+      let words = trimmed
+      for (const board of [...first].reverse()) words = words.slice(0, board.index) + words.slice(board.index + board.length)
+      flush()
+      if (words.trim()) blocks.push(...splitReply(words.replace(/[^\S\n]{2,}/g, ' ').trim()))
+      for (const board of first) blocks.push({ kind: 'board', id: board.id })
+      continue
+    }
     const drawn = trimmed.startsWith('>') ? [] : previews(trimmed)
     if (drawn.length) {
       let cursor = 0
@@ -227,7 +263,11 @@ export function namingFiles(text: string): string {
   if (blocks.length === 1 && blocks[0]!.kind === 'markdown') return blocks[0]!.text
   return blocks
     .map(block =>
-      block.kind === 'markdown' ? block.text : `${block.kind === 'media' && block.alt ? `${block.alt} ` : ''}(a file in the chat: ${fileName(block.path)})`
+      block.kind === 'markdown'
+        ? block.text
+        : block.kind === 'board'
+          ? ''
+          : `${block.kind === 'media' && block.alt ? `${block.alt} ` : ''}(a file in the chat: ${fileName(block.path)})`
     )
     .join('\n')
 }

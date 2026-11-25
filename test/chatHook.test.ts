@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
 import { forgetTranscripts } from '../src/renderer/src/state/transcriptCache'
-import { forgetChatLengths } from '../src/renderer/src/state/chatLength'
+import { forgetChatLengths, noteChatLength } from '../src/renderer/src/state/chatLength'
 import { settleRunning } from '../src/renderer/src/state/longChat'
 import { useTranscript, useTranscriptValue } from '../src/renderer/src/state/transcriptStore'
 
@@ -798,5 +798,29 @@ describe("model and run settings before a new chat's first message", () => {
     expect(sentRpc).toContain('prompt.submit')
     expect(hook.result().chat.yolo).toBeUndefined()
     expect(hook.result().transcript.items.some(i => i.kind === 'notice' && 'text' in i && i.text === 'yolo refused')).toBe(true)
+  })
+})
+
+describe('whether a chat has rows before the ones it holds, while it opens (desktop#486)', () => {
+  it('takes one past a page, or of unknown length, to have them, and a short one not to', async () => {
+    holdResumes = true
+    const hook = mount(chatInApp, { storedId: 'unknown', connected: true })
+    await settle()
+    expect(hook.result().loading).toBe(true)
+    // It opens on its newest page too (resumeChat), so calls from before its rows wait as they will then.
+    expect(hook.result().olderRows).toBe(true)
+    noteChatLength('short', 12)
+    hook.rerender({ storedId: 'short', connected: true })
+    await settle()
+    expect(hook.result().loading).toBe(true)
+    expect(hook.result().olderRows).toBe(false)
+    noteChatLength('long', 900)
+    hook.rerender({ storedId: 'long', connected: true })
+    await settle()
+    expect(hook.result().olderRows).toBe(true)
+    // A draft has no stored rows at all.
+    hook.rerender({ storedId: null, connected: true })
+    await settle()
+    expect(hook.result().olderRows).toBe(false)
   })
 })

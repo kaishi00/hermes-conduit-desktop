@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { budgets, dayIn, nextTime, parseMemory, parseSettings, sortedKinds, weekdays } from '../src/renderer/src/state/pulseSettings'
+import { budgets, dayIn, excludedAfter, nextTime, parseMemory, parseSettings, profileChoices, sortedKinds, weekdays } from '../src/renderer/src/state/pulseSettings'
 
 describe('pulse settings', () => {
   it('reads the plugin state and keeps the shape safe', () => {
@@ -23,6 +23,24 @@ describe('pulse settings', () => {
     expect(state.recent).toHaveLength(1)
     expect(state.privatePushes).toBeNull()
     expect(parseSettings({ night: [] }).night).toBeNull()
+  })
+
+  it('lists the other profiles to leave out while Pulse reads every profile', () => {
+    // hermes-conduit issue 3241. A plugin without the list offers none.
+    expect(parseSettings({ report_profiles: 'all', other_profiles: ['work'] }).excludedProfiles).toBeNull()
+    expect(profileChoices(parseSettings({ report_profiles: 'all', other_profiles: ['work'] }))).toEqual([])
+    const state = parseSettings({ report_profiles: 'all', other_profiles: ['work', 'default'], excluded_profiles: ['nahida', 5] })
+    expect(profileChoices(state)).toEqual([
+      { name: 'default', leftOut: false },
+      { name: 'nahida', leftOut: true },
+      { name: 'work', leftOut: false }
+    ])
+    expect(excludedAfter(state, 'work', true)).toEqual(['nahida', 'work'])
+    expect(excludedAfter(state, 'nahida', true)).toEqual(['nahida'])
+    expect(excludedAfter(state, 'nahida', false)).toEqual([])
+    // Reading only its own profile, there is nothing to leave out; every other profile left out still lists them.
+    expect(profileChoices(parseSettings({ report_profiles: 'this', other_profiles: [], excluded_profiles: ['work'] }))).toEqual([])
+    expect(profileChoices(parseSettings({ report_profiles: 'all', other_profiles: [], excluded_profiles: ['work'] }))).toEqual([{ name: 'work', leftOut: true }])
   })
 
   it('adds a report time an hour after the last, never one already listed', () => {
