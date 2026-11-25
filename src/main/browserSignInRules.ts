@@ -77,6 +77,15 @@ export const CHECK_WAIT_MAX_MS = 30_000
  * then twice as long each time, up to half a minute (desktop#511). A page
  * that loads is asked about at once whatever this says.
  */
+/**
+ * A page load that arrives while a check is in flight must not be lost: the next
+ * `look` runs it even when no new navigation event follows (issue 520).
+ */
+export function lookRequest(checking: boolean, navigated: boolean, pending: boolean): { run: boolean; pending: boolean } {
+  if (checking) return { run: false, pending: pending || navigated }
+  return { run: navigated || pending, pending: false }
+}
+
 export function checkWait(failures: number, paceMs: number): number {
   if (failures < CHECK_FAILURES_AT_PACE) return 0
   return Math.min(CHECK_WAIT_MAX_MS, paceMs * 2 ** (failures - CHECK_FAILURES_AT_PACE + 1))

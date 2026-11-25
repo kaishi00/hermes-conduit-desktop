@@ -14,7 +14,7 @@
  */
 import { app, BrowserWindow, nativeTheme, session } from 'electron'
 import { AuthError, cookieHeader, type CookieJar } from './auth'
-import { checkWait, cookieJarOf, isWebPage, pastSignIn, plainUserAgent, signInPartition } from './browserSignInRules'
+import { checkWait, cookieJarOf, isWebPage, lookRequest, pastSignIn, plainUserAgent, signInPartition } from './browserSignInRules'
 import { carriesHeaders, type ProxyHeaders } from './proxyHeaders'
 import { t } from '../shared/i18n'
 
@@ -74,6 +74,8 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
   /** Checks in a row that couldn't be made, and until when the timer's looks wait because of them. */
   let failures = 0
   let waitUntil = 0
+  /** A page load seen while a check was in flight, to run when it ends. */
+  let pendingLook = false
   const timer = setInterval(() => void look(), POLL_MS)
 
   const finish = (jar: CookieJar | null, error?: Error): void => {
@@ -89,15 +91,20 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
   signal.addEventListener('abort', abort, { once: true })
 
   async function look(navigated = false): Promise<void> {
-    if (finished || checking || window.isDestroyed() || !pastSignIn(contents.getURL(), url)) return
-    // A dashboard that keeps failing the check is asked less often between page loads.
-    if (!navigated && Date.now() < waitUntil) return
+    if (finished) return
+    const request = lookRequest(checking, navigated, pendingLook)
+    if (request.pending) pendingLook = true
+    // A load during an in-flight check is kept for the look that follows it;
+    // a timer look during back-off stays skipped.
+    if (checking || request.pending || !request.run && Date.now() < waitUntil) return
+    if (request.run && pendingLook) pendingLook = false
+    if (window.isDestroyed() || !pastSignIn(contents.getURL(), url)) return
     checking = true
     try {
       const jar = cookieJarOf(await store.cookies.get({ url: `${url}/` }))
       const header = cookieHeader(jar)
       // A page that loaded is always asked about; between loads, only when its cookies changed.
-      if (!navigated && header === tried) return
+      if (!request.run && header === tried) return
       tried = header
       const kept = await signedIn(jar)
       failures = 0
