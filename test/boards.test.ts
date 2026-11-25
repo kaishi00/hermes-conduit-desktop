@@ -85,6 +85,9 @@ describe('boards', () => {
     // The first reply of the turn to name it takes it.
     const twice = placeBoards([user, row, reply('a1', line), reply('a2', `Again ${line}`)])
     expect([...twice.placed.keys()]).toEqual(['a1'])
+    // A steer between the board and the reply is part of the same turn.
+    const steered = placeBoards([user, row, { kind: 'user', key: 'u2', text: 'Shorter', steer: true }, reply('a1', line)])
+    expect([...steered.hidden]).toEqual(['t1'])
   })
 
   it('leaves a board at its row without the line, for a later turn’s line, or for an example', () => {

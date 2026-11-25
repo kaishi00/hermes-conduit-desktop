@@ -47,12 +47,15 @@ const NOWHERE: BoardPlacement = { hidden: new Set(), placed: new Map() }
  * board's line takes the board from the `conduit_show` row above it in its own turn, the first reply to name it,
  * and that row draws nothing. A reply without the line leaves the board at its row, and so does a later turn's.
  */
-export function placeBoards(items: readonly { kind: string; key: string; text?: string; board?: Board }[]): BoardPlacement {
+export function placeBoards(items: readonly { kind: string; key: string; text?: string; board?: Board; steer?: boolean }[]): BoardPlacement {
   let hidden: Set<string> | undefined
   let placed: Map<string, PlacedBoard[]> | undefined
   const turn = new Map<string, PlacedBoard>()
   for (const item of items) {
-    if (item.kind === 'user') turn.clear()
+    if (item.kind === 'user') {
+      // A steer is part of the turn it steers.
+      if (!item.steer) turn.clear()
+    }
     else if (item.kind === 'tool' && item.board?.line) turn.set(item.board.line, { id: item.board.line, board: item.board, key: item.key })
     else if (item.kind === 'assistant' && turn.size && item.text?.includes('::conduit-board{')) {
       const taken = splitReply(item.text, new Set(turn.keys())).flatMap(block => (block.kind === 'board' ? [turn.get(block.id)!] : []))

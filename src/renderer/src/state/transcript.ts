@@ -22,6 +22,8 @@ export interface UserItem {
   at?: number
   /** Sent from here and not yet confirmed by the gateway. */
   pending?: boolean
+  /** Hermes took it into a running turn (Steer): part of that turn, not the start of a new one. */
+  steer?: true
 }
 
 export interface AssistantItem {
@@ -413,7 +415,7 @@ export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
     switch (row.role) {
       case 'user': {
         const item = userRow(key, rowText(row), at)
-        if (item) items.push(item)
+        if (item) items.push(item.kind === 'user' && row.display_kind === 'steer' ? { ...item, steer: true } : item)
         break
       }
       case 'assistant': {
