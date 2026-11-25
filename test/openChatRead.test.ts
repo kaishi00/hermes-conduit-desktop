@@ -67,6 +67,16 @@ describe('the open chat’s read state', () => {
     t.unmount()
   })
 
+  it('keeps the mark through a list read that briefly lacks the open chat’s row', () => {
+    const t = mount({ openId: 'a', openRow: row('a', 2000) })
+    t.toggle(row('a', 2000))
+    t.show({ openId: 'a', openRow: undefined })
+    t.show({ openId: 'a', openRow: row('a', 2000, true) })
+    expect(isUnread(t.marks(), row('a', 2000, true))).toBe(true)
+    expect(t.writes).toEqual([['a', true]])
+    t.unmount()
+  })
+
   it('reads the open chat again when it is marked read by hand', () => {
     const t = mount({ openId: 'a', openRow: row('a', 2000) })
     t.toggle(row('a', 2000))

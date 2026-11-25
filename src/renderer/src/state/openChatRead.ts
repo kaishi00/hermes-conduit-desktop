@@ -29,14 +29,14 @@ export function useOpenChatRead(
   const kept = useRef<KeptUnread | null>(null)
   const openKey = openRow ? markKey(openRow) : undefined
   useEffect(() => {
-    // Another chat opened, or none: the mark is the list's again. The same
-    // chat under another id (its stored id arriving) keeps it.
-    if (kept.current && kept.current.openId !== openId && kept.current.key !== openKey) kept.current = null
+    // Another chat opened, or none: the mark is the list's again. A list read
+    // that briefly lacks the open chat's row leaves it, the selection unchanged.
+    if (kept.current && kept.current.openId !== openId) kept.current = null
     if (!openRow) return
     if (kept.current?.key === openKey) return
     updateMarks(current => markRead(current, openRow))
     if (openRow.unread) writeUnread(openRow, false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the row's id, activity and flag are what read it again
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the row's key, activity and flag read it again; a new row object alone doesn't
   }, [openId, openKey, openRow?.activeAt, openRow?.unread, updateMarks, writeUnread])
   return useCallback(
     (row: ChatRow) => {
