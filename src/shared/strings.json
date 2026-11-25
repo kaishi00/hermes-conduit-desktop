@@ -46528,5 +46528,20 @@
     "tr": "Kanban: {count} engellendi",
     "zh-Hans": "Kanban：{count} 个受阻",
     "zh-Hant": "Kanban：{count} 個受阻"
+  },
+  "Open in Browser": {
+    "de": "Im Browser öffnen",
+    "es": "Abrir en el navegador",
+    "fr": "Ouvrir dans le navigateur",
+    "id": "Buka di Browser",
+    "it": "Apri nel browser",
+    "ja": "ブラウザで開く",
+    "ko": "브라우저에서 열기",
+    "pl": "Otwórz w przeglądarce",
+    "pt-BR": "Abrir no navegador",
+    "ru": "Открыть в браузере",
+    "tr": "Tarayıcıda Aç",
+    "zh-Hans": "在浏览器中打开",
+    "zh-Hant": "在瀏覽器中打開"
   }
 }
