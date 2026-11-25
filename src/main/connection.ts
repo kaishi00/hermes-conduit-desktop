@@ -572,8 +572,8 @@ export class Connection {
    * A dashboard REST call (`/api/...`) with this sign-in's credential. A
    * password sign-in whose session ran out signs in again once.
    */
-  async http<T>(method: string, path: string, body?: unknown, timeoutMs = 30_000): Promise<T> {
-    const response = await this.request(method, path, body, AbortSignal.timeout(timeoutMs))
+  async http<T>(method: string, path: string, body?: unknown, timeoutMs = 30_000, signal?: AbortSignal): Promise<T> {
+    const response = await this.request(method, path, body, signal ?? AbortSignal.timeout(timeoutMs))
     const text = await response.text()
     let parsed: unknown = null
     try {

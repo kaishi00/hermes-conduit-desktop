@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { copyDown, hostFileName, type DataUrl, type Download, type ReadText } from './hostFiles'
-import { FILE_SCHEME, KEPT_VIEWS, byteRange, isPagePath, viewedFileUrl, viewedType } from '../shared/viewFileRules'
+import { FILE_SCHEME, KEPT_VIEWS, byteRange, isPagePath, pageReadResult, viewedFileUrl, viewedType } from '../shared/viewFileRules'
 
 interface View {
   file: string
@@ -90,13 +90,15 @@ export async function viewHostFile(path: string, download: Download, dataUrl: Da
  */
 export async function openPageInBrowser(path: string, readText: ReadText, download: Download, dataUrl: DataUrl): Promise<boolean> {
   if (!isPagePath(path)) return false
-  const text = await readText()
+  const read = pageReadResult(await readText())
+  // A dashboard answering an unknown route with its own page is not a file to open.
+  if (!read) return false
   const dir = join(folder(), 'pages', randomUUID())
   await mkdir(dir, { recursive: true })
   const file = join(dir, hostFileName(path))
   try {
-    if (text !== null) await writeFile(file, text)
-    // Too long to read as text: a page's own download answers as a page, so it's taken as the file.
+    if (read.text !== undefined) await writeFile(file, read.text)
+    // Read cut short or binary: a page's own download answers as a page, so it's taken as the file.
     else await copyDown(file, download, dataUrl, undefined, true)
   } catch (error) {
     void rm(dir, { recursive: true, force: true }).catch(() => undefined)
