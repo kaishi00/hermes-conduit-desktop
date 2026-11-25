@@ -161,9 +161,10 @@ export function wheelSteps(): (event: WheelTurn) => -1 | 0 | 1 | null {
   let sum = 0
   let last = 0
   return event => {
-    if (!event.ctrlKey) return null
-    // Lines and pages (Firefox-style mice) in pixels.
-    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1)
+    // A sideways turn with Ctrl held still scrolls what's under the pointer.
+    if (!event.ctrlKey || event.deltaY === 0) return null
+    // Lines and pages in pixels: a notch of three lines is a step, as a 100 px notch is.
+    const delta = event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 100 : 1)
     if (event.timeStamp - last > 400 || Math.sign(delta) !== Math.sign(sum)) sum = 0
     last = event.timeStamp
     sum += delta

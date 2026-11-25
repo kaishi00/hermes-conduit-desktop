@@ -117,13 +117,15 @@ describe('Ctrl with the scroll wheel', () => {
     expect(read(turn(-100, 50))).toBe(1)
     expect(read(turn(100, 100))).toBe(-1)
     // A mouse that reports lines.
-    expect(read(turn(3, 150, { deltaMode: 1 }))).toBe(0)
-    expect(read(turn(4, 160, { deltaMode: 1 }))).toBe(-1)
+    expect(read(turn(3, 150, { deltaMode: 1 }))).toBe(-1)
+    expect(read(turn(1, 160, { deltaMode: 1 }))).toBe(0)
   })
 
   it('leaves a plain scroll to the page', async () => {
     const { wheelSteps } = await import('../src/renderer/src/state/shortcuts')
     expect(wheelSteps()(turn(-100, 0, { ctrlKey: false }))).toBeNull()
+    // A sideways turn with Ctrl held.
+    expect(wheelSteps()(turn(0, 0))).toBeNull()
   })
 
   it("adds a pinch's small turns up, and starts again after a pause or a turn back", async () => {
