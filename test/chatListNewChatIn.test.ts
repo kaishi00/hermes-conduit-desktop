@@ -74,6 +74,16 @@ describe('New Chat under All (issue 394)', () => {
     act(() => root.unmount())
   })
 
+  it('lists the profiles in the column’s order, the main one first', async () => {
+    const bots = [bot('default', true), bot('furina'), bot('yelan')]
+    const tiles = [bots[2], bots[1], bots[0]].map(b => ({ key: b.name, host: 'h', bot: b, own: true }))
+    const { host, root } = await renderList({ bots, profileTiles: tiles, profile: null, onNewChat: () => {} })
+    act(() => plus(host).click())
+    const lines = [...host.querySelectorAll('.header-menu button[role="menuitem"]')].map(b => b.textContent)
+    expect(lines).toEqual(['Default', 'Yelan', 'Furina'])
+    act(() => root.unmount())
+  })
+
   it('starts straight away in a profile chosen in the column', async () => {
     const onNewChat = vi.fn()
     const { host, root } = await renderList({ bots: [bot('default', true), bot('furina')], profile: 'furina', onNewChat })

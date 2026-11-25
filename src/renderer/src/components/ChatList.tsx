@@ -354,7 +354,12 @@ export function ChatList({
   const botNames = useMemo(() => (bots ?? []).map(b => b.name), [bots])
   const allLeftOut = canGroup ? leftOut : []
   // New Chat under All asks which profile, as the phone's "New chat in" menu does (issue 394).
-  const newChatIn = useMemo(() => (canGroup ? newChatProfiles(bots ?? [], allLeftOut) : []), [canGroup, bots, allLeftOut])
+  // In the column's order (Bots Home's, this dashboard's own profiles), the main one first.
+  const columnBots = useMemo(() => {
+    const own = profileTiles?.filter(tile => tile.own).map(tile => tile.bot)
+    return own?.length ? own : (bots ?? [])
+  }, [profileTiles, bots])
+  const newChatIn = useMemo(() => (canGroup ? newChatProfiles(columnBots, allLeftOut) : []), [canGroup, columnBots, allLeftOut])
   const newChatMenu = useHeaderMenu()
   const includeInAll = (name: string, on: boolean) => {
     const next = on ? leftOut.filter(p => p.toLowerCase() !== name.toLowerCase()) : [...leftOut, name]
