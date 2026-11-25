@@ -105,9 +105,10 @@ export class RequestWords {
   }
 
   /** All of it went with a request, or was the user's answer about one. */
-  skip(): void {
+  skip(keepLine = false): void {
     this.done = []
-    this.taken = this.line.length
+    // `keepLine`: the line being said began after the answer and is the next request's.
+    if (!keepLine) this.taken = this.line.length
   }
 
   /** What the user said for the request being made, given `waitMs` to arrive and to stop growing. */

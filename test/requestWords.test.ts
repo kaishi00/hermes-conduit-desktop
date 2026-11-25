@@ -147,9 +147,25 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     ask.heard('Yes')
     setTimeout(() => {
       ask.modelSpoke()
-      ask.heard('thanks')
+      ask.heard('and order a cab for eight')
     }, 100)
-    expect(await ask.release()).toMatchObject({ send: true })
+    expect(await ask.release()).toEqual({ send: true, tool: 'ask_thread', request: 'Book a table for two.' })
+    // Their next line is the next request's.
+    ask.set(false)
+    expect(await ask.ask('ask_thread', 'Order a cab.')).toEqual({ request: 'Order a cab.' + MARKER + 'and order a cab for eight' })
+  })
+
+  it('reads the rest of a yes that arrives after the model already spoke before the answer was read', async () => {
+    let t = 1_000_000
+    const ask = new AskFirst(true, () => t, 0, 600)
+    ask.heard('Book a table')
+    await ask.ask('ask_thread', 'Book a table for two.')
+    ask.modelSpoke()
+    t += 3000
+    ask.heard('Yes', true)
+    setTimeout(() => ask.heard('Yes make it for four', true), 100)
+    const sent = await ask.release()
+    expect('request' in sent && sent.request).toContain('the user said: "Yes make it for four"')
   })
 
   it('takes the same line said again after the model spoke as a new one', async () => {
