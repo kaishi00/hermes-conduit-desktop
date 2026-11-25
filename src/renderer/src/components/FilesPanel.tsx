@@ -28,6 +28,7 @@ import { useMouseBack } from '../state/mouseBack'
 import { saveHostFile, sayIfFailed } from '../state/saveMedia'
 import { ask, askText } from '../state/dialogs'
 import { useFittedMenu } from '../state/menuFit'
+import { NO_TABS, closeTab, closeTabsUnder, renameTabs, showTab, updateTab, type FolderTabs } from '../state/folderTabs'
 
 interface Props {
   /** The chat's working folder: the tree never goes above it. */
@@ -58,6 +59,8 @@ type OpenFile = {
   folder?: WorkspaceListing
   /** The folders opened before this one in the viewer, newest last: Back returns to them. */
   back?: WorkspaceEntry[]
+  /** A reply ended since its text was read: going back to the tab reads it again. */
+  stale?: boolean
 }
 
 type Menu = { entry: WorkspaceEntry; x: number; y: number }
@@ -76,7 +79,10 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([root]))
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState<WorkspaceSearch | 'loading' | { error: string } | null>(null)
-  const [open, setOpen] = useState<OpenFile | null>(null)
+  // The open files, a tab each (issue 454); `open` is the one shown, none while the tree shows.
+  const [files, setFiles] = useState<FolderTabs<OpenFile>>(NO_TABS)
+  const open = files.files.find(f => f.entry.path === files.active) ?? null
+  const setTab = (path: string, change: (file: OpenFile) => OpenFile) => setFiles(current => updateTab(current, path, change))
   const [menu, setMenu] = useState<Menu | null>(null)
   const menuFit = useFittedMenu(menu)
   const [note, setNote] = useState<string | null>(null)
@@ -128,7 +134,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
     pluginRef.current = null
     setListings({})
     setExpanded(new Set([root]))
-    setOpen(null)
+    setFiles(NO_TABS)
     setQuery('')
     setSearch(null)
     void list(root)
@@ -136,6 +142,8 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
 
   const refresh = useCallback(() => {
     for (const path of expanded) void list(path)
+    // The agent may have changed an open file: a tab without changes reads it again when it's next picked.
+    setFiles(current => ({ ...current, files: current.files.map(f => (f.draft === undefined && !f.entry.isDirectory ? { ...f, stale: true } : f)) }))
   }, [expanded, list])
 
   // After a reply: the open folders again.
@@ -194,25 +202,29 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
   }
 
   // A folder over the tree, wherever it is on the host: its entries, each opening in turn.
-  const openFolder = async (entry: WorkspaceEntry, back: WorkspaceEntry[] = []) => {
+  // `inPlace`: in the shown tab's place, walking a folder a reply named (Back returns); else a tab of its own.
+  const openFolder = async (entry: WorkspaceEntry, back: WorkspaceEntry[] = [], inPlace = false) => {
     const folder = { ...entry, isDirectory: true }
-    setOpen({ entry: folder, preview: null, back })
+    setFiles(current => showTab(current, { entry: folder, preview: null, back }, inPlace))
     try {
       const listing = parseListing(await gateway.http('GET', fsListPath(folder.path, profile)))
-      setOpen(current => (current?.entry.path === folder.path ? { ...current, folder: listing } : current))
+      setTab(folder.path, current => ({ ...current, folder: listing }))
     } catch (e) {
-      setOpen(current => (current?.entry.path === folder.path ? { ...current, error: message(e) } : current))
+      setTab(folder.path, current => ({ ...current, error: message(e) }))
     }
   }
 
-  const openFile = async (entry: WorkspaceEntry, back: WorkspaceEntry[] = []) => {
-    if (entry.isDirectory) return openFolder(entry, back)
-    setOpen({ entry, preview: null, back })
+  const openFile = async (entry: WorkspaceEntry, back: WorkspaceEntry[] = [], inPlace = false) => {
+    if (entry.isDirectory) return openFolder(entry, back, inPlace)
+    // A file already open goes back to its tab and the text read for it, unless a reply ended since.
+    const kept = inPlace ? undefined : files.files.find(f => f.entry.path === entry.path && !f.entry.isDirectory)
+    if (kept && (!kept.stale || kept.draft !== undefined) && !kept.error) return setFiles(current => ({ ...current, active: entry.path }))
+    setFiles(current => showTab(current, { entry, preview: null, back }, inPlace))
     try {
       if (isImage(entry.name)) {
         const raw = (await gateway.http('GET', dataUrlPath(entry.path, profile))) as { data_url?: unknown; dataUrl?: unknown } | null
         const url = typeof raw?.data_url === 'string' ? raw.data_url : typeof raw?.dataUrl === 'string' ? raw.dataUrl : undefined
-        setOpen(current => (current?.entry.path === entry.path ? { ...current, image: url, error: url ? undefined : t("Couldn't open this file") } : current))
+        setTab(entry.path, current => ({ ...current, image: url, error: url ? undefined : t("Couldn't open this file") }))
         return
       }
       const preview = parsePreview(await gateway.http('GET', readTextPath(entry.path, profile)))
@@ -226,11 +238,11 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
           // Read only, then.
         }
       }
-      setOpen(current => (current?.entry.path === entry.path ? { ...current, entry: dated, preview } : current))
+      setTab(entry.path, current => ({ ...current, entry: dated, preview }))
     } catch (e) {
       // A path a reply named that turns out to be a folder (Hermes: "Path points to a directory") shows its entries.
-      if (/director/i.test(message(e))) return openFolder(entry, back)
-      setOpen(current => (current?.entry.path === entry.path ? { ...current, error: message(e) } : current))
+      if (/director/i.test(message(e))) return openFolder(entry, back, true)
+      setTab(entry.path, current => ({ ...current, error: message(e) }))
     }
   }
 
@@ -249,7 +261,8 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
       return (await gateway.http('POST', changePath(action, profile), { root, ...body })) as { entry?: unknown } | null
     } catch (e) {
       setNote(message(e))
-      return null
+      // Refused: false, told apart from a change that answers with no body.
+      return false as const
     } finally {
       for (const folder of folders) void list(folder)
     }
@@ -279,7 +292,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
   const save = async (replace = false) => {
     if (!open || open.draft === undefined) return
     const { entry, draft } = open
-    setOpen({ ...open, saving: true })
+    setTab(entry.path, current => ({ ...current, saving: true }))
     setNote(null)
     try {
       const answer = (await gateway.http('POST', changePath('save', profile), {
@@ -289,12 +302,17 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
         ...(replace || entry.mtime === undefined ? {} : { expected_mtime: entry.mtime / 1000 })
       })) as { entry?: { mtime?: unknown } } | null
       const mtime = typeof answer?.entry?.mtime === 'number' ? answer.entry.mtime * 1000 : undefined
-      setOpen(current =>
-        current?.entry.path === entry.path ? { ...current, entry: { ...entry, mtime }, preview: current.preview && { ...current.preview, text: draft }, draft: undefined, saving: false } : current
-      )
+      // Text typed while the save ran stays as changes on the saved file, as on the phone.
+      setTab(entry.path, current => ({
+        ...current,
+        entry: { ...entry, mtime },
+        preview: current.preview && { ...current.preview, text: draft },
+        draft: current.draft === draft ? undefined : current.draft,
+        saving: false
+      }))
       void list(parentPath(entry.path))
     } catch (e) {
-      setOpen(current => (current ? { ...current, saving: false } : current))
+      setTab(entry.path, current => ({ ...current, saving: false }))
       if ((e as { code?: unknown }).code === 409 && await ask(`${message(e)}\n\n${t('Replace it with your changes?')}`)) void save(true)
       else setNote(message(e))
     }
@@ -330,14 +348,40 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
     return listed.entries.map(entry => row(entry, depth))
   }
 
+  // Back: to the folder this was opened from, in the same tab; else to the tree, every tab kept with its changes.
   const closeViewer = async () => {
-    if (open?.draft !== undefined && !(await ask(t('Discard unsaved changes?')))) return
-    // Back to the folder this was opened from, if any.
     const back = open?.back ?? []
     const previous = back.at(-1)
-    if (previous) void openFolder(previous, back.slice(0, -1))
-    else setOpen(null)
+    if (!previous) return setFiles(current => ({ ...current, active: null }))
+    if (open?.draft !== undefined && !(await ask(t('Discard unsaved changes?')))) return
+    void openFolder(previous, back.slice(0, -1), true)
   }
+  const closeFile = async (file: OpenFile) => {
+    if (file.draft !== undefined && !(await ask(t('Discard unsaved changes?')))) return
+    setFiles(current => closeTab(current, file.entry.path))
+  }
+  const tabStrip =
+    files.files.length > 1 || (!open && files.files.length) ? (
+      <div className="ws-tabs" role="tablist">
+        {files.files.map(file => (
+          <div key={file.entry.path} className={`ws-tab${file.entry.path === files.active ? ' on' : ''}`}>
+            <button
+              role="tab"
+              aria-selected={file.entry.path === files.active}
+              title={file.entry.path}
+              onClick={() => (file.entry.isDirectory ? setFiles(current => ({ ...current, active: file.entry.path })) : void openFile(file.entry))}
+              onAuxClick={e => e.button === 1 && void closeFile(file)}
+            >
+              {file.draft !== undefined ? <span className="ws-tab-dot" aria-hidden="true" /> : null}
+              {file.entry.name}
+            </button>
+            <button className="ws-tab-close" aria-label={t('Close Tab')} title={t('Close Tab')} onClick={() => void closeFile(file)}>
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    ) : null
   useMouseBack(open ? closeViewer : null)
 
   const viewer = open ? (
@@ -353,7 +397,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
         <span className="spacer" />
         {open.draft !== undefined ? (
           <>
-            <button className="secondary" disabled={open.saving} onClick={() => setOpen({ ...open, draft: undefined })}>
+            <button className="secondary" disabled={open.saving} onClick={() => setTab(open.entry.path, current => ({ ...current, draft: undefined }))}>
               {t('Cancel')}
             </button>
             <button className="primary" disabled={open.saving} onClick={() => void save()}>
@@ -366,7 +410,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
               {t('Download')}
             </button>
             {plugin && open.preview && !open.preview.binary && !open.preview.truncated ? (
-              <button className="secondary" onClick={() => setOpen({ ...open, draft: open.preview!.text })}>
+              <button className="secondary" onClick={() => setTab(open.entry.path, current => ({ ...current, draft: current.preview?.text ?? '' }))}>
                 {t('Edit')}
               </button>
             ) : null}
@@ -384,7 +428,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
               title={entry.path}
               draggable
               onDragStart={e => e.dataTransfer.setData('text/plain', entry.path)}
-              onClick={() => void openFile(entry, [...(open.back ?? []), open.entry])}
+              onClick={() => void openFile(entry, [...(open.back ?? []), open.entry], true)}
             >
               <span className="ws-twisty" />
               <Icon name={entry.isDirectory ? 'folder' : isImage(entry.name) ? 'image' : 'file'} />
@@ -403,7 +447,10 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
           value={open.draft}
           spellCheck={false}
           autoFocus
-          onChange={e => setOpen({ ...open, draft: e.target.value })}
+          onChange={e => {
+            const draft = e.target.value
+            setTab(open.entry.path, current => ({ ...current, draft }))
+          }}
           onKeyDown={e => {
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
               e.preventDefault()
@@ -413,7 +460,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
               const el = e.currentTarget
               const { selectionStart, selectionEnd } = el
               const next = `${open.draft!.slice(0, selectionStart)}  ${open.draft!.slice(selectionEnd)}`
-              setOpen({ ...open, draft: next })
+              setTab(open.entry.path, current => ({ ...current, draft: next }))
               requestAnimationFrame(() => el.setSelectionRange(selectionStart + 2, selectionStart + 2))
             }
           }}
@@ -498,6 +545,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
           </button>
         </div>
       ) : null}
+      {tabStrip}
       {viewer ?? (
         <>
           {plugin ? (
@@ -572,7 +620,9 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
                   const entry = menu.entry
                   setMenu(null)
                   const name = await askName(t('Rename'), entry.name)
-                  if (name && name !== entry.name) void change('move', { path: entry.path, to: parentPath(entry.path), name }, [parentPath(entry.path)])
+                  if (!name || name === entry.name) return
+                  const moved = await change('move', { path: entry.path, to: parentPath(entry.path), name }, [parentPath(entry.path)])
+                  if (moved !== false) setFiles(current => renameTabs(current, entry.path, `${parentPath(entry.path).replace(/[\\/]+$/, '')}/${name}`))
                 }}
               >
                 {t('Rename')}
@@ -593,7 +643,8 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
                 onClick={async () => {
                   const entry = menu.entry
                   setMenu(null)
-                  if (await ask(t('Delete “{name}”? This can’t be undone.', { name: entry.name }), { confirm: t('Delete'), destructive: true })) void change('delete', { path: entry.path }, [parentPath(entry.path)])
+                  if (!(await ask(t('Delete “{name}”? This can’t be undone.', { name: entry.name }), { confirm: t('Delete'), destructive: true }))) return
+                  if ((await change('delete', { path: entry.path }, [parentPath(entry.path)])) !== false) setFiles(current => closeTabsUnder(current, entry.path))
                 }}
               >
                 {t('Delete')}

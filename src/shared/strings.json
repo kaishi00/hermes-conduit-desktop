@@ -5069,6 +5069,21 @@
     "zh-Hans": "关闭旁边的聊天",
     "zh-Hant": "關閉旁邊的聊天"
   },
+  "Close Tab": {
+    "de": "Tab schließen",
+    "es": "Cerrar pestaña",
+    "fr": "Fermer l’onglet",
+    "id": "Tutup Tab",
+    "it": "Chiudi pannello",
+    "ja": "タブを閉じる",
+    "ko": "탭 닫기",
+    "pl": "Zamknij kartę",
+    "pt-BR": "Fechar aba",
+    "ru": "Закрыть вкладку",
+    "tr": "Sekmeyi Kapat",
+    "zh-Hans": "关闭标签页",
+    "zh-Hant": "關閉標籤頁"
+  },
   "Closes the task, with the note as its summary of what was done.": {
     "de": "Schließt die Aufgabe ab, mit der Notiz als Zusammenfassung des Erledigten.",
     "es": "Cierra la tarea, con la nota como resumen de lo que se hizo.",
