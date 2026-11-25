@@ -40,6 +40,17 @@ const unmade = (chatId: string | null): boolean => chatId === null || chatId.sta
  * never the one that opened: a new chat the call sent nothing keeps no id,
  * so what it leaves is dropped.
  */
+/** The chat a call owns: only a chat its own send created, never one opened while it waited. */
+export function callChatId(
+  kept: string | null,
+  wasCalling: boolean,
+  calling: boolean,
+  chatId: string | null,
+  createdId: string | null
+): string | null {
+  return chatOfCall(kept, wasCalling, calling, chatId, createdId !== null && chatId === createdId)
+}
+
 export function chatOfCall(kept: string | null, wasCalling: boolean, calling: boolean, chatId: string | null, sent = true): string | null {
   if (!calling) return kept
   if (!wasCalling) return chatId

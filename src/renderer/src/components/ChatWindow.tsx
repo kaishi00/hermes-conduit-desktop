@@ -507,7 +507,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       if (sent === false) return false
       // The message answers the questions Hermes stopped waiting for here.
       clearExpired(chat.liveId)
-      return true
+      // A fresh docked chat the call's own send made names itself here (issue 550).
+      return sent || true
     },
     [botChat, docked, command, commands, notice, send, roster.bots, profile, botTitle, chat.liveId]
   )
