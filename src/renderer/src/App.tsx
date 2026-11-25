@@ -384,6 +384,7 @@ function Shell({
   const [section, setSection] = useState<Section>(() => resolveInitialSection(reopenedSection(status.url ?? ''), railLayout))
   // A chat's Kanban task opened from its line: Tasks > Board opens it on its board.
   const [taskFocus, setTaskFocus] = useState<TaskFocus | null>(null)
+  const clearTaskFocus = useCallback(() => setTaskFocus(null), [])
   const pinnedRail = useMemo(() => pinnedSections(railLayout), [railLayout])
   const pinnedRailRef = useRef(pinnedRail)
   pinnedRailRef.current = pinnedRail
@@ -2841,6 +2842,7 @@ function Shell({
             tiles={profileTiles}
             badgeFor={tileBadge}
             focus={taskFocus}
+            onFocused={clearTaskFocus}
             hostBadge={host => badgeFor(host ?? status.url ?? '')}
             onOpenRun={(run, job) => {
               if (!run.id) return

@@ -25,9 +25,11 @@ interface Props {
   segment: ReactNode
   /** A task to open, on this dashboard's board by its slug: a chat's Kanban task, from its line. */
   focus?: TaskFocus | null
+  /** The focus was opened: the ask is spent, so a later visit to Board doesn't open it again. */
+  onFocused?: () => void
 }
 
-/** A task to open on Board; `n` counts the asks, so asking for the same task again opens it again. */
+/** A task to open on Board; `n` counts the asks, so asking for the same task again opens it again. Spent once opened (`onFocused`). */
 export interface TaskFocus {
   slug: string
   id: string
@@ -50,7 +52,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
  * into view (the phone's jump bar), the wheel and a grab on empty board space
  * move it sideways, and a card dragged to the edge rolls the board on.
  */
-export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, segment, focus }: Props) {
+export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, segment, focus, onFocused }: Props) {
   const farHosts = useMemo(() => [...new Set(tiles.filter(tile => !tile.own).map(tile => tile.host))], [tiles])
   const kanban = useKanban(connected, true, farHosts)
   const shownList = kanban.lists.find(list => list.host === kanban.host)
@@ -144,7 +146,8 @@ export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, s
     focused.current = focus.n
     setComposing(false)
     setOpenId(focus.id)
-  }, [focus, kanban.host, kanban.slug, pickBoard])
+    onFocused?.()
+  }, [focus, kanban.host, kanban.slug, pickBoard, onFocused])
   // With no board picked, the board is whatever Hermes calls current, which another client can change:
   // a menu whose task left the board read closes rather than act on the new one.
   useEffect(() => {

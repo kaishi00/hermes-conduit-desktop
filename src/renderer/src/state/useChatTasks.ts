@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { gateway } from '../gateway'
 import { everyWhileVisible } from './visibility'
-import { chatTasksPath, isOpenTask, parseChatTasks, shownTasks, type ChatTask } from './chatTasks'
+import { afterRead, chatTasksPath, isOpenTask, parseChatTasks, type ChatTask } from './chatTasks'
 
 /**
  * The open chat's Kanban tasks (desktop#553), from the plugin's
@@ -27,8 +27,7 @@ export function useChatTasks(sessionId: string | null, profile: string | undefin
       const answer = parseChatTasks(await gateway.http('GET', chatTasksPath(sid, profile)))
       if (scopeRef.current !== asked) return
       const listed = answer.supported ? answer.tasks : []
-      for (const task of listed) if (isOpenTask(task)) seenOpen.current.add(task.id)
-      setTasks(shownTasks(listed, seenOpen.current))
+      setTasks(afterRead(listed, seenOpen.current))
     } catch {
       // An older plugin (404), a chat Hermes has no row for yet, or a failed read: the line stays as it was.
     }

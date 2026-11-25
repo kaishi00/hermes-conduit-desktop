@@ -17,8 +17,6 @@ export interface ChatTask {
   assignee?: string
   board: string
   boardName: string
-  /** Epoch seconds. */
-  startedAt?: number
   /** Why it's blocked, only while it is. */
   error?: string
 }
@@ -34,7 +32,6 @@ export function chatTasksPath(sessionId: string, profile?: string | null): strin
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
-const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 
 export function parseChatTasks(raw: unknown): ChatTasks {
   const object = (raw ?? {}) as Record<string, unknown>
@@ -53,7 +50,6 @@ export function parseChatTasks(raw: unknown): ChatTasks {
       assignee: str(r.assignee) || undefined,
       board,
       boardName: str(r.board_name) || board,
-      startedAt: num(r.started_at),
       error: str(r.error) || undefined
     })
   }
@@ -72,6 +68,15 @@ export const isBlockedTask = (task: ChatTask) => task.status === 'blocked'
 export function shownTasks(tasks: readonly ChatTask[], seenOpen: ReadonlySet<string>): ChatTask[] {
   if (!tasks.some(isOpenTask) && !tasks.some(task => seenOpen.has(task.id))) return []
   return tasks.filter(task => isOpenTask(task) || seenOpen.has(task.id))
+}
+
+/**
+ * One read's tasks merged into what the chat has seen open (`seenOpen`,
+ * grown in place), and the tasks the line shows after it.
+ */
+export function afterRead(listed: readonly ChatTask[], seenOpen: Set<string>): ChatTask[] {
+  for (const task of listed) if (isOpenTask(task)) seenOpen.add(task.id)
+  return shownTasks(listed, seenOpen)
 }
 
 /** "Kanban: 2 in progress", then how many are blocked; "Kanban tasks finished" once none is open. */

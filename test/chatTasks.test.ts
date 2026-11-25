@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatTasksLabel, chatTasksPath, parseChatTasks, shownTasks, type ChatTask } from '../src/renderer/src/state/chatTasks'
+import { afterRead, chatTasksLabel, chatTasksPath, parseChatTasks, shownTasks, type ChatTask } from '../src/renderer/src/state/chatTasks'
 
 const task = (id: string, status: string, extra: Partial<ChatTask> = {}): ChatTask => ({ id, title: id, status, board: 'default', boardName: 'Default', ...extra })
 
@@ -16,8 +16,8 @@ describe('chat Kanban tasks (desktop#553)', () => {
     })
     expect(parsed.supported).toBe(true)
     expect(parsed.tasks).toEqual([
-      { id: 't1', title: 'Build it', status: 'running', assignee: 'coder', board: 'research', boardName: 'Research', startedAt: 5, error: undefined },
-      { id: 't2', title: 't2', status: 'blocked', assignee: undefined, board: 'default', boardName: 'default', startedAt: undefined, error: 'worker crashed' }
+      { id: 't1', title: 'Build it', status: 'running', assignee: 'coder', board: 'research', boardName: 'Research', error: undefined },
+      { id: 't2', title: 't2', status: 'blocked', assignee: undefined, board: 'default', boardName: 'default', error: 'worker crashed' }
     ])
     expect(parseChatTasks({ tasks: [] }).supported).toBe(false)
     expect(parseChatTasks(null)).toEqual({ supported: false, tasks: [] })
@@ -39,6 +39,16 @@ describe('chat Kanban tasks (desktop#553)', () => {
     // Seen open, now finished: the line stays to say so.
     const finished = task('b', 'done')
     expect(shownTasks([done, finished], new Set(['b']))).toEqual([finished])
+  })
+
+  it('remembers across reads which tasks the chat saw open', () => {
+    const seen = new Set<string>()
+    // Opened after the first card finished: only the running one shows.
+    expect(afterRead([task('a', 'done'), task('b', 'running')], seen).map(t => t.id)).toEqual(['b'])
+    // It finishes while the chat shows: the line stays, saying so.
+    expect(afterRead([task('a', 'done'), task('b', 'done')], seen).map(t => t.id)).toEqual(['b'])
+    // Another chat starts over (the hook gives it a new set): nothing.
+    expect(afterRead([task('a', 'done'), task('b', 'done')], new Set())).toEqual([])
   })
 
   it('says how many are in progress and how many are blocked', () => {

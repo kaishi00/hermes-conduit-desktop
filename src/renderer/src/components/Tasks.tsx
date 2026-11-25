@@ -23,10 +23,11 @@ interface Props {
   onOpenRun: (run: CronRun, job: CronJob) => void
   /** A task to open on Board (a chat's Kanban task, from its line). */
   focus?: TaskFocus | null
+  onFocused?: () => void
 }
 
 /** The phone's Tasks tab: the task board, and the scheduled jobs. */
-export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, hostBadge, onOpenRun, focus }: Props) {
+export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, hostBadge, onOpenRun, focus, onFocused }: Props) {
   const [segment, setSegment] = useState<Segment>(() => {
     try {
       return localStorage.getItem(SEGMENT_KEY) === 'scheduled' ? 'scheduled' : 'board'
@@ -53,7 +54,7 @@ export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, ho
     </div>
   )
   return segment === 'board' ? (
-    <KanbanBoard connected={connected} bots={bots} tiles={tiles} hostBadge={hostBadge} segment={switcher} focus={focus} />
+    <KanbanBoard connected={connected} bots={bots} tiles={tiles} hostBadge={hostBadge} segment={switcher} focus={focus} onFocused={onFocused} />
   ) : (
     <ScheduledJobs bots={bots} connected={connected} profile={profile} onProfile={onProfile} tiles={tiles} badgeFor={badgeFor} onOpenRun={onOpenRun} segment={switcher} />
   )
