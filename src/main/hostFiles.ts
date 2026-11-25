@@ -5,7 +5,7 @@
  */
 import { createWriteStream } from 'node:fs'
 import { randomBytes } from 'node:crypto'
-import { open, readdir, rename, rm, stat } from 'node:fs/promises'
+import { open, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -29,10 +29,10 @@ export function kanbanAttachmentPath(id: string, board: string | null): string {
 /**
  * Whether an attachment download answered with the dashboard's own page (a
  * route it doesn't know) rather than the file: HTML for a file that isn't a
- * page. An attachment named .html or .htm is the file.
+ * page. An attachment named .html, .htm or .xhtml is the file.
  */
 export function isDashboardPage(contentType: string | null, filename: string): boolean {
-  return /text\/html/i.test(contentType ?? '') && !/\.html?$/i.test(filename.trim())
+  return /text\/html/i.test(contentType ?? '') && !/\.x?html?$/i.test(filename.trim())
 }
 
 /** `/api/fs/download`, `/api/fs/read-data-url` or `/api/fs/read-text` for `path`, in a profile's scope when it isn't the default. */
@@ -129,5 +129,44 @@ export async function sweepStaleParts(destination: string, now = Date.now()): Pr
     }
   } catch {
     // A folder that can't be listed has nothing to sweep here; the save says what's wrong.
+  }
+}
+
+export type Download = (signal: AbortSignal) => Promise<Response>
+export type DataUrl = () => Promise<Buffer | null>
+/** Hermes' read of a file as text (/api/fs/read-text): null when it isn't text or was cut short. */
+export type ReadText = () => Promise<string | null>
+
+/**
+ * Copies a host file to `file` (desktop#554's viewer and Open in Browser):
+ * from `download`'s stream, or `dataUrl`'s bytes for a Hermes without the
+ * download route, which `download` says by throwing a 404 or 405, or by
+ * answering with the dashboard's own page (HTML). `page` is a page's copy,
+ * whose own download answers as HTML, so that's taken as the file. `cancel`
+ * stops it, and a stopped copy leaves no file.
+ */
+export async function copyDown(file: string, download: Download, dataUrl: DataUrl, cancel?: AbortSignal, page = false): Promise<void> {
+  const stop = new AbortController()
+  const onCancel = () => stop.abort()
+  cancel?.addEventListener('abort', onCancel)
+  const cancelled = () => Object.assign(new Error('cancelled'), { code: 'cancelled' })
+  try {
+    if (cancel?.aborted) throw cancelled()
+    const response = await download(stop.signal)
+    if (!page && /text\/html/i.test(response.headers.get('content-type') ?? '')) {
+      void response.body?.cancel().catch(() => undefined)
+      throw Object.assign(new Error('no download route'), { code: 404 })
+    }
+    if (!response.body) throw new Error('no body')
+    await streamToFile(response.body as ReadableStream, file, () => stop.abort())
+  } catch (error) {
+    const code = (error as { code?: unknown }).code
+    if ((code !== 404 && code !== 405) || stop.signal.aborted) throw error
+    const bytes = await dataUrl()
+    if (cancel?.aborted) throw cancelled()
+    if (!bytes) throw Object.assign(new Error('unreadable'), { code: 415 })
+    await writeFile(file, bytes)
+  } finally {
+    cancel?.removeEventListener('abort', onCancel)
   }
 }

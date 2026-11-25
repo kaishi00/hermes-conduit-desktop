@@ -82,3 +82,45 @@ describe('a file the chat’s file card opens (desktop#554)', () => {
     expect(clip).not.toContain('Open in Browser')
   })
 })
+
+describe('a copy the viewer or Open in Browser makes (copyDown)', () => {
+  const setup = async () => {
+    const { mkdtemp } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    return join(await mkdtemp(join(tmpdir(), 'conduit-copy-')), 'copy')
+  }
+
+  it('takes a dashboard page answering the download route as no route, and reads the data URL', async () => {
+    const { copyDown } = await import('../src/main/hostFiles')
+    const { readFile } = await import('node:fs/promises')
+    const file = await setup()
+    let cancelled = false
+    const body = new ReadableStream({ start: c => c.enqueue(new TextEncoder().encode('<html>dashboard</html>')), cancel: () => void (cancelled = true) })
+    await copyDown(file, async () => new Response(body, { headers: { 'content-type': 'text/html' } }), async () => Buffer.from('PNG'))
+    expect(await readFile(file, 'utf8')).toBe('PNG')
+    expect(cancelled).toBe(true)
+  })
+
+  it('takes a page’s own HTML download as the file when copying a page', async () => {
+    const { copyDown } = await import('../src/main/hostFiles')
+    const { readFile } = await import('node:fs/promises')
+    const file = await setup()
+    await copyDown(file, async () => new Response('<html>mine</html>', { headers: { 'content-type': 'text/html' } }), async () => null, undefined, true)
+    expect(await readFile(file, 'utf8')).toBe('<html>mine</html>')
+  })
+
+  it('stops when cancelled and leaves no file', async () => {
+    const { copyDown } = await import('../src/main/hostFiles')
+    const { readdir } = await import('node:fs/promises')
+    const { dirname } = await import('node:path')
+    const file = await setup()
+    const cancel = new AbortController()
+    const slow = async (signal: AbortSignal) =>
+      new Response(new ReadableStream({ start: c => { c.enqueue(new Uint8Array(100)); signal.addEventListener('abort', () => c.error(new Error('aborted'))) } }), { headers: { 'content-type': 'video/mp4' } })
+    const copying = copyDown(file, slow, async () => Buffer.from('x'), cancel.signal)
+    setTimeout(() => cancel.abort(), 50)
+    await expect(copying).rejects.toThrow()
+    expect(await readdir(dirname(file))).toEqual([])
+  })
+})

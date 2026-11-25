@@ -28,7 +28,7 @@ export function sayIfFailed(error: string | null): void {
   if (error) void tell(error)
 }
 
-/** Opens a page on the Hermes host (.html, .htm) in the default browser from a copy, saying so when it can't (desktop#554). */
+/** Opens a page on the Hermes host (.html, .htm, .xhtml) in the default browser from a copy, saying so when it can't (desktop#554). */
 export async function openPageInBrowser(path: string, profile?: string | null): Promise<void> {
   try {
     sayIfFailed(await window.conduit.openHostPageInBrowser(path, profile ?? undefined))
