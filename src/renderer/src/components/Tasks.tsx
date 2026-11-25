@@ -4,7 +4,7 @@ import type { Bot } from '../state/bots'
 import type { MixedTile } from '../state/botOrder'
 import type { HostBadge } from '../state/keptHosts'
 import type { CronJob, CronRun } from '../state/cron'
-import { KanbanBoard } from './KanbanBoard'
+import { KanbanBoard, type TaskFocus } from './KanbanBoard'
 import { ScheduledJobs } from './ScheduledJobs'
 
 type Segment = 'board' | 'scheduled'
@@ -21,10 +21,12 @@ interface Props {
   /** A dashboard's badge by its URL (null: this one), for Board's picker. */
   hostBadge?: (host: string | null) => HostBadge | null
   onOpenRun: (run: CronRun, job: CronJob) => void
+  /** A task to open on Board (a chat's Kanban task, from its line). */
+  focus?: TaskFocus | null
 }
 
 /** The phone's Tasks tab: the task board, and the scheduled jobs. */
-export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, hostBadge, onOpenRun }: Props) {
+export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, hostBadge, onOpenRun, focus }: Props) {
   const [segment, setSegment] = useState<Segment>(() => {
     try {
       return localStorage.getItem(SEGMENT_KEY) === 'scheduled' ? 'scheduled' : 'board'
@@ -51,7 +53,7 @@ export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, ho
     </div>
   )
   return segment === 'board' ? (
-    <KanbanBoard connected={connected} bots={bots} tiles={tiles} hostBadge={hostBadge} segment={switcher} />
+    <KanbanBoard connected={connected} bots={bots} tiles={tiles} hostBadge={hostBadge} segment={switcher} focus={focus} />
   ) : (
     <ScheduledJobs bots={bots} connected={connected} profile={profile} onProfile={onProfile} tiles={tiles} badgeFor={badgeFor} onOpenRun={onOpenRun} segment={switcher} />
   )

@@ -23,6 +23,15 @@ interface Props {
   hostBadge?: (host: string | null) => HostBadge | null
   /** The Board | Scheduled switch, for the header. */
   segment: ReactNode
+  /** A task to open, on this dashboard's board by its slug: a chat's Kanban task, from its line. */
+  focus?: TaskFocus | null
+}
+
+/** A task to open on Board; `n` counts the asks, so asking for the same task again opens it again. */
+export interface TaskFocus {
+  slug: string
+  id: string
+  n: number
 }
 
 /** The picker's value for a board: its dashboard (none for this one), then its slug. */
@@ -41,7 +50,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
  * into view (the phone's jump bar), the wheel and a grab on empty board space
  * move it sideways, and a card dragged to the edge rolls the board on.
  */
-export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, segment }: Props) {
+export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, segment, focus }: Props) {
   const farHosts = useMemo(() => [...new Set(tiles.filter(tile => !tile.own).map(tile => tile.host))], [tiles])
   const kanban = useKanban(connected, true, farHosts)
   const shownList = kanban.lists.find(list => list.host === kanban.host)
@@ -123,6 +132,19 @@ export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, s
     setOpenId(null)
     setComposing(false)
   }, [kanban.slug, kanban.host])
+  // A chat's task: its board, then the task, after the effect above has closed whatever the last board had open.
+  const focused = useRef(0)
+  const { pickBoard } = kanban
+  useEffect(() => {
+    if (!focus || focused.current === focus.n) return
+    if (kanban.host !== null || kanban.slug !== focus.slug) {
+      pickBoard(focus.slug, null)
+      return
+    }
+    focused.current = focus.n
+    setComposing(false)
+    setOpenId(focus.id)
+  }, [focus, kanban.host, kanban.slug, pickBoard])
   // With no board picked, the board is whatever Hermes calls current, which another client can change:
   // a menu whose task left the board read closes rather than act on the new one.
   useEffect(() => {

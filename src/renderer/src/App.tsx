@@ -102,6 +102,9 @@ import { onModelsSettings, type ModelsRequest } from './state/modelsLink'
 import { MemoryPage } from './components/MemoryPage'
 import { PlanDock } from './components/PlanDock'
 import { AgentsDock } from './components/AgentsDock'
+import { ChatTasksDock } from './components/ChatTasksDock'
+import { useChatTasks } from './state/useChatTasks'
+import type { TaskFocus } from './components/KanbanBoard'
 import { ControlDock } from './components/ControlDock'
 import { useAgents } from './state/useAgents'
 import { planFromChecklist } from './state/plan'
@@ -379,6 +382,8 @@ function Shell({
   const connected = status.phase === 'open'
   const [railLayout, setRailLayout] = useState<RailLayout>(() => readRailLayout())
   const [section, setSection] = useState<Section>(() => resolveInitialSection(reopenedSection(status.url ?? ''), railLayout))
+  // A chat's Kanban task opened from its line: Tasks > Board opens it on its board.
+  const [taskFocus, setTaskFocus] = useState<TaskFocus | null>(null)
   const pinnedRail = useMemo(() => pinnedSections(railLayout), [railLayout])
   const pinnedRailRef = useRef(pinnedRail)
   pinnedRailRef.current = pinnedRail
@@ -863,6 +868,7 @@ function Shell({
   const workChecklist = workItem?.checklist
   const shownPlan = useMemo(() => (workChecklist?.length ? planFromChecklist(workChecklist) : transcriptPlan), [workChecklist, transcriptPlan])
   const delegates = useAgents(chat.liveId, connected, running)
+  const chatTasks = useChatTasks(chat.storedId ?? chat.liveId, selected.profile, connected, running)
   const [drafting, setDrafting] = useState(false)
   const followedUp = useFollowUps(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined, selected.profile, !drafting)
   const predictions = usePredictions(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined)
@@ -2655,6 +2661,14 @@ function Shell({
                 processes={delegates.processes}
                 kill={delegates.kill}
               />
+              <ChatTasksDock
+                tasks={chatTasks.tasks}
+                chatKey={selected.id ?? 'new'}
+                onOpen={task => {
+                  setTaskFocus(focus => ({ slug: task.board, id: task.id, n: (focus?.n ?? 0) + 1 }))
+                  setSection('tasks')
+                }}
+              />
               <PlanDock plan={shownPlan} running={running} chatKey={selected.id ?? 'new'} />
               {takeover ? (
                 <div className="takeover-offer" role="status">
@@ -2826,6 +2840,7 @@ function Shell({
             onProfile={setChatProfile}
             tiles={profileTiles}
             badgeFor={tileBadge}
+            focus={taskFocus}
             hostBadge={host => badgeFor(host ?? status.url ?? '')}
             onOpenRun={(run, job) => {
               if (!run.id) return
