@@ -13,6 +13,9 @@ export interface FolderTabs<T extends FolderTab> {
 export interface FolderTab {
   entry: { path: string }
   draft?: string
+  saving?: boolean
+  /** Read again when it's next picked. */
+  stale?: boolean
 }
 
 export const FOLDER_TAB_LIMIT = 12
@@ -96,7 +99,8 @@ export function renameTabs<
         ? { ...f.folder, entries: f.folder.entries.map(e => (under(e.path) ? { ...e, path: moved(e.path), name: name(moved(e.path)) } : e)) }
         : f.folder
       if (!under(f.entry.path)) return back === f.back && folder === f.folder ? f : { ...f, back, folder }
-      return { ...f, back, entry: { ...f.entry, path: moved(f.entry.path), name: name(moved(f.entry.path)) } }
+      // A read or save still running answers for the old path and can't reach it: read it again when picked.
+      return { ...f, back, saving: undefined, stale: true, entry: { ...f.entry, path: moved(f.entry.path), name: name(moved(f.entry.path)) } }
     }),
     active: next.active === null ? null : moved(next.active)
   }

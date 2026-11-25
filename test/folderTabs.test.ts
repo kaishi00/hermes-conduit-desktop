@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { childPath } from '../src/renderer/src/state/workspace'
 import { FOLDER_TAB_LIMIT, NO_TABS, closeTab, closeTabsUnder, renameTabs, showTab, updateTab, type FolderTabs } from '../src/renderer/src/state/folderTabs'
 
 type F = { entry: { path: string; name: string }; draft?: string; text?: string }
@@ -66,7 +67,7 @@ describe('the Folder’s file tabs', () => {
   it('a rename moves the tabs under it, drafts kept', () => {
     const tabs = showTab(showTab(NO_TABS as FolderTabs<F>, file('/r/dir/a', { draft: 'x' })), file('/r/other'))
     const next = renameTabs({ ...tabs, active: '/r/dir/a' }, '/r/dir', '/r/new')
-    expect(next.files[0]).toEqual({ entry: { path: '/r/new/a', name: 'a' }, draft: 'x' })
+    expect(next.files[0]).toEqual({ entry: { path: '/r/new/a', name: 'a' }, draft: 'x', saving: undefined, stale: true })
     expect(next.active).toBe('/r/new/a')
     expect(next.files[1]).toBe(tabs.files[1])
   })
@@ -95,5 +96,13 @@ describe('the Folder’s file tabs', () => {
     const top: G = { entry: { path: '/r', name: 'r', isDirectory: true }, folder: { entries: [{ path: '/r/sub', name: 'sub' }, { path: '/r/a', name: 'a' }] } }
     const tabs = renameTabs(showTab(NO_TABS as FolderTabs<G>, top), '/r/sub', '/r/new')
     expect(tabs.files[0].folder?.entries).toEqual([{ path: '/r/new', name: 'new' }, { path: '/r/a', name: 'a' }])
+  })
+
+  it('a rename on a Windows host keeps its backslashes', () => {
+    const tabs = showTab(NO_TABS as FolderTabs<F>, file('C:\\w\\a.txt'))
+    const to = childPath('C:\\w', 'b.txt')
+    expect(to).toBe('C:\\w\\b.txt')
+    expect(renameTabs(tabs, 'C:\\w\\a.txt', to).files[0].entry).toEqual({ path: 'C:\\w\\b.txt', name: 'b.txt' })
+    expect(childPath('/r/', 'x')).toBe('/r/x')
   })
 })

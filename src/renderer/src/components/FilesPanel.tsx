@@ -5,6 +5,7 @@ import { answerKeeper, keptAnswer } from '../state/keptAnswers'
 import {
   baseName,
   changePath,
+  childPath,
   dataUrlPath,
   fsListPath,
   isImage,
@@ -298,7 +299,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
     setExpanded(current => new Set(current).add(folder))
     const made = await change(kind === 'file' ? 'new-file' : 'mkdir', { path: folder, name }, [folder])
     if (made && kind === 'file') {
-      const entry = { name, path: `${folder.replace(/[\\/]+$/, '')}/${name}`, isDirectory: false }
+      const entry = { name, path: childPath(folder, name), isDirectory: false }
       void openFile(entry)
     }
   }
@@ -642,7 +643,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
                   const name = await askName(t('Rename'), entry.name)
                   if (!name || name === entry.name) return
                   const moved = await change('move', { path: entry.path, to: parentPath(entry.path), name }, [parentPath(entry.path)])
-                  if (moved !== false) setFiles(current => renameTabs(current, entry.path, `${parentPath(entry.path).replace(/[\\/]+$/, '')}/${name}`))
+                  if (moved !== false) setFiles(current => renameTabs(current, entry.path, childPath(parentPath(entry.path), name)))
                 }}
               >
                 {t('Rename')}

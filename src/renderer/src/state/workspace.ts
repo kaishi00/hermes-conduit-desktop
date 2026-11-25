@@ -135,6 +135,13 @@ export function parentPath(path: string): string {
   return cut === 0 ? trimmed.slice(0, 1) : trimmed.slice(0, cut)
 }
 
+/** `name` inside `folder`, joined with the separator the folder's path uses (a Windows host's backslash). */
+export function childPath(folder: string, name: string): string {
+  const trimmed = folder.replace(/[\\/]+$/, '')
+  const sep = trimmed.includes('\\') && !trimmed.includes('/') ? '\\' : '/'
+  return `${trimmed}${sep}${name}`
+}
+
 /** A path from the root's top: "src/app.ts". */
 export function relativePath(root: string, path: string): string {
   const base = root.replace(/[\\/]+$/, '')
