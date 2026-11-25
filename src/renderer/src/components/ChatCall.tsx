@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import type { PendingRequest } from '@shared/ipc'
 import { VOICE_MODE_EVENT, setVoiceMode, voiceMode, type VoiceMode } from '../state/gptLive'
+import { afterCallStep, leftByCall, type AfterCall } from '../state/afterCall'
 import { consented, isLive } from '../state/consent'
 import type { CallResume } from '../state/voiceSave'
 import type { CallTranscript } from '../state/voiceCalls'
@@ -217,6 +218,15 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
   const items = useTranscriptValue(store, state => (calling ? state.items : null)) ?? NO_ITEMS
   const lastReply = useTranscriptValue(store, state => (calling ? lastReplyOf(state.items) : null))
 
+  // What a live call left unsent at hang-up goes once the chat is free (hermes-conduit issue 3185).
+  const [left, setLeft] = useState<AfterCall | null>(null)
+  const callLeft = (requests: string[]) => setLeft(kept => leftByCall(kept, chatId, requests))
+  useEffect(() => {
+    const step = afterCallStep(left, { chatId, calling, running, turnsDone })
+    if (step.left !== left) setLeft(step.left)
+    if (step.send !== undefined) callSay(step.send)
+  }, [left, chatId, calling, running, turnsDone])
+
   const end = () => setCalling(false)
   const view = (drawn: ChatCallView): ReactNode => {
     late.current = drawn
@@ -233,6 +243,7 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
       turnsDone,
       lastReply,
       onEnd: end,
+      onLeft: callLeft,
       onClassic: () => setCallMode('classic'),
       requests,
       resume: resume ?? undefined

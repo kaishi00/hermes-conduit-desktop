@@ -104,6 +104,8 @@ interface Props {
   pictureNote?: PictureNote | null
   /** Ends this call and starts a Classic one in its place. */
   onClassic: () => void
+  /** Requests for the chat still waiting to be sent when the call ends. */
+  onLeft?: (requests: string[]) => void
   /** Gemini, or Qwen on the same shell through the phone's adapter. */
   provider?: 'gemini' | 'qwen'
   /** The approvals and questions the chat waits on, which the call can answer by voice. */
@@ -163,6 +165,7 @@ export function GeminiLiveCall({
   pictureControls,
   pictureNote,
   onClassic,
+  onLeft,
   provider = 'gemini',
   requests = [],
   resume
@@ -873,6 +876,8 @@ export function GeminiLiveCall({
       stopListening()
       ended.current = true
       teardown()
+      // Still waiting for the chat: they go once it's free.
+      if (queue.current.length) onLeft?.(queue.current.splice(0).map(entry => entry.request))
     }
   }, [])
 

@@ -86,6 +86,8 @@ interface Props {
   pictureNote?: PictureNote | null
   /** Ends this call and starts a Classic one in its place. */
   onClassic: () => void
+  /** Requests for the chat still waiting to be sent when the call ends. */
+  onLeft?: (requests: string[]) => void
   /** The approvals and questions the chat waits on, which the call can answer by voice. */
   requests?: PendingRequest[]
   /** Resume call: the saved call this one continues, its id and turns. */
@@ -129,6 +131,7 @@ export function GptLiveCall({
   pictureControls,
   pictureNote,
   onClassic,
+  onLeft,
   requests = [],
   resume
 }: Props) {
@@ -624,6 +627,8 @@ export function GptLiveCall({
       window.clearTimeout(openingTimer.current)
       ended.current = true
       teardown()
+      // Still waiting for the chat: they go once it's free.
+      if (queue.current.length) onLeft?.(queue.current.splice(0).map(entry => entry.request))
     }
   }, [])
 
