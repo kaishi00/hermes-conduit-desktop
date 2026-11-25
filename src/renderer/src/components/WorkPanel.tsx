@@ -55,6 +55,19 @@ interface Props {
 type WorkCardAction = WorkAction | WorkManage | 'approve' | 'deny'
 const nativeMenuTarget = 'input, textarea, a[href]'
 
+/** A link, a field or text selected in the card keeps the system's own menu, by mouse or keyboard. */
+function keepsNativeMenu(card: Element, target: Element): boolean {
+  if (target.closest(nativeMenuTarget)) return true
+  const sel = window.getSelection()
+  return (
+    !!sel?.toString().trim() &&
+    ((!!sel.anchorNode && card.contains(sel.anchorNode)) || (!!sel.focusNode && card.contains(sel.focusNode)))
+  )
+}
+
+/** What a refusal on a card was about: once a refresh changes any of it, the refusal is stale. */
+const workStamp = (item: WorkItem) => `${item.status}|${item.updatedAt}|${item.closed}|${item.pinned}`
+
 function WorkCard({
   item,
   movingFocus,
@@ -109,25 +122,22 @@ function WorkCard({
       onContextMenu={e => {
         if (!hasMenu) return
         const target = e.target as Element
-        const sel = window.getSelection()
-        const selectedHere =
-          !!sel?.toString().trim() &&
-          ((!!sel.anchorNode && e.currentTarget.contains(sel.anchorNode)) ||
-            (!!sel.focusNode && e.currentTarget.contains(sel.focusNode)))
-        if (target.closest(nativeMenuTarget) || selectedHere) return
+        if (keepsNativeMenu(e.currentTarget, target)) return
         e.preventDefault()
         e.stopPropagation()
         const opener = target.closest('button') ?? e.currentTarget.querySelector('button')
         const box = (opener ?? e.currentTarget).getBoundingClientRect()
-        const x = e.clientX || e.clientY ? e.clientX : Math.round(box.left + 12)
-        const y = e.clientX || e.clientY ? e.clientY : Math.round(box.bottom)
+        // A keyboard-made contextmenu event comes at (0, 0): place it under the card's button instead.
+        const fromPointer = e.clientX !== 0 || e.clientY !== 0
+        const x = fromPointer ? e.clientX : Math.round(box.left + 12)
+        const y = fromPointer ? e.clientY : Math.round(box.bottom)
         onOpenMenu(item, x, y, opener)
       }}
       onKeyDown={e => {
         if (!hasMenu) return
         if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return
         const target = e.target as Element
-        if (target.closest(nativeMenuTarget)) return
+        if (keepsNativeMenu(e.currentTarget, target)) return
         e.preventDefault()
         e.stopPropagation()
         const opener = target.closest('button') ?? e.currentTarget.querySelector('button')
@@ -425,7 +435,8 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
     }
   })
   const [busyByRef, setBusyByRef] = useState<Record<string, boolean>>({})
-  const [problemByRef, setProblemByRef] = useState<Record<string, string>>({})
+  // A refusal is kept with what its card looked like, and drops once a refresh changes the card.
+  const [problemByRef, setProblemByRef] = useState<Record<string, { text: string; stamp: string | null }>>({})
   const busyRefs = useRef(new Set<string>())
   const [menu, setMenu] = useState<{ ref: string; x: number; y: number } | null>(null)
   const menuFit = useFittedMenu<HTMLDivElement>(menu)
@@ -458,12 +469,34 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
     })
   }
 
+  // stamp null: a clipboard failure, which no refresh makes stale; it stays until the next try.
+  const refuse = (ref: string, error: unknown, stamp: string | null) => {
+    setProblemByRef(current => ({ ...current, [ref]: { text: workRefusal(error), stamp } }))
+  }
+
+  const problemOf = (item: WorkItem): string | null => {
+    const problem = problemByRef[item.ref]
+    return problem && (problem.stamp === null || problem.stamp === workStamp(item)) ? problem.text : null
+  }
+
+  // A card that leaves both lists takes its refusal with it.
+  useEffect(() => {
+    const refs = new Set([...(snapshot?.items ?? []), ...(resolved ?? [])].map(item => item.ref))
+    setProblemByRef(current => {
+      const gone = Object.keys(current).filter(ref => !refs.has(ref))
+      if (!gone.length) return current
+      const next = { ...current }
+      for (const ref of gone) delete next[ref]
+      return next
+    })
+  }, [snapshot, resolved])
+
   const copyBranch = async (item: WorkItem) => {
     clearProblem(item.ref)
     try {
       await navigator.clipboard.writeText(item.branch)
     } catch (e) {
-      setProblemByRef(current => ({ ...current, [item.ref]: workRefusal(e) }))
+      refuse(item.ref, e, null)
     }
   }
 
@@ -472,12 +505,15 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
     busyRefs.current.add(ref)
     setBusyByRef(current => ({ ...current, [ref]: true }))
     clearProblem(ref)
+    // What the card looked like when it was asked: a refusal is about that state.
+    const asked = [...(resolved ?? []), ...(snapshot?.items ?? [])].find(row => row.ref === ref)
+    const stamp = asked ? workStamp(asked) : ''
     try {
       await gateway.http('POST', workPath(`${WORK}/${encodeURIComponent(ref)}/${action}`, profile), body)
       changed()
       return true
     } catch (e) {
-      setProblemByRef(current => ({ ...current, [ref]: workRefusal(e) }))
+      refuse(ref, e, stamp)
       return false
     } finally {
       busyRefs.current.delete(ref)
@@ -553,7 +589,7 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
       movingFocus={movingFocus}
       botName={botName}
       busy={!!busyByRef[item.ref]}
-      problem={problemByRef[item.ref] ?? null}
+      problem={problemOf(item)}
       onAct={act}
       onCopyBranch={copyBranch}
       onOpenChat={onOpenChat}
@@ -700,7 +736,10 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
             const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
             if (!items.length) return
             const index = items.indexOf(document.activeElement as HTMLButtonElement)
-            const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : index + (e.key === 'ArrowDown' ? 1 : -1)
+            // With nothing in the menu focused yet, Down starts at the first entry and Up at the last.
+            const step = e.key === 'ArrowDown' ? 1 : -1
+            const next =
+              e.key === 'Home' ? 0 : e.key === 'End' || (index < 0 && step < 0) ? items.length - 1 : index + step
             items[(next + items.length) % items.length]?.focus()
           }}
         >

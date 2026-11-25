@@ -313,4 +313,57 @@ describe('WorkPanel right-click context menu', () => {
     })
     expect(host.querySelector('[role="menu"]')).toBeNull()
   })
+
+  it('drops a refusal once a refresh changes its card, and keeps it while the card is the same', async () => {
+    httpMock.mockRejectedValueOnce(new Error('Already resolved'))
+    await renderPanel()
+    rightClick(cardByRef('A94'))
+    await act(async () => {
+      menuButton('Resolve').click()
+    })
+    expect(cardByRef('A94').querySelector('[role="alert"]')?.textContent).toBe('Already resolved')
+    await renderPanel({ snapshot: { ...snapshot, items: [...snapshot.items] } })
+    expect(cardByRef('A94').querySelector('[role="alert"]')?.textContent).toBe('Already resolved')
+    await renderPanel({ snapshot: { ...snapshot, items: snapshot.items.map(i => (i.ref === 'A94' ? { ...i, updatedAt: i.updatedAt + 1000 } : i)) } })
+    expect(cardByRef('A94').querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('leaves Shift+F10 to the native menu while text in the card is selected', async () => {
+    await renderPanel()
+    const card = cardByRef('A94')
+    const head = card.querySelector<HTMLButtonElement>('.work-card-head')!
+    const origGetSelection = window.getSelection
+    try {
+      window.getSelection = (() => ({ toString: () => 'selected', anchorNode: card.firstChild, focusNode: card.firstChild })) as typeof window.getSelection
+      const key = new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true })
+      act(() => {
+        head.dispatchEvent(key)
+      })
+      expect(key.defaultPrevented).toBe(false)
+      expect(host.querySelector('[role="menu"]')).toBeNull()
+    } finally {
+      window.getSelection = origGetSelection
+    }
+  })
+
+  it('ArrowUp with nothing in the menu focused goes to its last entry', async () => {
+    await renderPanel()
+    rightClick(cardByRef('W37'))
+    const menu = host.querySelector<HTMLElement>('[role="menu"]')!
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    act(() => {
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
+    })
+    expect(document.activeElement?.textContent).toBe('Copy Branch')
+  })
+
+  it('keeps a clipboard failure through a refresh that changes the card', async () => {
+    const write = vi.fn().mockImplementation(() => { throw new Error('Clipboard unavailable') })
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true })
+    await renderPanel()
+    rightClick(cardByRef('W37'))
+    await act(async () => { menuButton('Copy Branch').click() })
+    await renderPanel({ snapshot: { ...snapshot, items: snapshot.items.map(i => (i.ref === 'W37' ? { ...i, updatedAt: i.updatedAt + 1000 } : i)) } })
+    expect(cardByRef('W37').querySelector('[role="alert"]')?.textContent).toContain('Clipboard unavailable')
+  })
 })
