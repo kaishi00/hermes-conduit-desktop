@@ -12821,3 +12821,12 @@ main.docked-pulse.pulse-page {
 .file-viewer-note {
   padding: 16px 20px;
 }
+/* A toolset backend's key: its name, whether it's set, a field and its button. */
+.toolset-key {
+  gap: 8px;
+  padding: 0 0 8px;
+}
+.toolset-key input {
+  flex: 1;
+  min-width: 0;
+}
