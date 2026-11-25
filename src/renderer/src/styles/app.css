@@ -7170,6 +7170,16 @@ button.cap-row-text {
 .agent-cards {
   padding: 4px;
 }
+/* A chat's Kanban tasks (desktop#553): red while one is blocked. */
+.chat-tasks-dock.blocked .plan-toggle strong,
+.chat-tasks-dock.blocked .plan-toggle svg,
+.chat-task-error {
+  color: var(--danger);
+}
+.chat-task .link {
+  margin-top: 4px;
+  padding: 0;
+}
 .agent-card {
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
