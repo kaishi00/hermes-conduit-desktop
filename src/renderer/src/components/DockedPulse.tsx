@@ -40,6 +40,7 @@ export function DockedPulse() {
           })
         }
         bots={[...(roster.bots ?? []), ...roster.hidden]}
+        connected={status?.phase === 'open'}
       />
     </div>
   )

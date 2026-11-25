@@ -2896,7 +2896,7 @@ function Shell({
             onOpenBoard={() => setSection('tasks')}
             chips={pulseHostChips}
             onPickHost={pickPulseHost}
-            bots={glowBots}
+            bots={glowBots} connected={connected}
           />
         ) : section === 'room' && shownCopy && shownCopyRoom ? (
           <RoomView
@@ -3348,7 +3348,7 @@ function Settings({
   if (page === 'pulse')
     return (
       <SettingsPane pane={pane}>
-        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} bots={pulseBots} />
+        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} bots={pulseBots} connected={status?.phase === 'open'} />
       </SettingsPane>
     )
   if (page === 'chat')

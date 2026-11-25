@@ -292,4 +292,35 @@ export const FEATURES: { id: string; capabilities: string[] }[] = [
   { id: 'updates', capabilities: ['self-restart'] }
 ]
 
+/**
+ * Ask for Pulse's capabilities until the plugin can answer. `unknown` retries with
+ * back-off; `missing` means no capabilities; `reported` hands them back. The returned
+ * stop keeps a late answer out (issue 550).
+ */
+export function watchPulseCapabilities(
+  ask: () => Promise<PluginStatus | null>,
+  onAnswer: (capabilities: readonly string[]) => void,
+  wait: (ms: number, then: () => void) => () => void = (ms, then) => {
+    const timer = setTimeout(then, ms)
+    return () => clearTimeout(timer)
+  }
+): () => void {
+  let live = true
+  let cancel = () => {}
+  const attempt = (n: number) => {
+    void ask()
+      .catch(() => null)
+      .then(status => {
+        if (!live) return
+        if (status) onAnswer(status.state === 'reported' ? status.capabilities : [])
+        else cancel = wait(askAgainMs(n), () => attempt(n + 1))
+      })
+  }
+  attempt(0)
+  return () => {
+    live = false
+    cancel()
+  }
+}
+
 export const serves = (status: PluginStatus, capabilities: string[]) => status.state === 'reported' && capabilities.every(c => status.capabilities.includes(c))
