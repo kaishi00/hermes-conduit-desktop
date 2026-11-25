@@ -41,6 +41,12 @@ describe('folded chat-list groups', () => {
     act(() => root.render(createElement(ChatList as never, props({ selectedId: 'a' }) as never)))
     expect(host.textContent).toContain('Alpha')
     expect(JSON.parse(localStorage.getItem('conduit.allProfiles.closedSections') ?? '[]')).toEqual([])
+
+    // Folding the open chat's group again holds through the list's next refresh.
+    act(() => (host.querySelector('button.sect') as HTMLButtonElement).click())
+    expect(host.textContent).not.toContain('Alpha')
+    act(() => root.render(createElement(ChatList as never, props({ rows: [row('a', 'Alpha'), row('b', 'Beta')], selectedId: 'a' }) as never)))
+    expect(host.textContent).not.toContain('Alpha')
     act(() => root.unmount())
   })
 

@@ -612,10 +612,15 @@ export function ChatList({
     scroller.current?.querySelector('.row[aria-current="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [present, selectedId])
   // A chat opened from a notification or a link must be visible, even when its group was folded.
+  // Once per chat, when its row is first listed: folding the open chat's group afterwards keeps it folded.
+  const unfoldedFor = useRef<string | null>(null)
   useEffect(() => {
+    if (!selectedId) unfoldedFor.current = null
+    if (!present || unfoldedFor.current === selectedId) return
+    unfoldedFor.current = selectedId
     const key = foldedKeyForSelection(sections, selectedId)
     if (key && closedSections.includes(key)) toggleSection(key)
-  }, [selectedId, sections])
+  }, [present, selectedId])
 
   // What a row's handlers read, so they keep one identity and memoized rows skip a redraw (desktop#199).
   const latest = useRef({ onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope })
