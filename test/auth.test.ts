@@ -391,6 +391,9 @@ describe('a dashboard behind a sign-in page', () => {
       error: 'This isn’t answering like a Hermes dashboard.',
       browser: 'https://hermes.example.com'
     })
+    // Another service answering in text has no page to sign in on.
+    const text = dashboard({ '/api/status': () => new Response('pong', { headers: { 'Content-Type': 'text/plain' } }) })
+    expect(await probeHost('hermes.example.com', text.fetchImpl)).toEqual({ ok: false, error: 'This isn’t answering like a Hermes dashboard.' })
   })
 
   it('takes a ticket from a gated Hermes with the window’s cookies, keeping one the proxy renews', async () => {

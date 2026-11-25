@@ -276,7 +276,8 @@ export async function probeHost(input: string, fetchImpl: Fetch, headers?: Proxy
       if (native) return result({ auth_required: true })
       // A page reached through a redirect on the dashboard's own origin is a sign-in portal there (a forward-auth gate).
       if (redirectedAnswers.has(response)) return signInPageAnswer(url)
-      return { ok: false, error: t('This isn’t answering like a Hermes dashboard.'), browser: url }
+      const page = /^text\/html\b/i.test(response.headers.get('content-type') ?? '')
+      return { ok: false, error: t('This isn’t answering like a Hermes dashboard.'), ...(page ? { browser: url } : {}) }
     }
     if ((!metadata || !Object.hasOwn(metadata, 'auth_flows')) && malformedAuthFlows(body)) {
       return { ok: false, error: t('This isn’t answering like a Hermes dashboard.') }
@@ -413,9 +414,9 @@ export async function fetchKeepingCookies(
   throw new AuthError(t('The dashboard redirected too many times.'))
 }
 
-/** Whether an answer to a request that carried a sign-in window's cookies says they no longer pass: a redirect (to sign in again) or a 401. */
+/** Whether an answer to a request that carried a sign-in window's cookies says they no longer pass: a redirect somewhere (to sign in again) or a 401. */
 export function browserSignedOut(response: Response): boolean {
-  return (response.status >= 300 && response.status < 400) || response.status === 401
+  return (response.status >= 300 && response.status < 400 && response.headers.has('location')) || response.status === 401
 }
 
 /**

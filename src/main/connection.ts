@@ -661,14 +661,16 @@ export class Connection {
     const response = await send()
     if (!browserSignedOut(response) || this.saved !== saved) return response
     const token = this.openToken
-    this.browserCheck ??= browserSession(saved.url, saved.cookies ?? {}, this.fetchFor(saved))
+    const check: Promise<boolean> = this.browserCheck ??= browserSession(saved.url, saved.cookies ?? {}, this.fetchFor(saved))
       .then(session => {
         this.keepCookies(saved, session.jar)
         if (this.saved === saved) this.openToken = session.token ?? null
         return true
       }, error => !(error instanceof AuthError && error.signedOut))
-      .finally(() => { this.browserCheck = null })
-    if (!(await this.browserCheck)) {
+      .finally(() => {
+        if (this.browserCheck === check) this.browserCheck = null
+      })
+    if (!(await check)) {
       if (this.saved === saved && this.status.phase !== 'failed') {
         this.teardown()
         this.setStatus({ ...this.identity(), phase: 'failed', error: t('Hermes signed this computer out. Sign in again.') })
@@ -1071,6 +1073,8 @@ export class Connection {
   }
 
   private teardown(): void {
+    // A look at one host's cookies never answers for the next host this connection opens.
+    this.browserCheck = null
     // A request belongs to the socket it came on; the next one replays what's still open.
     this.clearRequests()
     if (this.retryTimer) this.clearTimer(this.retryTimer)
