@@ -27,6 +27,11 @@ export function sayIfFailed(error: string | null): void {
   if (error) void tell(error)
 }
 
+/** Opens a page on the Hermes host (.html, .htm) in the default browser from a copy, saying so when it can't (desktop#554). */
+export async function openPageInBrowser(path: string, profile?: string | null): Promise<void> {
+  sayIfFailed(await window.conduit.openHostPageInBrowser(path, profile ?? undefined))
+}
+
 /** A base64 data URL's bytes, or null when it isn't one. */
 export function dataUrlBytes(src: string): ArrayBuffer | null {
   const match = /^data:[^,]*;base64,(.*)$/s.exec(src)

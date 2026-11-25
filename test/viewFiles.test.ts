@@ -1,0 +1,82 @@
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { byteRange, isPagePath, isViewedFileUrl, viewedFileUrl, viewedType, viewerFrame } from '../src/shared/viewFileRules'
+import { frameStays } from '../src/main/linkPolicy'
+
+beforeAll(() => {
+  const store = new Map<string, string>()
+  Object.assign(globalThis, {
+    window: Object.assign(globalThis.window ?? {}, { conduit: new Proxy({ platform: 'linux' } as Record<string, unknown>, { get: (t, k: string) => (k in t ? t[k] : () => () => {}) }), addEventListener() {}, removeEventListener() {} }),
+    localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) }
+  })
+})
+
+describe('a file the chat’s file card opens (desktop#554)', () => {
+  it('is copied down only when it’s a picture, sound, video or PDF, served as its type', () => {
+    expect(viewedType('/srv/out/Report.PDF')).toBe('application/pdf')
+    expect(viewedType('C:\\clips\\take.mp4')).toBe('video/mp4')
+    expect(viewedType('/a/voice.ogg')).toBe('audio/ogg')
+    expect(viewedType('/a/logo.svg')).toBe('image/svg+xml')
+    expect(viewedType('/a/page.html')).toBeNull()
+    expect(viewedType('/a/notes.md')).toBeNull()
+    expect(viewedType('/a/Makefile')).toBeNull()
+    expect(viewedType('/a/.pdf')).toBeNull()
+  })
+
+  it('opens a page in the browser only for .html and .htm', () => {
+    expect(isPagePath('/a/report.html')).toBe(true)
+    expect(isPagePath('/a/report.HTM')).toBe(true)
+    expect(isPagePath('/a/report.html.txt')).toBe(false)
+    expect(isPagePath('/a/report')).toBe(false)
+  })
+
+  it('has a copy address on its own scheme, whose frames (and the PDF viewer’s) stay', () => {
+    const url = viewedFileUrl('abc', '/a/b/clip.webm')
+    expect(url).toBe('conduit-file://abc/file.webm')
+    expect(isViewedFileUrl(url)).toBe(true)
+    expect(frameStays(false, viewerFrame(url))).toBe(true)
+    expect(viewerFrame('chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html')).toBe(true)
+    expect(viewerFrame('chrome-extension://someoneelse/index.html')).toBe(false)
+    expect(viewerFrame('https://example.com/')).toBe(false)
+  })
+
+  it('answers the byte range a player asks for', () => {
+    expect(byteRange(null, 100)).toBeNull()
+    expect(byteRange('bytes=0-', 100)).toEqual({ start: 0, end: 99 })
+    expect(byteRange('bytes=10-19', 100)).toEqual({ start: 10, end: 19 })
+    expect(byteRange('bytes=90-500', 100)).toEqual({ start: 90, end: 99 })
+    expect(byteRange('bytes=-30', 100)).toEqual({ start: 70, end: 99 })
+    expect(byteRange('bytes=-300', 100)).toEqual({ start: 0, end: 99 })
+    expect(byteRange('bytes=100-', 100)).toBe('unsatisfiable')
+    expect(byteRange('bytes=20-10', 100)).toBe('unsatisfiable')
+    expect(byteRange('bytes=-0', 100)).toBe('unsatisfiable')
+    expect(byteRange('bytes=0-', 0)).toBe('unsatisfiable')
+    expect(byteRange('bytes=0-1,4-5', 100)).toBeNull()
+    expect(byteRange('items=0-1', 100)).toBeNull()
+  })
+
+  it('is shown by its kind, and the card offers Open, with Open in Browser for a page', async () => {
+    // Paths the node typecheck doesn't follow: the components are the renderer's, checked by tsconfig.web.json.
+    const viewer = '../src/renderer/src/components/FileViewer.tsx'
+    const transcript = '../src/renderer/src/components/Transcript.tsx'
+    const { viewerKind } = (await import(/* @vite-ignore */ viewer)) as { viewerKind: (path: string) => string }
+    expect(viewerKind('/a/site/index.html')).toBe('page')
+    expect(viewerKind('/a/paper.pdf')).toBe('pdf')
+    expect(viewerKind('/a/README.md')).toBe('markdown')
+    expect(viewerKind('/a/clip.mov')).toBe('video')
+    expect(viewerKind('/a/voice.m4a')).toBe('audio')
+    expect(viewerKind('/a/shot.png')).toBe('image')
+    expect(viewerKind('/a/data.csv')).toBe('text')
+    expect(viewerKind('/a/IMG_0001.HEIC')).toBe('text')
+    expect(viewerKind('/a/old.avi')).toBe('text')
+    const { Reply } = (await import(/* @vite-ignore */ transcript)) as { Reply: unknown }
+    const page = renderToStaticMarkup(createElement(Reply as never, { text: 'Here it is.\n\nMEDIA:/srv/out/report.html' }))
+    expect(page).toContain('>Open<')
+    expect(page).toContain('>Open in Browser<')
+    expect(page).toContain('>Download<')
+    const clip = renderToStaticMarkup(createElement(Reply as never, { text: 'MEDIA:/srv/out/clip.mp4' }))
+    expect(clip).toContain('>Open<')
+    expect(clip).not.toContain('Open in Browser')
+  })
+})
