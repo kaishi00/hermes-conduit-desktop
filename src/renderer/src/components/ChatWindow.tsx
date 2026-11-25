@@ -1,4 +1,4 @@
-import { applyScale, nextScale, readScale, scaleFromStorage, scaleStep, shortcutFor } from '../state/shortcuts'
+import { applyScale, nextScale, readScale, scaleFromStorage, scaleStep, shortcutFor, wheelSteps } from '../state/shortcuts'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { t } from '@shared/i18n'
 import type { ChatWindowRequest, ConnectionStatus } from '@shared/ipc'
@@ -113,11 +113,20 @@ export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
       scale = next
       document.documentElement.style.setProperty('--chat-scale', String(next))
     }
+    const read = wheelSteps()
+    const onWheel = (event: WheelEvent) => {
+      const by = read(event)
+      if (by === null) return
+      event.preventDefault()
+      if (by) step(by)
+    }
     window.addEventListener('keydown', onKey)
+    window.addEventListener('wheel', onWheel, { passive: false })
     window.addEventListener('storage', follow)
     const offMenu = window.conduit.onMenu(action => void step(scaleStep(action)))
     return () => {
       window.removeEventListener('keydown', onKey)
+      window.removeEventListener('wheel', onWheel)
       window.removeEventListener('storage', follow)
       offMenu()
     }

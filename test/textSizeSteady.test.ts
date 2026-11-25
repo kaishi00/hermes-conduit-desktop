@@ -3,7 +3,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 // Comments stripped, so a commented-out rule doesn't count.
-const css = readFileSync(join(__dirname, '../src/renderer/src/styles/app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+const css = ['app.css', 'theme.css']
+  .map(name => readFileSync(join(__dirname, '../src/renderer/src/styles', name), 'utf8'))
+  .join('\n')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
 
 describe('text size and pane width', () => {
   // The chat stepped its text up as its pane widened, so closing the sidebar or a side panel changed
@@ -20,7 +23,7 @@ describe('text size and pane width', () => {
 
   it('changes no font size inside a width query', () => {
     const offenders: string[] = []
-    for (const m of css.matchAll(/@(?:container|media)[^{]*\b(?:min|max)-width[^{]*\{/g)) {
+    for (const m of css.matchAll(/@(?:container|media)[^{]*\b(?:width|inline-size)\b[^{]*\{/g)) {
       let depth = 1
       let i = m.index + m[0].length
       while (i < css.length && depth > 0) {

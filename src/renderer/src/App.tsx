@@ -199,7 +199,7 @@ import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies
 import { loadMarks, markRead, markUnread, saveMarks, toggleStar, isStarred, isUnread, type ChatMarks } from './state/chatMarks'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
-import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor } from './state/shortcuts'
+import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor, wheelSteps } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { LoginItemSetting } from './components/LoginItemSetting'
@@ -592,6 +592,18 @@ function Shell({
       offOpen()
       window.removeEventListener('keydown', onKey)
     }
+  }, [])
+  // Ctrl with the scroll wheel changes the chat's text size, on a Mac too (a trackpad's pinch).
+  useEffect(() => {
+    const read = wheelSteps()
+    const onWheel = (event: WheelEvent) => {
+      const by = read(event)
+      if (by === null) return
+      event.preventDefault()
+      if (by) setChatScale(s => nextScale(s, by))
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => window.removeEventListener('wheel', onWheel)
   }, [])
 
   const roster = useBots(connected, status.url ?? '')

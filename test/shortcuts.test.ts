@@ -106,3 +106,37 @@ describe('the chat text size across windows (desktop#449)', () => {
     expect(scaleStep(null)).toBeNull()
   })
 })
+
+describe('Ctrl with the scroll wheel', () => {
+  const turn = (deltaY: number, timeStamp: number, more: Partial<{ ctrlKey: boolean; deltaMode: number }> = {}) => ({ deltaY, timeStamp, ctrlKey: true, deltaMode: 0, ...more })
+
+  it('steps the text size a notch at a time, up for bigger', async () => {
+    const { wheelSteps } = await import('../src/renderer/src/state/shortcuts')
+    const read = wheelSteps()
+    expect(read(turn(-100, 0))).toBe(1)
+    expect(read(turn(-100, 50))).toBe(1)
+    expect(read(turn(100, 100))).toBe(-1)
+    // A mouse that reports lines.
+    expect(read(turn(3, 150, { deltaMode: 1 }))).toBe(0)
+    expect(read(turn(4, 160, { deltaMode: 1 }))).toBe(-1)
+  })
+
+  it('leaves a plain scroll to the page', async () => {
+    const { wheelSteps } = await import('../src/renderer/src/state/shortcuts')
+    expect(wheelSteps()(turn(-100, 0, { ctrlKey: false }))).toBeNull()
+  })
+
+  it("adds a pinch's small turns up, and starts again after a pause or a turn back", async () => {
+    const { wheelSteps } = await import('../src/renderer/src/state/shortcuts')
+    const read = wheelSteps()
+    for (let i = 0; i < 9; i++) expect(read(turn(-10, i * 16))).toBe(0)
+    expect(read(turn(-10, 150))).toBe(1)
+    expect(read(turn(-60, 200))).toBe(0)
+    // Turned back: the 60 px toward bigger is dropped.
+    expect(read(turn(60, 220))).toBe(0)
+    expect(read(turn(40, 240))).toBe(-1)
+    expect(read(turn(-60, 300))).toBe(0)
+    // After a pause the count starts again.
+    expect(read(turn(-60, 1000))).toBe(0)
+  })
+})

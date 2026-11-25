@@ -1,6 +1,6 @@
 /**
  * Conduit's keyboard shortcuts, after the phone's catalog: ⌘N New Chat, ⌘F
- * Search, ⌘. Stop, ⌘, Settings, ⌘1 to ⌘6 the sections, ⌘+ ⌘− ⌘0 the chat's
+ * Search, ⌘. Stop, ⌘, Settings, ⌘1 to ⌘6 the sections, ⌘+ ⌘− ⌘0 (and Ctrl with the scroll wheel) the chat's
  * text size, ⌘\ the chat list and ⌘/ this list. The Mac's menu bar holds them there; Windows
  * has no menu bar, so the window reads Ctrl and the same key.
  */
@@ -99,7 +99,13 @@ export function shortcutGroups(mac: boolean, sections: readonly GoTo[] = GO_TO, 
     },
     {
       title: t('Chat text size'),
-      rows: [row(t('Make Text Bigger'), 'text-bigger'), row(t('Make Text Smaller'), 'text-smaller'), row(t('Make Text Normal Size'), 'text-normal')]
+      rows: [
+        row(t('Make Text Bigger'), 'text-bigger'),
+        row(t('Make Text Smaller'), 'text-smaller'),
+        row(t('Make Text Normal Size'), 'text-normal'),
+        // The wheel, with Ctrl on a Mac too; a key's name like Enter and Esc, so not translated.
+        { title: t('Chat text size'), keys: ['Ctrl+Scroll'] }
+      ]
     },
     { title: '', rows: [row(t('Keyboard Shortcuts'), 'shortcuts')] }
   ]
@@ -140,6 +146,32 @@ export function scaleFromStorage(event: Pick<StorageEvent, 'key' | 'newValue'>):
   if (event.key !== SCALE_KEY) return null
   const value = Number(event.newValue)
   return SCALES.includes(value) ? value : 1
+}
+
+/** A wheel event as `wheelSteps` reads it. */
+export type WheelTurn = Pick<WheelEvent, 'deltaY' | 'deltaMode' | 'ctrlKey' | 'timeStamp'>
+
+/**
+ * Ctrl with the scroll wheel changes the chat's text size, up for bigger, one step a notch. A pinch on a
+ * trackpad arrives as Ctrl with many small turns, so turns add up to a notch's worth (100 px) before a
+ * step, and a pause or a change of direction starts the count again. The reader answers null for a turn
+ * that isn't a text-size one (the page scrolls), 0 for one that counts toward a step, and 1 or -1 for a step.
+ */
+export function wheelSteps(): (event: WheelTurn) => -1 | 0 | 1 | null {
+  let sum = 0
+  let last = 0
+  return event => {
+    if (!event.ctrlKey) return null
+    // Lines and pages (Firefox-style mice) in pixels.
+    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1)
+    if (event.timeStamp - last > 400 || Math.sign(delta) !== Math.sign(sum)) sum = 0
+    last = event.timeStamp
+    sum += delta
+    if (Math.abs(sum) < 100) return 0
+    const by = sum < 0 ? 1 : -1
+    sum = 0
+    return by
+  }
 }
 
 /** The text-size step a shortcut asks for, or null when the action is another one. */
