@@ -196,7 +196,7 @@ import { parseProjects, type Project, type ProjectChat } from './state/projects'
 import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
-import { loadMarks, saveMarks, toggleStar, isStarred, showsUnread, type ChatMarks } from './state/chatMarks'
+import { loadMarks, saveMarks, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
 import { useOpenChatRead } from './state/openChatRead'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
@@ -1774,11 +1774,7 @@ function Shell({
   // open chat only when marked unread by hand (Unread dot on projects).
   const shownOpenId = dockedChat ? null : openId
   const projectChatUnread = useCallback(
-    (chat: ProjectChat) => {
-      if (!marks) return false
-      const listed = list.rows?.find(r => r.id === chat.id)
-      return showsUnread(marks, listed ?? { id: chat.id, title: chat.title, pinned: false, profile: chat.profile, activeAt: chat.lastActive }, chat.id === shownOpenId)
-    },
+    (chat: ProjectChat) => projectChatUnreadIn(marks, chat, list.rows, shownOpenId),
     [marks, list.rows, shownOpenId]
   )
   const waitingIds = useMemo(() => {

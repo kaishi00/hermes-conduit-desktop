@@ -5,6 +5,7 @@
  * first look count as read, so a new install doesn't light every row up.
  */
 import type { ChatRow } from './chats'
+import type { ProjectChat } from './projects'
 
 export type ChatFilter = 'all' | 'starred' | 'unread' | 'running' | 'waiting' | 'inprogress' | 'done'
 
@@ -23,8 +24,8 @@ export const markKey = (row: { id: string; profile?: string }) => `${row.profile
 
 const storageKey = (host: string) => `conduit.chatMarks.${host}`
 
-/** At most this many read times are kept; the oldest go first. */
-const SEEN_LIMIT = 2000
+/** At most this many read times and hand marks are kept; the oldest go first. */
+const MARK_LIMIT = 2000
 
 export function loadMarks(host: string, now = Date.now()): ChatMarks {
   try {
@@ -41,9 +42,12 @@ export function loadMarks(host: string, now = Date.now()): ChatMarks {
 
 export function saveMarks(host: string, marks: ChatMarks): void {
   const entries = Object.entries(marks.seen)
-  const seen = entries.length > SEEN_LIMIT ? Object.fromEntries(entries.sort((a, b) => b[1] - a[1]).slice(0, SEEN_LIMIT)) : marks.seen
+  const seen = entries.length > MARK_LIMIT ? Object.fromEntries(entries.sort((a, b) => b[1] - a[1]).slice(0, MARK_LIMIT)) : marks.seen
+  // Hand marks are keyed by chat too: a chat marked unread and then deleted otherwise
+  // keeps its key in localStorage forever (issue 527).
+  const unread = marks.unread.length > MARK_LIMIT ? marks.unread.slice(-MARK_LIMIT) : marks.unread
   try {
-    localStorage.setItem(storageKey(host), JSON.stringify({ ...marks, seen }))
+    localStorage.setItem(storageKey(host), JSON.stringify({ ...marks, seen, unread }))
   } catch {
     // Kept for this window only.
   }
@@ -72,6 +76,27 @@ export function isUnread(marks: ChatMarks, row: ChatRow): boolean {
  */
 export const showsUnread = (marks: ChatMarks, row: ChatRow, open: boolean): boolean =>
   isUnread(marks, row) && (!open || marks.unread.includes(markKey(row)))
+
+/**
+ * A project chat's dot, as its row would draw it. The list's copy wins when present
+ * (it carries newer activity and Hermes' flag); otherwise the project's own fields
+ * stand in. `openId` is null while a chat is docked or absent, so its mark stays.
+ */
+export function projectChatUnread(
+  marks: ChatMarks,
+  chat: ProjectChat,
+  listed: readonly ChatRow[] | null | undefined,
+  openId: string | null | undefined
+): boolean {
+  const row: ChatRow = listed?.find(r => r.id === chat.id) ?? {
+    id: chat.id,
+    title: chat.title,
+    pinned: false,
+    profile: chat.profile,
+    activeAt: chat.lastActive
+  }
+  return showsUnread(marks, row, chat.id === openId)
+}
 
 /** The row as read up to its latest activity; the same marks when nothing changes. */
 export function markRead(marks: ChatMarks, row: ChatRow): ChatMarks {
