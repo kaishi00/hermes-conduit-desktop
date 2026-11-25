@@ -79,35 +79,42 @@ export function turnNotification(sessionId: string, payload: unknown, chat: Chat
   return { title, body: plainLine(shown) || t('Replied.'), tag }
 }
 
+/** What a finished turn's notification reads besides its event: the reply it streamed last, and when it started. */
+export interface TurnEnd {
+  streamed: string
+  /** On this computer's clock; null when this window didn't see it start. */
+  startedAt: number | null
+}
+
 /**
  * The reply each chat's turn streamed last, for a turn that ends with no text
- * of its own. A tool, or a delta of `null`, closes a reply: the next text is a
- * new one, as the chat shows it.
+ * of its own, and when the turn started. A tool, or a delta of `null`, closes
+ * a reply: the next text is a new one, as the chat shows it.
  */
 export class TurnReplies {
-  private replies = new Map<string, { text: string; open: boolean }>()
+  private replies = new Map<string, { text: string; open: boolean; startedAt: number | null }>()
 
-  /** Takes one gateway event; on `message.complete` it hands back that turn's last reply and forgets it. */
-  note(event: { type: string; session_id?: string; payload?: unknown }): string {
+  /** Takes one gateway event; on `message.complete` it hands back that turn's end and forgets it, else null. */
+  note(event: { type: string; session_id?: string; payload?: unknown }, now = Date.now()): TurnEnd | null {
     const sid = event.session_id
-    if (!sid) return ''
+    if (!sid) return null
     const p = event.payload && typeof event.payload === 'object' ? (event.payload as Record<string, unknown>) : {}
     if (event.type === 'message.complete') {
-      const text = this.replies.get(sid)?.text ?? ''
-      this.replies.delete(sid)
-      return text
-    }
-    if (event.type === 'message.start') {
-      this.replies.set(sid, { text: '', open: false })
-    } else if (event.type === 'message.delta') {
-      const reply = this.replies.get(sid) ?? { text: '', open: false }
-      if (typeof p.text === 'string' && p.text) this.replies.set(sid, reply.open ? { text: reply.text + p.text, open: true } : { text: p.text, open: true })
-      else if (p.text === null) this.replies.set(sid, { ...reply, open: false })
-    } else if (event.type.startsWith('tool.')) {
       const reply = this.replies.get(sid)
-      if (reply) this.replies.set(sid, { ...reply, open: false })
+      this.replies.delete(sid)
+      return { streamed: reply?.text ?? '', startedAt: reply?.startedAt ?? null }
     }
-    return ''
+    const reply = this.replies.get(sid)
+    if (event.type === 'message.start') {
+      this.replies.set(sid, { text: '', open: false, startedAt: now })
+    } else if (event.type === 'message.delta') {
+      const current = reply ?? { text: '', open: false, startedAt: null }
+      if (typeof p.text === 'string' && p.text) this.replies.set(sid, { ...current, text: current.open ? current.text + p.text : p.text, open: true })
+      else if (p.text === null) this.replies.set(sid, { ...current, open: false })
+    } else if (event.type.startsWith('tool.') && reply) {
+      this.replies.set(sid, { ...reply, open: false })
+    }
+    return null
   }
 }
 

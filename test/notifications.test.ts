@@ -43,7 +43,7 @@ describe('notifications', () => {
     const replies = new TurnReplies()
     const turn = (events: Array<{ type: string; payload?: unknown }>) => {
       let streamed = ''
-      for (const e of events) streamed = replies.note({ ...e, session_id: 'bc' })
+      for (const e of events) streamed = replies.note({ ...e, session_id: 'bc' })?.streamed ?? streamed
       return streamed
     }
     const silent = turn([
@@ -66,6 +66,13 @@ describe('notifications', () => {
     // The turn's own text wins, and the next turn starts clean.
     expect(turnNotification('bc', { text: '[SILENT]', status: 'complete' }, undefined, 'W2 is done.')).toBeNull()
     expect(turn([{ type: 'message.start' }, { type: 'message.complete', payload: { text: 'Hi' } }])).toBe('')
+  })
+
+  it('says when a turn started, and nothing for a turn it never saw start', () => {
+    const replies = new TurnReplies()
+    expect(replies.note({ type: 'message.start', session_id: 'a' }, 1000)).toBeNull()
+    expect(replies.note({ type: 'message.complete', session_id: 'a', payload: { text: 'x' } }, 5000)).toEqual({ streamed: '', startedAt: 1000 })
+    expect(replies.note({ type: 'message.complete', session_id: 'b', payload: { text: 'x' } })).toEqual({ streamed: '', startedAt: null })
   })
 
   it('names what an approval or a question wants', () => {

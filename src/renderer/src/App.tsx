@@ -88,6 +88,7 @@ import {
   type NotificationSpec
 } from './state/notifications'
 import { cleanTitle } from './state/text'
+import { keptQuiet } from './state/quietTurns'
 import { askerLine } from './state/presented'
 import type { StagedAttachment } from './state/attachments'
 import type { QuoteRequest } from './state/quote'
@@ -1855,7 +1856,7 @@ function Shell({
       window.conduit.onEvent(event => {
         const sid = event.session_id
         if (!sid) return
-        const streamed = turnReplies.current.note(event)
+        const end = turnReplies.current.note(event)
         if (event.type === 'session.title') {
           const t = (event.payload as { title?: unknown } | undefined)?.title
           const ref = chats.current.get(sid)
@@ -1863,15 +1864,23 @@ function Shell({
           return
         }
         if (event.type !== 'message.complete' || isWatching(sid, watching.current.liveId, watching.current.onChats)) return
-        const spec = turnNotification(sid, event.payload, chats.current.get(sid), streamed)
+        const spec = turnNotification(sid, event.payload, chats.current.get(sid), end?.streamed)
         // Notifications off: the mutes aren't asked at all (desktop#539).
         if (!spec || mutedRef.current(sid) || !notificationsEnabled()) return
         // A mute set on another device since the last read: asked then, each
         // profile's answer shared for a few seconds by the turns after it. A
         // chat this window never opened is asked under what Needs you knows
         // of it, or under every listed profile when nothing does.
-        void turnNotifies(muteHttp, chatMuteRef.current, muteRowRef.current(sid), muteProfilesRef.current, turnMuteReadsRef.current).then(notifies => {
-          if (notifies) void notify(spec, sid)
+        // And a reply the plugin sent the phone no push for (a Bot Chat's answer to an update of only waits, a
+        // workstream's turn...) stays quiet here too, asked under the same ids and profiles (state/quietTurns).
+        const target = muteRowRef.current(sid)
+        const ids = [...new Set([target.id, ...chatIdsOf(sid, chats.current.get(sid)?.storedId, waitingRowsRef.current)].filter(Boolean))]
+        const profiles = target.profileUnknown ? muteProfilesRef.current : [target.profile]
+        void Promise.all([
+          turnNotifies(muteHttp, chatMuteRef.current, target, muteProfilesRef.current, turnMuteReadsRef.current),
+          keptQuiet(muteHttp, ids, profiles, end?.startedAt ?? null)
+        ]).then(([notifies, quiet]) => {
+          if (notifies && !quiet) void notify(spec, sid)
         })
       }),
     [notify]

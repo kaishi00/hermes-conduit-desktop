@@ -22,6 +22,7 @@ import { isResetCommand, looksLikeSlashCommand } from '../state/slash'
 import { cleanTitle } from '../state/text'
 import { notificationsEnabled, requestNotification, turnNotification, TurnReplies, type NotificationSpec } from '../state/notifications'
 import { readMuted } from '../state/chatMute'
+import { keptQuiet } from '../state/quietTurns'
 import { gateway } from '../gateway'
 
 import type { StagedAttachment } from '../state/attachments'
@@ -445,16 +446,18 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       window.conduit.onEvent(event => {
         const { liveId, ...ref } = chatRef.current
         if (!event.session_id || event.session_id !== liveId) return
-        const streamed = turnReplies.current.note(event)
-        if (event.type !== 'message.complete') return
-        const spec = turnNotification(event.session_id, event.payload, ref, streamed)
-        // A silent reply, and a muted chat's finished turn, stay quiet, as the plugin's push does (state/chatMute).
+        const end = turnReplies.current.note(event)
+        if (!end) return
+        const spec = turnNotification(event.session_id, event.payload, ref, end.streamed)
+        // A silent reply, a muted chat's finished turn and a reply the plugin sent the phone no push for stay
+        // quiet, as the plugin's push does (state/chatMute, state/quietTurns).
         if (!spec) return
         if (!ref.storedId) void notify(spec)
         else
-          void readMuted(muteHttp, { id: ref.storedId, title: ref.title ?? '', pinned: false, profile: ref.profile ?? undefined }).then(
-            muted => muted || void notify(spec)
-          )
+          void Promise.all([
+            readMuted(muteHttp, { id: ref.storedId, title: ref.title ?? '', pinned: false, profile: ref.profile ?? undefined }),
+            keptQuiet(muteHttp, [ref.storedId], [ref.profile ?? undefined], end.startedAt)
+          ]).then(([muted, quiet]) => muted || quiet || void notify(spec))
       }),
     [notify]
   )
