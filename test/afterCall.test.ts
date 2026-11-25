@@ -58,6 +58,9 @@ describe('requests a call left unsent (hermes-conduit issue 3185)', () => {
     for (const unmade of [null, 'new-1764039000000']) {
       expect(chatOfCall(chatOfCall(unmade, false, true, unmade), true, true, 'made')).toBe('made')
     }
+    // A new chat the call sent nothing: another chat opening isn't the call's.
+    expect(chatOfCall(null, true, true, 'other', false)).toBeNull()
+    expect(afterCallStep(leftByCall(null, null, ['and a car']), { ...free, chatId: 'other' })).toEqual({ left: null })
     // The next call takes the chat open as it starts.
     expect(chatOfCall('A', false, true, 'B')).toBe('B')
   })

@@ -34,12 +34,16 @@ const unmade = (chatId: string | null): boolean => chatId === null || chatId.sta
 
 /**
  * The chat a call belongs to, kept from one draw to the next: the chat open
- * when it started, and the id that chat got from the call's first message.
- * Another chat opening ends the call, and what the call leaves as it goes is
- * still its own chat's, never the one that opened.
+ * when it started, and the id that chat got from the call's first message
+ * (`sent`: the call has sent the chat a request). Another chat opening ends
+ * the call, and what the call leaves as it goes is still its own chat's,
+ * never the one that opened: a new chat the call sent nothing keeps no id,
+ * so what it leaves is dropped.
  */
-export function chatOfCall(kept: string | null, wasCalling: boolean, calling: boolean, chatId: string | null): string | null {
-  return calling && (!wasCalling || unmade(kept)) ? chatId : kept
+export function chatOfCall(kept: string | null, wasCalling: boolean, calling: boolean, chatId: string | null, sent = true): string | null {
+  if (!calling) return kept
+  if (!wasCalling) return chatId
+  return unmade(kept) && sent ? chatId : kept
 }
 
 /** A send the chat didn't take: the rest go with it, unless a later call added to them meanwhile, which try again. */

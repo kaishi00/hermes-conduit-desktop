@@ -184,7 +184,12 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     if (sent === false) tell(t('That didn’t reach the chat. Try again.'))
     return sent !== false
   }
-  const callSay = (words: string) => void sayToChat(words)
+  // Whether this call sent the chat a request: a new chat gets its id from the first one.
+  const callSent = useRef(false)
+  const callSay = (words: string) => {
+    callSent.current = true
+    void sayToChat(words)
+  }
   const pictureControls = (
     <CallPictureControls
       waiting={callPicture}
@@ -225,7 +230,8 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
   // kept here: the one it started in (with the id a new chat got from it), not the chat whose opening
   // ended the call.
   const callChat = useRef({ chatId, calling: false })
-  callChat.current = { chatId: chatOfCall(callChat.current.chatId, callChat.current.calling, calling, chatId), calling }
+  if (calling && !callChat.current.calling) callSent.current = false
+  callChat.current = { chatId: chatOfCall(callChat.current.chatId, callChat.current.calling, calling, chatId, callSent.current), calling }
   const callLeft = (requests: string[]) => setLeft(kept => leftByCall(kept, callChat.current.chatId, requests))
   // Drawn again once a send no reply followed has been waited on long enough.
   const [stallTick, setStallTick] = useState(0)
