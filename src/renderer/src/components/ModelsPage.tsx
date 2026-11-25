@@ -24,6 +24,7 @@ import { ModelCatalogNote, RefreshModelsButton } from './ModelCatalogNote'
 import { useMouseBack } from '../state/mouseBack'
 import { ask } from '../state/dialogs'
 import { Select } from './Select'
+import { ToolsetPage } from './ToolsetPage'
 
 interface Props {
   bots: { name: string; title: string }[]
@@ -52,6 +53,8 @@ export function ModelsPage({ bots, profile: initialProfile, onBack }: Props) {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const generation = useRef(0)
+  /** Image generation's page: its backend and model, as in Capabilities > Tools. */
+  const [imageOpen, setImageOpen] = useState(false)
 
   const load = useCallback(async () => {
     const mine = ++generation.current
@@ -120,6 +123,8 @@ export function ModelsPage({ bots, profile: initialProfile, onBack }: Props) {
       />
     )
   }
+
+  if (imageOpen) return <ToolsetPage name="image_gen" label={t('Image generation')} profile={profile} onBack={() => setImageOpen(false)} />
 
   return (
     <div className="pset">
@@ -198,6 +203,14 @@ export function ModelsPage({ bots, profile: initialProfile, onBack }: Props) {
             ))}
           </section>
           <FallbackModels key={`fallbacks:${profile}`} profile={profile} />
+          <section className="pset-section">
+            <h2>{t('Image generation')}</h2>
+            <p className="meta">{t('The backend and model Hermes makes pictures with, as in Capabilities > Tools.')}</p>
+            <button className="pset-link" onClick={() => setImageOpen(true)}>
+              <span>{t('Image generation')}</span>
+              <Icon name="chevron" />
+            </button>
+          </section>
           <ProvidersSection
             profile={profile}
             profileName={bots.find(bot => bot.name === profile)?.title ?? profile}

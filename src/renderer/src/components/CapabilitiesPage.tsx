@@ -30,6 +30,7 @@ import type { AppsRequest } from '../state/appsDirectory'
 import { Icon } from './icons'
 import { useMouseBack } from '../state/mouseBack'
 import { Select } from './Select'
+import { ToolsetPage } from './ToolsetPage'
 
 interface Props {
   bots: { name: string; title: string }[]
@@ -97,6 +98,8 @@ export function CapabilitiesPage({ bots, profile: initialProfile, host, apps, on
   useMouseBack(open ? () => setOpen(null) : null)
   const [openServer, setOpenServer] = useState<string | null>(null)
   const [hubOpen, setHubOpen] = useState(false)
+  /** A toolset's page (its backends, and an image or video backend's model), over the tab. */
+  const [openToolset, setOpenToolset] = useState<Toolset | null>(null)
   // Connectors' Apps, through Nous Portal: the directory or an app's page over the tab.
   const hostedApps = useHostedApps(profile)
   const [appsPage, setAppsPage] = useState<{ slug: string | null; fromDirectory: boolean; suggested?: string[] } | null>(null)
@@ -104,7 +107,7 @@ export function CapabilitiesPage({ bots, profile: initialProfile, host, apps, on
   const appsAsk = useRef<AppsRequest | null>(null)
   // Back from a page drawn over the tab lands where the tab was.
   useBackScroll(
-    appsPage?.slug ? `app:${appsPage.slug}` : appsPage ? 'apps' : hubOpen ? 'hub' : open ? `skill:${open.skill.name}` : 'list'
+    appsPage?.slug ? `app:${appsPage.slug}` : appsPage ? 'apps' : hubOpen ? 'hub' : openToolset ? `toolset:${openToolset.name}` : open ? `skill:${open.skill.name}` : 'list'
   )
   const generation = useRef(0)
   const writes = useRef<Promise<unknown>>(Promise.resolve())
@@ -187,6 +190,7 @@ export function CapabilitiesPage({ bots, profile: initialProfile, host, apps, on
     setOpen(null)
     setOpenServer(null)
     setHubOpen(false)
+    setOpenToolset(null)
     const ask = appsAsk.current
     appsAsk.current = null
     setAppsPage(ask && (ask.profile ?? profile) === profile ? { slug: null, fromDirectory: true, suggested: ask.suggested } : null)
@@ -320,11 +324,11 @@ export function CapabilitiesPage({ bots, profile: initialProfile, host, apps, on
         <h2>{t('Toolsets')}</h2>
         {shown.map(set => (
           <div key={set.name} className={`cap-row${set.enabled ? '' : ' off'}`}>
-            <div className="cap-row-text">
+            <button className="cap-row-text" onClick={() => setOpenToolset(set)}>
               <strong>{set.label}</strong>
               {!set.configured ? <span className="cap-badge warn">{t('Needs keys')}</span> : null}
               {set.description ? <span className="meta">{set.description}</span> : null}
-            </div>
+            </button>
             {/* The last toolset that's on stays on: a chat with none can't do anything. */}
             <Switch label={set.label} checked={set.enabled} disabled={set.enabled && on <= 1} onChange={next => flip('tools', set.name, next)} />
           </div>
@@ -433,6 +437,9 @@ export function CapabilitiesPage({ bots, profile: initialProfile, host, apps, on
         onBack={() => setAppsPage(null)}
       />
     )
+
+  if (openToolset)
+    return <ToolsetPage name={openToolset.name} label={openToolset.label} profile={profile} onBack={() => setOpenToolset(null)} />
 
   if (hubOpen)
     return (
