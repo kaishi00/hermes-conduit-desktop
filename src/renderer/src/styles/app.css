@@ -5237,6 +5237,50 @@ html[data-window='quick'] body {
   background: var(--accent);
 }
 
+/* The tabs over the chat column (issue 423), in the Folder's tab look: shown once two chats are open. */
+.workspace-tabs {
+  align-items: center;
+  padding: 8px 12px 0;
+}
+
+.workspace-tabs .ws-tab {
+  max-width: 220px;
+}
+
+.workspace-tabs .ws-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-tabs .ws-tab-bot {
+  flex: none;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.workspace-tabs .ws-tab-dot.waits {
+  background: var(--warning);
+}
+
+.ws-tab-new {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.ws-tab-new:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
 .ws-viewer {
   flex: 1;
   min-height: 0;
