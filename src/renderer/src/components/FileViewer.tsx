@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
-import { mediaKind } from '../state/media'
+import { viewedType } from '@shared/viewFileRules'
 import { parsePreview, readTextPath } from '../state/workspace'
 import { Markdown } from './Markdown'
 import { PageFrame, pageAddress } from './PagePreview'
@@ -14,10 +14,14 @@ export type ViewerKind = 'page' | 'image' | 'audio' | 'video' | 'pdf' | 'markdow
 export function viewerKind(path: string): ViewerKind {
   const ext = /\.([^./\\]+)$/.exec(path)?.[1]?.toLowerCase() ?? ''
   if (ext === 'html' || ext === 'htm') return 'page'
-  if (ext === 'pdf') return 'pdf'
   if (ext === 'md' || ext === 'markdown') return 'markdown'
-  const kind = mediaKind(path)
-  return kind === 'file' ? 'text' : kind
+  // What Conduit can draw from a copy goes by the copy's type; anything else (a HEIC, an AVI) is read as text, which says it isn't.
+  const type = viewedType(path) ?? ''
+  if (type.startsWith('image/')) return 'image'
+  if (type.startsWith('audio/')) return 'audio'
+  if (type.startsWith('video/')) return 'video'
+  if (type === 'application/pdf') return 'pdf'
+  return 'text'
 }
 
 type Shown = { url: string } | { text: string } | { error: string } | null

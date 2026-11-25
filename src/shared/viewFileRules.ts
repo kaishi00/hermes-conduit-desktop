@@ -2,7 +2,8 @@
  * The rules for a host file a chat's file card opens in Conduit's viewer
  * (desktop#554): which files are copied down to be shown, the type each is
  * served as, and the byte range a player asks for. Kept free of Electron so
- * they're tested on their own; viewFiles.ts applies them.
+ * they're tested on their own and the renderer asks them too; main's
+ * viewFiles.ts applies them.
  */
 
 export const FILE_SCHEME = 'conduit-file'

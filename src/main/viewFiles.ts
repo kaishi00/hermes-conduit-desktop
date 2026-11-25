@@ -6,7 +6,7 @@
  * player can seek. The last six copies are kept and the rest removed; the
  * folder is emptied as Conduit starts and as it quits. A page opened in the
  * browser is copied there too. The rules are in
- * viewFileRules.ts.
+ * src/shared/viewFileRules.ts.
  */
 import { app, protocol, shell } from 'electron'
 import { createReadStream, rmSync } from 'node:fs'
@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import { hostFileName, streamToFile } from './hostFiles'
-import { FILE_SCHEME, KEPT_VIEWS, byteRange, isPagePath, viewedFileUrl, viewedType } from './viewFileRules'
+import { FILE_SCHEME, KEPT_VIEWS, byteRange, isPagePath, viewedFileUrl, viewedType } from '../shared/viewFileRules'
 
 interface View {
   file: string
@@ -27,13 +27,22 @@ const views = new Map<string, View>()
 
 const folder = () => join(app.getPath('temp'), 'conduit-view')
 
+/** Removes the copies; one another program holds open (a page the browser still shows) stays, and startup or quit carries on. */
+function emptyFolder(): void {
+  try {
+    rmSync(folder(), { recursive: true, force: true })
+  } catch (error) {
+    console.warn('Conduit: viewed files left in place', error)
+  }
+}
+
 /** The scheme's privileges, registered with the page scheme's before the app is ready. */
 export const FILE_SCHEME_PRIVILEGES = { scheme: FILE_SCHEME, privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }
 
 /** Once the app is ready: empties what an earlier run left and serves the copies. */
 export function serveViewedFiles(): void {
-  rmSync(folder(), { recursive: true, force: true })
-  app.on('will-quit', () => rmSync(folder(), { recursive: true, force: true }))
+  emptyFolder()
+  app.on('will-quit', emptyFolder)
   protocol.handle(FILE_SCHEME, async request => {
     const view = views.get(new URL(request.url).hostname)
     const size = view ? await stat(view.file).then(s => s.size, () => null) : null
@@ -91,7 +100,7 @@ export async function viewHostFile(path: string, download: Download, dataUrl: Da
   while (views.size > KEPT_VIEWS) {
     const [oldest, view] = views.entries().next().value!
     views.delete(oldest)
-    void rm(view.file, { force: true })
+    void rm(view.file, { force: true }).catch(() => undefined)
   }
   return viewedFileUrl(id, path)
 }

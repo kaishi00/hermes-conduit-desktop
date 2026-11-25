@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { byteRange, isPagePath, isViewedFileUrl, viewedFileUrl, viewedType, viewerFrame } from '../src/main/viewFileRules'
+import { byteRange, isPagePath, isViewedFileUrl, viewedFileUrl, viewedType, viewerFrame } from '../src/shared/viewFileRules'
 import { frameStays } from '../src/main/linkPolicy'
 
 beforeAll(() => {
@@ -68,6 +68,8 @@ describe('a file the chat’s file card opens (desktop#554)', () => {
     expect(viewerKind('/a/voice.m4a')).toBe('audio')
     expect(viewerKind('/a/shot.png')).toBe('image')
     expect(viewerKind('/a/data.csv')).toBe('text')
+    expect(viewerKind('/a/IMG_0001.HEIC')).toBe('text')
+    expect(viewerKind('/a/old.avi')).toBe('text')
     const { Reply } = (await import(/* @vite-ignore */ transcript)) as { Reply: unknown }
     const page = renderToStaticMarkup(createElement(Reply as never, { text: 'Here it is.\n\nMEDIA:/srv/out/report.html' }))
     expect(page).toContain('>Open<')

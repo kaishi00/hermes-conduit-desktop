@@ -6,7 +6,7 @@
 import { shell, type WebContents } from 'electron'
 import { frameStays, navigatesToBrowser, opensExternally } from './linkPolicy'
 import { isPageUrl } from './pages'
-import { viewerFrame } from './viewFileRules'
+import { viewerFrame } from '../shared/viewFileRules'
 
 const isMac = process.platform === 'darwin'
 

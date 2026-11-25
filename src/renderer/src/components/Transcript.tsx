@@ -408,6 +408,8 @@ function FileCard({ path, label, link }: { path: string; label?: string; link?: 
     }
   }
   const closeViewer = useCallback(() => setViewing(false), [])
+  // A streaming reply can put another file in this block's place: its viewer doesn't follow.
+  useEffect(() => setViewing(false), [path])
   return (
     <div className="file-card" title={path}>
       <div className="file-card-row">
