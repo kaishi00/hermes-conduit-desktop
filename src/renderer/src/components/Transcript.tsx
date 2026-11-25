@@ -1468,7 +1468,8 @@ export function Transcript({
   // on. A reader still at the top of the rows they had takes on the first of the page now,
   // since a scroller at its top sends no scroll to ask with.
   useLayoutEffect(() => {
-    if (windowed.chat !== chatKey || windowed.start === null || start === windowed.start) return
+    // Not while a tab's chat comes back to its place: the last chat's rows, still drawn, lack its row (issue 423).
+    if (restoring.current || windowed.chat !== chatKey || windowed.start === null || start === windowed.start) return
     const el = scroller.current
     const reading = start !== null && start > windowed.start && el && !pinned.current && nearTop(el.scrollTop)
     setWindowed(windowAt(reading ? olderStart(start, rows.length) : start))
