@@ -69,7 +69,7 @@ export function HeaderMenuButton({ menu }: { menu: ReturnType<typeof useHeaderMe
   )
 }
 
-export function HeaderMenu({ menu, items }: { menu: ReturnType<typeof useHeaderMenu>; items: HeaderMenuItem[] }) {
+export function HeaderMenu({ menu, items, title }: { menu: ReturnType<typeof useHeaderMenu>; items: HeaderMenuItem[]; title?: string }) {
   const { open, setOpen } = menu
   const box = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState<{ left: number; top: number } | null>(null)
@@ -123,7 +123,10 @@ export function HeaderMenu({ menu, items }: { menu: ReturnType<typeof useHeaderM
           {inside.items?.map(line)}
         </>
       ) : (
-        items.map(line)
+        <>
+          {title ? <div className="menu-title">{title}</div> : null}
+          {items.map(line)}
+        </>
       )}
     </div>
   )

@@ -471,10 +471,11 @@ function Shell({
   const chatProfileRef = useRef(chatProfile)
   const chatPane = useRef<HTMLElement>(null)
   chatProfileRef.current = chatProfile
-  const newChat = useCallback(() => {
+  // `profile`: the one New Chat under All was asked for; else the profile chosen in the column.
+  const newChat = useCallback((profile?: string) => {
     setArchivedOpen(false)
     setSection('chats')
-    setSelected({ id: null, profile: chatProfileRef.current ?? undefined })
+    setSelected({ id: null, profile: profile ?? chatProfileRef.current ?? undefined })
   }, [])
 
   // The Mac's menu bar sends its shortcuts; elsewhere the window reads Ctrl and the same key.

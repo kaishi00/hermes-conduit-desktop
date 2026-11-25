@@ -12,6 +12,7 @@ import type { MixedTile } from '../state/botOrder'
 import type { HostBadge } from '../state/keptHosts'
 import { HostBadgeMark } from './CombinedDashboards'
 import { useBoardScroll } from '../state/useBoardScroll'
+import { useFittedMenu } from '../state/menuFit'
 
 interface Props {
   connected: boolean
@@ -58,6 +59,7 @@ export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, s
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const dragged = useRef<KanbanTask | null>(null)
   const [menu, setMenu] = useState<{ task: KanbanTask; x: number; y: number } | null>(null)
+  const menuFit = useFittedMenu(menu)
   const lanesRef = useRef<HTMLDivElement | null>(null)
 
   const botTitle = (name?: string) => (name ? bots?.find(b => b.name === name)?.title ?? name : t('Unassigned'))
@@ -355,7 +357,7 @@ export function KanbanBoard({ connected, bots: ownBots, tiles = [], hostBadge, s
         </>
       )}
       {menu ? (
-        <div className="host-menu row-menu card-menu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 330) }}>
+        <div ref={menuFit.ref} className="host-menu row-menu card-menu" role="menu" style={menuFit.style}>
           <button
             role="menuitem"
             onClick={() => {

@@ -149,3 +149,14 @@ export function writeLeftOut(profiles: string[]): void {
     // Kept for this window only.
   }
 }
+
+/**
+ * The profiles New Chat offers under All, as the phone's "New chat in" menu
+ * (issue 394): the ones All lists, the main profile first, then in the
+ * column's order. Fewer than two means there's nothing to ask.
+ */
+export function newChatProfiles<B extends { name: string; isDefault?: boolean }>(bots: B[], leftOut: string[]): B[] {
+  const included = new Set(includedInAll(bots.map(b => b.name), leftOut).map(p => p.toLowerCase()))
+  const listed = bots.filter(b => included.has(b.name.toLowerCase()))
+  return [...listed.filter(b => b.isDefault), ...listed.filter(b => !b.isDefault)]
+}

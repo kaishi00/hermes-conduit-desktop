@@ -27,6 +27,7 @@ import { Icon } from './icons'
 import { useMouseBack } from '../state/mouseBack'
 import { saveHostFile, sayIfFailed } from '../state/saveMedia'
 import { ask, askText } from '../state/dialogs'
+import { useFittedMenu } from '../state/menuFit'
 
 interface Props {
   /** The chat's working folder: the tree never goes above it. */
@@ -77,6 +78,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
   const [search, setSearch] = useState<WorkspaceSearch | 'loading' | { error: string } | null>(null)
   const [open, setOpen] = useState<OpenFile | null>(null)
   const [menu, setMenu] = useState<Menu | null>(null)
+  const menuFit = useFittedMenu(menu)
   const [note, setNote] = useState<string | null>(null)
   const generation = useRef(0)
   const pluginRef = useRef<boolean | null>(null)
@@ -510,7 +512,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
         </>
       )}
       {menu ? (
-        <div className="host-menu row-menu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 280) }} onMouseDown={e => e.stopPropagation()}>
+        <div ref={menuFit.ref} className="host-menu row-menu" role="menu" style={menuFit.style} onMouseDown={e => e.stopPropagation()}>
           <button
             role="menuitem"
             onClick={() => {

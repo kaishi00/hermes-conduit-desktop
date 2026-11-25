@@ -1,12 +1,13 @@
 import { searchFold } from '../state/searchFold'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { underSource } from '../state/voiceList'
-import { includedInAll, profileGroups, readClosedSections, readGroupByProfile, readLeftOut, shownInAll, writeClosedSections, writeGroupByProfile, writeLeftOut } from '../state/profileGroups'
+import { includedInAll, newChatProfiles, profileGroups, readClosedSections, readGroupByProfile, readLeftOut, shownInAll, writeClosedSections, writeGroupByProfile, writeLeftOut } from '../state/profileGroups'
 import { foldedKeyForSelection, sectionFolded, sectionRows, startOfDay, timeLabel, type ChatRow, type UnreadProfile } from '../state/chats'
 import type { Bot } from '../state/bots'
 import { BotAvatar } from './BotsHome'
 import { t } from '@shared/i18n'
 import { HideListButton } from './HideListButton'
+import { HeaderMenu, useHeaderMenu } from './HeaderMenu'
 import { Icon } from './icons'
 import { UpdatingCapsule } from './UpdatingCapsule'
 import { facetOf, isSourceKey, isStarred, isUnread, parseSelection, selectRows, settingFilter, showsUnread, type ChatFilterKey, type ChatMarks } from '../state/chatMarks'
@@ -99,7 +100,8 @@ interface Props {
   waitingIds?: ReadonlySet<string>
   runningStatus?: string
   onSelect: (row: ChatRow) => void
-  onNewChat: () => void
+  /** A new chat, in `profile` when New Chat under All asked which one. */
+  onNewChat: (profile?: string) => void
   /** The bots, for the profile column and the rows' bot names. */
   bots?: Bot[] | null
   /** The profile the list shows (null: every one). */
@@ -351,6 +353,9 @@ export function ChatList({
   const [showInAll, setShowInAll] = useState(false)
   const botNames = useMemo(() => (bots ?? []).map(b => b.name), [bots])
   const allLeftOut = canGroup ? leftOut : []
+  // New Chat under All asks which profile, as the phone's "New chat in" menu does (issue 394).
+  const newChatIn = useMemo(() => (canGroup ? newChatProfiles(bots ?? [], allLeftOut) : []), [canGroup, bots, allLeftOut])
+  const newChatMenu = useHeaderMenu()
   const includeInAll = (name: string, on: boolean) => {
     const next = on ? leftOut.filter(p => p.toLowerCase() !== name.toLowerCase()) : [...leftOut, name]
     setLeftOut(next)
@@ -732,10 +737,23 @@ export function ChatList({
           className="round"
           aria-label={t('New chat')}
           title={window.conduit.platform === 'darwin' ? t('New chat (⌘N)') : t('New chat (Ctrl+N)')}
-          onClick={onNewChat}
+          aria-haspopup={newChatIn.length > 1 ? 'menu' : undefined}
+          aria-expanded={newChatIn.length > 1 ? !!newChatMenu.open : undefined}
+          onClick={e => {
+            if (newChatIn.length < 2) return onNewChat(newChatIn[0]?.name)
+            // The window's click closes the menu; this one opens it.
+            e.stopPropagation()
+            const box = e.currentTarget.getBoundingClientRect()
+            newChatMenu.setOpen(current => (current ? null : { x: box.right, y: box.bottom + 6, fromRight: true }))
+          }}
         >
           <Icon name="plus" />
         </button>
+        <HeaderMenu
+          menu={newChatMenu}
+          title={t('New chat in')}
+          items={newChatIn.map(bot => ({ key: bot.name, label: bot.title || bot.name, onClick: () => onNewChat(bot.name) }))}
+        />
         {onHide ? <HideListButton onHide={onHide} /> : null}
       </div>
       <div className="chatlist-searchrow">

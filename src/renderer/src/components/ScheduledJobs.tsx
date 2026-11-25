@@ -41,6 +41,7 @@ import { useModelCatalog } from '../state/modelCatalog'
 import { ModelChooser } from './ModelChooser'
 import { ModelCatalogNote, RefreshModelsButton } from './ModelCatalogNote'
 import { ask } from '../state/dialogs'
+import { useFittedMenu } from '../state/menuFit'
 import { Select } from './Select'
 
 interface Props {
@@ -112,6 +113,7 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [],
   const [pins, setPins] = useState(readPins)
   const [pane, setPane] = useState<Pane>(null)
   const [menu, setMenu] = useState<{ job: CronJob; x: number; y: number } | null>(null)
+  const menuFit = useFittedMenu(menu)
   const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
@@ -274,7 +276,7 @@ export function ScheduledJobs({ bots, connected, profile, onProfile, tiles = [],
           ) : null}
         </div>
         {menu ? (
-          <div className="host-menu row-menu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 220) }}>
+          <div ref={menuFit.ref} className="host-menu row-menu" role="menu" style={menuFit.style}>
             <button role="menuitem" onClick={() => togglePin(menu.job)}>
               {pins.includes(pinKey(menu.job)) ? t('Unpin') : t('Pin')}
             </button>

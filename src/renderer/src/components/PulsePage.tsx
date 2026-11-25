@@ -40,6 +40,7 @@ import { Markdown } from './Markdown'
 import { PulseLearnedView, PulseLeftOutView } from './PulseLearned'
 import { PulseSettings } from './PulseSettings'
 import { ask } from '../state/dialogs'
+import { useFittedMenu } from '../state/menuFit'
 
 interface Props {
   pulse: PulseState
@@ -71,6 +72,7 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
   const [busy, setBusy] = useState<Set<number>>(new Set())
   const [note, setNote] = useState<string | null>(null)
   const [menu, setMenu] = useState<Menu | null>(null)
+  const menuFit = useFittedMenu(menu)
   const seenSent = useRef(false)
   const [view, setView] = useState<'feed' | 'settings' | 'learned' | 'leftOut'>('feed')
   // Back from Pulse's pages lands where the briefs were.
@@ -501,12 +503,10 @@ export function PulsePage({ pulse, onOpenChat, onOpenBoard, chips = [], onPickHo
         )}
         {menu ? (
           <div
+            ref={menuFit.ref}
             className="host-menu row-menu"
             role="menu"
-            style={{
-              left: Math.min(menu.x, window.innerWidth - 240),
-              top: Math.min(menu.y, window.innerHeight - 260)
-            }}
+            style={menuFit.style}
             onMouseDown={e => e.stopPropagation()}
           >
             <div className="menu-title">{menu.kind === 'down' ? t('What was wrong with it?') : t('Not now, until when?')}</div>

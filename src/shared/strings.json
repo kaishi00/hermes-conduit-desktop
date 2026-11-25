@@ -19334,6 +19334,21 @@
     "zh-Hans": "新聊天（Ctrl+N）",
     "zh-Hant": "新聊天（Ctrl+N）"
   },
+  "New chat in": {
+    "de": "Neuer Chat in",
+    "es": "Nuevo chat en",
+    "fr": "Nouvelle discussion dans",
+    "id": "Obrolan baru di",
+    "it": "Nuova chat in",
+    "ja": "新規チャットの作成先",
+    "ko": "새 채팅 만들 프로필",
+    "pl": "Nowy czat w",
+    "pt-BR": "Novo chat em",
+    "ru": "Новый чат в",
+    "tr": "Yeni sohbet profili",
+    "zh-Hans": "新聊天位于",
+    "zh-Hant": "新聊天位於"
+  },
   "New chat (⌘N)": {
     "de": "Neuer Chat (⌘N)",
     "es": "Nuevo chat (⌘N)",
