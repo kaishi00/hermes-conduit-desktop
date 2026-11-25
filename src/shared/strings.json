@@ -46423,5 +46423,20 @@
     "tr": "Bu, panonun oturum açma sayfasını bir Conduit penceresinde açar.",
     "zh-Hans": "这会在 Conduit 窗口中打开仪表板的登录页面。",
     "zh-Hant": "這會在 Conduit 視窗中打開儀表板的登入頁面。"
+  },
+  "Open in Browser": {
+    "de": "Im Browser öffnen",
+    "es": "Abrir en el navegador",
+    "fr": "Ouvrir dans le navigateur",
+    "id": "Buka di Browser",
+    "it": "Apri nel browser",
+    "ja": "ブラウザで開く",
+    "ko": "브라우저에서 열기",
+    "pl": "Otwórz w przeglądarce",
+    "pt-BR": "Abrir no navegador",
+    "ru": "Открыть в браузере",
+    "tr": "Tarayıcıda Aç",
+    "zh-Hans": "在浏览器中打开",
+    "zh-Hant": "在瀏覽器中打開"
   }
 }

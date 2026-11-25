@@ -6,6 +6,7 @@
 import { shell, type WebContents } from 'electron'
 import { frameStays, navigatesToBrowser, opensExternally } from './linkPolicy'
 import { isPageUrl } from './pages'
+import { viewerFrame } from '../shared/viewFileRules'
 
 const isMac = process.platform === 'darwin'
 
@@ -14,9 +15,9 @@ export function confineNavigation(contents: WebContents): void {
     if (opensExternally(url, isMac)) void shell.openExternal(url)
     return { action: 'deny' }
   })
-  // A page Hermes drew stays in its frame: a link it follows opens in the browser.
+  // A page Hermes drew stays in its frame, as does a file the viewer shows (and a PDF's viewer): a link it follows opens in the browser.
   contents.on('will-frame-navigate', event => {
-    if (frameStays(event.isMainFrame, isPageUrl(event.url))) return
+    if (frameStays(event.isMainFrame, isPageUrl(event.url) || viewerFrame(event.url))) return
     event.preventDefault()
     if (navigatesToBrowser(event.url)) void shell.openExternal(event.url)
   })
