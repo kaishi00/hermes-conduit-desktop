@@ -54,6 +54,12 @@ export function tabHolding(tabs: WorkspaceTabs, chat: Pick<ChatTabTarget, 'id' |
   return tabs.tabs.find(tab => holds(tab, chat))
 }
 
+/** What the chat column opens for a tab. */
+export function tabTarget(tab: WorkspaceTab): ChatTabTarget {
+  const { id, profile, title, folder } = tab.chat
+  return { id, profile, title, ...(folder ? { folder } : {}) }
+}
+
 export function activeTab(tabs: WorkspaceTabs): WorkspaceTab | undefined {
   return tabs.active === null ? undefined : tabs.tabs.find(tab => tab.key === tabs.active)
 }

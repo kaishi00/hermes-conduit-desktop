@@ -8,6 +8,7 @@ import {
   openInNewTab,
   showsTabStrip,
   stepTab,
+  tabTarget,
   type WorkspaceTabs
 } from '../src/renderer/src/state/workspaceTabs'
 
@@ -69,6 +70,18 @@ describe('the tabs over the chat column', () => {
     tabs = followChat(tabs, chat('n1'), key())
     expect(ids(tabs)).toEqual(['a', 'n1'])
     expect(tabs.active).toBe(tab)
+  })
+
+  it('shows a new chat’s tab when it’s picked, never the shown tab taking a second new chat', () => {
+    // Chat a, then + (a new chat's tab), then back to a, then the new chat's tab picked: the window shows that tab
+    // by its key and opens its new chat, as App's showTab does.
+    let tabs = followChat(NO_WORKSPACE_TABS, chat('a'), key())
+    tabs = openInNewTab(tabs, chat(null), key())
+    const draft = tabs.active!
+    tabs = followChat(tabs, chat('a'), key())
+    tabs = followChat({ ...tabs, active: draft }, tabTarget(tabs.tabs.find(tab => tab.key === draft)!), key())
+    expect(ids(tabs)).toEqual(['a', null])
+    expect(tabs.active).toBe(draft)
   })
 
   it('leaves the tabs be while a Bot Chat shows, and the strip starts from the chat on screen', () => {

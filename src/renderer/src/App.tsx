@@ -46,7 +46,7 @@ import {
   openInNewTab,
   showsTabStrip,
   stepTab,
-  type ChatTabTarget,
+  tabTarget,
   type WorkspaceTab,
   type WorkspaceTabs
 } from './state/workspaceTabs'
@@ -1066,9 +1066,14 @@ function Shell({
       return next
     })
   }, [chatWindowIds])
-  const showTabChat = (chat: ChatTabTarget) => {
+  /**
+   * Shows a tab's chat, and that tab: a new chat's tab is told apart by its key alone, so the tab picked is the one
+   * shown, never the one that was shown taking its new chat.
+   */
+  const showTab = (tab: WorkspaceTab) => {
+    setTabs(current => (current.active === tab.key || !current.tabs.some(t => t.key === tab.key) ? current : { ...current, active: tab.key }))
     setSection('chats')
-    setSelected({ id: chat.id, profile: chat.profile, title: chat.title, ...(chat.folder ? { folder: chat.folder } : {}) })
+    setSelected(tabTarget(tab))
   }
   /** Open in New Tab, from a row's menu or a middle or ⌘/Ctrl click on it: the chat in a tab of its own beside the shown one. */
   const openRowInTab = (row: ChatRow) => {
@@ -1079,12 +1084,13 @@ function Shell({
     const target = { id: row.id, profile: row.profile, title: row.title }
     const current = selected.botChat ? undefined : { chat: { id: selected.id, profile: selected.profile, title: selected.title }, key: nextTabKey() }
     setTabs(tabs => openInNewTab(tabs, target, nextTabKey(), current))
-    showTabChat(target)
+    setSection('chats')
+    setSelected(target)
   }
   const closeTab = (tab: WorkspaceTab) => {
     const closed = closeWorkspaceTab(tabsRef.current, tab.key)
     setTabs(closed.tabs)
-    if (closed.show) showTabChat(closed.show.chat)
+    if (closed.show) showTab(closed.show)
   }
   /** The strip's +: a new chat, in the profile the list shows, in a tab of its own. */
   const newTab = () => {
@@ -1100,7 +1106,7 @@ function Shell({
     if (section !== 'chats' || selected.botChat || dockedRef.current || !showsTabStrip(tabs)) return false
     const next = stepTab(tabs, by)
     if (!next) return false
-    showTabChat(next.chat)
+    showTab(next)
     return true
   }
   useEffect(() => {
@@ -1151,7 +1157,10 @@ function Shell({
       // A chat in a tab gives its place to the tab beside it, as closing that tab would.
       const besideTab = onScreen && !nextBot ? dropChatTabs(tabsRef.current, target).show : undefined
       if (nextBot) openBot(nextBot)
-      else if (besideTab) setSelected({ id: besideTab.chat.id, profile: besideTab.chat.profile, title: besideTab.chat.title })
+      else if (besideTab) {
+        setTabs(current => ({ ...current, active: besideTab.key }))
+        setSelected(tabTarget(besideTab))
+      }
       else if (onScreen) setSelected({ id: null, profile: selected.profile })
       const opened = await window.conduit.openChatWindow({
         id: target.id,
@@ -1243,10 +1252,11 @@ function Shell({
     async (row: ChatRow, patch: { pinned?: boolean; title?: string } | null) => {
       list.patchRow(row.id, patch)
       // A deleted chat's tab closes; on screen, the tab beside it shows in its place.
-      const dropped = patch === null ? dropChatTabs(tabsRef.current, row) : undefined
+      const tabsBefore = tabsRef.current
+      const dropped = patch === null ? dropChatTabs(tabsBefore, row) : undefined
       if (dropped) setTabs(dropped.tabs)
       if (patch === null && (selected.id === row.id || chat.storedId === row.id)) {
-        if (dropped?.show) setSelected({ id: dropped.show.chat.id, profile: dropped.show.chat.profile, title: dropped.show.chat.title })
+        if (dropped?.show) setSelected(tabTarget(dropped.show))
         else newChat()
       }
       if (patch === null) setBeside(current => (current?.id === row.id ? null : current))
@@ -1258,6 +1268,8 @@ function Shell({
       } catch (e) {
         void tell(t('Couldn’t change “{title}”: {reason}', { title: row.title, reason: e instanceof Error ? e.message : String(e) }))
         list.refresh()
+        // A refused delete gives the chat its tab back, where nothing else changed the tabs meanwhile.
+        if (dropped && dropped.tabs !== tabsBefore) setTabs(current => (current.tabs === dropped.tabs.tabs ? { ...tabsBefore, active: current.active } : current))
         return false
       }
       list.refresh()
@@ -1860,9 +1872,13 @@ function Shell({
       if (!archiveHostMounted.current || statusUrlRef.current !== host) return false
       if (archived !== false) {
         list.patchRow(row.id, null)
+        // An archived chat's tab closes, as a deleted one's does; on screen, the tab beside it shows.
+        const dropped = dropChatTabs(tabsRef.current, row)
+        if (dropped.tabs !== tabsRef.current) setTabs(dropped.tabs)
+        const next = dropped.show ? tabTarget(dropped.show) : { id: null, profile: chatProfileRef.current ?? undefined }
         setSelected(current => sameProfileAs(current.profile, row.profile) &&
           (current.id === row.id || (current === selected && chat.storedId === row.id))
-          ? { id: null, profile: chatProfileRef.current ?? undefined }
+          ? next
           : current)
         setBeside(current => current?.id === row.id && sameProfileAs(current.profile, row.profile) ? null : current)
         window.conduit.closeChatWindows([row.id])
@@ -2629,7 +2645,7 @@ function Shell({
             {/* Kept while another dashboard's chat is docked over it, so coming back to it doesn't open it again. */}
             <main className="chat" ref={chatPane} style={dockedChat ? { display: 'none' } : undefined}>
               {showsTabStrip(tabs) && !selected.botChat ? (
-                <WorkspaceTabStrip tabs={tabs} label={tabLabel} showBots={tabsSpanBots} onPick={tab => showTabChat(tab.chat)} onClose={closeTab} onNewTab={newTab} />
+                <WorkspaceTabStrip tabs={tabs} label={tabLabel} showBots={tabsSpanBots} onPick={showTab} onClose={closeTab} onNewTab={newTab} />
               ) : null}
               <ChatHeader
                 title={title}
