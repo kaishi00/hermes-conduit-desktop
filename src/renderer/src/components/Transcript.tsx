@@ -241,6 +241,8 @@ export function revealMessage(container: HTMLElement | null, key: string | undef
   if (!container || !key) return
   const el = rowElement(container, key)
   if (!el) return
+  // A step inside a folded run: the run opens, so the step is there to see.
+  if (el.matches('.step-run:not(.open)')) el.querySelector<HTMLElement>(':scope > .step-run-head')?.click()
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   el.classList.remove('flash')
   void el.offsetWidth

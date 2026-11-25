@@ -153,3 +153,38 @@ describe('a jump to a step inside a run', () => {
     expect(rowElement(container, 'lone-tool')).toBe(step)
   })
 })
+
+describe('a jump to a step in a folded run', () => {
+  it('opens the run, and leaves an open run alone', async () => {
+    ;(window as unknown as { conduit: unknown }).conduit = new Proxy({ platform: 'linux' } as Record<string, unknown>, {
+      get: (target, key: string) => (key in target ? target[key] : () => () => {})
+    })
+    const path = '../src/renderer/src/components/Transcript.tsx'
+    const { revealMessage } = (await import(/* @vite-ignore */ path)) as { revealMessage: (el: HTMLElement, key: string) => void }
+    const build = (open: boolean) => {
+      const container = document.createElement('div')
+      const run = document.createElement('div')
+      run.className = open ? 'step-run open' : 'step-run'
+      run.setAttribute('data-key', 'first')
+      run.setAttribute('data-step-keys', 'first second')
+      run.scrollIntoView = () => {}
+      const head = document.createElement('button')
+      head.className = 'step-run-head'
+      let presses = 0
+      head.addEventListener('click', () => presses++)
+      run.append(head)
+      container.append(run)
+      return { container, presses: () => presses }
+    }
+    const folded = build(false)
+    revealMessage(folded.container, 'second')
+    expect(folded.presses()).toBe(1)
+    const open = build(true)
+    revealMessage(open.container, 'second')
+    expect(open.presses()).toBe(0)
+    // The run is filed under its first step's key: a jump to that step opens it too.
+    const whole = build(false)
+    revealMessage(whole.container, 'first')
+    expect(whole.presses()).toBe(1)
+  })
+})

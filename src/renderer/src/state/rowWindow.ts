@@ -110,9 +110,9 @@ const escapeKey = (key: string) => (typeof CSS !== 'undefined' && CSS.escape ? C
  * no such row. Not for use while rendering, as the opener draws.
  */
 export function rowElement(container: HTMLElement, key: string): HTMLElement | null {
+  const escaped = escapeKey(key)
+  if (!escaped) return null
   const find = () => {
-    const escaped = escapeKey(key)
-    if (!escaped) return null
     return container.querySelector<HTMLElement>(`[data-key="${escaped}"]`)
       // A step inside a run shares its row: the run carries its steps' keys.
       ?? [...container.querySelectorAll<HTMLElement>('[data-step-keys]')]

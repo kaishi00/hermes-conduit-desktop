@@ -62,10 +62,36 @@ describe('folded chat-list groups', () => {
     const host = document.createElement('div')
     document.body.append(host)
     const root = createRoot(host)
-    act(() => root.render(createElement(ChatList as never, props({ selectedId: 'a' }) as never)))
-    expect(scrolled.some(text => text.includes('Alpha'))).toBe(true)
-    act(() => root.unmount())
-    Element.prototype.scrollIntoView = was
+    try {
+      act(() => root.render(createElement(ChatList as never, props({ selectedId: 'a' }) as never)))
+      expect(scrolled.some(text => text.includes('Alpha'))).toBe(true)
+    } finally {
+      act(() => root.unmount())
+      Element.prototype.scrollIntoView = was
+    }
+  })
+
+  it('opens the group a nested job’s call is in, and scrolls to the job', async () => {
+    const path = '../src/renderer/src/components/ChatList.tsx'
+    const { ChatList } = (await import(/* @vite-ignore */ path)) as { ChatList: unknown }
+    localStorage.setItem('conduit.allProfiles.closedSections', JSON.stringify(['date:today']))
+    const rows = [row('call', 'The call'), { ...row('job', 'Its job', Date.now() - 1000), nestUnder: 'call' }]
+    const scrolled: string[] = []
+    const was = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.textContent ?? '')
+    }
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    try {
+      act(() => root.render(createElement(ChatList as never, props({ rows, selectedId: 'job' }) as never)))
+      expect(host.textContent).toContain('Its job')
+      expect(scrolled.some(text => text.includes('Its job'))).toBe(true)
+    } finally {
+      act(() => root.unmount())
+      Element.prototype.scrollIntoView = was
+    }
   })
 
   it('starts with the two oldest date groups closed, once', async () => {
