@@ -4,6 +4,7 @@ import { useBackScroll } from '../state/keptScroll'
 import { locale, t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { PULSE } from '../state/pulse'
+import { STATUS_PATH, askAgainMs, askPluginStatus } from '../state/plugin'
 import {
   FOLLOWUP_BUDGETS,
   MAX_REPORT_TIMES,
@@ -40,15 +41,12 @@ const NOTE_LIMIT = 1500
 export function PulseSettings({
   onBack,
   onChanged,
-  bots,
-  capabilities
+  bots
 }: {
   onBack: () => void
   onChanged: () => void
   /** The host's bots, to name the profile Pulse runs in as the rest of the app does. */
   bots?: readonly { name: string; title: string }[] | null
-  /** The plugin's capabilities on this host: what a Leave out pick sends. */
-  capabilities?: readonly string[]
 }) {
   useMouseBack(onBack)
   // Opens on Pulse's state as it last answered on this dashboard (Screens that open on their last answer).
@@ -65,6 +63,26 @@ export function PulseSettings({
   useBackScroll(showMemory ? 'memory' : 'settings')
   const [showBehind, setShowBehind] = useState(false)
   const language = locale()
+  // The plugin's capabilities on this page's host, asked here so every place
+  // that shows these settings (a docked dashboard's included) knows what a
+  // Leave out pick may send; until they're known the checkboxes wait, so a
+  // pick never sends a list read earlier (hermes-conduit issue 3269).
+  const [capabilities, setCapabilities] = useState<readonly string[] | null>(null)
+  useEffect(() => {
+    let live = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const ask = async (attempt: number) => {
+      const status = await askPluginStatus(() => gateway.http('GET', STATUS_PATH, undefined, 8_000))
+      if (!live) return
+      if (status) setCapabilities(status.state === 'reported' ? status.capabilities : [])
+      else timer = setTimeout(() => void ask(attempt + 1), askAgainMs(attempt))
+    }
+    void ask(0)
+    return () => {
+      live = false
+      if (timer) clearTimeout(timer)
+    }
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -381,8 +399,8 @@ export function PulseSettings({
                       <input
                         type="checkbox"
                         checked={choice.leftOut}
-                        disabled={saving}
-                        onChange={e => void change(exclusionChange(state, choice.name, e.target.checked, capabilities))}
+                        disabled={saving || capabilities === null}
+                        onChange={e => void change(exclusionChange(state, choice.name, e.target.checked, capabilities ?? []))}
                       />
                       {bots?.find(b => b.name === choice.name)?.title ?? choice.name}
                     </label>

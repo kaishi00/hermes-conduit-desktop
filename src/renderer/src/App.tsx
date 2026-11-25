@@ -2883,7 +2883,6 @@ function Shell({
             chips={pulseHostChips}
             onPickHost={pickPulseHost}
             bots={glowBots}
-            capabilities={roomInvites.capabilities}
           />
         ) : section === 'room' && shownCopy && shownCopyRoom ? (
           <RoomView
@@ -3335,7 +3334,7 @@ function Settings({
   if (page === 'pulse')
     return (
       <SettingsPane pane={pane}>
-        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} bots={pulseBots} capabilities={pluginCapabilities} />
+        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} bots={pulseBots} />
       </SettingsPane>
     )
   if (page === 'chat')

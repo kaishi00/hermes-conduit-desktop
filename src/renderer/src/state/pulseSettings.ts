@@ -129,7 +129,7 @@ export function exclusionChange(
   return { excluded_profiles: excludedAfter(state, name, leftOut) }
 }
 
-/** `excluded_profiles` as it is sent once ``name`` is left out, or read again. */
+/** `excluded_profiles` as it is sent once `name` is left out, or read again. */
 export function excludedAfter(state: Pick<PulseSettings, 'excludedProfiles'>, name: string, leftOut: boolean): string[] {
   const others = (state.excludedProfiles ?? []).filter(kept => kept !== name)
   return leftOut ? [...others, name] : others
