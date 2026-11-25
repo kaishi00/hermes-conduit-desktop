@@ -37,9 +37,9 @@ afterEach(() => {
   root = null
 })
 
-const rows = (chat: string, count: number): TranscriptState => ({
+const rows = (chat: string, count: number, prefix = 'row'): TranscriptState => ({
   ...emptyTranscript,
-  items: Array.from({ length: count }, (_, n) => ({ key: `row-${n}`, kind: 'user', text: `${chat} ${n}` }) as unknown as TranscriptItem)
+  items: Array.from({ length: count }, (_, n) => ({ key: `${prefix}-${n}`, kind: 'user', text: `${chat} ${n}` }) as unknown as TranscriptItem)
 })
 
 function show(chatId: string, keepsPlace?: (chat: string, leaving: boolean) => boolean, state = rows(chatId, 12)) {
@@ -102,9 +102,10 @@ describe('a chat in a tab keeps the reader’s place (issue 423)', () => {
     show('a', keepsPlace, long)
     const scroller = host.querySelector<HTMLElement>('.transcript')!
     readUpTo(scroller, 320)
-    const short = rows('b', 5)
+    // Rows keyed apart from a's, so b's still-drawn rows hold no row a's place starts on.
+    const short = rows('b', 5, 'other')
     show('b', keepsPlace, short)
-    // Back to a: its transcript isn't read yet, so b's five rows are what's drawn for a frame.
+    // Back to a: its transcript isn't read yet, so b's five rows are what's drawn for a frame, and the place waits.
     show('a', keepsPlace, short)
     show('a', keepsPlace, long)
     expect(scroller.scrollTop).toBe(320)
