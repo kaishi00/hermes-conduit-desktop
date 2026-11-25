@@ -3,8 +3,12 @@
  * phone's RichBoard. The plugin's answer keeps the normalized cards (so the
  * chat's history draws them again), their Markdown, the layout and the
  * follow-ups. This app draws the plainer kinds itself; a board with any
- * other kind shows its Markdown whole, never part of it.
+ * other kind shows its Markdown whole, never part of it. A board is drawn
+ * at its call's row, or where the reply writes the board's line
+ * (`placeBoards`).
  */
+
+import { splitReply } from './media'
 
 export const SHOW_TOOL = 'conduit_show'
 
@@ -18,7 +22,54 @@ export interface Board {
   next: string[]
   /** The cards' Markdown, shown in the board's place when they can't all be drawn. */
   markdown?: string
+  /** The id its answer's `::conduit-board{id="cb-…"}` line names: a reply that writes the line draws the board there. */
+  line?: string
 }
+
+/** A board a reply draws where its line is, and the `conduit_show` row it came from. */
+export interface PlacedBoard {
+  id: string
+  board: Board
+  /** The row's key: its follow-ups show while it is the last turn's last board. */
+  key: string
+}
+
+/** Where a chat's boards go: the rows that draw nothing, and each reply's boards by the reply's key. */
+export interface BoardPlacement {
+  hidden: ReadonlySet<string>
+  placed: ReadonlyMap<string, PlacedBoard[]>
+}
+
+const NOWHERE: BoardPlacement = { hidden: new Set(), placed: new Map() }
+
+/**
+ * Where a chat's boards go, after the phone's LineBoards.placement (phone issue 3215): a reply that writes a
+ * board's line takes the board from the `conduit_show` row above it in its own turn, the first reply to name it,
+ * and that row draws nothing. A reply without the line leaves the board at its row, and so does a later turn's.
+ */
+export function placeBoards(items: readonly { kind: string; key: string; text?: string; board?: Board }[]): BoardPlacement {
+  let hidden: Set<string> | undefined
+  let placed: Map<string, PlacedBoard[]> | undefined
+  const turn = new Map<string, PlacedBoard>()
+  for (const item of items) {
+    if (item.kind === 'user') turn.clear()
+    else if (item.kind === 'tool' && item.board?.line) turn.set(item.board.line, { id: item.board.line, board: item.board, key: item.key })
+    else if (item.kind === 'assistant' && turn.size && item.text?.includes('::conduit-board{')) {
+      const taken = splitReply(item.text, new Set(turn.keys())).flatMap(block => (block.kind === 'board' ? [turn.get(block.id)!] : []))
+      if (!taken.length) continue
+      for (const board of taken) {
+        turn.delete(board.id)
+        ;(hidden ??= new Set()).add(board.key)
+      }
+      ;(placed ??= new Map()).set(item.key, taken)
+    }
+  }
+  return hidden && placed ? { hidden, placed } : NOWHERE
+}
+
+/** Whether two replies' placed boards draw the same. */
+export const sameBoards = (a: readonly PlacedBoard[] | undefined, b: readonly PlacedBoard[] | undefined) =>
+  a === b || (!!a && !!b && a.length === b.length && a.every((x, i) => x.id === b[i]!.id && x.board === b[i]!.board && x.key === b[i]!.key))
 
 /** The kinds drawn here. */
 export const DRAWN = new Set(['stats', 'table', 'checklist', 'list', 'progress', 'callout', 'status', 'steps', 'timeline', 'contact'])
@@ -59,7 +110,8 @@ export function boardFrom(name: string, result: unknown, args: unknown): Board |
     .slice(0, 4)
   const drawable = cards.length === raw.length && cards.every(card => DRAWN.has(card.type))
   if (!drawable && !markdown) return null
-  return { cards: drawable ? cards : [], tabs: answer.layout === 'tabs' && cards.length > 1, next, markdown }
+  const line = typeof answer.directive === 'string' ? /^::conduit-board\{\s*id="(cb-[0-9a-f]{12})"\s*\}$/.exec(answer.directive.trim())?.[1] : undefined
+  return { cards: drawable ? cards : [], tabs: answer.layout === 'tabs' && cards.length > 1, next, markdown, ...(line ? { line } : {}) }
 }
 
 // Readers for a card's parts: the plugin normalized them, so these only keep the shape safe.

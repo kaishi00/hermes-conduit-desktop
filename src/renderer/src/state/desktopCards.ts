@@ -4,8 +4,10 @@
  * a directive only Hermes Desktop draws, such as hermes-rich-ui's
  * `::richui{id="…"}`. Conduit doesn't rebuild those renderers: it shows a
  * card in the directive's place naming its plugin, and a click shows the
- * directive as written. The plugin's own `::conduit-board{…}` is hidden,
- * since the board is drawn from conduit_show's tool row. A directive is one
+ * directive as written. The plugin's own `::conduit-board{…}` is hidden:
+ * the board is drawn where the line is when the reply's turn showed it
+ * (boards.ts placeBoards cuts the reply there), else from conduit_show's
+ * tool row. A directive is one
  * at a word's start, `::name{…}` holding only `key="value"` attributes, at
  * least one; in a code span, a fence, a quote or a table cell it stays text,
  * and one still being written shows as text until its closing brace.

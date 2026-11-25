@@ -23,7 +23,8 @@ import { readDataUrlPath } from '../state/gatewayPictures'
 import { saveHostFile, sayIfFailed } from '../state/saveMedia'
 import { formatDate, locale, t } from '@shared/i18n'
 import { blockquote, copyableReply, excerpt, parseReplyEnvelope, sameQuotedText, type QuoteRequest } from '../state/quote'
-import { BoardView } from './BoardView'
+import { BoardFollowUps, BoardView } from './BoardView'
+import { placeBoards, sameBoards, type PlacedBoard } from '../state/boards'
 import { DEFAULT_DISPLAY, type ChatDisplay } from '../state/display'
 import { readAloud, stopReading, useReadingKey } from '../state/readAloud'
 import { VOICE_FILE_PREFIX, parseVoiceMessage } from '../state/voice'
@@ -460,7 +461,16 @@ function AttachmentChips({ attachments }: { attachments: Attachment[] }) {
 }
 
 /** A reply's Markdown, with each `MEDIA:` file as a card where the tag stood. */
-export const Reply = memo(function Reply({ text, streaming = false }: { text: string; streaming?: boolean }) {
+export const Reply = memo(function Reply({
+  text,
+  streaming = false,
+  boards
+}: {
+  text: string
+  streaming?: boolean
+  /** The boards its `::conduit-board` lines place, drawn where the lines are (boards.ts placeBoards). */
+  boards?: readonly PlacedBoard[]
+}) {
   // Its links to its work become cards under it, and Hermes' references to chats links to them (workLinks).
   const links = useContext(WorkLinks)
   // Only where a card can open its chat: elsewhere (a chat beside, a window, a room) the reply stays as written.
@@ -471,7 +481,8 @@ export const Reply = memo(function Reply({ text, streaming = false }: { text: st
     const referred = linkSessionRefs(words, links.titleOf, t('Open chat'))
     return links.chatOf ? linkNamedRefs(referred, links.chatOf) : referred
   }, [split, text, links])
-  const blocks = useMemo(() => splitReply(shown), [shown])
+  const boardIds = boards?.map(board => board.id).join(' ') ?? ''
+  const blocks = useMemo(() => splitReply(shown, boardIds ? new Set(boardIds.split(' ')) : undefined), [shown, boardIds])
   // While it streams, its markdown parses in blocks, only the open last one again per delta (desktop#198).
   const Text = streaming ? StreamingMarkdown : Markdown
   return (
@@ -479,6 +490,8 @@ export const Reply = memo(function Reply({ text, streaming = false }: { text: st
       {blocks.map((block, i) =>
         block.kind === 'markdown' ? (
           <Text key={i} text={block.text} />
+        ) : block.kind === 'board' ? (
+          <PlacedBoardView key={block.id} board={boards?.find(board => board.id === block.id)} />
         ) : block.kind === 'preview' ? (
           <PagePreview key={i} path={block.path} name={baseName(block.path)} fallback={<FileCard path={block.path} />} />
         ) : mediaKind(block.path) === 'image' ? (
@@ -502,7 +515,17 @@ export const Reply = memo(function Reply({ text, streaming = false }: { text: st
       ) : null}
     </>
   )
-})
+}, sameReply)
+
+/** A reply redraws for its words or its boards, not for a new list of the same boards. */
+function sameReply(a: { text: string; streaming?: boolean; boards?: readonly PlacedBoard[] }, b: typeof a): boolean {
+  return a.text === b.text && a.streaming === b.streaming && sameBoards(a.boards, b.boards)
+}
+
+/** A board where its reply's line placed it; its follow-ups go under the reply. */
+function PlacedBoardView({ board }: { board?: PlacedBoard }) {
+  return board ? <BoardView board={board.board} /> : null
+}
 
 export function clock(ms?: number): string {
   return ms ? formatDate(ms, { hour: 'numeric', minute: '2-digit' }) : ''
@@ -549,6 +572,10 @@ interface ItemProps {
   onEdit?: () => void
   /** A board's follow-up, sent as the user's message: on the last turn's last board. */
   onFollowUp?: (text: string) => void
+  /** On a reply: the boards its `::conduit-board` lines place, drawn where the lines are. */
+  boards?: readonly PlacedBoard[]
+  /** On a reply: the follow-ups of the board it placed, while that is the last turn's last board. */
+  followUps?: string[]
   /** ⋯'s Show thinking or Hide thinking, on a reply while Thinking is On request. */
   thinkingToggle?: { label: string; onSelect: () => void }
   /** Settings > Chat > Keep tool cards expanded. */
@@ -706,6 +733,8 @@ function sameItemProps(a: ItemProps, b: ItemProps): boolean {
     a.jump === b.jump &&
     a.face === b.face &&
     a.newest === b.newest &&
+    sameBoards(a.boards, b.boards) &&
+    a.followUps === b.followUps &&
     sameTeammates(a.teammates, b.teammates) &&
     a.thinkingToggle?.label === b.thinkingToggle?.label &&
     a.pinToggle?.label === b.pinToggle?.label &&
@@ -731,6 +760,8 @@ const Item = memo(function Item({
   onRetry,
   onEdit,
   onFollowUp,
+  boards,
+  followUps,
   thinkingToggle,
   expandTools,
   onOpenCall,
@@ -807,7 +838,8 @@ const Item = memo(function Item({
               {t('Hermes followed up')}
             </span>
           ) : null}
-          <Reply text={item.text} streaming={item.streaming} />
+          <Reply text={item.text} streaming={item.streaming} boards={boards} />
+          {onFollowUp && followUps?.length ? <BoardFollowUps next={followUps} onFollowUp={onFollowUp} /> : null}
           <ReactionChips reactions={item.reactions ?? []} author={author} onPick={onReact} />
           {!item.streaming && item.text.trim() ? (
             <ReplyActions
@@ -1122,6 +1154,8 @@ export function Transcript({
   // A chat with stored rows before the ones it holds draws a call once its page is read:
   // the first stored row's time, whether or not that row is drawn.
   const heldFrom = useMemo(() => (olderRows ? firstTime(state.items) : undefined), [olderRows, state.items])
+  // A board its reply's line places is drawn there, and its own row draws nothing (phone issue 3215).
+  const placement = useMemo(() => placeBoards(state.items), [state.items])
   const shown = useMemo(
     () =>
       withCalls(
@@ -1133,14 +1167,16 @@ export function Transcript({
             ? showsThinking
             : item.kind === 'tool' && !item.board
               ? display.toolCards
-              : item.kind === 'review'
-                ? display.showReviews
-                : true
+              : item.kind === 'tool'
+                ? !placement.hidden.has(item.key)
+                : item.kind === 'review'
+                  ? display.showReviews
+                  : true
         ),
         calls ?? [],
         heldFrom
       ),
-    [state.items, showsThinking, display.toolCards, display.showReviews, calls, heldFrom]
+    [state.items, showsThinking, display.toolCards, display.showReviews, calls, heldFrom, placement]
   )
   const rows = useMemo(() => foldRuns(shown), [shown])
   // A chat past a window's worth of rows draws a window of them — its newest, and the
@@ -1421,6 +1457,16 @@ export function Transcript({
   // Another chat: a bar pin still being read for isn't this chat's.
   useEffect(() => setBarReveal(null), [chatKey])
 
+  // The follow-ups of a board its reply placed go under that reply, while it is the last turn's last board.
+  const placedFollowUp = useMemo(() => {
+    if (!actions.followUpKey || !placement.hidden.has(actions.followUpKey)) return undefined
+    for (const [reply, boards] of placement.placed) {
+      const board = boards.find(placed => placed.key === actions.followUpKey)
+      if (board) return { reply, next: board.board.next }
+    }
+    return undefined
+  }, [placement, actions.followUpKey])
+
   // What reactionTarget allows, without a walk of the chat per reply.
   const newestReply = useMemo(() => state.items.findLast(i => i.kind === 'assistant')?.key, [state.items])
   const reactable = (item: TranscriptItem) =>
@@ -1436,7 +1482,9 @@ export function Transcript({
       jump={jump}
       onRetry={actions.retryKey.has(item.key) ? stable.retry : undefined}
       onEdit={actions.editTurns.has(item.key) ? forItem(item.key).edit : undefined}
-      onFollowUp={actions.followUpKey === item.key && onCommand ? stable.command : undefined}
+      onFollowUp={(actions.followUpKey === item.key || placedFollowUp?.reply === item.key) && onCommand ? stable.command : undefined}
+      boards={item.kind === 'assistant' ? placement.placed.get(item.key) : undefined}
+      followUps={placedFollowUp?.reply === item.key ? placedFollowUp.next : undefined}
       thinkingToggle={item.kind === 'assistant' ? thinkingToggle : undefined}
       expandTools={display.expandTools}
       onOpenCall={onOpenCall ? stable.openCall : undefined}
