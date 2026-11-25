@@ -29,6 +29,8 @@ interface Props {
 /** The phone's Tasks tab: the task board, and the scheduled jobs. */
 export function Tasks({ bots, connected, profile, onProfile, tiles, badgeFor, hostBadge, onOpenRun, focus, onFocused }: Props) {
   const [segment, setSegment] = useState<Segment>(() => {
+    // A chat's task waiting to open: straight to Board, without drawing Scheduled first.
+    if (focus) return 'board'
     try {
       return localStorage.getItem(SEGMENT_KEY) === 'scheduled' ? 'scheduled' : 'board'
     } catch {
