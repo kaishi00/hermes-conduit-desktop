@@ -1494,8 +1494,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   useEffect(() => seekMore(), [older, seekMore])
 
   return {
-    /** Whether the chat has stored rows before the ones it holds. */
-    olderRows: older?.more === true,
+    /**
+     * Whether the chat has stored rows before the ones it holds. While it opens, that isn't
+     * read yet: a chat long enough to open on its newest page is taken to have them, so the
+     * copy kept from its last open draws as it will once the open settles.
+     */
+    olderRows: older ? older.more : loading && !!chat.storedId && (knownChatLength(chat.storedId) ?? 0) >= LONG_CHAT_PAGE,
     seekRow,
     transcriptStore,
     chat,
