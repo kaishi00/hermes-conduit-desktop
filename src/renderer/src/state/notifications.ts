@@ -6,6 +6,7 @@
 import type { PendingRequest } from '../../../shared/ipc'
 import { inputPromptView } from './inputPrompts'
 import { approvalView, clarifyQuestions } from './needsYou'
+import { silenceShown } from './silence'
 import { plainLine } from './text'
 import { t } from '../../../shared/i18n'
 
@@ -54,11 +55,15 @@ export function untitledAsNone(title: string | undefined): string | undefined {
 }
 
 /**
- * A finished turn's notification, or none (a stop needs no telling). It's
- * titled by the chat, else by the bot that answered, as the phone's reply
- * push is, never a line that says only that a reply came.
+ * A finished turn's notification, or none: a stop needs no telling, and nor
+ * does a reply that is only one of Hermes' silence markers ([SILENT],
+ * NO_REPLY, ...), as the plugin's push sends none (events.is_silent_response).
+ * A Bot Chat's turn ends with no text when Hermes streamed its reply, so the
+ * reply streamed last (`streamed`, from TurnReplies) stands in. It's titled by
+ * the chat, else by the bot that answered, as the phone's reply push is, never
+ * a line that says only that a reply came.
  */
-export function turnNotification(sessionId: string, payload: unknown, chat: ChatRef | undefined): NotificationSpec | null {
+export function turnNotification(sessionId: string, payload: unknown, chat: ChatRef | undefined, streamed = ''): NotificationSpec | null {
   const p = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
   if (p.status === 'interrupted') return null
   const title = untitledAsNone(chat?.title) || chat?.bot || 'Hermes'
@@ -67,8 +72,56 @@ export function turnNotification(sessionId: string, payload: unknown, chat: Chat
     const reason = typeof p.error === 'string' ? p.error : t('The turn failed.')
     return { title, body: plainLine(reason), tag }
   }
-  const text = typeof p.text === 'string' ? p.text : typeof p.rendered === 'string' ? p.rendered : ''
-  return { title, body: plainLine(text) || t('Replied.'), tag }
+  const final = typeof p.text === 'string' ? p.text : typeof p.rendered === 'string' ? p.rendered : ''
+  const reply = final.trim() ? final : streamed
+  const shown = silenceShown(reply)
+  if (reply.trim() && !shown.trim()) return null
+  return { title, body: plainLine(shown) || t('Replied.'), tag }
+}
+
+/** What a finished turn's notification reads besides its event: the reply it streamed last, and when it started. */
+export interface TurnEnd {
+  streamed: string
+  /** On this computer's clock; null when this window didn't see it start. */
+  startedAt: number | null
+}
+
+/**
+ * The reply each chat's turn streamed last, for a turn that ends with no text
+ * of its own, and when the turn started. A tool, reasoning, a reply sent whole
+ * (`message.interim`) or a delta of `null` closes a reply: the next text is a
+ * new one, as the chat shows it.
+ */
+export class TurnReplies {
+  private replies = new Map<string, { text: string; open: boolean; startedAt: number | null }>()
+
+  /** Takes one gateway event; on `message.complete` it hands back that turn's end and forgets it, else null. */
+  note(event: { type: string; session_id?: string; payload?: unknown }, now = Date.now()): TurnEnd | null {
+    const sid = event.session_id
+    if (!sid) return null
+    const p = event.payload && typeof event.payload === 'object' ? (event.payload as Record<string, unknown>) : {}
+    if (event.type === 'message.complete') {
+      const reply = this.replies.get(sid)
+      this.replies.delete(sid)
+      return { streamed: reply?.text ?? '', startedAt: reply?.startedAt ?? null }
+    }
+    const reply = this.replies.get(sid)
+    if (event.type === 'message.start') {
+      this.replies.set(sid, { text: '', open: false, startedAt: now })
+    } else if (event.type === 'message.delta') {
+      const current = reply ?? { text: '', open: false, startedAt: null }
+      if (typeof p.text === 'string' && p.text) this.replies.set(sid, { ...current, text: current.open ? current.text + p.text : p.text, open: true })
+      else if (p.text === null) this.replies.set(sid, { ...current, open: false })
+    } else if (event.type === 'message.interim') {
+      // A reply sent whole between tools: the chat draws it unless its deltas came already.
+      const current = reply ?? { text: '', open: false, startedAt: null }
+      const whole = typeof p.text === 'string' && p.text.trim() && p.already_streamed !== true
+      this.replies.set(sid, { ...current, text: whole ? (p.text as string) : current.text, open: false })
+    } else if ((event.type.startsWith('tool.') || event.type === 'reasoning.delta') && reply) {
+      this.replies.set(sid, { ...reply, open: false })
+    }
+    return null
+  }
 }
 
 export function requestNotification(request: PendingRequest, chat: ChatRef | undefined): NotificationSpec {
