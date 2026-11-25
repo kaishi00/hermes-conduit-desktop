@@ -65,6 +65,14 @@ export function isUnread(marks: ChatMarks, row: ChatRow): boolean {
   return at > marks.baseline && at > (marks.seen[key] ?? 0)
 }
 
+/**
+ * Whether the row draws its unread dot. The open chat reads as it goes, so
+ * activity alone draws none there; marked unread by hand, it keeps its dot
+ * while open (state/openChatRead).
+ */
+export const showsUnread = (marks: ChatMarks, row: ChatRow, open: boolean): boolean =>
+  isUnread(marks, row) && (!open || marks.unread.includes(markKey(row)))
+
 /** The row as read up to its latest activity; the same marks when nothing changes. */
 export function markRead(marks: ChatMarks, row: ChatRow): ChatMarks {
   if (!isUnread(marks, row)) return marks

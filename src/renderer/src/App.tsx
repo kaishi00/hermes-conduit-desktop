@@ -196,7 +196,7 @@ import { parseProjects, type Project, type ProjectChat } from './state/projects'
 import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
-import { loadMarks, saveMarks, toggleStar, isStarred, isUnread, type ChatMarks } from './state/chatMarks'
+import { loadMarks, saveMarks, toggleStar, isStarred, showsUnread, type ChatMarks } from './state/chatMarks'
 import { useOpenChatRead } from './state/openChatRead'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
@@ -1770,14 +1770,16 @@ function Shell({
       archiveMutations.current.delete(key)
     }
   }
-  // A project's chats read as their chat rows do: the list's copy when it has one (Unread dot on projects).
+  // A project's chats draw their dots as their chat rows do: the list's copy when it has one, and the
+  // open chat only when marked unread by hand (Unread dot on projects).
+  const shownOpenId = dockedChat ? null : openId
   const projectChatUnread = useCallback(
     (chat: ProjectChat) => {
       if (!marks) return false
       const listed = list.rows?.find(r => r.id === chat.id)
-      return isUnread(marks, listed ?? { id: chat.id, title: chat.title, pinned: false, profile: chat.profile, activeAt: chat.lastActive })
+      return showsUnread(marks, listed ?? { id: chat.id, title: chat.title, pinned: false, profile: chat.profile, activeAt: chat.lastActive }, chat.id === shownOpenId)
     },
-    [marks, list.rows]
+    [marks, list.rows, shownOpenId]
   )
   const waitingIds = useMemo(() => {
     const ids = new Set<string>()

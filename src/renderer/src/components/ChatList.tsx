@@ -9,7 +9,7 @@ import { t } from '@shared/i18n'
 import { HideListButton } from './HideListButton'
 import { Icon } from './icons'
 import { UpdatingCapsule } from './UpdatingCapsule'
-import { facetOf, isSourceKey, isStarred, isUnread, markKey, parseSelection, selectRows, settingFilter, type ChatFilterKey, type ChatMarks } from '../state/chatMarks'
+import { facetOf, isSourceKey, isStarred, isUnread, parseSelection, selectRows, settingFilter, showsUnread, type ChatFilterKey, type ChatMarks } from '../state/chatMarks'
 import { sourceName, sourcesIn, type ChatSource } from '../state/chatSources'
 import { contentRows, useContentSearch } from '../state/contentSearch'
 import { arrangePinned, edgeScrollDecision, moved, usePinnedOrder } from '../state/pinnedOrder'
@@ -879,7 +879,7 @@ export function ChatList({
               const depth = item.depth
               // A closed nest's unread reply shows on its parent, so it never hides.
               const nestUnread =
-                !!marks && nesting.children.has(row.id) && !(expandedNests.has(row.id) || openAncestors.has(row.id)) && descendants(nesting, row).some(r => isUnread(marks, r) && r.id !== selectedId)
+                !!marks && nesting.children.has(row.id) && !(expandedNests.has(row.id) || openAncestors.has(row.id)) && descendants(nesting, row).some(r => showsUnread(marks, r, r.id === selectedId))
               if (isOther(row)) {
                 const badge = badgeFor?.(row.host) ?? null
                 return (
@@ -933,7 +933,7 @@ export function ChatList({
                   running={running}
                   status={running && selected ? runningStatus : undefined}
                   // The open chat shows a dot only when marked unread by hand, which keeps it while open.
-                  unread={(!!marks && isUnread(marks, row) && (!selected || marks.unread.includes(markKey(row)))) || nestUnread}
+                  unread={(!!marks && showsUnread(marks, row, selected)) || nestUnread}
                   starred={!!marks && isStarred(marks, row)}
                   done={!!isDone?.(row)}
                   muted={!!muteOf?.(row)}

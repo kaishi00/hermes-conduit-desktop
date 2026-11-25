@@ -20,7 +20,7 @@ interface Props {
   /** A new chat working in the project's folder. */
   onNewChat: (folder: string | undefined, project: Project) => void
   onClose: () => void
-  /** Whether a chat has a reply the user hasn't seen, read as its chat row reads it. */
+  /** Whether a chat draws its unread dot, as its chat row does: the open chat only when marked unread by hand. */
   isUnread?: (chat: ProjectChat) => boolean
   /** Chats with a turn running. */
   runningIds?: Set<string>
@@ -158,7 +158,7 @@ export function ProjectsPane({ profile, profiles, connected, selectedId, onSelec
         {projects && !projects.some(p => !p.isHome) && !creating ? <div className="empty">{t('Projects you make here or in Hermes Desktop show here.')}</div> : null}
         {projects?.map(project => {
           // The dot while any chat the tree lists for it is unread, and the Running line beside it (issue 1496).
-          const unread = !!isUnread && project.previews.some(chat => chat.id !== selectedId && isUnread(chat))
+          const unread = !!isUnread && project.previews.some(chat => isUnread(chat))
           const running = !!runningIds && project.previews.some(chat => runningIds.has(chat.id))
           return (
             <button key={project.profile ? `${project.profile}:${project.id}` : project.id} className="row project-row" onClick={() => setOpen(project)}>
@@ -379,7 +379,7 @@ function ProjectPage({
                     <button key={chat.id} className="row" aria-current={chat.id === selectedId ? 'true' : undefined} onClick={() => onSelect(chat)}>
                       <span className="row-top">
                         <span className="row-title">
-                          {isUnread && chat.id !== selectedId && isUnread(chat) ? <span className="unread-dot" role="img" aria-label={t('Unread')} /> : null}
+                          {isUnread && isUnread(chat) ? <span className="unread-dot" role="img" aria-label={t('Unread')} /> : null}
                           {chat.title}
                         </span>
                         {chat.lastActive ? <span className="meta row-time">{timeLabel(chat.lastActive)}</span> : null}

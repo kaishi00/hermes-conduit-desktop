@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { facetOf, filterRows, isStarred, isUnread, markRead, markUnread, parseSelection, selectRows, settingFilter, toggleStar, type ChatFilterKey, type ChatMarks } from '../src/renderer/src/state/chatMarks'
+import { facetOf, filterRows, isStarred, isUnread, markRead, markUnread, parseSelection, selectRows, settingFilter, showsUnread, toggleStar, type ChatFilterKey, type ChatMarks } from '../src/renderer/src/state/chatMarks'
 
 const marks = (): ChatMarks => ({ stars: [], seen: {}, baseline: 1000, unread: [] })
 const row = (id: string, activeAt: number, profile?: string) => ({ id, title: id, activeAt, profile, pinned: false })
@@ -41,6 +41,18 @@ describe('stars and read state', () => {
     expect(filterRows(rows, 'running', m, new Set(['c'])).map(r => r.id)).toEqual(['c'])
     m = toggleStar(m, row('a', 900, 'work'))
     expect(m.stars).toEqual([])
+  })
+})
+
+describe('the open chat’s dot', () => {
+  const marks: ChatMarks = { stars: [], seen: {}, baseline: 1000, unread: [] }
+  const chat = { id: 'a', title: 'a', pinned: false, activeAt: 2000 }
+
+  it('draws none on the open chat for activity alone, and one once it is marked unread by hand', () => {
+    expect(showsUnread(marks, chat, false)).toBe(true)
+    expect(showsUnread(marks, chat, true)).toBe(false)
+    expect(showsUnread(markUnread(marks, chat), chat, true)).toBe(true)
+    expect(showsUnread(markRead(markUnread(marks, chat), chat), chat, true)).toBe(false)
   })
 })
 
