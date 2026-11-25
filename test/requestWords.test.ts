@@ -86,4 +86,54 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     words.heard('And the flyer', true)
     expect(words.pending()).toEqual(['Post the ad', 'And the flyer'])
   })
+
+  it("leaves a no about a waiting request out of the next request's words", async () => {
+    let t = 1_000_000
+    const ask = new AskFirst(true, () => t, 0, 0)
+    // Told no through send_request.
+    ask.heard('Clean the inbox')
+    await ask.ask('start_job', 'Clean the inbox.')
+    ask.modelSpoke()
+    t += 3000
+    ask.heard('No')
+    expect((await ask.release()).send).toBe(false)
+    ask.set(false)
+    ask.modelSpoke()
+    ask.heard('Do the drafts')
+    expect(await ask.ask('ask_thread', 'Do the drafts.')).toEqual({ request: 'Do the drafts.' })
+    // Let go by the model without send_request: the bare no stays behind, a change goes along.
+    ask.set(true)
+    ask.modelSpoke()
+    ask.heard('Clean the inbox')
+    await ask.ask('start_job', 'Clean the inbox.')
+    ask.modelSpoke()
+    t += 3000
+    ask.heard('No')
+    ask.modelSpoke()
+    ask.heard('Only the newsletters this time')
+    const next = await ask.ask('start_job', 'Archive the newsletters.')
+    expect('held' in next).toBe(true)
+    ask.modelSpoke()
+    t += 3000
+    ask.heard('Yes')
+    expect(await ask.release()).toMatchObject({ send: true, request: 'Archive the newsletters.' + MARKER + 'Only the newsletters this time' })
+  })
+
+  it('reads a yes that arrives in pieces whole', async () => {
+    let t = 1_000_000
+    const ask = new AskFirst(true, () => t, 0, 600)
+    ask.heard('Book a table')
+    await ask.ask('ask_thread', 'Book a table for two.')
+    ask.modelSpoke()
+    t += 3000
+    ask.heard('Yes')
+    setTimeout(() => ask.heard(' make it for four'), 100)
+    const sent = await ask.release()
+    expect(sent).toMatchObject({ send: true })
+    expect('request' in sent && sent.request).toContain('the user said: "Yes make it for four"')
+    ask.set(false)
+    ask.modelSpoke()
+    ask.heard('And a cab')
+    expect(await ask.ask('ask_thread', 'Order a cab.')).toEqual({ request: 'Order a cab.' + MARKER + 'And a cab' })
+  })
 })

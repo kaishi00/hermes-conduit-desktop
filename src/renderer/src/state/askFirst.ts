@@ -88,6 +88,12 @@ export function adding(words: string | null, request: string): string {
   return said ? `${request}${ASKED_ANSWER_LEAD}${said}"` : request
 }
 
+/** A no and nothing else ("No", "No thanks"): an answer about a waiting request, never part of the next one. */
+function isBareNo(words: string): boolean {
+  const answer = heldRequestAnswer(words)
+  return answer.kind === 'no' && !answer.change
+}
+
 /** "Mode: ask first" → true, "Mode: send directly" → false, at the very start of a delegation. */
 export function modeMarker(request: string): boolean | null {
   const match = /^\s*mode\s*:\s*(ask first|send directly)\b/i.exec(request)
@@ -184,7 +190,10 @@ export class AskFirst {
    * issue 3236).
    */
   async ask(tool: HeldTool, request: string): Promise<Asked> {
-    const said = await this.words.take(this.wordsWaitMs)
+    const answered = this.draft !== null
+    let said = await this.words.take(this.wordsWaitMs)
+    // The model let a held request go on the user's no without send_request: a bare no was about that one.
+    if (answered) said = said.filter(words => !isBareNo(words))
     const held = this.hold(tool, request, said)
     return held ? { held } : { request: withUserWords(said, request) }
   }
@@ -199,6 +208,8 @@ export class AskFirst {
     const dropped = !on && this.draft !== null
     this.on = on
     if (!on) this.draft = null
+    // What they said to let the waiting request go isn't the next request's.
+    if (dropped) this.words.skip()
     this.sendNowAt = null
     return dropped
   }
@@ -256,6 +267,8 @@ export class AskFirst {
         if (answer.kind === 'notYet')
           return { send: false, result: { status: 'waiting_for_ok', message: "Not sent: the user isn't ready yet. Wait for their OK, then call send_request." } }
         this.draft = null
+        // Their no was about this request: it doesn't go with the next one as their words.
+        this.words.skip()
         return { send: false, result: { status: 'dropped', message: "Not sent: the user said no, so it won't go to Hermes. Tell them in a few words." } }
       default:
         return {
@@ -273,9 +286,22 @@ export class AskFirst {
     const deadline = this.now() + this.lateYesMs
     for (;;) {
       const answer = heldRequestAnswer(this.line)
+      if (answer.kind === 'yes') return this.wholeAnswer(answer)
       if (answer.kind !== 'other' || this.now() >= deadline) return answer
       await new Promise(resolve => setTimeout(resolve, 250))
     }
+  }
+
+  /** A yes whose line is still arriving ("Yes", then "make it for four"): read once it stops growing, so the rest goes with this request and not the next. */
+  private async wholeAnswer(first: HeldAnswer): Promise<HeldAnswer> {
+    let answer = first
+    for (let waited = 0; waited < this.wordsWaitMs; waited += 250) {
+      const line = this.line
+      await new Promise(resolve => setTimeout(resolve, 250))
+      if (this.line === line) break
+      answer = heldRequestAnswer(this.line)
+    }
+    return answer
   }
 }
 
