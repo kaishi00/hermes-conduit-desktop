@@ -4,7 +4,7 @@ import { useBackScroll } from '../state/keptScroll'
 import { locale, t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { PULSE } from '../state/pulse'
-import { STATUS_PATH, askAgainMs, askPluginStatus } from '../state/plugin'
+import { STATUS_PATH, askPluginStatus, watchPulseCapabilities } from '../state/plugin'
 import {
   FOLLOWUP_BUDGETS,
   MAX_REPORT_TIMES,
@@ -41,12 +41,15 @@ const NOTE_LIMIT = 1500
 export function PulseSettings({
   onBack,
   onChanged,
-  bots
+  bots,
+  connected
 }: {
   onBack: () => void
   onChanged: () => void
   /** The host's bots, to name the profile Pulse runs in as the rest of the app does. */
   bots?: readonly { name: string; title: string }[] | null
+  /** A reconnect asks again: a plugin restarted behind this page may report new capabilities. */
+  connected?: boolean
 }) {
   useMouseBack(onBack)
   // Opens on Pulse's state as it last answered on this dashboard (Screens that open on their last answer).
@@ -68,21 +71,11 @@ export function PulseSettings({
   // Leave out pick may send; until they're known the checkboxes wait, so a
   // pick never sends a list read earlier (hermes-conduit issue 3269).
   const [capabilities, setCapabilities] = useState<readonly string[] | null>(null)
-  useEffect(() => {
-    let live = true
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const ask = async (attempt: number) => {
-      const status = await askPluginStatus(() => gateway.http('GET', STATUS_PATH, undefined, 8_000))
-      if (!live) return
-      if (status) setCapabilities(status.state === 'reported' ? status.capabilities : [])
-      else timer = setTimeout(() => void ask(attempt + 1), askAgainMs(attempt))
-    }
-    void ask(0)
-    return () => {
-      live = false
-      if (timer) clearTimeout(timer)
-    }
-  }, [])
+  useEffect(() =>
+    watchPulseCapabilities(
+      () => askPluginStatus(() => gateway.http('GET', STATUS_PATH, undefined, 8_000)),
+      caps => setCapabilities(caps)
+    ), [connected])
 
   const load = useCallback(async () => {
     try {
