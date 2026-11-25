@@ -10078,33 +10078,14 @@ button.secondary.danger {
 }
 
 /*
- * A wide chat shows bigger text rather than longer lines, after the phone's
- * Readable width on wide windows: the column stays 780 px until the chat
- * passes about 1180 px, then the column and everything in it (text, cards,
- * the composer, their buttons) steps up one text size at a time, 17 to 19,
- * 21 and 23 pt at the default size, while each size's lines still hold as
- * many words as the 780 px column. The chat's header keeps its size.
+ * The chat's text is the size Chat text size sets (Settings, or
+ * Ctrl/Cmd with + and -) at any width: opening or closing the sidebar or a
+ * side panel, or resizing the window, never changes it (a reader on Reddit,
+ * 2026-11-25: the font size changed as the side panels opened and closed).
+ * The column stays 780 px, and a wider chat shows wider margins.
  */
 .chat {
   container: chat / inline-size;
-}
-
-@container chat (min-width: 1180px) {
-  .chat > :not(.chat-head) {
-    zoom: 1.1176;
-  }
-}
-
-@container chat (min-width: 1304px) {
-  .chat > :not(.chat-head) {
-    zoom: 1.2353;
-  }
-}
-
-@container chat (min-width: 1428px) {
-  .chat > :not(.chat-head) {
-    zoom: 1.3529;
-  }
 }
 
 /* A project's unread dot, on its tile's corner as on a chat row's icon (issue 1496). */
