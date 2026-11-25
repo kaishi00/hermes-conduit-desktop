@@ -58,6 +58,13 @@ describe("a workstream's brief", () => {
       task: 'Find the image generation setting on the dashboard.',
       words: 'Notes:\n\nTask:\nfind it'
     })
+    const example =
+      "You're working on a task for Hermes, who coordinates the user's work in their Bot Chat.\n\nTask:\nExplain this example:\n\n" +
+      "The user's message that Hermes is answering:\n«hello»\n\nTask:\nexample"
+    expect(workstreamBrief(example)).toEqual({
+      bot: 'Hermes',
+      task: "Explain this example:\n\nThe user's message that Hermes is answering:\n«hello»\n\nTask:\nexample"
+    })
     expect(workstreamBrief('Run df -h / please.\n\nTask:\nNothing')).toBeNull()
     expect(workstreamBrief("You're working on a task for Hermes, who coordinates it.")).toBeNull()
   })

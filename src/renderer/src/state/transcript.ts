@@ -265,10 +265,12 @@ export function workstreamBrief(raw: string): { bot: string; task: string; words
   const text = raw.replace(/\r\n/g, '\n')
   if (!text.startsWith(BRIEF_OPENING)) return null
   // The user's words are quoted last, right before the task: their own "Task:" lines stay inside the quote.
+  // A quote is read only ahead of the first ordinary mark: one in the task is the task's own text.
+  const first = text.indexOf(BRIEF_TASK)
+  if (first < 0) return null
   const quoted = text.indexOf(BRIEF_WORDS)
-  const afterQuote = quoted >= 0 ? text.indexOf('»' + BRIEF_TASK, quoted) : -1
-  const mark = afterQuote >= 0 ? afterQuote + 1 : text.indexOf(BRIEF_TASK)
-  if (mark < 0) return null
+  const afterQuote = quoted >= 0 && quoted < first ? text.indexOf('»' + BRIEF_TASK, quoted) : -1
+  const mark = afterQuote >= 0 ? afterQuote + 1 : first
   const head = text.slice(BRIEF_OPENING.length, mark)
   const comma = head.indexOf(', who coordinates')
   if (comma < 0) return null
