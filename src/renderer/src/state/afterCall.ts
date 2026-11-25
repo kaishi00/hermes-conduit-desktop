@@ -4,7 +4,9 @@
  * dropped with the call. The person asked for it, so it is sent once the
  * chat is free, as on the phone (hermes-conduit issue 3185; Eric,
  * 2026-11-25). The desktop's call is the chat on screen's, so they go only
- * while that chat stays open: another chat opening drops them.
+ * while that chat stays open: another chat opening drops them. One the chat
+ * didn't take drops the rest too, with the notice its send shows, rather
+ * than leaving them waiting on a reply that never comes.
  */
 export interface AfterCall {
   /** The chat the call was in. */
@@ -22,6 +24,9 @@ export function leftByCall(left: AfterCall | null, chatId: string | null, reques
   return { chatId, requests: kept, sentAt: null }
 }
 
+/** A chat not made yet: no id, or the placeholder a docked new chat has until its first message. */
+const unmade = (chatId: string | null): boolean => chatId === null || chatId.startsWith('new-')
+
 export interface AfterCallStep {
   /** The request to send now, as the chat's next message. */
   send?: string
@@ -31,14 +36,19 @@ export interface AfterCallStep {
 /**
  * What to do with what a call left. Nothing while a call runs (its own
  * requests have the chat), while a reply runs, or until the reply to the last
- * one sent has ended; all of it is dropped once another chat is open.
+ * one sent has ended; all of it is dropped once another chat is open. A new
+ * chat getting its id from the first one sent is the same chat.
  */
 export function afterCallStep(
   left: AfterCall | null,
   now: { chatId: string | null; calling: boolean; running: boolean; turnsDone: number }
 ): AfterCallStep {
   if (!left) return { left: null }
-  if (left.chatId !== now.chatId) return { left: null }
+  if (left.chatId !== now.chatId) {
+    const made = left.sentAt !== null && unmade(left.chatId) && !unmade(now.chatId)
+    if (!made) return { left: null }
+    left = { ...left, chatId: now.chatId }
+  }
   if (now.calling || now.running || left.sentAt === now.turnsDone) return { left }
   const [send, ...rest] = left.requests
   if (send === undefined) return { left: null }

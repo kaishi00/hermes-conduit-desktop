@@ -171,19 +171,20 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     setPictureNote({ id: ++pictureIds.current, kind: picture.kind, change: 'removed', frame: null })
   }
   /** A call's request to Hermes: the waiting picture goes with it, once. */
-  const callSay = (words: string) => {
+  const sayToChat = async (words: string): Promise<boolean> => {
     const picture = waitingPicture.current
     if (picture) {
       waitingPicture.current = null
       setCallPicture(null)
     }
     const send = late.current?.onSend
-    if (!send) return
-    void send(words, picture ? [picture.attachment] : [], { takeOver: true, spoken: true }).then(sent => {
-      // The chat didn't open, or was left while it opened: the call says the words didn't go.
-      if (sent === false) tell(t('That didn’t reach the chat. Try again.'))
-    })
+    if (!send) return false
+    const sent = await send(words, picture ? [picture.attachment] : [], { takeOver: true, spoken: true }).catch(() => false as const)
+    // The chat didn't open, or was left while it opened: the call says the words didn't go.
+    if (sent === false) tell(t('That didn’t reach the chat. Try again.'))
+    return sent !== false
   }
+  const callSay = (words: string) => void sayToChat(words)
   const pictureControls = (
     <CallPictureControls
       waiting={callPicture}
@@ -220,11 +221,19 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
 
   // What a live call left unsent at hang-up goes once the chat is free (hermes-conduit issue 3185).
   const [left, setLeft] = useState<AfterCall | null>(null)
-  const callLeft = (requests: string[]) => setLeft(kept => leftByCall(kept, chatId, requests))
+  // A call hands them over as it unmounts, with the callback it was first drawn with: the chat is read
+  // as it is then, since a call started in a new chat gave it its id meanwhile.
+  const chatNow = useRef(chatId)
+  chatNow.current = chatId
+  const callLeft = (requests: string[]) => setLeft(kept => leftByCall(kept, chatNow.current, requests))
   useEffect(() => {
     const step = afterCallStep(left, { chatId, calling, running, turnsDone })
     if (step.left !== left) setLeft(step.left)
-    if (step.send !== undefined) callSay(step.send)
+    if (step.send === undefined) return
+    // One the chat didn't take: the rest would wait on a reply that never comes, so they go with it.
+    void sayToChat(step.send).then(sent => {
+      if (!sent) setLeft(null)
+    })
   }, [left, chatId, calling, running, turnsDone])
 
   const end = () => setCalling(false)

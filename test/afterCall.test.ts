@@ -26,6 +26,26 @@ describe('requests a call left unsent (hermes-conduit issue 3185)', () => {
     expect(second).toEqual({ send: 'and a car', left: null })
   })
 
+  it('keeps a later call’s behind the reply to the one already sent', () => {
+    const sent = afterCallStep(leftByCall(null, 'chat', ['book the hotel', 'and a car']), free).left
+    const merged = leftByCall(sent, 'chat', ['then lunch'])
+    expect(merged).toEqual({ chatId: 'chat', requests: ['and a car', 'then lunch'], sentAt: 3 })
+    expect(afterCallStep(merged, free)).toEqual({ left: merged })
+  })
+
+  it('follows a new chat that got its id from the first one sent', () => {
+    for (const unmade of [null, 'new-1764039000000']) {
+      const first = afterCallStep(leftByCall(null, unmade, ['book the hotel', 'and a car']), { ...free, chatId: unmade, turnsDone: 0 })
+      expect(first.send).toBe('book the hotel')
+      const made = { ...free, chatId: 'made', turnsDone: 0 }
+      // Its reply still runs in the chat it made.
+      expect(afterCallStep(first.left, { ...made, running: true })).toEqual({ left: { chatId: 'made', requests: ['and a car'], sentAt: 0 } })
+      expect(afterCallStep(first.left, { ...made, turnsDone: 1 })).toEqual({ send: 'and a car', left: null })
+    }
+    // Nothing went yet: a chat opening then is another chat.
+    expect(afterCallStep(leftByCall(null, null, ['book the hotel']), free)).toEqual({ left: null })
+  })
+
   it('drops them once another chat is open', () => {
     const left = leftByCall(null, 'chat', ['book the hotel'])
     expect(afterCallStep(left, { ...free, chatId: 'other' })).toEqual({ left: null })
