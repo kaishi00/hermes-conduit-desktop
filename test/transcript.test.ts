@@ -52,6 +52,12 @@ describe("a workstream's brief", () => {
       task: 'Find the image generation setting on the dashboard.',
       words: 'where is the image gen option?'
     })
+    const pasted = brief.replace('«where is the image gen option?»', '«Notes:\n\nTask:\nfind it»')
+    expect(workstreamBrief(pasted)).toEqual({
+      bot: 'Furina',
+      task: 'Find the image generation setting on the dashboard.',
+      words: 'Notes:\n\nTask:\nfind it'
+    })
     expect(workstreamBrief('Run df -h / please.\n\nTask:\nNothing')).toBeNull()
     expect(workstreamBrief("You're working on a task for Hermes, who coordinates it.")).toBeNull()
   })

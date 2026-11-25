@@ -264,7 +264,10 @@ const BRIEF_WORDS = "\n\nThe user's message that "
 export function workstreamBrief(raw: string): { bot: string; task: string; words?: string } | null {
   const text = raw.replace(/\r\n/g, '\n')
   if (!text.startsWith(BRIEF_OPENING)) return null
-  const mark = text.indexOf(BRIEF_TASK)
+  // The user's words are quoted last, right before the task: their own "Task:" lines stay inside the quote.
+  const quoted = text.indexOf(BRIEF_WORDS)
+  const afterQuote = quoted >= 0 ? text.indexOf('»' + BRIEF_TASK, quoted) : -1
+  const mark = afterQuote >= 0 ? afterQuote + 1 : text.indexOf(BRIEF_TASK)
   if (mark < 0) return null
   const head = text.slice(BRIEF_OPENING.length, mark)
   const comma = head.indexOf(', who coordinates')
@@ -276,9 +279,9 @@ export function workstreamBrief(raw: string): { bot: string; task: string; words
   task = task.trim()
   if (!bot || !task) return null
   let words: string | undefined
-  const quoted = head.indexOf(BRIEF_WORDS)
-  if (quoted >= 0) {
-    const open = head.indexOf('«', quoted + BRIEF_WORDS.length)
+  const quotedInHead = head.indexOf(BRIEF_WORDS)
+  if (quotedInHead >= 0) {
+    const open = head.indexOf('«', quotedInHead + BRIEF_WORDS.length)
     const close = head.lastIndexOf('»')
     if (open >= 0 && close > open) words = head.slice(open + 1, close).trim() || undefined
   }
