@@ -46783,5 +46783,20 @@
     "tr": "Kullan",
     "zh-Hans": "使用",
     "zh-Hant": "使用"
+  },
+  "This tool has no backends to set up.": {
+    "de": "Dieses Tool hat keine Backends zum Einrichten.",
+    "es": "Esta herramienta no tiene backends que configurar.",
+    "fr": "Cet outil n’a aucun backend à configurer.",
+    "id": "Alat ini tidak punya backend untuk diatur.",
+    "it": "Questo strumento non ha backend da configurare.",
+    "ja": "このツールには設定するバックエンドがありません。",
+    "ko": "이 도구에는 설정할 백엔드가 없습니다.",
+    "pl": "To narzędzie nie ma backendów do skonfigurowania.",
+    "pt-BR": "Esta ferramenta não tem back-ends para configurar.",
+    "ru": "У этого инструмента нет бэкендов для настройки.",
+    "tr": "Bu aracın ayarlanacak arka ucu yok.",
+    "zh-Hans": "此工具没有需要设置的后端。",
+    "zh-Hant": "此工具沒有需要設定的後端。"
   }
 }
