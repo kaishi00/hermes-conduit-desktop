@@ -197,7 +197,7 @@ import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, saveMarks, toggleStar, isStarred, showsUnread, type ChatMarks } from './state/chatMarks'
-import { useOpenChatRead } from './state/openChatRead'
+import { readRowFor, useOpenChatRead } from './state/openChatRead'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor, wheelSteps } from './state/shortcuts'
@@ -1275,7 +1275,10 @@ function Shell({
   const openRow = openId ? list.rows?.find(row => row.id === openId) : undefined
   // The open chat reads as read, unless it was marked unread while open (state/openChatRead).
   // Another host's chat docked over it hides it: nothing is open here until it goes.
-  const toggleRead = useOpenChatRead(dockedChat ? null : openId, dockedChat ? undefined : openRow, marks, updateMarks, writeUnread)
+  // Voice and auto-archived rows are only in `listedRows`: using `list.rows` here would
+  // leave an open voice chat's seen time unadvanced, so its dot comes back (issue 527).
+  const readRow = readRowFor(listedRows, list.rows, dockedChat ? null : openId)
+  const toggleRead = useOpenChatRead(dockedChat ? null : openId, readRow, marks, updateMarks, writeUnread)
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
     [respondConnection, reissueConnection, wakeConnection]
