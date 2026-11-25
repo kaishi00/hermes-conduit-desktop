@@ -79,6 +79,11 @@ install.
    accessible without them.
    For other sign-in methods behind Cloudflare Access or another proxy,
    enter its service token or headers under **Behind Cloudflare Access or another proxy?**
+   A dashboard behind a login page of its own (oauth2-proxy, Google IAP,
+   Authelia, Cloudflare Access without a service token), or an older Hermes
+   that only signs in on its own page, offers **Open Sign-In Page**: you sign
+   in on that page in a Conduit window, as on the phone, and Conduit keeps the
+   sign-in. If the page's session runs out, Conduit asks you to sign in again.
 3. Already signed in on the iPhone? Choose **Pair with your iPhone** instead,
    then in Conduit on the phone open Settings > Connection > Pair a Computer
    and scan the code.
@@ -179,8 +184,8 @@ releases; a release only releases.
 ## How it's put together
 
 - `src/main`: the Electron main process. It owns the connection to Hermes
-  (`connection.ts`), signs in (`auth.ts`) and keeps the sign-in
-  (`store.ts`). The window never sees a password, cookie or token.
+  (`connection.ts`), signs in (`auth.ts`, and `browserSignIn.ts` for a
+  dashboard behind a login page) and keeps the sign-in (`store.ts`). The window never sees a password, cookie or token.
 - `src/preload`: the small API the window gets (`window.conduit`).
 - `src/renderer`: the window, in React. `state/` turns Hermes' events into
   the transcript and the chat list; `components/` draws them.

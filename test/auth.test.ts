@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   AuthError,
   absorbCookies,
+  browserSession,
   cookieHeader,
+  isSignIn,
+  isSignInPath,
   mintTicket,
   normalizeBaseUrl,
   passwordLogin,
@@ -128,8 +131,13 @@ describe('sign-in methods', () => {
       '/api/auth/providers': () => json(providers),
       '/api/status': () => json({ auth_required: true, auth_providers: ['basic'] })
     })
-    expect(await probeHost('example.com', fetchImpl)).toEqual({ ok: false, error: 'This dashboard has no sign-in method supported by Conduit.' })
-    expect(signInMethods({ auth_required: true, auth_providers: ['session-token'] }, providers)).toEqual(['token'])
+    // Its provider signs in on the dashboard's own page, and this Hermes has no native sign-in: the sign-in window.
+    expect(await probeHost('example.com', fetchImpl)).toMatchObject({ ok: true, methods: ['browser'] })
+    expect(signInMethods({ auth_required: true, auth_providers: ['session-token'] }, providers)).toEqual(['browser', 'token'])
+    // A native sign-in takes its place, and a provider that can't hold a session offers nothing.
+    expect(signInMethods({ auth_required: true, auth_flows: ['native_pkce'] }, providers)).toEqual(['oidc'])
+    expect(signInMethods({ auth_required: true }, { providers: [{ name: 'drain', supports_password: false, supports_session: false }] })).toEqual([])
+    expect(signInMethods({ auth_required: true }, { providers: [{ name: 'session-token', supports_password: false }] })).toEqual(['token'])
   })
 
   it('treats provider flows as authoritative over stale status flows', async () => {
@@ -302,7 +310,12 @@ describe('a dashboard behind Cloudflare Access', () => {
   it('says so, and sends the service token only to the dashboard', async () => {
     const access = (url: string) => Object.defineProperty(new Response('<html>login</html>', { status: 200 }), 'url', { value: url })
     const turnedAway = await probeHost('https://hermes.example.com', async () => access('https://team.cloudflareaccess.com/cdn-cgi/access/login'))
-    expect(turnedAway).toEqual({ ok: false, help: 'cloudflare', error: 'This dashboard is behind Cloudflare Access. Add its service token under Proxy sign-in.' })
+    expect(turnedAway).toEqual({
+      ok: false,
+      help: 'cloudflare',
+      error: 'This dashboard is behind Cloudflare Access. Add its service token under Proxy sign-in, or sign in on its page.',
+      browser: 'https://hermes.example.com'
+    })
 
     const seen: [string, string | null][] = []
     const passes = await probeHost(
@@ -318,5 +331,105 @@ describe('a dashboard behind Cloudflare Access', () => {
       ['https://hermes.example.com/api/auth/providers', 'id.access'],
       ['https://hermes.example.com/api/status', 'id.access']
     ])
+  })
+})
+
+describe('a dashboard behind a sign-in page', () => {
+  const html = (status = 200) => new Response('<html>sign in</html>', { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+  const redirect = (location: string) => new Response(null, { status: 302, headers: { Location: location } })
+
+  it('knows a sign-in page as the phone does', () => {
+    for (const path of ['/login', '/hermes/login', '/signin', '/sign_in', '/Sign-In', '/oauth2/start', '/oauth2/sign_in']) expect(isSignInPath(path), path).toBe(true)
+    for (const path of ['/', '/docs/login-guide', '/oauth2/callback', '/api/status', '/chats']) expect(isSignInPath(path), path).toBe(false)
+    expect(isSignIn('https://accounts.google.com/o/oauth2/auth', 'https://hermes.example.com')).toBe(true)
+    expect(isSignIn('https://hermes.example.com:8443/', 'https://hermes.example.com')).toBe(true)
+    expect(isSignIn('https://hermes.example.com/oauth2/sign_in', 'https://hermes.example.com')).toBe(true)
+    expect(isSignIn('https://hermes.example.com/chats', 'https://hermes.example.com')).toBe(false)
+    expect(isSignIn('conduit://pair', 'https://hermes.example.com')).toBe(false)
+  })
+
+  it('offers the sign-in window when a login proxy redirects the first read to its page', async () => {
+    const seen: string[] = []
+    const probe = await probeHost('hermes.example.com', async input => {
+      seen.push(String(input))
+      return redirect('https://accounts.google.com/o/oauth2/auth?client_id=x')
+    })
+    expect(probe).toEqual({ ok: false, error: 'This dashboard is behind a sign-in page. Sign in on that page to continue.', browser: 'https://hermes.example.com' })
+    // The redirect is never followed off the dashboard.
+    expect(seen.every(url => url.startsWith('https://hermes.example.com/'))).toBe(true)
+  })
+
+  it('offers it for a sign-in portal on the dashboard’s own origin', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/auth/providers': () => redirect('/oauth2/sign_in?rd=%2Fapi%2Fauth%2Fproviders'),
+      '/api/status': () => redirect('/oauth2/sign_in?rd=%2Fapi%2Fstatus'),
+      '/oauth2/sign_in': () => html(403)
+    })
+    expect(await probeHost('hermes.example.com', fetchImpl)).toMatchObject({ ok: false, browser: 'https://hermes.example.com' })
+    const landed = dashboard({ '/api/status': () => redirect('/portal'), '/portal': () => html() })
+    expect(await probeHost('hermes.example.com', landed.fetchImpl)).toEqual({
+      ok: false,
+      error: 'This dashboard is behind a sign-in page. Sign in on that page to continue.',
+      browser: 'https://hermes.example.com'
+    })
+  })
+
+  it('offers it beside the refusal when a proxy answers 401, or refuses with a page', async () => {
+    const refused = dashboard({ '/api/status': () => new Response('{"error":"unauthorized"}', { status: 401 }) })
+    expect(await probeHost('hermes.example.com', refused.fetchImpl)).toMatchObject({ ok: false, help: 'network', browser: 'https://hermes.example.com' })
+    const page = dashboard({ '/api/status': () => html(403) })
+    expect(await probeHost('hermes.example.com', page.fetchImpl)).toMatchObject({ ok: false, help: 'network', browser: 'https://hermes.example.com' })
+    // A plain refusal (an access list) has no page to sign in on.
+    const denied = dashboard({ '/api/status': () => new Response('{"detail":"forbidden"}', { status: 403 }) })
+    expect(await probeHost('hermes.example.com', denied.fetchImpl)).not.toHaveProperty('browser')
+  })
+
+  it('offers it when a page answers where the status should be', async () => {
+    const { fetchImpl } = dashboard({ '/api/status': () => html() })
+    expect(await probeHost('hermes.example.com', fetchImpl)).toEqual({
+      ok: false,
+      error: 'This isn’t answering like a Hermes dashboard.',
+      browser: 'https://hermes.example.com'
+    })
+  })
+
+  it('takes a ticket from a gated Hermes with the window’s cookies, keeping one the proxy renews', async () => {
+    const { fetchImpl, calls } = dashboard({
+      '/api/status': () => new Response('{"auth_required":true}', { status: 200, headers: { 'Set-Cookie': '_oauth2_proxy=renewed; Path=/' } }),
+      '/api/auth/ws-ticket': () => json({ ticket: 'tk' })
+    })
+    const session = await browserSession('https://hermes.example.com', { _oauth2_proxy: 'old', hermes_session: 's' }, fetchImpl)
+    expect(session).toEqual({ query: { ticket: 'tk' }, jar: { _oauth2_proxy: 'renewed', hermes_session: 's' } })
+    expect(new Headers(calls[0]!.init.headers).get('cookie')).toBe('_oauth2_proxy=old; hermes_session=s')
+    expect(new Headers(calls[1]!.init.headers).get('cookie')).toBe('_oauth2_proxy=renewed; hermes_session=s')
+  })
+
+  it('reads an ungated Hermes’ session token from its page', async () => {
+    const { fetchImpl } = dashboard({
+      '/api/status': () => json({ auth_required: false }),
+      '/': () => new Response('<script>window.__HERMES_SESSION_TOKEN__ = "open-token"</script>')
+    })
+    expect(await browserSession('https://hermes.example.com', { proxy: '1' }, fetchImpl)).toEqual({ query: { token: 'open-token' }, jar: { proxy: '1' }, token: 'open-token' })
+  })
+
+  it('says signed out when the cookies no longer pass the proxy or Hermes', async () => {
+    const signedOut = async (routes: Record<string, Handler>) =>
+      browserSession('https://hermes.example.com', { proxy: 'stale' }, dashboard(routes).fetchImpl).then(() => null, error => error as AuthError)
+    for (const routes of [
+      { '/api/status': () => redirect('https://accounts.google.com/login') },
+      { '/api/status': () => redirect('/oauth2/sign_in') },
+      { '/api/status': () => new Response('', { status: 401 }) },
+      { '/api/status': () => html() },
+      { '/api/status': () => json({ auth_required: true }), '/api/auth/ws-ticket': () => new Response('{"detail":"no session"}', { status: 401 }) },
+      { '/api/status': () => json({ auth_required: true }), '/api/auth/ws-ticket': () => redirect('/login?next=%2F') },
+      { '/api/status': () => json({ auth_required: false }), '/': () => html() }
+    ] as Record<string, Handler>[]) {
+      const error = await signedOut(routes)
+      expect(error).toBeInstanceOf(AuthError)
+      expect(error!.signedOut).toBe(true)
+    }
+    // An outage is not a sign-out: the dial tries again.
+    const outage = await signedOut({ '/api/status': () => new Response('bad gateway', { status: 502 }) })
+    expect(outage!.signedOut).toBe(false)
   })
 })

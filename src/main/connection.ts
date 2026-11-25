@@ -21,8 +21,11 @@ import {
   CONDUIT_CLIENT_HEADER,
   SESSION_TOKEN_HEADER,
   type CookieJar,
+  browserSession,
+  browserSignedOut,
   endpoint,
   type Fetch,
+  fetchKeepingCookies,
   cookieHeader,
   mintTicket,
   normalizeBaseUrl,
@@ -127,6 +130,19 @@ export interface ConnectionDeps {
   store: ConnectionStore
   /** Opens the system browser for passkeys, not an embedded browser. */
   openExternal?: (url: string) => Promise<void>
+  /**
+   * Conduit's sign-in window, for a login proxy in front of the dashboard or a Hermes that signs in on its own page
+   * (browserSignIn.ts). It stays open until `signedIn`, asked with the window's cookies for the dashboard each time
+   * a page there loads, says they pass (the cookies to keep), and rejects when it is closed first.
+   */
+  browserSignIn?: (
+    url: string,
+    headers: ProxyHeaders | undefined,
+    signal: AbortSignal,
+    signedIn: (jar: CookieJar) => Promise<CookieJar | null>
+  ) => Promise<CookieJar>
+  /** Clears what the sign-in window kept for a dashboard's address (its proxy's and identity provider's cookies). */
+  forgetBrowser?: (url: string) => void
   /** Authoritative store shared by the open and kept connections. */
   oidcStore?: ConnectionStore
   createSocket: SocketFactory
@@ -173,6 +189,8 @@ export class Connection {
   private readonly setTimer: (fn: () => void, ms: number) => unknown
   private readonly newOidc = new WeakSet<SavedConnection>()
   private browserSignIn: AbortController | null = null
+  /** One look at whether a sign-in window's cookies still pass, shared by the requests that were refused together. */
+  private browserCheck: Promise<boolean> | null = null
   private readonly clearTimer: (handle: unknown) => void
 
   constructor(private readonly deps: ConnectionDeps) {
@@ -340,14 +358,26 @@ export class Connection {
         this.browserSignIn = browserAttempt
         saved.oidc = await oidcLogin(url, this.fetchFor(saved), this.deps.openExternal, browserAttempt.signal)
         this.newOidc.add(saved)
+      } else if (request.method === 'browser') {
+        if (!this.deps.browserSignIn) throw new Error(t('Browser sign-in is unavailable.'))
+        browserAttempt = new AbortController()
+        this.browserSignIn?.abort()
+        this.browserSignIn = browserAttempt
+        const fetchImpl = this.fetchFor(saved)
+        // The window closes once its cookies open the dashboard: past the proxy, and past Hermes' own sign-in if it has one.
+        saved.cookies = await this.deps.browserSignIn(url, saved.headers, browserAttempt.signal, jar =>
+          browserSession(url, jar, fetchImpl).then(session => session.jar, () => null)
+        )
       }
     } catch (error) {
       if (this.browserSignIn === browserAttempt) this.browserSignIn = null
+      if (request.method === 'browser') this.forgetBrowserSession(url, true)
       return { ok: false, error: (error as Error).message }
     }
     if (generation !== this.generation) {
       if (this.browserSignIn === browserAttempt) this.browserSignIn = null
       if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
+      if (saved.method === 'browser') this.forgetBrowserSession(url, true)
       return { ok: false, error: t('Cancelled.') }
     }
     // The sign-in this one takes the place of (the same host signed in again, or Edit Connection's).
@@ -358,10 +388,12 @@ export class Connection {
     if (this.browserSignIn === browserAttempt) this.browserSignIn = null
     if (generation !== this.generation) {
       if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
+      if (saved.method === 'browser') this.forgetBrowserSession(url, true)
       return { ok: false, error: t('Cancelled.') }
     }
     if (error) {
       if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
+      if (saved.method === 'browser') this.forgetBrowserSession(url, true)
       this.saved = null
       this.teardown()
       this.setStatus({ phase: 'signed-out', hosts: this.hosts() })
@@ -375,9 +407,23 @@ export class Connection {
     if (displaced?.method === 'oidc' && displaced.oidc && displaced.oidc.refresh_token !== saved.oidc?.refresh_token) {
       void revokeOidc(displaced.url, displaced.oidc, this.fetchFor(displaced)).catch(() => {})
     }
+    // What the sign-in window kept for the sign-in this one replaced goes, unless this one is the window's too, at that address.
+    if (displaced?.method === 'browser' && (saved.method !== 'browser' || new URL(displaced.url).origin !== new URL(url).origin)) {
+      this.forgetBrowserSession(displaced.url)
+    }
     // The host list now holds it, and its name.
     this.setStatus({ ...this.status, hosts: this.hosts(), hostLabel: this.identityOf(saved).hostLabel })
     return { ok: true }
+  }
+
+  /**
+   * Clears what the sign-in window kept for `url`'s address, unless another saved dashboard signed in through the
+   * window at that address still uses it. `keepIfSaved`: a sign-in that didn't finish leaves the saved host's alone.
+   */
+  private forgetBrowserSession(url: string, keepIfSaved = false): void {
+    const origin = new URL(url).origin
+    const inUse = this.hosts().some(h => h.method === 'browser' && new URL(h.url).origin === origin && (keepIfSaved || h.url !== url))
+    if (!inUse) this.deps.forgetBrowser?.(url)
   }
 
   /** Signs out of the open host; the next saved one, if any, opens. */
@@ -390,6 +436,7 @@ export class Connection {
     this.saved = null
     this.openToken = null
     this.deps.store.clear()
+    if (previous?.method === 'browser') this.forgetBrowserSession(previous.url)
     const next = this.deps.store.load()
     if (next) this.open(next)
     else this.setStatus({ phase: 'signed-out', hosts: this.hosts() })
@@ -466,6 +513,7 @@ export class Connection {
     const removed = this.deps.store.get?.(url)
     if (removed?.method === 'oidc' && removed.oidc) this.forgetOidc(removed)
     this.deps.store.remove?.(url)
+    if (removed?.method === 'browser') this.forgetBrowserSession(url)
     this.setStatus({ ...this.identity(), phase: this.status.phase, error: this.status.error, retryInSeconds: this.status.retryInSeconds })
   }
 
@@ -556,6 +604,7 @@ export class Connection {
     const saved = this.saved
     if (!saved) throw new Error(t('Not signed in.'))
     if (!path.startsWith('/api/')) throw new Error('Only dashboard API paths can be called.')
+    if (saved.method === 'browser') return this.browserRequest(saved, method, path, body, signal, accept)
     const send = async (): Promise<Response> => {
       const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit' }
       if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -589,6 +638,48 @@ export class Connection {
   }
 
   /**
+   * One dashboard request with a sign-in window's cookies. Redirects are followed on the dashboard's own origin
+   * only, never to a sign-in page, and a cookie the proxy renews on the way is kept. A redirect to sign in, or a
+   * 401, is checked against the dashboard's status once: cookies that no longer pass end the connection asking to
+   * sign in again, as they can't be renewed from here; an ungated Hermes' new session token sends the request again.
+   */
+  private async browserRequest(saved: SavedConnection, method: string, path: string, body: unknown, signal: AbortSignal | undefined, accept: string): Promise<Response> {
+    const send = async (): Promise<Response> => {
+      const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit' }
+      if (body !== undefined) headers['Content-Type'] = 'application/json'
+      if (this.saved === saved && this.openToken) headers[SESSION_TOKEN_HEADER] = this.openToken
+      const { response, jar } = await fetchKeepingCookies(
+        this.fetchFor(saved),
+        endpoint(saved.url, path),
+        { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal },
+        saved.cookies ?? {},
+        { stopAtSignIn: true, send: (fetchImpl, url, init) => fetchImpl(url, init) }
+      )
+      this.keepCookies(saved, jar)
+      return response
+    }
+    const response = await send()
+    if (!browserSignedOut(response) || this.saved !== saved) return response
+    const token = this.openToken
+    this.browserCheck ??= browserSession(saved.url, saved.cookies ?? {}, this.fetchFor(saved))
+      .then(session => {
+        this.keepCookies(saved, session.jar)
+        if (this.saved === saved) this.openToken = session.token ?? null
+        return true
+      }, error => !(error instanceof AuthError && error.signedOut))
+      .finally(() => { this.browserCheck = null })
+    if (!(await this.browserCheck)) {
+      if (this.saved === saved && this.status.phase !== 'failed') {
+        this.teardown()
+        this.setStatus({ ...this.identity(), phase: 'failed', error: t('Hermes signed this computer out. Sign in again.') })
+      }
+      return response
+    }
+    // The cookies pass: the refusal was this route's own, unless an ungated Hermes started again with a new token.
+    return this.saved === saved && this.openToken && this.openToken !== token ? send() : response
+  }
+
+  /**
    * A plugin's socket (`/api/plugins/...`, Grok Live's relay) with this
    * sign-in's credential: a fresh ticket for a password sign-in, as the
    * dashboard's own sockets take it.
@@ -601,7 +692,7 @@ export class Connection {
     const url = new URL(await this.socketUrl(saved, path))
     for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value)
     const headers: Record<string, string> = { [CONDUIT_CLIENT_HEADER]: 'conduit' }
-    if (saved.method === 'password' && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
+    if ((saved.method === 'password' || saved.method === 'browser') && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
     if (saved.method === 'oidc') headers.Authorization = `Bearer ${await this.oidcAccess(saved)}`
     return this.deps.createSocket(url.toString(), withProxyHeaders(headers, url.toString(), saved.url, saved.headers))
   }
@@ -637,7 +728,8 @@ export class Connection {
     if (generation !== this.generation) return 'Cancelled.'
 
     const headers: Record<string, string> = { [CONDUIT_CLIENT_HEADER]: 'conduit' }
-    if (saved.method === 'password' && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
+    // A sign-in window's cookies pass its proxy on the socket's handshake too.
+    if ((saved.method === 'password' || saved.method === 'browser') && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
     if (saved.method === 'oidc') {
       try {
         headers.Authorization = `Bearer ${await this.oidcAccess(saved)}`
@@ -816,6 +908,13 @@ export class Connection {
           await this.oidcAccess(saved, true)
           return webSocketUrl(saved.url, { ticket: (await send()).ticket }, path)
         }
+      }
+      case 'browser': {
+        // What the cookies open is asked at each dial: Hermes behind the proxy may be ungated (its token) or gated (a ticket).
+        const session = await browserSession(saved.url, saved.cookies ?? {}, this.fetchFor(saved))
+        this.keepCookies(saved, session.jar)
+        if (this.saved === saved) this.openToken = session.token ?? null
+        return webSocketUrl(saved.url, session.query, path)
       }
       case 'password': {
         let jar = saved.cookies ?? {}

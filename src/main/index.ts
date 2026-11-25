@@ -35,6 +35,7 @@ import {
   type AppIconChoice
 } from '../shared/ipc'
 import { probeHost } from './auth'
+import { forgetSignInSession, openSignInWindow } from './browserSignIn'
 import { pageUrl, registerPageScheme, servePages } from './pages'
 import { confineNavigation } from './navigation'
 import { endSocket, LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
@@ -357,6 +358,8 @@ const connection = new Connection({
   fetch: globalThis.fetch.bind(globalThis),
   store: hostStore,
   openExternal: url => shell.openExternal(url),
+  browserSignIn: (url, headers, signal, signedIn) => openSignInWindow({ url, headers, signal, signedIn, parent: mainWindow }),
+  forgetBrowser: forgetSignInSession,
   createSocket,
   onStatus: status => {
     const before = shownHost

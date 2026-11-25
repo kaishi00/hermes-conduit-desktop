@@ -746,3 +746,163 @@ describe('more than one Hermes', () => {
     expect(two.connection.current().choosing).toBeUndefined()
   })
 })
+
+describe('a dashboard signed in through the sign-in window', () => {
+  const url = 'https://hermes.example.com'
+  const redirect = (location: string) => new Response(null, { status: 302, headers: { Location: location } })
+
+  /** A Hermes behind a login proxy: `passes` says whether the proxy's cookie is still good, `gated` whether Hermes asks for its own session. */
+  function proxied(opts: { gated?: boolean } = {}) {
+    const state = { passes: true, token: 'open-1', refused: new Set<string>() }
+    const seen: { path: string; headers: Headers }[] = []
+    const fetchImpl: Fetch = async (input, init = {}) => {
+      const path = new URL(String(input)).pathname
+      const headers = new Headers(init.headers)
+      seen.push({ path, headers })
+      if (!state.passes || !(headers.get('cookie') ?? '').includes('_proxy=')) return redirect('https://accounts.google.com/login')
+      if (state.refused.has(path)) return json({ detail: 'not yours' }, 401)
+      if (path === '/api/status') return json({ auth_required: !!opts.gated }, 200, { 'Set-Cookie': '_proxy=renewed; Path=/' })
+      if (path === '/api/auth/ws-ticket') return json({ ticket: 'tk' })
+      if (path === '/') return new Response(`<script>window.__HERMES_SESSION_TOKEN__ = "${state.token}"</script>`)
+      if (path === '/api/x' && headers.get('x-hermes-session-token') !== state.token && !opts.gated) return json({ detail: 'bad token' }, 401)
+      return json({ ok: true })
+    }
+    const sockets: FakeSocket[] = []
+    const statuses: ConnectionStatus[] = []
+    const forgotten: string[] = []
+    const windows: { url: string; headers?: Record<string, string>; signal: AbortSignal; signedIn: (jar: Record<string, string>) => Promise<Record<string, string> | null> }[] = []
+    let answer: (jar: Record<string, string>) => void = () => {}
+    const timers: (() => void)[] = []
+    const store = createHostList(() => {}, { hosts: [], active: null })
+    const connection = new Connection({
+      fetch: fetchImpl,
+      store,
+      browserSignIn: (windowUrl, headers, signal, signedIn) => {
+        windows.push({ url: windowUrl, headers, signal, signedIn })
+        return new Promise((resolve, reject) => {
+          answer = resolve
+          signal.addEventListener('abort', () => reject(new Error('Sign-in was cancelled.')))
+        })
+      },
+      forgetBrowser: forgotUrl => forgotten.push(forgotUrl),
+      createSocket: (socketUrl, headers) => {
+        const socket = new FakeSocket(socketUrl, headers)
+        sockets.push(socket)
+        return socket as unknown as WebSocketLike
+      },
+      onStatus: s => statuses.push(s),
+      onEvent: () => {},
+      setTimeout: fn => timers.push(fn),
+      clearTimeout: () => {}
+    })
+    const signIn = async (jar: Record<string, string> = { _proxy: 'first' }) => {
+      const result = connection.signIn({ url, method: 'browser' })
+      await until(() => windows.length > 0)
+      answer(jar)
+      return result
+    }
+    return { connection, store, state, seen, sockets, statuses, forgotten, windows, timers, signIn }
+  }
+
+  it('signs in with the window’s cookies: an ungated Hermes’ token on the socket, the cookies on its handshake and on requests', async () => {
+    const h = proxied()
+    expect(await h.signIn()).toEqual({ ok: true })
+    await until(() => h.connection.current().phase === 'open')
+    expect(h.windows[0]!.url).toBe(url)
+    // The window is told its cookies pass only once they open the dashboard.
+    expect(await h.windows[0]!.signedIn({ _proxy: 'first' })).toEqual({ _proxy: 'renewed' })
+    expect(await h.windows[0]!.signedIn({})).toBeNull()
+    expect(h.sockets[0]!.url).toBe('wss://hermes.example.com/api/ws?token=open-1')
+    expect(h.sockets[0]!.headers.Cookie).toBe('_proxy=renewed')
+    // The cookie the proxy renewed is the one saved.
+    expect(h.store.get?.(url)).toMatchObject({ method: 'browser', cookies: { _proxy: 'renewed' } })
+    await h.connection.http('GET', '/api/x')
+    const sent = h.seen.at(-1)!
+    expect(sent.headers.get('cookie')).toBe('_proxy=renewed')
+    expect(sent.headers.get('x-hermes-session-token')).toBe('open-1')
+  })
+
+  it('takes a ticket from a gated Hermes, and opens a plugin socket the same way', async () => {
+    const h = proxied({ gated: true })
+    expect(await h.signIn({ _proxy: 'first', hermes_session: 's' })).toEqual({ ok: true })
+    await until(() => h.connection.current().phase === 'open')
+    expect(h.sockets[0]!.url).toBe('wss://hermes.example.com/api/ws?ticket=tk')
+    expect(h.sockets[0]!.headers.Cookie).toBe('_proxy=renewed; hermes_session=s')
+    await h.connection.openSocket('/api/plugins/conduit_push/live', { a: '1' })
+    expect(h.sockets[1]!.url).toBe('wss://hermes.example.com/api/plugins/conduit_push/live?ticket=tk&a=1')
+    expect(h.sockets[1]!.headers.Cookie).toBe('_proxy=renewed; hermes_session=s')
+    await h.connection.http('GET', '/api/x')
+    expect(h.seen.at(-1)!.headers.has('x-hermes-session-token')).toBe(false)
+  })
+
+  it('asks to sign in again when the proxy sends a request to its sign-in page, once for the requests refused together', async () => {
+    const h = proxied()
+    await h.signIn()
+    await until(() => h.connection.current().phase === 'open')
+    h.state.passes = false
+    const before = h.seen.length
+    const failures = await Promise.all([h.connection.http('GET', '/api/a').catch(e => e as Error), h.connection.http('GET', '/api/b').catch(e => e as Error)])
+    expect(failures.every(f => f instanceof Error)).toBe(true)
+    expect(h.connection.current()).toMatchObject({ phase: 'failed', error: 'Hermes signed this computer out. Sign in again.' })
+    // The two requests, and one look at the status for both.
+    expect(h.seen.slice(before).map(s => s.path).sort()).toEqual(['/api/a', '/api/b', '/api/status'])
+    expect(h.sockets[0]!.readyState).toBe(3)
+    // The host stays saved, for Repair.
+    expect(h.store.get?.(url)?.method).toBe('browser')
+  })
+
+  it('leaves the connection open when one route answers 401 on its own, and takes an ungated Hermes’ new token', async () => {
+    const h = proxied()
+    await h.signIn()
+    await until(() => h.connection.current().phase === 'open')
+    h.state.refused.add('/api/plugins/thing')
+    await expect(h.connection.http('GET', '/api/plugins/thing')).rejects.toThrow('not yours')
+    expect(h.connection.current().phase).toBe('open')
+    // Hermes started again: its page prints a new token, and the request goes again with it.
+    h.state.token = 'open-2'
+    expect(await h.connection.http('GET', '/api/x')).toEqual({ ok: true })
+    expect(h.seen.at(-1)!.headers.get('x-hermes-session-token')).toBe('open-2')
+    expect(h.connection.current().phase).toBe('open')
+  })
+
+  it('asks to sign in again at a dial the cookies no longer pass, instead of retrying', async () => {
+    const h = proxied()
+    await h.signIn()
+    await until(() => h.connection.current().phase === 'open')
+    h.state.passes = false
+    h.sockets[0]!.serverDrops()
+    await until(() => h.connection.current().phase === 'reconnecting')
+    h.timers.at(-1)!()
+    await until(() => h.connection.current().phase === 'failed')
+    expect(h.connection.current()).toMatchObject({ phase: 'failed', error: 'Hermes signed this computer out. Sign in again.' })
+    expect(h.sockets).toHaveLength(1)
+  })
+
+  it('clears what the window kept when the sign-in is cancelled, signed out or removed, and not while a saved host uses it', async () => {
+    const h = proxied()
+    const cancelled = h.connection.signIn({ url, method: 'browser' })
+    await until(() => h.windows.length > 0)
+    h.connection.cancelSignIn()
+    expect(await cancelled).toEqual({ ok: false, error: 'Sign-in was cancelled.' })
+    expect(h.windows[0]!.signal.aborted).toBe(true)
+    expect(h.forgotten).toEqual([url])
+
+    await h.signIn()
+    await until(() => h.connection.current().phase === 'open')
+    // Signing in again to the saved host and closing the window leaves its session alone.
+    const again = h.connection.signIn({ url, method: 'browser' })
+    await until(() => h.windows.length > 2)
+    h.connection.cancelSignIn()
+    await again
+    expect(h.forgotten).toEqual([url])
+    await until(() => h.connection.current().phase === 'open')
+    h.connection.signOut()
+    expect(h.forgotten).toEqual([url, url])
+    expect(h.connection.current().phase).toBe('signed-out')
+  })
+
+  it('says so when this build has no sign-in window', async () => {
+    const connection = new Connection({ fetch: async () => json({}), store: createHostList(() => {}, { hosts: [], active: null }), createSocket: () => { throw new Error('none') }, onStatus: () => {}, onEvent: () => {} })
+    expect(await connection.signIn({ url, method: 'browser' })).toEqual({ ok: false, error: 'Browser sign-in is unavailable.' })
+  })
+})

@@ -27,6 +27,7 @@ export function parseHeaderLines(text: string): { ok: true; headers: Record<stri
 const methodLabels = (): Record<SignInMethod, string> => ({
   password: t('User name and password'),
   oidc: t('Browser'),
+  browser: t('Sign-in page'),
   token: t('Session token'),
   open: t('No sign-in')
 })
@@ -75,6 +76,8 @@ export function SignIn({
   /** The troubleshooting page the last failure points to, and the one open. */
   const [help, setHelp] = useState<TroubleshootingTopic | null>(null)
   const [troubleshooting, setTroubleshooting] = useState<TroubleshootingTopic | null>(null)
+  /** An address a sign-in page answered for (a login proxy in front of the dashboard): Open Sign-In Page signs in there, in Conduit's window. */
+  const [signInPage, setSignInPage] = useState<string | null>(null)
 
   /** The proxy's headers as typed, or an error to show. */
   function proxyHeaders(): { ok: true; headers?: Record<string, string> } | { ok: false; error: string } {
@@ -95,6 +98,7 @@ export function SignIn({
     setSavedAs(null)
     setUntrusted(null)
     setHelp(null)
+    setSignInPage(null)
     const proxy = proxyHeaders()
     if (!proxy.ok) {
       setBusy(false)
@@ -107,6 +111,7 @@ export function SignIn({
       setError(probe.error)
       setUntrusted(probe.untrusted ?? null)
       setHelp(probe.help ?? null)
+      setSignInPage(probe.browser ?? null)
       return
     }
     setUrl(probe.url)
@@ -235,6 +240,11 @@ export function SignIn({
           {error ? <div className="error-text" role="alert">{error}</div> : null}
           {switchToSaved}
           {untrusted ? <ServerCertificate url={untrusted} /> : null}
+          {error && signInPage ? (
+            <button className="secondary" type="button" disabled={busy} onClick={() => void signIn(signInPage, 'browser')}>
+              {t('Open Sign-In Page')}
+            </button>
+          ) : null}
           {error && help ? (
             <button className="link-button" type="button" onClick={() => setTroubleshooting(help)}>
               {t('Troubleshoot Connection')}
@@ -297,16 +307,17 @@ export function SignIn({
           ) : null}
           {method === 'open' ? <p>{t('This dashboard doesn’t ask for a sign-in.')}</p> : null}
           {method === 'oidc' ? <p>{t('This will open your browser to sign in.')}</p> : null}
+          {method === 'browser' ? <p>{t('This opens the dashboard’s sign-in page in a Conduit window.')}</p> : null}
           {error ? <div className="error-text" role="alert">{error}</div> : null}
           {switchToSaved}
           <button className="primary" type="submit" disabled={busy}>
-            {busy ? t('Signing in…') : method === 'oidc' ? t('Sign in with browser') : t('Sign in')}
+            {busy ? t('Signing in…') : method === 'oidc' ? t('Sign in with browser') : method === 'browser' ? t('Open Sign-In Page') : t('Sign in')}
           </button>
           <button
             className="link-button"
             type="button"
             onClick={() => {
-              if (busy && method === 'oidc') {
+              if (busy && (method === 'oidc' || method === 'browser')) {
                 attempt.current++
                 void window.conduit.cancelSignIn()
                 setBusy(false)

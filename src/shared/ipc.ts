@@ -8,7 +8,8 @@ import type { DeviceReport } from './deviceReports'
 import type { UpdateState } from './updates'
 
 /** How a dashboard lets us in, from its public sign-in discovery and status. */
-export type SignInMethod = 'password' | 'token' | 'open' | 'oidc'
+/** `browser`: signed in on the dashboard's own page, or its login proxy's, in Conduit's sign-in window; its cookies are the sign-in. */
+export type SignInMethod = 'password' | 'token' | 'open' | 'oidc' | 'browser'
 
 export type HostProbe =
   | {
@@ -26,6 +27,8 @@ export type HostProbe =
       untrusted?: string
       /** Which troubleshooting page fits the failure: Network & reachability, HTTPS & certificates or Cloudflare Access. */
       help?: TroubleshootingTopic
+      /** A sign-in page answered in the dashboard's place (a login proxy in front of it): the address to sign in at, in Conduit's sign-in window. */
+      browser?: string
     }
 
 /** A language's offline speech model for the wake phrase, from Vosk's list. */

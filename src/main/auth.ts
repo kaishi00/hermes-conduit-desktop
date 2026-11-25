@@ -10,6 +10,12 @@
  *   (`HERMES_DASHBOARD_SESSION_TOKEN`); the socket takes it as `?token=`.
  * - `oidc`: a native PKCE flow opens the system browser and exchanges its
  *   one-time code for a dashboard grant.
+ * - `browser`: a login proxy in front of the dashboard (oauth2-proxy, Google
+ *   IAP, Authelia, Cloudflare Access without a service token), or a Hermes
+ *   whose only sign-in is its own page, is signed in to in Conduit's sign-in
+ *   window (browserSignIn.ts), as the phone does in its browser view. The
+ *   window's cookies go with every request and socket, and say what is behind
+ *   them at each dial: an ungated Hermes' session token, or a ticket.
  *
  * Everything here takes its `fetch` as an argument so the tests can stand in
  * for a dashboard.
@@ -127,12 +133,65 @@ async function discoveryFetch(fetchImpl: Fetch, url: string): Promise<Response> 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const response = await timedFetch(fetchImpl, current, { headers: { Accept: 'application/json' }, redirect: 'manual' })
     const location = response.headers.get('location')
-    if (response.status < 300 || response.status >= 400 || !location) return response
+    if (response.status < 300 || response.status >= 400 || !location) {
+      if (hop > 0) redirectedAnswers.add(response)
+      return response
+    }
     const next = new URL(location, current)
     if (next.origin !== new URL(url).origin) return response
     current = next.toString()
   }
   throw new AuthError(t('The dashboard redirected too many times.'))
+}
+
+/** Discovery answers that came through a redirect on the dashboard's own origin. */
+const redirectedAnswers = new WeakSet<Response>()
+
+/**
+ * A sign-in page's path on the dashboard's own origin, as the phone decides
+ * it (DashboardSignInRedirect.isSignInPath): a sign-in segment (Hermes'
+ * `/login`, `/signin`, `/sign_in`, `/sign-in`, under any base path) or an auth
+ * proxy's start (`/oauth2/start`). Whole segments only.
+ */
+export function isSignInPath(path: string): boolean {
+  const segments = path.toLowerCase().split('/').filter(Boolean)
+  if (segments.some(segment => ['login', 'signin', 'sign_in', 'sign-in'].includes(segment))) return true
+  return segments.some((segment, index) => segment === 'oauth2' && segments[index + 1] === 'start')
+}
+
+/** Whether `target`, a page or a redirect's target for the dashboard at `baseUrl`, is a sign-in: any web address on another origin, or a sign-in page on its own. */
+export function isSignIn(target: string, baseUrl: string): boolean {
+  let url: URL
+  try {
+    url = new URL(target)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+  return url.origin !== new URL(baseUrl).origin || isSignInPath(url.pathname)
+}
+
+/**
+ * An unauthenticated read answered by a sign-in in the dashboard's place: a
+ * redirect to one, a 401, or a refusal that is a web page. Something in front
+ * of the dashboard wants a person to sign in on its page first.
+ */
+function signInAnswered(response: Response, requested: string, baseUrl: string): boolean {
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get('location')
+    if (!location) return false
+    try {
+      return isSignIn(new URL(location, response.url || requested).toString(), baseUrl)
+    } catch {
+      return false
+    }
+  }
+  if (response.status === 401) return true
+  return response.status === 403 && /^text\/html\b/i.test(response.headers.get('content-type') ?? '')
+}
+
+function signInPageAnswer(url: string): HostProbe {
+  return { ok: false, error: t('This dashboard is behind a sign-in page. Sign in on that page to continue.'), browser: url }
 }
 
 function malformedAuthFlows(body: Record<string, unknown>): boolean {
@@ -160,7 +219,8 @@ export async function probeHost(input: string, fetchImpl: Fetch, headers?: Proxy
         help: 'cloudflare',
         error: headers
           ? t('Cloudflare Access turned this computer away. Check the service token under Proxy sign-in.')
-          : t('This dashboard is behind Cloudflare Access. Add its service token under Proxy sign-in.')
+          : t('This dashboard is behind Cloudflare Access. Add its service token under Proxy sign-in, or sign in on its page.'),
+        ...(headers ? {} : { browser: url })
       }
     }
     const discovered = discovery.ok ? await discovery.json().catch(() => null) : null
@@ -193,19 +253,30 @@ export async function probeHost(input: string, fetchImpl: Fetch, headers?: Proxy
         help: 'cloudflare',
         error: headers
           ? t('Cloudflare Access turned this computer away. Check the service token under Proxy sign-in.')
-          : t('This dashboard is behind Cloudflare Access. Add its service token under Proxy sign-in.')
+          : t('This dashboard is behind Cloudflare Access. Add its service token under Proxy sign-in, or sign in on its page.'),
+        ...(headers ? {} : { browser: url })
       }
     }
     if (!response.ok && native) return result({ auth_required: true })
+    const statusUrl = endpoint(url, '/api/status')
+    // A redirect to a sign-in page: a login proxy in front of the dashboard owns the first step, as on the phone.
+    if (response.status >= 300 && response.status < 400 && signInAnswered(response, statusUrl, url)) return signInPageAnswer(url)
     // No credentials went with this read, so a 401 or 403 is something in front of the dashboard turning this computer away.
-    if (response.status === 401 || response.status === 403) return { ok: false, error: accessDeniedMessage(), help: 'network' }
+    // One that has a page to sign in on (a 401, or a refusal that is a page) can be passed in the sign-in window.
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, error: accessDeniedMessage(), help: 'network', ...(signInAnswered(response, statusUrl, url) ? { browser: url } : {}) }
+    }
+    // A web page where Hermes' status should be may be a sign-in page answered in its place, so the sign-in window is offered with the error.
     if (!response.ok) {
-      return { ok: false, error: t('This isn’t answering like a Hermes dashboard ({detail}).', { detail: await errorDetail(response) }) }
+      const page = /^text\/html\b/i.test(response.headers.get('content-type') ?? '')
+      return { ok: false, error: t('This isn’t answering like a Hermes dashboard ({detail}).', { detail: await errorDetail(response) }), ...(page ? { browser: url } : {}) }
     }
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       if (native) return result({ auth_required: true })
-      return { ok: false, error: t('This isn’t answering like a Hermes dashboard.') }
+      // A page reached through a redirect on the dashboard's own origin is a sign-in portal there (a forward-auth gate).
+      if (redirectedAnswers.has(response)) return signInPageAnswer(url)
+      return { ok: false, error: t('This isn’t answering like a Hermes dashboard.'), browser: url }
     }
     if ((!metadata || !Object.hasOwn(metadata, 'auth_flows')) && malformedAuthFlows(body)) {
       return { ok: false, error: t('This isn’t answering like a Hermes dashboard.') }
@@ -247,6 +318,13 @@ export function signInMethods(status: Record<string, unknown>, metadata?: Record
   const methods: SignInMethod[] = []
   if (native) methods.push('oidc')
   if (password) methods.push('password')
+  // A provider that signs in on the dashboard's own page, on a Hermes without native sign-in (older than `native_pkce`):
+  // Conduit's sign-in window, as the phone's browser view.
+  const pageProvider = discoveredProviders?.some(p =>
+    p && typeof p === 'object' && typeof p.name === 'string' && p.name !== SESSION_TOKEN_PROVIDER && p.supports_session !== false &&
+    (p.supports_password === false || (p.supports_password === undefined && p.name !== PASSWORD_PROVIDER))
+  )
+  if (!native && pageProvider) methods.push('browser')
   if (providers.includes(SESSION_TOKEN_PROVIDER) || discoveredProviders?.some(p => p && typeof p === 'object' && p.name === SESSION_TOKEN_PROVIDER)) methods.push('token')
   // Only old servers with no provider metadata get the historical password fallback.
   if (methods.length === 0 && !discoveredProviders) methods.push('password')
@@ -300,12 +378,19 @@ export function absorbCookies(jar: CookieJar, response: Response): CookieJar {
  * Follows redirects ourselves, within the dashboard's own origin, so a
  * cookie set on a redirect isn't lost.
  */
-async function fetchKeepingCookies(
+/**
+ * `send` makes each request (within the sign-in's own time limit by default).
+ * With `stopAtSignIn`, a redirect to a sign-in page on the dashboard's own
+ * origin comes back as the answer too, as one to another origin always does.
+ */
+export async function fetchKeepingCookies(
   fetchImpl: Fetch,
   url: string,
   init: RequestInit,
-  jar: CookieJar
+  jar: CookieJar,
+  options: { stopAtSignIn?: boolean; send?: (fetchImpl: Fetch, url: string, init: RequestInit) => Promise<Response> } = {}
 ): Promise<{ response: Response; jar: CookieJar }> {
+  const send = options.send ?? timedFetch
   let current = url
   let cookies = jar
   let request = init
@@ -313,18 +398,64 @@ async function fetchKeepingCookies(
     const headers = new Headers(request.headers)
     const header = cookieHeader(cookies)
     if (header) headers.set('Cookie', header)
-    const response = await timedFetch(fetchImpl, current, { ...request, headers, redirect: 'manual' })
+    const response = await send(fetchImpl, current, { ...request, headers, redirect: 'manual' })
     cookies = absorbCookies(cookies, response)
     const location = response.headers.get('location')
     if (response.status < 300 || response.status >= 400 || !location) return { response, jar: cookies }
     const next = new URL(location, current)
     if (next.origin !== new URL(url).origin) return { response, jar: cookies }
+    if (options.stopAtSignIn && isSignInPath(next.pathname)) return { response, jar: cookies }
     current = next.toString()
     if (response.status === 303 || ((response.status === 301 || response.status === 302) && request.method === 'POST')) {
-      request = { method: 'GET', headers: request.headers }
+      request = { method: 'GET', headers: request.headers, signal: request.signal }
     }
   }
   throw new AuthError(t('The dashboard redirected too many times.'))
+}
+
+/** Whether an answer to a request that carried a sign-in window's cookies says they no longer pass: a redirect (to sign in again) or a 401. */
+export function browserSignedOut(response: Response): boolean {
+  return (response.status >= 300 && response.status < 400) || response.status === 401
+}
+
+/**
+ * What a sign-in window's cookies open, asked at each dial: the socket's
+ * credential (an ungated Hermes' session token read from its page, or a
+ * ticket from a gated one) and the cookies as they stand after it. Cookies
+ * that no longer pass, at the proxy or at Hermes, throw a signed-out error.
+ */
+export async function browserSession(
+  baseUrl: string,
+  jar: CookieJar,
+  fetchImpl: Fetch
+): Promise<{ query: Record<string, string>; jar: CookieJar; token?: string }> {
+  const signedOut = () => new AuthError(t('Your sign-in to this dashboard ran out. Sign in again.'), 401)
+  const read = async (path: string, init: RequestInit, cookies: CookieJar) => {
+    const answer = await fetchKeepingCookies(fetchImpl, endpoint(baseUrl, path), init, cookies, { stopAtSignIn: true })
+    if (browserSignedOut(answer.response)) throw signedOut()
+    return answer
+  }
+  const status = await read('/api/status', { headers: { Accept: 'application/json' } }, jar)
+  if (!status.response.ok) {
+    throw new AuthError(t('This isn’t answering like a Hermes dashboard ({detail}).', { detail: await errorDetail(status.response) }), status.response.status)
+  }
+  const body = (await status.response.json().catch(() => null)) as Record<string, unknown> | null
+  // A page where the status should be: the proxy's own sign-in, answered in place.
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw signedOut()
+  if (body.auth_required === true) {
+    const minted = await read('/api/auth/ws-ticket', { method: 'POST', headers: { Accept: 'application/json' } }, status.jar)
+    if (!minted.response.ok) {
+      throw new AuthError(t('Couldn’t open a connection ({detail}).', { detail: await errorDetail(minted.response) }), minted.response.status)
+    }
+    const ticket = ((await minted.response.json().catch(() => null)) as { ticket?: unknown } | null)?.ticket
+    if (typeof ticket !== 'string' || !ticket.trim()) throw new AuthError(t('The dashboard sent no connection ticket.'))
+    return { query: { ticket }, jar: minted.jar }
+  }
+  const page = await read('/', { headers: { Accept: 'text/html' } }, status.jar)
+  if (!page.response.ok) throw new AuthError(t('The dashboard page didn’t load ({detail}).', { detail: await errorDetail(page.response) }), page.response.status)
+  const token = /__HERMES_SESSION_TOKEN__\s*=\s*["']([^"']+)["']/.exec(await page.response.text())?.[1]
+  if (!token) throw signedOut()
+  return { query: { token }, jar: page.jar, token }
 }
 
 export async function passwordLogin(
