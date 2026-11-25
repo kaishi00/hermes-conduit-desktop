@@ -562,7 +562,9 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       const text = payload.text
       if (text === null) return { ...state, items: seal(state.items) }
       if (typeof text !== 'string' || !text) return state
-      return { ...state, running: true, items: appendStreaming(confirmPending(state.items), 'assistant', text) }
+      // A prompt sent while this turn was running keeps its queued mark until its own
+      // message.start: these events belong to the earlier turn (issue 550).
+      return { ...state, running: true, items: appendStreaming(confirmPending(state.items, state.turnFrom ?? 0), 'assistant', text) }
     }
     // `thinking.delta` is the terminal UI's spinner face, not the model's reasoning.
     case 'reasoning.delta': {
@@ -615,7 +617,7 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       return text ? { ...state, status: text } : state
     }
     case 'message.complete': {
-      let items = seal(confirmPending(state.items))
+      let items = seal(confirmPending(state.items, state.turnFrom ?? 0))
       const finalText = silenceShown(str(payload.text) ?? str(payload.rendered) ?? '')
       const lastUser = items.map(i => i.kind).lastIndexOf('user')
       // A hidden turn has no row of the user's: its replies are the ones since its start, not since
@@ -768,9 +770,12 @@ export function inflightRemainder(state: TranscriptState, text: string): string 
   return rest.trimStart()
 }
 
-function confirmPending(items: TranscriptItem[]): TranscriptItem[] {
+/** Confirm pending prompts, unless `keepFrom` says they arrived after the turn these events belong to. */
+function confirmPending(items: TranscriptItem[], keepFrom?: number): TranscriptItem[] {
   if (!items.some(item => item.kind === 'user' && item.pending)) return items
-  return items.map(item => (item.kind === 'user' && item.pending ? { ...item, pending: false } : item))
+  return items.map((item, i) =>
+    item.kind === 'user' && item.pending && (keepFrom === undefined || i < keepFrom) ? { ...item, pending: false } : item
+  )
 }
 
 export function addPendingUser(state: TranscriptState, text: string, attachments: Attachment[] = [], key = nextKey('u')): TranscriptState {

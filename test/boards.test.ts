@@ -2,11 +2,31 @@ import { describe, expect, it } from 'vitest'
 import { boardFrom, dialable, mailtoLink, people, placeBoards, sameBoards, share, smsLink, textRecipient } from '../src/renderer/src/state/boards'
 import { namingFiles, splitReply, withoutBoardLines } from '../src/renderer/src/state/media'
 import { copyableReply, sameQuotedText } from '../src/renderer/src/state/quote'
+import { addPendingUser, applyEvent, emptyTranscript } from '../src/renderer/src/state/transcript'
+import type { TranscriptItem, TranscriptState } from '../src/renderer/src/state/transcript'
 
 const stats = { type: 'stats', title: 'Today', stats: [{ label: 'Steps', value: '8,412' }] }
 const map = { type: 'map', title: 'Route', places: [] }
 
 describe('a queued prompt between a board and its reply (issue 550)', () => {
+  it('keeps a prompt queued through the running turn’s reply events (real applyEvent sequence)', () => {
+    const board = { ...stats, cards: [stats], tabs: false, next: [], line: 'cb-000000000003' }
+    let state: TranscriptState = {
+      ...emptyTranscript,
+      items: [{ kind: 'tool', key: 't1', name: 'conduit_show', status: 'done', board } as unknown as TranscriptItem]
+    }
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    state = addPendingUser(state, 'then order a cab', [], 'u-real')
+    state = applyEvent(state, { type: 'message.delta', payload: { text: 'Here:\n::conduit-board{id="cb-000000000003"}' } })
+    state = applyEvent(state, { type: 'message.complete', payload: { text: 'Here:\n::conduit-board{id="cb-000000000003"}' } })
+    // The queued prompt is still queued, so the board belongs to the earlier turn's reply.
+    expect(state.items.find(i => i.key === 'u-real')).toMatchObject({ pending: true })
+    const assistant = state.items.find(i => i.kind === 'assistant')!
+    const placed = placeBoards(state.items)
+    expect(placed.hidden).toEqual(new Set(['t1']))
+    expect(placed.placed?.get(assistant.key)?.map(b => b.id)).toEqual(['cb-000000000003'])
+  })
+
   it('does not end the turn for a prompt still waiting on the gateway', () => {
     const board = { ...stats, cards: [stats], tabs: false, next: [], line: 'cb-000000000001' }
     const withQueued = placeBoards([
