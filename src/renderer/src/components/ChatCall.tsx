@@ -185,10 +185,14 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     return sent !== false
   }
   // Whether this call sent the chat a request: a new chat gets its id from the first one.
-  const callSent = useRef(false)
+  // A send the chat refused doesn't count; each call has its own count, so a late answer can't touch the next call's.
+  const callSent = useRef({ count: 0 })
   const callSay = (words: string) => {
-    callSent.current = true
-    void sayToChat(words)
+    const sent = callSent.current
+    sent.count += 1
+    void sayToChat(words).then(reached => {
+      if (!reached) sent.count -= 1
+    })
   }
   const pictureControls = (
     <CallPictureControls
@@ -230,8 +234,8 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
   // kept here: the one it started in (with the id a new chat got from it), not the chat whose opening
   // ended the call.
   const callChat = useRef({ chatId, calling: false })
-  if (calling && !callChat.current.calling) callSent.current = false
-  callChat.current = { chatId: chatOfCall(callChat.current.chatId, callChat.current.calling, calling, chatId, callSent.current), calling }
+  if (calling && !callChat.current.calling) callSent.current = { count: 0 }
+  callChat.current = { chatId: chatOfCall(callChat.current.chatId, callChat.current.calling, calling, chatId, callSent.current.count > 0), calling }
   const callLeft = (requests: string[]) => setLeft(kept => leftByCall(kept, callChat.current.chatId, requests))
   // Drawn again once a send no reply followed has been waited on long enough.
   const [stallTick, setStallTick] = useState(0)

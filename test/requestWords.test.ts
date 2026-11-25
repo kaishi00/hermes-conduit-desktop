@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AskFirst } from '../src/renderer/src/state/askFirst'
+import { AskFirst, adding } from '../src/renderer/src/state/askFirst'
 import { REQUEST_WORDS_MARKER as MARKER, REQUEST_WORDS_MAX, RequestWords, modelWords, withUserWords } from '../src/renderer/src/state/requestWords'
 import { jobTitle } from '../src/renderer/src/state/voiceJobs'
 
@@ -68,5 +68,22 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     // Their yes was that request's: the next one doesn't carry it.
     ask.set(false)
     expect(await ask.ask('ask_thread', 'Now the drafts.')).toEqual({ request: 'Now the drafts.' })
+  })
+
+  it("titles a job without the user's answer to send this?", () => {
+    const request = withUserWords(['Clean it up'], adding('Yes, make it all of it', 'Clean the inbox.'))
+    expect(request).toContain('the user said: "Yes, make it all of it"')
+    expect(modelWords(request)).toBe('Clean the inbox.')
+  })
+
+  it('keeps a line that grows after the model spoke as one line', () => {
+    const words = new RequestWords()
+    words.heard('Post the', true)
+    words.modelSpoke()
+    words.heard('Post the ad', true)
+    expect(words.pending()).toEqual(['Post the ad'])
+    words.modelSpoke()
+    words.heard('And the flyer', true)
+    expect(words.pending()).toEqual(['Post the ad', 'And the flyer'])
   })
 })

@@ -13,6 +13,8 @@ export const REQUEST_WORDS_MARKER =
 
 /** The most of what the user said that goes with one request: the newest of it. */
 export const REQUEST_WORDS_MAX = 1000
+/** What leads the user's answer to "send this?" when it goes with the request (askFirst's `adding`). */
+export const ASKED_ANSWER_LEAD = '\n\nWhen asked whether to send this, the user said: "'
 
 /** How long a request waits for the user's words: their transcript can trail the model's call. */
 export const REQUEST_WORDS_WAIT_MS = 1200
@@ -53,8 +55,8 @@ export function withUserWords(said: string[], request: string): string {
 
 /** The request as the model wrote it, without the user's words: a job's title reads only this. */
 export function modelWords(request: string): string {
-  const at = request.indexOf(REQUEST_WORDS_MARKER)
-  return at < 0 ? request : request.slice(0, at)
+  const ends = [request.indexOf(REQUEST_WORDS_MARKER), request.indexOf(ASKED_ANSWER_LEAD)].filter(at => at >= 0)
+  return ends.length ? request.slice(0, Math.min(...ends)) : request
 }
 
 /** What the user said in a call that no request carried yet, fed from its transcript. */
@@ -72,7 +74,9 @@ export class RequestWords {
   heard(text: string, whole = false): void {
     if (whole) {
       // The same line grown, or another one: a line that doesn't continue the last is new.
-      if (!this.open || !(text.startsWith(this.line) || this.line.startsWith(text))) this.close()
+      // A line still growing when the model spoke goes on as the same line.
+      const grown = this.line !== '' && text.startsWith(this.line)
+      if (!grown && !(this.open && this.line.startsWith(text))) this.close()
       this.line = text
       this.taken = Math.min(this.taken, text.length)
     } else {

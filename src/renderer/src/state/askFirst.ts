@@ -9,7 +9,7 @@
  * changes it for that call. The model-facing text is the phone's.
  */
 import { heldRequestAnswer, saysSendToHermes, type HeldAnswer } from './heldAnswer'
-import { REQUEST_WORDS_WAIT_MS, RequestWords, withUserWords } from './requestWords'
+import { ASKED_ANSWER_LEAD, REQUEST_WORDS_WAIT_MS, RequestWords, withUserWords } from './requestWords'
 
 const KEY = 'conduit.liveAskFirst'
 
@@ -85,7 +85,7 @@ export const modeAnswer = (on: boolean) =>
 /** The request with what the user said when asked, so Hermes reads their own words. */
 export function adding(words: string | null, request: string): string {
   const said = words?.trim()
-  return said ? `${request}\n\nWhen asked whether to send this, the user said: "${said}"` : request
+  return said ? `${request}${ASKED_ANSWER_LEAD}${said}"` : request
 }
 
 /** "Mode: ask first" → true, "Mode: send directly" → false, at the very start of a delegation. */
