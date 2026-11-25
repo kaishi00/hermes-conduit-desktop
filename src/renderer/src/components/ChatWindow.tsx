@@ -20,7 +20,7 @@ import { mentionCandidates, withMentionNote, withoutMentionNote } from '../state
 import { clearExpired } from '../state/expiredQuestions'
 import { isResetCommand, looksLikeSlashCommand } from '../state/slash'
 import { cleanTitle } from '../state/text'
-import { notificationsEnabled, requestNotification, turnNotification, type NotificationSpec } from '../state/notifications'
+import { notificationsEnabled, requestNotification, turnNotification, TurnReplies, type NotificationSpec } from '../state/notifications'
 import { readMuted } from '../state/chatMute'
 import { gateway } from '../gateway'
 
@@ -439,13 +439,16 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     },
     [docked, request.id, request.fresh, profile, host, botChat]
   )
+  const turnReplies = useRef(new TurnReplies())
   useEffect(
     () =>
       window.conduit.onEvent(event => {
         const { liveId, ...ref } = chatRef.current
-        if (event.type !== 'message.complete' || !event.session_id || event.session_id !== liveId) return
-        const spec = turnNotification(event.session_id, event.payload, ref)
-        // A muted chat's finished turn stays quiet, as the plugin's push does (state/chatMute).
+        if (!event.session_id || event.session_id !== liveId) return
+        const streamed = turnReplies.current.note(event)
+        if (event.type !== 'message.complete') return
+        const spec = turnNotification(event.session_id, event.payload, ref, streamed)
+        // A silent reply, and a muted chat's finished turn, stay quiet, as the plugin's push does (state/chatMute).
         if (!spec) return
         if (!ref.storedId) void notify(spec)
         else

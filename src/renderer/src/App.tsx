@@ -83,6 +83,7 @@ import {
   requestNotification,
   setNotificationsEnabled,
   turnNotification,
+  TurnReplies,
   type ChatRef,
   type NotificationSpec
 } from './state/notifications'
@@ -1848,11 +1849,13 @@ function Shell({
       }
     }
   }, [])
+  const turnReplies = useRef(new TurnReplies())
   useEffect(
     () =>
       window.conduit.onEvent(event => {
         const sid = event.session_id
         if (!sid) return
+        const streamed = turnReplies.current.note(event)
         if (event.type === 'session.title') {
           const t = (event.payload as { title?: unknown } | undefined)?.title
           const ref = chats.current.get(sid)
@@ -1860,7 +1863,7 @@ function Shell({
           return
         }
         if (event.type !== 'message.complete' || isWatching(sid, watching.current.liveId, watching.current.onChats)) return
-        const spec = turnNotification(sid, event.payload, chats.current.get(sid))
+        const spec = turnNotification(sid, event.payload, chats.current.get(sid), streamed)
         // Notifications off: the mutes aren't asked at all (desktop#539).
         if (!spec || mutedRef.current(sid) || !notificationsEnabled()) return
         // A mute set on another device since the last read: asked then, each
