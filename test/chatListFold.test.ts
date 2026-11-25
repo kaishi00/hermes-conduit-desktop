@@ -50,6 +50,24 @@ describe('folded chat-list groups', () => {
     act(() => root.unmount())
   })
 
+  it('scrolls to the open chat once its folded group is open', async () => {
+    const path = '../src/renderer/src/components/ChatList.tsx'
+    const { ChatList } = (await import(/* @vite-ignore */ path)) as { ChatList: unknown }
+    localStorage.setItem('conduit.allProfiles.closedSections', JSON.stringify(['date:today']))
+    const scrolled: string[] = []
+    const was = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.textContent ?? '')
+    }
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    act(() => root.render(createElement(ChatList as never, props({ selectedId: 'a' }) as never)))
+    expect(scrolled.some(text => text.includes('Alpha'))).toBe(true)
+    act(() => root.unmount())
+    Element.prototype.scrollIntoView = was
+  })
+
   it('starts with the two oldest date groups closed, once', async () => {
     const path = '../src/renderer/src/components/ChatList.tsx'
     const { ChatList } = (await import(/* @vite-ignore */ path)) as { ChatList: unknown }

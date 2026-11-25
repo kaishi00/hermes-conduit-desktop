@@ -298,6 +298,8 @@ describe('a chat list with chats missing says why, where it would say the profil
       { id: 'today', title: 'Today one', activeAt: now - 1000, pinned: false },
       { id: 'old', title: 'Older one', activeAt: now - 20 * 86_400_000, pinned: false }
     ]
+    // Past the first run, so only the saved fold is closed, whichever test ran before.
+    localStorage.setItem('conduit.chatList.dateSectionDefaults', '1')
     localStorage.setItem('conduit.allProfiles.closedSections', JSON.stringify(['date:today']))
     const props = {
       rows,

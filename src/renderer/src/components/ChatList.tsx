@@ -608,19 +608,28 @@ export function ChatList({
   const present = !!selectedId && sections.some(s => s.rows.some(r => r.id === selectedId))
   useEffect(() => {
     if (!present || revealed.current === selectedId) return
+    // In a folded group its row isn't drawn yet: the unfold below draws it, and this runs again.
+    const row = scroller.current?.querySelector('.row[aria-current="true"]')
+    if (!row) return
     revealed.current = selectedId
-    scroller.current?.querySelector('.row[aria-current="true"]')?.scrollIntoView({ block: 'nearest' })
-  }, [present, selectedId])
+    row.scrollIntoView({ block: 'nearest' })
+  }, [present, selectedId, closedSections])
   // A chat opened from a notification or a link must be visible, even when its group was folded.
   // Once per chat, when its row is first listed: folding the open chat's group afterwards keeps it folded.
+  // A job nested under its call is listed by the row at the top of its nest.
+  const listedAs = !selectedId
+    ? null
+    : present
+      ? selectedId
+      : sections.flatMap(s => s.rows).find(r => openAncestors.has(r.id))?.id ?? null
   const unfoldedFor = useRef<string | null>(null)
   useEffect(() => {
     if (!selectedId) unfoldedFor.current = null
-    if (!present || unfoldedFor.current === selectedId) return
+    if (!listedAs || unfoldedFor.current === selectedId) return
     unfoldedFor.current = selectedId
-    const key = foldedKeyForSelection(sections, selectedId)
+    const key = foldedKeyForSelection(sections, listedAs)
     if (key && closedSections.includes(key)) toggleSection(key)
-  }, [present, selectedId])
+  }, [listedAs, selectedId])
 
   // What a row's handlers read, so they keep one identity and memoized rows skip a redraw (desktop#199).
   const latest = useRef({ onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope })
