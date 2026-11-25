@@ -20,6 +20,9 @@ describe('Done chats', () => {
   it('marks before the plugin answers, one mark per chat', () => {
     const compacted = row('chat-2', { lineageRoot: 'chat-1', profile: 'Work' })
     expect(doneIds(compacted)).toEqual(['chat-1', 'chat-2'])
+
+    // No Set allocation for the common case: root and tip are the same row id.
+    expect(doneIds(row('chat-1'))).toEqual(['chat-1'])
     let marks = settingDone(null, compacted, true, 5)
     expect(marks).toEqual({ work: [{ ids: ['chat-1', 'chat-2'], at: 5, byAgent: false }] })
     marks = settingDone(marks, row('chat-1', { profile: 'work' }), true, 6)

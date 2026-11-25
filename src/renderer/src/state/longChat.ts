@@ -107,6 +107,14 @@ export function joinRows(older: HistoryRow[], newer: HistoryRow[]): HistoryRow[]
 }
 
 /** The stored page before `offset` rows from the newest, oldest first, and whether the chat has rows before it. */
+/** A resumed page position and a kept one describe different pages: `more` belongs to the offset it came with. */
+export function mergedOlderAt(
+  open: { offset: number; more: boolean } | null,
+  kept: { offset: number; more: boolean }
+): { offset: number; more: boolean } {
+  return !open || kept.offset > open.offset ? kept : open
+}
+
 export async function olderRows(
   http: Http,
   storedId: string,

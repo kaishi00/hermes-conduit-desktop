@@ -7170,6 +7170,16 @@ button.cap-row-text {
 .agent-cards {
   padding: 4px;
 }
+/* A chat's Kanban tasks (desktop#553): red while one is blocked. */
+.chat-tasks-dock.blocked .plan-toggle strong,
+.chat-tasks-dock.blocked .plan-toggle svg,
+.chat-task-error {
+  color: var(--danger);
+}
+.chat-task .link {
+  margin-top: 4px;
+  padding: 0;
+}
 .agent-card {
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
@@ -12722,4 +12732,48 @@ main.docked-pulse.pulse-page {
 
 .archived-chats-more {
   margin-top: 12px;
+}
+
+/* A file a chat's file card opens (desktop#554): over the window, as a page opened full screen. */
+.file-viewer .file-viewer-pdf {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+}
+
+.file-viewer-media {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.file-viewer-media img,
+.file-viewer-media video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.file-viewer-media audio {
+  width: min(520px, 100%);
+}
+
+.file-viewer-text {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 16px 20px;
+}
+
+.file-viewer-markdown {
+  max-width: 820px;
+}
+
+.file-viewer-note {
+  padding: 16px 20px;
 }

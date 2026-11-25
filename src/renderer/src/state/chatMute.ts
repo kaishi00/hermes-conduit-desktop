@@ -146,6 +146,11 @@ export class TurnMuteReads {
     return mutes
   }
 
+  /** A mute set or unset here is authoritative until this cache window ends. */
+  seed(profile: string | undefined, mutes: ChatMute[], now = Date.now()): void {
+    this.kept.set(profileKey(profile), { at: now, mutes: Promise.resolve(mutes) })
+  }
+
   forget(): void {
     this.kept.clear()
   }
@@ -254,7 +259,10 @@ export function useChatMute(http: Http, connected: boolean, profiles: string[], 
       const askedHost = hostRef.current
       const profileName = row.profile ?? 'default'
       wroteAt.current.set(profileKey(profileName), Date.now())
-      turnReads.forget()
+      // A turn finishing before the PUT lands must not read a stale mute from the
+      // plugin and cache it for five seconds (issue 550).
+      const key = profileKey(profileName)
+      turnReads.seed(profileName, (settingMute(mutes ?? {}, row, seconds) ?? {})[key] ?? [])
       setMutes(current => settingMute(current, row, seconds))
       http('PUT', mutePath(row.profile), { session_ids: muteIds(row), mute_s: seconds })
         .then(body => {
@@ -266,7 +274,7 @@ export function useChatMute(http: Http, connected: boolean, profiles: string[], 
           void read(profileName)
         })
     },
-    [http, read, onError, turnReads]
+    [http, read, onError, turnReads, mutes]
   )
 
   // `tick` changes when a timed mute ends, so what reads the mutes reads them again.

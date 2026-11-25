@@ -50,6 +50,10 @@ export function saveMarksSoon(host: string, marks: ChatMarks): void {
   const pending = pendingSaves.get(host)
   if (pending) {
     pending.marks = marks
+    // Debounce, not throttle: a stream of read-time bumps writes once, a second
+    // after the last one (issue 550).
+    clearTimeout(pending.timer)
+    pending.timer = setTimeout(() => flushMarks(host), MARKS_SAVE_WAIT_MS)
     return
   }
   const timer = setTimeout(() => flushMarks(host), MARKS_SAVE_WAIT_MS)

@@ -26,6 +26,8 @@ import {
 import { dayLabel } from '../state/groups'
 import { dataUrlPath, parsePreview, readTextPath, sizeText } from '../state/workspace'
 import { PageFrame, pageAddress } from './PagePreview'
+import { openPageInBrowser } from '../state/saveMedia'
+import { isPagePath } from '@shared/viewFileRules'
 import { GatewayPicture, PictureProfile } from './Picture'
 import { Icon, type IconName } from './icons'
 import { KEPT_PROFILES_MAX_AGE_MS, keptArtifactKey, profileNames, type HostBadge, type KeptArtifact } from '../state/keptHosts'
@@ -587,6 +589,11 @@ export function ArtifactsPanel({ profile, sessionIds, refreshKey, folder, onShow
           {viewer.item.name}
         </span>
         <span className="spacer" />
+        {viewer.item.kind === 'page' && openablePath(viewer.item) && isPagePath(openablePath(viewer.item)!) && !elsewhere(viewer.item) ? (
+          <button className="secondary" onClick={() => void openPageInBrowser(openablePath(viewer.item)!, profile)}>
+            {t('Open in Browser')}
+          </button>
+        ) : null}
         {openablePath(viewer.item) ? (
           <button className="secondary" disabled={busy === viewer.item.id} onClick={() => void download(viewer.item)}>
             {t('Download')}

@@ -10,6 +10,8 @@ import { useRequests, useWaiting } from '../state/useNeedsYou'
 import { askedInChat } from '../state/needsYou'
 import { useCommands } from '../state/useCommands'
 import { useAgents } from '../state/useAgents'
+import { useChatTasks } from '../state/useChatTasks'
+import { ChatTasksDock } from './ChatTasksDock'
 import { usePredictions } from '../state/usePredictions'
 import { SummaryHost } from '../state/useStepSummaries'
 import { chatDraft } from '../state/composerDrafts'
@@ -214,6 +216,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   )
   const commands = useCommands(profile, connected)
   const delegates = useAgents(chat.liveId, connected, running)
+  const chatTasks = useChatTasks(chat.storedId ?? chat.liveId, profile, connected, running)
   const mentionBots = useMemo(() => mentionCandidates(roster.bots ?? [], '', profile ?? 'default'), [roster.bots, profile])
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
@@ -507,7 +510,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       if (sent === false) return false
       // The message answers the questions Hermes stopped waiting for here.
       clearExpired(chat.liveId)
-      return true
+      // A fresh docked chat the call's own send made names itself here (issue 550).
+      return sent || true
     },
     [botChat, docked, command, commands, notice, send, roster.bots, profile, botTitle, chat.liveId]
   )
@@ -660,6 +664,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           processes={delegates.processes}
           kill={delegates.kill}
         />
+        <ChatTasksDock tasks={chatTasks.tasks} chatKey={request.id} />
         <PlanDock plan={plan} running={running} chatKey={request.id} />
         {takeover ? (
           <div className="takeover-offer" role="status">

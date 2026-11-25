@@ -34,7 +34,7 @@ interface Props {
   model?: string
   cwd?: string
   /** Sends the message. A promise of false means it didn't go: its words, files and reply come back to the draft. */
-  onSend: (text: string, attachments: StagedAttachment[]) => void | Promise<boolean | void>
+  onSend: (text: string, attachments: StagedAttachment[]) => void | Promise<boolean | string | void>
   onStop: () => void
   focusKey: string
   /** Which chat's draft this is: words, files and a reply wait here for that chat until sent. Defaults to `focusKey`. */

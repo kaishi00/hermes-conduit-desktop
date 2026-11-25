@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { noteDashboardProfiles, setDashboardProfilesHost } from '../src/renderer/src/state/dashboardProfile'
-import { doing, parseItem, parseWork, sections, sideWorkstreams, statusText, workPath, needsYou, sameWork, workTone, manageTitle, handOverCaption, parseQuestions, questionButtons, questionHeadline, answerRequest, goingAheadText, answersInWords, canDismiss } from '../src/renderer/src/state/work'
+import { doing, parseItem, parseWork, sections, sideWorkstreams, statusText, workPath, needsYou, sameWork, workTone, manageTitle, handOverCaption, workMenuItems, parseQuestions, questionButtons, questionHeadline, answerRequest, goingAheadText, answersInWords, canDismiss } from '../src/renderer/src/state/work'
 
 const answer = {
   policy: 'on',
@@ -179,5 +179,63 @@ describe('questions that wait past their turn', () => {
     expect(canDismiss(question)).toBe(true)
     expect(questionButtons(question)).toEqual([])
     expect(answerRequest({ kind: 'dismiss' })).toEqual({ action: 'dismiss', body: {} })
+  })
+})
+
+describe('workMenuItems', () => {
+  it('lists manage actions, run actions (without send), open chat, and copy branch for a workstream', () => {
+    const item = parseItem({
+      ref: 'W37',
+      kind: 'workstream',
+      status: 'running',
+      session_id: 's37',
+      branch: 'work/w37',
+      actions: ['send', 'stop'],
+      manage: ['pin', 'leave_alone']
+    })!
+    expect(workMenuItems(item, 'Infra')).toEqual([
+      { kind: 'manage', action: 'pin', label: 'Pin' },
+      { kind: 'manage', action: 'leave_alone', label: 'Keep Infra out of this' },
+      { kind: 'action', action: 'stop', label: 'Stop' },
+      { kind: 'open', label: 'Open W37’s chat' },
+      { kind: 'copy-branch', branch: 'work/w37', label: 'Copy Branch' }
+    ])
+  })
+
+  it('lists Pin and Resolve for an answered ask card', () => {
+    const item = parseItem({
+      ref: 'A94',
+      kind: 'ask_in',
+      status: 'done',
+      bot: 'Network',
+      manage: ['pin', 'resolve']
+    })!
+    expect(workMenuItems(item, 'Infra')).toEqual([
+      { kind: 'manage', action: 'pin', label: 'Pin' },
+      { kind: 'manage', action: 'resolve', label: 'Resolve' }
+    ])
+  })
+
+  it('lists Reopen and Open chat for a resolved workstream, and nothing for a non-manageable ask', () => {
+    const resolvedWs = parseItem({
+      ref: 'W38',
+      kind: 'workstream',
+      status: 'done',
+      closed: true,
+      session_id: 's38',
+      manage: ['reopen']
+    })!
+    expect(workMenuItems(resolvedWs, 'Infra')).toEqual([
+      { kind: 'manage', action: 'reopen', label: 'Reopen' },
+      { kind: 'open', label: 'Open W38’s chat' }
+    ])
+    const closedAsk = parseItem({
+      ref: 'A95',
+      kind: 'ask_out',
+      status: 'stopped',
+      closed: true,
+      manage: []
+    })!
+    expect(workMenuItems(closedAsk, 'Infra')).toEqual([])
   })
 })
