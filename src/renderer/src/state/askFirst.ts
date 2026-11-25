@@ -9,6 +9,7 @@
  * changes it for that call. The model-facing text is the phone's.
  */
 import { heldRequestAnswer, saysSendToHermes, type HeldAnswer } from './heldAnswer'
+import { REQUEST_WORDS_WAIT_MS, RequestWords, withUserWords } from './requestWords'
 
 const KEY = 'conduit.liveAskFirst'
 
@@ -114,7 +115,12 @@ export interface Draft {
   request: string
   /** When it was held: an answer is the user's words after this. */
   heldAt: number
+  /** What the user said for it, sent with it (requestWords.ts). */
+  said: string[]
 }
+
+/** A new request: held for the user's OK, or sent now as `request`, the user's own words with it. */
+export type Asked = { held: Record<string, string> } | { request: string }
 
 export type Release =
   | { send: true; tool: HeldTool; request: string }
@@ -140,13 +146,17 @@ export class AskFirst {
   private line = ''
   private lineAt = 0
   private lineOpen = false
+  /** What the user said that no request carried yet. */
+  private readonly words: RequestWords
 
   constructor(
     on: boolean,
     private readonly now: () => number = Date.now,
-    private readonly lateYesMs = LATE_YES_MS
+    private readonly lateYesMs = LATE_YES_MS,
+    private readonly wordsWaitMs = REQUEST_WORDS_WAIT_MS
   ) {
     this.on = on
+    this.words = new RequestWords(now)
   }
 
   /**
@@ -158,12 +168,30 @@ export class AskFirst {
     this.lineOpen = true
     this.line += text
     this.lineAt = this.now()
+    this.words.heard(text, whole)
     if (this.on && saysSendToHermes(this.line, whole)) this.sendNowAt = this.now()
   }
 
   /** The model spoke: the user's next words start a new line. */
   modelSpoke(): void {
     this.lineOpen = false
+    this.words.modelSpoke()
+  }
+
+  /**
+   * A new request from the model: held while asking first is on, else sent
+   * now with what the user said for it, marked as theirs (hermes-conduit
+   * issue 3236).
+   */
+  async ask(tool: HeldTool, request: string): Promise<Asked> {
+    const said = await this.words.take(this.wordsWaitMs)
+    const held = this.hold(tool, request, said)
+    return held ? { held } : { request: withUserWords(said, request) }
+  }
+
+  /** A correction to running work, with what the user said themselves. */
+  async withWords(message: string): Promise<string> {
+    return withUserWords(await this.words.take(this.wordsWaitMs), message)
   }
 
   /** Switches it for this call; switched off, a held request is let go. */
@@ -188,14 +216,14 @@ export class AskFirst {
   }
 
   /** Holds a new request while asking first is on, answered so the model asks; null sends it now. */
-  hold(tool: HeldTool, request: string): Record<string, string> | null {
+  hold(tool: HeldTool, request: string, said: string[] = []): Record<string, string> | null {
     const saidSend = this.sendNowAt !== null && this.now() - this.sendNowAt < SEND_NOW_WINDOW_MS
     this.sendNowAt = null
     if (!this.on || saidSend) {
       this.draft = null
       return null
     }
-    this.draft = { tool, request, heldAt: this.lineAt }
+    this.draft = { tool, request, heldAt: this.lineAt, said }
     return {
       status: 'waiting_for_ok',
       message: `Not sent yet: the user OKs each new request before it goes to Hermes. Tell them in a few words what you'll send and ask whether to send it. When they say yes, call send_request; when they change it, call ${tool} again with the new request.`
@@ -213,7 +241,9 @@ export class AskFirst {
     switch (answer.kind) {
       case 'yes':
         this.draft = null
-        return { send: true, tool: waiting.tool, request: adding(answer.addition, waiting.request) }
+        // Their yes, and anything said while it waited, was this request's: none of it goes with the next one.
+        this.words.skip()
+        return { send: true, tool: waiting.tool, request: withUserWords(waiting.said, adding(answer.addition, waiting.request)) }
       case 'no':
       case 'notYet':
         if (answer.change) {

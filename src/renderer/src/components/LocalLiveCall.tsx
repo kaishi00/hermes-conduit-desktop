@@ -448,9 +448,11 @@ export function LocalLiveCall({
       case ASK_THREAD: {
         const request = (event.args.request ?? '').trim()
         if (!request) return answer(event.id, event.name, NO_REQUEST)
-        const held = askFirst.current.hold(ASK_THREAD, request)
-        if (held) return answer(event.id, event.name, held)
-        return answer(event.id, event.name, toChat(request))
+        void askFirst.current.ask(ASK_THREAD, request).then(asked => {
+          if (ended.current) return
+          answer(event.id, event.name, 'held' in asked ? asked.held : toChat(asked.request), true)
+        })
+        return
       }
       case SEND_REQUEST:
         void askFirst.current.release().then(release => {
@@ -471,9 +473,11 @@ export function LocalLiveCall({
         )
         return
       case START_JOB: {
-        const held = askFirst.current.hold(START_JOB, (event.args.instructions ?? '').trim())
-        if (held) return answer(event.id, event.name, held)
-        void jobs.current?.start(event.args.instructions ?? '').then(result => !ended.current && answer(event.id, event.name, result, true))
+        void askFirst.current.ask(START_JOB, (event.args.instructions ?? '').trim()).then(asked => {
+          if (ended.current) return
+          if ('held' in asked) return answer(event.id, event.name, asked.held, true)
+          void jobs.current?.start(asked.request).then(result => !ended.current && answer(event.id, event.name, result, true))
+        })
         return
       }
       case LIST_JOBS: {
@@ -484,9 +488,10 @@ export function LocalLiveCall({
         void jobs.current?.cancel(event.args.job_id).then(result => !ended.current && answer(event.id, event.name, result, true))
         return
       case INTERRUPT_JOB:
-        void (jobs.current?.followUp(event.args.job_id ?? '', event.args.message ?? '') ?? Promise.resolve({ status: 'error', error: 'No jobs.' })).then(
-          result => !ended.current && answer(event.id, event.name, result, true)
-        )
+        void askFirst.current
+          .withWords(event.args.message ?? '')
+          .then(message => jobs.current?.followUp(event.args.job_id ?? '', message) ?? { status: 'error', error: 'No jobs.' })
+          .then(result => !ended.current && answer(event.id, event.name, result, true))
         return
       case FIND_CHAT:
         void finder.current.find(event.args.query ?? '').then(result => !ended.current && answer(event.id, event.name, result, true))

@@ -377,9 +377,11 @@ export function GrokLiveCall({
       case ASK_THREAD: {
         const request = (event.args.request ?? '').trim()
         if (!request) return answer(event.id, NO_REQUEST)
-        const held = askFirst.current.hold(ASK_THREAD, request)
-        if (held) return answer(event.id, held)
-        return answer(event.id, toChat(request))
+        void askFirst.current.ask(ASK_THREAD, request).then(asked => {
+          if (ended.current) return
+          answer(event.id, 'held' in asked ? asked.held : toChat(asked.request))
+        })
+        return
       }
       case SEND_REQUEST:
         void askFirst.current.release().then(release => {
@@ -400,9 +402,11 @@ export function GrokLiveCall({
         )
         return
       case START_JOB: {
-        const held = askFirst.current.hold(START_JOB, (event.args.instructions ?? '').trim())
-        if (held) return answer(event.id, held)
-        void jobs.current?.start(event.args.instructions ?? '').then(result => !ended.current && answer(event.id, result))
+        void askFirst.current.ask(START_JOB, (event.args.instructions ?? '').trim()).then(asked => {
+          if (ended.current) return
+          if ('held' in asked) return answer(event.id, asked.held)
+          void jobs.current?.start(asked.request).then(result => !ended.current && answer(event.id, result))
+        })
         return
       }
       case LIST_JOBS: {
@@ -413,9 +417,10 @@ export function GrokLiveCall({
         void jobs.current?.cancel(event.args.job_id).then(result => !ended.current && answer(event.id, result))
         return
       case INTERRUPT_JOB:
-        void (jobs.current?.followUp(event.args.job_id ?? '', event.args.message ?? '') ?? Promise.resolve({ status: 'error', error: 'No jobs.' })).then(
-          result => !ended.current && answer(event.id, result)
-        )
+        void askFirst.current
+          .withWords(event.args.message ?? '')
+          .then(message => jobs.current?.followUp(event.args.job_id ?? '', message) ?? { status: 'error', error: 'No jobs.' })
+          .then(result => !ended.current && answer(event.id, result))
         return
       case FIND_CHAT:
         // Grok holds its turn on every call: one search, not three.

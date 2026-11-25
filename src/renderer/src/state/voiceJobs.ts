@@ -22,6 +22,7 @@ import { tagVoiceSession } from './voiceList'
 import { namingFiles } from './media'
 import { correctTurn, type Correction } from './localLive'
 import { STATUS_PATH, pluginStatus, serves } from './plugin'
+import { modelWords } from './requestWords'
 import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 
 const withProfile = (path: string, profile?: string) => (profile && profile !== 'default' ? `${path}?profile=${encodeURIComponent(profile)}` : path)
@@ -454,7 +455,8 @@ export class VoiceJobs {
     if (this.jobs.filter(j => j.status === 'running').length >= MAX_ACTIVE_JOBS)
       return { status: 'error', error: `${MAX_ACTIVE_JOBS} background jobs are already running. Tell the user to wait for one to finish, or cancel one.` }
     const id = `job-${++this.count}`
-    const job: VoiceJob = { id, title: jobTitle(task), status: 'running' }
+    // Named by the model's request: the user's words sent with it aren't its title.
+    const job: VoiceJob = { id, title: jobTitle(modelWords(task)), status: 'running' }
     this.jobs = [...this.jobs, job]
     this.onChange(this.jobs)
     try {
