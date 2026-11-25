@@ -89,4 +89,11 @@ describe('the Folder’s file tabs', () => {
     expect(tabs.files).toEqual([{ ...walked, back: [] }])
     expect(tabs.active).toBe('/r/other/y')
   })
+
+  it('a rename renames the entry in a folder tab that lists it', () => {
+    type G = F & { entry: F['entry'] & { isDirectory?: boolean }; folder?: { entries: { path: string; name: string }[] } }
+    const top: G = { entry: { path: '/r', name: 'r', isDirectory: true }, folder: { entries: [{ path: '/r/sub', name: 'sub' }, { path: '/r/a', name: 'a' }] } }
+    const tabs = renameTabs(showTab(NO_TABS as FolderTabs<G>, top), '/r/sub', '/r/new')
+    expect(tabs.files[0].folder?.entries).toEqual([{ path: '/r/new', name: 'new' }, { path: '/r/a', name: 'a' }])
+  })
 })

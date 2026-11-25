@@ -75,7 +75,9 @@ export function closeTabsUnder<T extends FolderTab>(tabs: FolderTabs<T>, path: s
  * `to`, drafts kept; a folder's tab under it closes (its listing names the old
  * paths), and a walk back through renamed folders is forgotten.
  */
-export function renameTabs<T extends FolderTab & { entry: { path: string; name: string; isDirectory?: boolean }; back?: { path: string }[] }>(
+export function renameTabs<
+  T extends FolderTab & { entry: { path: string; name: string; isDirectory?: boolean }; back?: { path: string }[]; folder?: { entries: { path: string; name: string }[] } }
+>(
   tabs: FolderTabs<T>,
   from: string,
   to: string
@@ -89,7 +91,11 @@ export function renameTabs<T extends FolderTab & { entry: { path: string; name: 
   return {
     files: next.files.map(f => {
       const back = f.back?.some(b => under(b.path)) ? [] : f.back
-      if (!under(f.entry.path)) return back === f.back ? f : { ...f, back }
+      // A folder shown in a tab that lists the renamed one names it anew.
+      const folder = f.folder?.entries.some(e => under(e.path))
+        ? { ...f.folder, entries: f.folder.entries.map(e => (under(e.path) ? { ...e, path: moved(e.path), name: name(moved(e.path)) } : e)) }
+        : f.folder
+      if (!under(f.entry.path)) return back === f.back && folder === f.folder ? f : { ...f, back, folder }
       return { ...f, back, entry: { ...f.entry, path: moved(f.entry.path), name: name(moved(f.entry.path)) } }
     }),
     active: next.active === null ? null : moved(next.active)

@@ -150,8 +150,9 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
       const path = tab.entry.path
       gateway
         .http('GET', fsListPath(path, profile))
-        .then(raw => setTab(path, current => ({ ...current, folder: parseListing(raw), error: undefined })))
-        .catch(() => undefined)
+        .then(raw => parseListing(raw))
+        .then(listing => setTab(path, current => ({ ...current, folder: listing, error: undefined })))
+        .catch(e => setTab(path, current => ({ ...current, error: message(e) })))
     }
     // The agent may have changed an open file: a tab without changes reads it again when it's next picked.
     setFiles(current => ({ ...current, files: current.files.map(f => (f.draft === undefined && !f.entry.isDirectory ? { ...f, stale: true } : f)) }))
@@ -382,7 +383,13 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
               role="tab"
               aria-selected={file.entry.path === files.active}
               title={file.entry.path}
-              onClick={() => (file.entry.isDirectory ? setFiles(current => ({ ...current, active: file.entry.path })) : void openFile(file.entry))}
+              onClick={() =>
+                file.entry.isDirectory && !file.error
+                  ? setFiles(current => ({ ...current, active: file.entry.path }))
+                  : file.entry.isDirectory
+                    ? void openFolder(file.entry, file.back ?? [])
+                    : void openFile(file.entry)
+              }
               onAuxClick={e => e.button === 1 && void closeFile(file)}
             >
               {file.draft !== undefined ? <span className="ws-tab-dot" aria-hidden="true" /> : null}
