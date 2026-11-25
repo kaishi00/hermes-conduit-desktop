@@ -1209,7 +1209,13 @@ export function useChat(storedId: string | null, profile: string | undefined, se
 
   /** A `config.set` on this chat's session, its answer's info folded in. */
   /** Words a call put into the running reply (a correction): shown in the chat as the user's, where Hermes keeps them. */
-  const noteCorrection = useCallback((text: string) => dispatch({ type: 'event', event: { type: 'user.message', payload: { text } } }), [])
+  // A redirected correction joins the running reply as a steer; a queued one is a new
+  // turn when the chat is free (issue 526).
+  const noteCorrection = useCallback(
+    (text: string, redirected = false) =>
+      dispatch({ type: 'event', event: { type: 'user.message', payload: redirected ? { text, display_kind: 'steer' } : { text } } }),
+    []
+  )
 
   const configure = useCallback(
     async (key: string, value: unknown, extra: Record<string, unknown> = {}) => {

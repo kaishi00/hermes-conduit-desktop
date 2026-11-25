@@ -38,7 +38,7 @@ export interface ChatCallOptions {
   turnsDone: number
   onStop: () => void
   /** Local Live's correction of what it heard, put in the chat's transcript. */
-  onCorrected: (text: string) => void
+  onCorrected: (text: string, redirected?: boolean) => void
   /** A notice for the person: the main window's dialog, or a chat page's notice line. */
   tell: (message: string) => void
 }

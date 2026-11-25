@@ -124,6 +124,8 @@ export function parseRoomReply(content: string): { author: string; quote: string
 /** A reply as Copy puts it on the clipboard: its words, and each file it delivered by its path. */
 export function copyableReply(text: string): string {
   return splitReply(withoutBoardLines(text))
+    // `splitReply` is called without board ids here, so no board block can appear;
+    // the branch only keeps the union exhaustive.
     .map(block => (block.kind === 'markdown' ? block.text.trim() : block.kind === 'board' ? '' : block.path))
     .filter(Boolean)
     .join('\n\n')

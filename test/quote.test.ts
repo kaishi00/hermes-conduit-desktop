@@ -67,5 +67,10 @@ describe('replying in a room', () => {
 describe('copying a reply', () => {
   it('keeps the words and names each file by its path', () => {
     expect(copyableReply('Here it is:\nMEDIA:/tmp/a.png\nDone.')).toBe('Here it is:\n\n/tmp/a.png\n\nDone.')
+
+    // A `|` in ordinary prose is not a table row: its directive is still removed for Copy.
+    expect(copyableReply('Pick A | B ::conduit-board{id="cb-000000000001"}')).toBe('Pick A | B')
+    // A real table row keeps its directive (the drawn reply keeps the row).
+    expect(copyableReply('| A | B ::conduit-board{id="cb-000000000001"} |')).toContain('::conduit-board{')
   })
 })
