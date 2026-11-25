@@ -24,9 +24,10 @@ describe('a file the chat’s file card opens (desktop#554)', () => {
     expect(viewedType('/a/.pdf')).toBeNull()
   })
 
-  it('opens a page in the browser only for .html and .htm', () => {
+  it('opens a page in the browser only for .html, .htm and .xhtml', () => {
     expect(isPagePath('/a/report.html')).toBe(true)
     expect(isPagePath('/a/report.HTM')).toBe(true)
+    expect(isPagePath('/a/report.xhtml')).toBe(true)
     expect(isPagePath('/a/report.html.txt')).toBe(false)
     expect(isPagePath('/a/report')).toBe(false)
   })
@@ -62,6 +63,7 @@ describe('a file the chat’s file card opens (desktop#554)', () => {
     const transcript = '../src/renderer/src/components/Transcript.tsx'
     const { viewerKind } = (await import(/* @vite-ignore */ viewer)) as { viewerKind: (path: string) => string }
     expect(viewerKind('/a/site/index.html')).toBe('page')
+    expect(viewerKind('/a/site/index.xhtml')).toBe('page')
     expect(viewerKind('/a/paper.pdf')).toBe('pdf')
     expect(viewerKind('/a/README.md')).toBe('markdown')
     expect(viewerKind('/a/clip.mov')).toBe('video')

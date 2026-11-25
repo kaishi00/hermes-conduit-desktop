@@ -5,6 +5,7 @@ import { parsePreview, readTextPath } from '../state/workspace'
 import { PictureProfile } from './Picture'
 import { inSelectMenu } from './Select'
 import { openPageInBrowser } from '../state/saveMedia'
+import { isPagePath } from '@shared/viewFileRules'
 
 const PLACEHOLDER = 280
 const MIN_HEIGHT = 60
@@ -107,9 +108,11 @@ export function PagePreview({ path, name, fallback }: { path: string; name: stri
         <div className="page-full" role="dialog" aria-label={name}>
           <div className="page-full-head">
             <span className="page-preview-name">{name}</span>
-            <button className="secondary" onClick={() => void openPageInBrowser(path, profile)}>
-              {t('Open in Browser')}
-            </button>
+            {isPagePath(path) ? (
+              <button className="secondary" onClick={() => void openPageInBrowser(path, profile)}>
+                {t('Open in Browser')}
+              </button>
+            ) : null}
             <button className="secondary" onClick={() => setFull(false)}>
               {t('Done')}
             </button>

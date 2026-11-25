@@ -56,8 +56,8 @@ export function viewedType(path: string): string | null {
   return VIEWED_TYPES[extensionOf(path)] ?? null
 }
 
-/** A page the browser can open from a copy: an .html or .htm file. */
-export const isPagePath = (path: string) => ['html', 'htm'].includes(extensionOf(path))
+/** A page: an .html, .htm or .xhtml file, drawn in the sandboxed frame or opened in the browser from a copy. */
+export const isPagePath = (path: string) => ['html', 'htm', 'xhtml'].includes(extensionOf(path))
 
 /** A copy's address on the file scheme. */
 export function viewedFileUrl(id: string, path: string): string {

@@ -751,28 +751,42 @@ function registerIpc(): void {
       dataUrl: async () => {
         const answer = await through.http<{ dataUrl?: unknown; data_url?: unknown }>('GET', hostFilePath('read-data-url', path, shownProfile))
         return dataUrlBytes(answer?.dataUrl ?? answer?.data_url)
+      },
+      readText: async () => {
+        const answer = await through.http<{ text?: unknown; binary?: unknown; truncated?: unknown }>('GET', hostFilePath('read-text', path, shownProfile))
+        return typeof answer?.text === 'string' && answer.binary !== true && answer.truncated !== true ? answer.text : null
       }
     }
   }
+  // A viewer's copy still downloading, by the ticket its viewer passed: closing the viewer stops it.
+  const viewCopies = new Map<string, AbortController>()
+  ipcMain.on(IPC.cancelViewHostFile, (_event, ticket: unknown) => {
+    if (typeof ticket === 'string') viewCopies.get(ticket)?.abort()
+  })
   const openFailure = (error: unknown) => {
     const code = (error as { code?: unknown } | null)?.code
     return code === 404 || code === 410 ? t('This file is no longer on your Hermes host.') : t("Couldn't open this file")
   }
-  ipcMain.handle(IPC.viewHostFile, async (event, path: unknown, profile: unknown): Promise<{ url: string } | { error: string }> => {
+  ipcMain.handle(IPC.viewHostFile, async (event, path: unknown, profile: unknown, ticket: unknown): Promise<{ url: string } | { error: string }> => {
     const routes = typeof path === 'string' && path ? copyRoutes(event.sender.id, path, profile) : null
     if (!routes) return { error: t("Couldn't open this file") }
+    const cancel = new AbortController()
+    const key = typeof ticket === 'string' ? ticket : null
+    if (key) viewCopies.set(key, cancel)
     try {
-      const url = await viewHostFile(path as string, routes.download, routes.dataUrl)
+      const url = await viewHostFile(path as string, routes.download, routes.dataUrl, cancel.signal)
       return url ? { url } : { error: t("Couldn't open this file") }
     } catch (error) {
       return { error: openFailure(error) }
+    } finally {
+      if (key) viewCopies.delete(key)
     }
   })
   ipcMain.handle(IPC.openHostPageInBrowser, async (event, path: unknown, profile: unknown): Promise<string | null> => {
     const routes = typeof path === 'string' && path ? copyRoutes(event.sender.id, path, profile) : null
     if (!routes) return t("Couldn't open this file")
     try {
-      return (await openPageInBrowser(path as string, routes.download, routes.dataUrl)) ? null : t("Couldn't open this file")
+      return (await openPageInBrowser(path as string, routes.readText, routes.download, routes.dataUrl)) ? null : t("Couldn't open this file")
     } catch (error) {
       return openFailure(error)
     }

@@ -3,6 +3,7 @@
  * person picks: a file on the Hermes host (streamed by the main process), or
  * a picture already drawn from its data.
  */
+import { t } from '../../../shared/i18n'
 import { tell } from './dialogs'
 
 /** Saves a host file; null when saved or cancelled, else what went wrong. */
@@ -29,7 +30,11 @@ export function sayIfFailed(error: string | null): void {
 
 /** Opens a page on the Hermes host (.html, .htm) in the default browser from a copy, saying so when it can't (desktop#554). */
 export async function openPageInBrowser(path: string, profile?: string | null): Promise<void> {
-  sayIfFailed(await window.conduit.openHostPageInBrowser(path, profile ?? undefined))
+  try {
+    sayIfFailed(await window.conduit.openHostPageInBrowser(path, profile ?? undefined))
+  } catch {
+    sayIfFailed(t("Couldn't open this file"))
+  }
 }
 
 /** A base64 data URL's bytes, or null when it isn't one. */
