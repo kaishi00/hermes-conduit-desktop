@@ -43,21 +43,26 @@ export function chatCalls(response: unknown, chatId: string): ChatCall[] {
   return calls.sort((a, b) => a.startedAt - b.startedAt)
 }
 
+/** The time of the first of `items` that has one. */
+export function firstTime(items: readonly TranscriptItem[]): number | undefined {
+  for (const item of items) if ('at' in item && typeof item.at === 'number') return item.at
+  return undefined
+}
+
 /**
  * The chat's items with a card for each call, placed before the first item
  * after the call started (or at the end). Items without a time stay where they are.
- * A chat holding only its newest stored pages (`olderRows`) leaves out the calls
- * from before its first timed item: their place is in a page not read yet, and
- * drawn on top of the rows held they would stay there as each page is read in.
+ * A chat holding only its newest stored pages leaves out the calls from before
+ * `heldFrom`, the time of the first row it holds: their place is in a page not
+ * read yet, and drawn on top of the rows held they would stay there as each
+ * page is read in. That time is the first stored row's, drawn or not, so a call
+ * after a row the display settings hide is still drawn.
  */
-export function withCalls(items: TranscriptItem[], calls: ChatCall[], olderRows = false): TranscriptItem[] {
+export function withCalls(items: TranscriptItem[], calls: ChatCall[], heldFrom?: number): TranscriptItem[] {
   if (!calls.length) return items
   const out: TranscriptItem[] = []
   let next = 0
-  if (olderRows) {
-    const first = items.find(item => 'at' in item && typeof item.at === 'number') as { at: number } | undefined
-    while (first && next < calls.length && calls[next]!.startedAt < first.at) next++
-  }
+  while (heldFrom !== undefined && next < calls.length && calls[next]!.startedAt < heldFrom) next++
   const card = (call: ChatCall): CallItem => ({
     kind: 'call',
     key: `call-${call.callId}`,

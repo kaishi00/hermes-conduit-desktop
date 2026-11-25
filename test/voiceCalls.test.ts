@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { callLength, callTranscript, chatCalls, speaker, withCalls } from '../src/renderer/src/state/voiceCalls'
+import { callLength, callTranscript, chatCalls, firstTime, speaker, withCalls } from '../src/renderer/src/state/voiceCalls'
 import type { TranscriptItem } from '../src/renderer/src/state/transcript'
 
 describe("a chat's saved voice calls", () => {
@@ -50,7 +50,9 @@ describe("a chat's saved voice calls", () => {
     ]
     // Held whole, the old call leads the chat; with pages still to read, it waits for its own.
     expect(withCalls(items, calls).map(i => i.key)).toEqual(['n', 'call-old', 'u1', 'call-x', 'a1', 'call-y'])
-    expect(withCalls(items, calls, true).map(i => i.key)).toEqual(['n', 'u1', 'call-x', 'a1', 'call-y'])
+    expect(withCalls(items, calls, firstTime(items)).map(i => i.key)).toEqual(['n', 'u1', 'call-x', 'a1', 'call-y'])
+    // The first stored row is hidden by a display setting: a call after it, before the first row drawn, keeps its card.
+    expect(withCalls(items.slice(2), calls, firstTime(items)).map(i => i.key)).toEqual(['call-x', 'a1', 'call-y'])
   })
 
   it("gives the call's length in its two largest units", () => {
