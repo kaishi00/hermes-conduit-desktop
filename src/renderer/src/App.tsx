@@ -1160,8 +1160,11 @@ function Shell({
         await mutateSession(gateway.http, row.id, row.profile, patch)
       } catch (e) {
         void tell(t('Couldn’t change “{title}”: {reason}', { title: row.title, reason: e instanceof Error ? e.message : String(e) }))
+        list.refresh()
+        return false
       }
       list.refresh()
+      return true
     },
     [list, selected.id, chat.storedId, newChat, updatePins]
   )
@@ -1335,8 +1338,10 @@ function Shell({
                 })
             : undefined,
           pin: () => {
-            if (openRow.pinned) dropFromSavedOrder(markHost, openRow, prefsHttp)
-            void chatAction(openRow, { pinned: !openRow.pinned })
+            // As with Archive: only drop the saved place once Hermes has accepted the unpin.
+            void chatAction(openRow, { pinned: !openRow.pinned }).then(ok => {
+              if (ok && openRow.pinned) dropFromSavedOrder(markHost, openRow, prefsHttp)
+            })
           },
           star: { on: isStarred(marks, openRow), toggle: () => updateMarks(current => toggleStar(current, openRow)) },
           done: chatDone.available ? { on: isRowDone(openRow), toggle: () => chatDone.toggle(openRow) } : undefined,
@@ -2462,7 +2467,7 @@ function Shell({
                   tileBadge={tileBadge}
                   otherWaits={otherWaits}
                   onOtherProfile={showOtherProfile}
-                  onPin={row => void chatAction(row, { pinned: !row.pinned })}
+                  onPin={row => chatAction(row, { pinned: !row.pinned })}
                   onRename={(row, title) => void chatAction(row, { title })}
                   onArchive={connected ? row => changeArchived(row, true) : undefined}
                   onArchived={connected ? () => setArchivedOpen(true) : undefined}

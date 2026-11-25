@@ -96,8 +96,14 @@ export function without(orders: PinnedOrders, row: ChatRow): PinnedOrders {
   const id = pinIdOf(row)
   const mine = orders.byProfile[profile] ?? []
   const key = mixedKey(row)
-  if (!mine.includes(id) && !orders.mixed.includes(key)) return orders
-  return { byProfile: { ...orders.byProfile, [profile]: mine.filter(x => x !== id) }, mixed: orders.mixed.filter(k => k !== key) }
+  const inMine = mine.includes(id)
+  const mixed = orders.mixed.filter(k => k !== key)
+  if (!inMine && mixed.length === orders.mixed.length) return orders
+  // A chat that only sat in `mixed` must not create an empty per-profile order.
+  return {
+    byProfile: inMine ? { ...orders.byProfile, [profile]: mine.filter(x => x !== id) } : orders.byProfile,
+    mixed
+  }
 }
 
 export const prefsPath = (profile: string) => (profile && profile !== 'default' ? `${PREFS_PATH}?profile=${encodeURIComponent(profile)}` : PREFS_PATH)

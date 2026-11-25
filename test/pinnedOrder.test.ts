@@ -99,6 +99,11 @@ describe("a chat unpinned or archived from the open chat's menu (desktop#503)", 
   const host = 'https://hermes.example.com'
   beforeEach(() => localStorage.clear())
 
+  it('does not add an empty per-profile order for a chat that only sat in mixed (issue 520)', () => {
+    const orders: PinnedOrders = { byProfile: { furina: ['f1'] }, mixed: ['default\u001fa'] }
+    expect(without(orders, row('a'))).toEqual({ byProfile: { furina: ['f1'] }, mixed: [] })
+  })
+
   it('leaves the saved order, and orders without it are left as they are', () => {
     const orders: PinnedOrders = { byProfile: { default: ['a', 'b'], furina: ['f1'] }, mixed: ['default\u001fa', 'furina\u001ff1', 'default\u001fb'] }
     expect(without(orders, row('a'))).toEqual({ byProfile: { default: ['b'], furina: ['f1'] }, mixed: ['furina\u001ff1', 'default\u001fb'] })
