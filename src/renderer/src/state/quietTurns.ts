@@ -5,7 +5,7 @@
  * [SILENT], a bot workstream's turn, a Bot Chat's answer to an update that
  * only says a workstream waits on the user, a room lead's routing pick, a
  * script's or Kanban worker's turn. It keeps the decision
- * (`/notifications/quiet-turns`, plugin 0.197.4+, quiet_turns.py) before
+ * (`/notifications/quiet-turns`, plugin 0.198.1+, quiet_turns.py) before
  * Hermes ends the turn, and a finished turn asks it before notifying.
  */
 export const QUIET_TURNS_PATH = '/api/plugins/conduit_push/notifications/quiet-turns'
