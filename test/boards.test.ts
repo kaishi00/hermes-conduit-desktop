@@ -6,6 +6,27 @@ import { copyableReply, sameQuotedText } from '../src/renderer/src/state/quote'
 const stats = { type: 'stats', title: 'Today', stats: [{ label: 'Steps', value: '8,412' }] }
 const map = { type: 'map', title: 'Route', places: [] }
 
+describe('a queued prompt between a board and its reply (issue 550)', () => {
+  it('does not end the turn for a prompt still waiting on the gateway', () => {
+    const board = { ...stats, cards: [stats], tabs: false, next: [], line: 'cb-000000000001' }
+    const withQueued = placeBoards([
+      { kind: 'tool', key: 't1', board },
+      { kind: 'user', key: 'u1', text: 'then do it', pending: true },
+      { kind: 'assistant', key: 'a1', text: 'Here:\n::conduit-board{id="cb-000000000001"}' }
+    ])
+    expect(withQueued.hidden).toEqual(new Set(['t1']))
+    expect(withQueued.placed?.get('a1')?.map(b => b.id)).toEqual(['cb-000000000001'])
+    // A confirmed prompt still starts a new turn and leaves the earlier board at its row.
+    const confirmed = placeBoards([
+      { kind: 'tool', key: 't1', board },
+      { kind: 'user', key: 'u1', text: 'then do it' },
+      { kind: 'assistant', key: 'a1', text: 'Here:\n::conduit-board{id="cb-000000000001"}' }
+    ])
+    expect(confirmed.hidden?.size ?? 0).toBe(0)
+    expect(confirmed.placed?.size ?? 0).toBe(0)
+  })
+})
+
 describe('boards', () => {
   it('draws a board of kinds it knows, with its tabs and follow-ups', () => {
     const board = boardFrom(
