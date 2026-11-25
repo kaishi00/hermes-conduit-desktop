@@ -717,6 +717,25 @@ function CronReportCard({ job, report, at }: { job: string; report: string; at?:
   )
 }
 
+/** A workstream's brief from the bot coordinating it, after the phone's WorkstreamBriefCard: the task folded to a few lines, Show all opens it. */
+function BriefCard({ bot, task, words, at }: { bot: string; task: string; words?: string; at?: number }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="cron-report brief-card">
+      <div className="cron-report-head">
+        <strong className="brief-from">{t('Brief from {bot}', { bot })}</strong>
+        <span className="spacer" />
+        <button className="link" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+          {open ? t('Show less') : t('Show all')}
+        </button>
+      </div>
+      <div className={open ? 'cron-report-body' : 'cron-report-body brief-folded'}>{open ? <Markdown text={task} /> : task}</div>
+      {words ? <span className={open ? 'meta' : 'meta brief-words'}>{t('For: “{words}”', { words })}</span> : null}
+      {at ? <span className="meta">{clock(at)}</span> : null}
+    </div>
+  )
+}
+
 function ReplyActions({ messageKey, text, menu, react }: { messageKey: string; text: string; menu: MessageMenuItem[]; react?: ReactControls }) {
   const reading = useReadingKey() === messageKey
   const profile = useContext(PictureProfile)
@@ -956,6 +975,8 @@ const Item = memo(function Item({
       return <CallCard startedAt={item.startedAt} endedAt={item.endedAt} onOpen={onOpenCall ? () => onOpenCall(item.callId) : undefined} />
     case 'cron':
       return <CronReportCard job={item.job} report={item.report} at={item.at} />
+    case 'brief':
+      return <BriefCard bot={item.bot} task={item.task} words={item.words} at={item.at} />
     case 'review':
       return (
         <details className="review-card" data-key={item.key}>
@@ -1468,7 +1489,8 @@ export function Transcript({
   // on. A reader still at the top of the rows they had takes on the first of the page now,
   // since a scroller at its top sends no scroll to ask with.
   useLayoutEffect(() => {
-    if (windowed.chat !== chatKey || windowed.start === null || start === windowed.start) return
+    // Not while a tab's chat comes back to its place: the last chat's rows, still drawn, lack its row (issue 423).
+    if (restoring.current || windowed.chat !== chatKey || windowed.start === null || start === windowed.start) return
     const el = scroller.current
     const reading = start !== null && start > windowed.start && el && !pinned.current && nearTop(el.scrollTop)
     setWindowed(windowAt(reading ? olderStart(start, rows.length) : start))
