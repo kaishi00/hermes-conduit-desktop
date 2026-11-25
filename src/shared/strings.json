@@ -46618,5 +46618,35 @@
     "tr": "Önceki Sekme",
     "zh-Hans": "上一个标签页",
     "zh-Hant": "上一個標籤頁"
+  },
+  "Brief from {bot}": {
+    "de": "Auftrag von {bot}",
+    "es": "Encargo de {bot}",
+    "fr": "Consigne de {bot}",
+    "id": "Arahan dari {bot}",
+    "it": "Incarico da {bot}",
+    "ja": "{bot}からの指示",
+    "ko": "{bot}의 지시",
+    "pl": "Zlecenie od {bot}",
+    "pt-BR": "Instruções de {bot}",
+    "ru": "Задание от {bot}",
+    "tr": "{bot} görevlendirmesi",
+    "zh-Hans": "来自 {bot} 的任务说明",
+    "zh-Hant": "來自 {bot} 的任務說明"
+  },
+  "For: “{words}”": {
+    "de": "Für: „{words}“",
+    "es": "Para: «{words}»",
+    "fr": "Pour : « {words} »",
+    "id": "Untuk: “{words}”",
+    "it": "Per: «{words}»",
+    "ja": "依頼:「{words}」",
+    "ko": "요청: “{words}”",
+    "pl": "Dla: „{words}”",
+    "pt-BR": "Para: “{words}”",
+    "ru": "Для: «{words}»",
+    "tr": "İstek: “{words}”",
+    "zh-Hans": "针对:“{words}”",
+    "zh-Hant": "針對:「{words}」"
   }
 }

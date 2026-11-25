@@ -7922,6 +7922,26 @@ button.cap-row-text {
 .cron-report-head .spacer {
   flex: 1;
 }
+.brief-card {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.brief-from {
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.cron-report-body.brief-folded {
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.brief-card .meta.brief-words {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .delegation-card {
   max-width: 640px;
   display: grid;
