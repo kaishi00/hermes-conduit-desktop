@@ -68,6 +68,30 @@ describe('notifications', () => {
     expect(turn([{ type: 'message.start' }, { type: 'message.complete', payload: { text: 'Hi' } }])).toBe('')
   })
 
+  it('closes a reply where the chat does: reasoning, and a reply sent whole', () => {
+    const replies = new TurnReplies()
+    const run = (events: Array<{ type: string; payload?: unknown }>) =>
+      events.map(e => replies.note({ ...e, session_id: 'x' })).find(Boolean)?.streamed
+    expect(run([
+      { type: 'message.start' },
+      { type: 'message.delta', payload: { text: 'Done.' } },
+      { type: 'reasoning.delta', payload: { text: 'nothing more' } },
+      { type: 'message.delta', payload: { text: '[SILENT]' } },
+      { type: 'message.complete', payload: { text: '' } }
+    ])).toBe('[SILENT]')
+    expect(run([
+      { type: 'message.start' },
+      { type: 'message.interim', payload: { text: 'Looking now.', already_streamed: false } },
+      { type: 'message.complete', payload: { text: '' } }
+    ])).toBe('Looking now.')
+    expect(run([
+      { type: 'message.start' },
+      { type: 'message.delta', payload: { text: 'Streamed.' } },
+      { type: 'message.interim', payload: { text: 'Streamed.', already_streamed: true } },
+      { type: 'message.complete', payload: { text: '' } }
+    ])).toBe('Streamed.')
+  })
+
   it('says when a turn started, and nothing for a turn it never saw start', () => {
     const replies = new TurnReplies()
     expect(replies.note({ type: 'message.start', session_id: 'a' }, 1000)).toBeNull()

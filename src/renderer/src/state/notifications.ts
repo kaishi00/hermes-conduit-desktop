@@ -88,8 +88,9 @@ export interface TurnEnd {
 
 /**
  * The reply each chat's turn streamed last, for a turn that ends with no text
- * of its own, and when the turn started. A tool, or a delta of `null`, closes
- * a reply: the next text is a new one, as the chat shows it.
+ * of its own, and when the turn started. A tool, reasoning, a reply sent whole
+ * (`message.interim`) or a delta of `null` closes a reply: the next text is a
+ * new one, as the chat shows it.
  */
 export class TurnReplies {
   private replies = new Map<string, { text: string; open: boolean; startedAt: number | null }>()
@@ -111,7 +112,12 @@ export class TurnReplies {
       const current = reply ?? { text: '', open: false, startedAt: null }
       if (typeof p.text === 'string' && p.text) this.replies.set(sid, { ...current, text: current.open ? current.text + p.text : p.text, open: true })
       else if (p.text === null) this.replies.set(sid, { ...current, open: false })
-    } else if (event.type.startsWith('tool.') && reply) {
+    } else if (event.type === 'message.interim') {
+      // A reply sent whole between tools: the chat draws it unless its deltas came already.
+      const current = reply ?? { text: '', open: false, startedAt: null }
+      const whole = typeof p.text === 'string' && p.text.trim() && p.already_streamed !== true
+      this.replies.set(sid, { ...current, text: whole ? (p.text as string) : current.text, open: false })
+    } else if ((event.type.startsWith('tool.') || event.type === 'reasoning.delta') && reply) {
       this.replies.set(sid, { ...reply, open: false })
     }
     return null
