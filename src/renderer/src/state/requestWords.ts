@@ -75,7 +75,7 @@ export class RequestWords {
     if (whole) {
       // The same line grown, or another one: a line that doesn't continue the last is new.
       // A line still growing when the model spoke goes on as the same line.
-      const grown = this.line !== '' && text.startsWith(this.line)
+      const grown = this.line !== '' && text.startsWith(this.line) && (this.open || text.length > this.line.length)
       if (!grown && !(this.open && this.line.startsWith(text))) this.close()
       this.line = text
       this.taken = Math.min(this.taken, text.length)

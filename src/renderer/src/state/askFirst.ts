@@ -299,6 +299,8 @@ export class AskFirst {
       const line = this.line
       await new Promise(resolve => setTimeout(resolve, 250))
       if (this.line === line) break
+      // The model spoke meanwhile and their next words began a new line: the yes already read stands.
+      if (!this.line.startsWith(line)) break
       answer = heldRequestAnswer(this.line)
     }
     return answer

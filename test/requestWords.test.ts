@@ -136,4 +136,28 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     ask.heard('And a cab')
     expect(await ask.ask('ask_thread', 'Order a cab.')).toEqual({ request: 'Order a cab.' + MARKER + 'And a cab' })
   })
+
+  it('keeps a yes when the model speaks before the rest of the answer arrives', async () => {
+    let t = 1_000_000
+    const ask = new AskFirst(true, () => t, 0, 600)
+    ask.heard('Book a table')
+    await ask.ask('ask_thread', 'Book a table for two.')
+    ask.modelSpoke()
+    t += 3000
+    ask.heard('Yes')
+    setTimeout(() => {
+      ask.modelSpoke()
+      ask.heard('thanks')
+    }, 100)
+    expect(await ask.release()).toMatchObject({ send: true })
+  })
+
+  it('takes the same line said again after the model spoke as a new one', async () => {
+    const words = new RequestWords()
+    words.heard('Do it', true)
+    expect(await words.take(0)).toEqual(['Do it'])
+    words.modelSpoke()
+    words.heard('Do it', true)
+    expect(words.pending()).toEqual(['Do it'])
+  })
 })
