@@ -12,7 +12,7 @@ import {
   budgets,
   checkTitle,
   dayIn,
-  excludedAfter,
+  exclusionChange,
   kindTitle,
   nextTime,
   nudgeDetail,
@@ -40,12 +40,15 @@ const NOTE_LIMIT = 1500
 export function PulseSettings({
   onBack,
   onChanged,
-  bots
+  bots,
+  capabilities
 }: {
   onBack: () => void
   onChanged: () => void
   /** The host's bots, to name the profile Pulse runs in as the rest of the app does. */
   bots?: readonly { name: string; title: string }[] | null
+  /** The plugin's capabilities on this host: what a Leave out pick sends. */
+  capabilities?: readonly string[]
 }) {
   useMouseBack(onBack)
   // Opens on Pulse's state as it last answered on this dashboard (Screens that open on their last answer).
@@ -379,7 +382,7 @@ export function PulseSettings({
                         type="checkbox"
                         checked={choice.leftOut}
                         disabled={saving}
-                        onChange={e => void change({ excluded_profiles: excludedAfter(state, choice.name, e.target.checked) })}
+                        onChange={e => void change(exclusionChange(state, choice.name, e.target.checked, capabilities))}
                       />
                       {bots?.find(b => b.name === choice.name)?.title ?? choice.name}
                     </label>

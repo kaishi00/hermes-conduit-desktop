@@ -111,6 +111,24 @@ export function profileChoices(state: Pick<PulseSettings, 'reportProfiles' | 'ot
     .map(name => ({ name, leftOut: leftOut.has(name) }))
 }
 
+/** The plugin takes one name in or out, keeping the rest of its list (notifier 0.196.6, hermes-conduit issue 3269). */
+export const EXCLUSION_TOGGLE = 'pulse_profile_exclusion_toggle'
+
+/**
+ * What a Leave out pick sends: only the profile it changes where the plugin
+ * takes that, so a change made on another device since the page was read
+ * stays (hermes-conduit issue 3269); the whole list otherwise.
+ */
+export function exclusionChange(
+  state: Pick<PulseSettings, 'excludedProfiles'>,
+  name: string,
+  leftOut: boolean,
+  capabilities: readonly string[] = []
+): Record<string, unknown> {
+  if (capabilities.includes(EXCLUSION_TOGGLE)) return leftOut ? { exclude_profile: name } : { include_profile: name }
+  return { excluded_profiles: excludedAfter(state, name, leftOut) }
+}
+
 /** `excluded_profiles` as it is sent once ``name`` is left out, or read again. */
 export function excludedAfter(state: Pick<PulseSettings, 'excludedProfiles'>, name: string, leftOut: boolean): string[] {
   const others = (state.excludedProfiles ?? []).filter(kept => kept !== name)

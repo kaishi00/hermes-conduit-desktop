@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { budgets, dayIn, excludedAfter, nextTime, parseMemory, parseSettings, profileChoices, sortedKinds, weekdays } from '../src/renderer/src/state/pulseSettings'
+import { EXCLUSION_TOGGLE, budgets, dayIn, excludedAfter, exclusionChange, nextTime, parseMemory, parseSettings, profileChoices, sortedKinds, weekdays } from '../src/renderer/src/state/pulseSettings'
 
 describe('pulse settings', () => {
   it('reads the plugin state and keeps the shape safe', () => {
@@ -38,6 +38,10 @@ describe('pulse settings', () => {
     expect(excludedAfter(state, 'work', true)).toEqual(['nahida', 'work'])
     expect(excludedAfter(state, 'nahida', true)).toEqual(['nahida'])
     expect(excludedAfter(state, 'nahida', false)).toEqual([])
+    // A plugin that takes one name gets only the pick, so a change made elsewhere since the read stays (hermes-conduit issue 3269).
+    expect(exclusionChange(state, 'work', true, [EXCLUSION_TOGGLE])).toEqual({ exclude_profile: 'work' })
+    expect(exclusionChange(state, 'nahida', false, [EXCLUSION_TOGGLE])).toEqual({ include_profile: 'nahida' })
+    expect(exclusionChange(state, 'work', true)).toEqual({ excluded_profiles: ['nahida', 'work'] })
     // Reading only its own profile, there is nothing to leave out; every other profile left out still lists them.
     expect(profileChoices(parseSettings({ report_profiles: 'this', other_profiles: [], excluded_profiles: ['work'] }))).toEqual([])
     expect(profileChoices(parseSettings({ report_profiles: 'all', other_profiles: [], excluded_profiles: ['work'] }))).toEqual([{ name: 'work', leftOut: true }])
