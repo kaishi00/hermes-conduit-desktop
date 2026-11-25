@@ -67,6 +67,18 @@ describe('the open chat’s read state', () => {
     t.unmount()
   })
 
+  it('ends the hold when nothing is open, as with another host’s chat docked over it, and reads the chat on its return', () => {
+    const t = mount({ openId: 'a', openRow: row('a', 2000) })
+    t.toggle(row('a', 2000))
+    t.show({ openId: null, openRow: undefined })
+    t.show({ openId: null, openRow: undefined })
+    expect(isUnread(t.marks(), row('a', 2000))).toBe(true)
+    t.show({ openId: 'a', openRow: row('a', 2000, true) })
+    expect(isUnread(t.marks(), row('a', 2000, true))).toBe(false)
+    expect(t.writes).toEqual([['a', true], ['a', false]])
+    t.unmount()
+  })
+
   it('keeps the mark through a list read that briefly lacks the open chat’s row', () => {
     const t = mount({ openId: 'a', openRow: row('a', 2000) })
     t.toggle(row('a', 2000))

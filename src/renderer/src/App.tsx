@@ -1274,7 +1274,8 @@ function Shell({
   const openId = chat.storedId ?? selected.id
   const openRow = openId ? list.rows?.find(row => row.id === openId) : undefined
   // The open chat reads as read, unless it was marked unread while open (state/openChatRead).
-  const toggleRead = useOpenChatRead(openId, openRow, marks, updateMarks, writeUnread)
+  // Another host's chat docked over it hides it: nothing is open here until it goes.
+  const toggleRead = useOpenChatRead(dockedChat ? null : openId, dockedChat ? undefined : openRow, marks, updateMarks, writeUnread)
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
     [respondConnection, reissueConnection, wakeConnection]
