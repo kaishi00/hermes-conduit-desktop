@@ -35,8 +35,8 @@ export function isDashboardPage(contentType: string | null, filename: string): b
   return /text\/html/i.test(contentType ?? '') && !/\.html?$/i.test(filename.trim())
 }
 
-/** `/api/fs/download` or `/api/fs/read-data-url` for `path`, in a profile's scope when it isn't the default. */
-export function hostFilePath(route: 'download' | 'read-data-url', path: string, profile?: string): string {
+/** `/api/fs/download`, `/api/fs/read-data-url` or `/api/fs/read-text` for `path`, in a profile's scope when it isn't the default. */
+export function hostFilePath(route: 'download' | 'read-data-url' | 'read-text', path: string, profile?: string): string {
   const query = `path=${encodeURIComponent(path)}`
   return profile && profile !== 'default' ? `/api/fs/${route}?${query}&profile=${encodeURIComponent(profile)}` : `/api/fs/${route}?${query}`
 }

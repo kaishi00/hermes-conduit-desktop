@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
-import { viewedType } from '@shared/viewFileRules'
+import { isPagePath, viewedType } from '@shared/viewFileRules'
 import { parsePreview, readTextPath } from '../state/workspace'
 import { Markdown } from './Markdown'
 import { PageFrame, pageAddress } from './PagePreview'
@@ -13,7 +13,7 @@ export type ViewerKind = 'page' | 'image' | 'audio' | 'video' | 'pdf' | 'markdow
 
 export function viewerKind(path: string): ViewerKind {
   const ext = /\.([^./\\]+)$/.exec(path)?.[1]?.toLowerCase() ?? ''
-  if (ext === 'html' || ext === 'htm') return 'page'
+  if (isPagePath(path)) return 'page'
   if (ext === 'md' || ext === 'markdown') return 'markdown'
   // What Conduit can draw from a copy goes by the copy's type; anything else (a HEIC, an AVI) is read as text, which says it isn't.
   const type = viewedType(path) ?? ''
@@ -67,7 +67,13 @@ export function FileViewer({
         })
         .catch(failed)
     } else {
-      window.conduit.viewHostFile(path, profile).then(answer => show('url' in answer ? { url: answer.url } : { error: answer.error }), failed)
+      // Closing the viewer, or its file changing, stops a copy still downloading.
+      const ticket = crypto.randomUUID()
+      window.conduit.viewHostFile(path, profile, ticket).then(answer => show('url' in answer ? { url: answer.url } : { error: answer.error }), failed)
+      return () => {
+        live = false
+        window.conduit.cancelViewHostFile(ticket)
+      }
     }
     return () => {
       live = false

@@ -65,37 +65,49 @@ export function serveViewedFiles(): void {
 
 type Download = (signal: AbortSignal) => Promise<Response>
 type DataUrl = () => Promise<Buffer | null>
+/** Hermes' read of a file as text (/api/fs/read-text): null when it isn't text or was cut short. */
+type ReadText = () => Promise<string | null>
 
 /**
  * Copies a host file to `file`: from `download`'s stream, or `dataUrl`'s
  * bytes for a Hermes without the download route (which `download` says by
- * throwing a 404 or 405).
+ * throwing a 404 or 405, or by answering with the dashboard's own page).
+ * `cancel` stops it, and a stopped copy leaves no file.
  */
-async function copyDown(file: string, download: Download, dataUrl: DataUrl): Promise<void> {
+async function copyDown(file: string, download: Download, dataUrl: DataUrl, cancel?: AbortSignal): Promise<void> {
+  const stop = new AbortController()
+  const onCancel = () => stop.abort()
+  cancel?.addEventListener('abort', onCancel)
   try {
-    const stop = new AbortController()
+    if (cancel?.aborted) throw Object.assign(new Error('cancelled'), { code: 'cancelled' })
     const response = await download(stop.signal)
     // A dashboard that serves its page for a route it doesn't know has no download route.
-    if (/text\/html/i.test(response.headers.get('content-type') ?? '') && !/\.html?$/i.test(file)) throw Object.assign(new Error('no download route'), { code: 404 })
+    if (/text\/html/i.test(response.headers.get('content-type') ?? '')) {
+      void response.body?.cancel().catch(() => undefined)
+      throw Object.assign(new Error('no download route'), { code: 404 })
+    }
     if (!response.body) throw new Error('no body')
     await streamToFile(response.body as NodeReadableStream, file, () => stop.abort())
   } catch (error) {
     const code = (error as { code?: unknown }).code
-    if (code !== 404 && code !== 405) throw error
+    if ((code !== 404 && code !== 405) || stop.signal.aborted) throw error
     const bytes = await dataUrl()
+    if (cancel?.aborted) throw Object.assign(new Error('cancelled'), { code: 'cancelled' })
     if (!bytes) throw Object.assign(new Error('unreadable'), { code: 415 })
     await writeFile(file, bytes)
+  } finally {
+    cancel?.removeEventListener('abort', onCancel)
   }
 }
 
 /** Copies `path` down for the viewer and gives its address; null when the viewer doesn't show this kind of file from a copy. */
-export async function viewHostFile(path: string, download: Download, dataUrl: DataUrl): Promise<string | null> {
+export async function viewHostFile(path: string, download: Download, dataUrl: DataUrl, cancel?: AbortSignal): Promise<string | null> {
   const type = viewedType(path)
   if (!type) return null
   await mkdir(folder(), { recursive: true })
   const id = randomUUID()
   const file = join(folder(), id)
-  await copyDown(file, download, dataUrl)
+  await copyDown(file, download, dataUrl, cancel)
   views.set(id, { file, type })
   while (views.size > KEPT_VIEWS) {
     const [oldest, view] = views.entries().next().value!
@@ -106,16 +118,21 @@ export async function viewHostFile(path: string, download: Download, dataUrl: Da
 }
 
 /**
- * Copies a page (an .html or .htm file) down and opens it in the default
+ * Copies a page (.html, .htm, .xhtml) down and opens it in the default
  * browser, where it runs as any downloaded page does (Eric 2026-11-25,
- * desktop#554). Its copy stays until Conduit quits, since the browser may
- * read it again; false when it isn't a page or the system couldn't open it.
+ * desktop#554). It's read as text, as the in-app frame reads it, so a
+ * dashboard answering an unknown route with its own page can't stand in for
+ * it; one too long for that read is downloaded. Its copy stays until Conduit
+ * quits, since the browser may read it again; false when it isn't a page or
+ * the system couldn't open it.
  */
-export async function openPageInBrowser(path: string, download: Download, dataUrl: DataUrl): Promise<boolean> {
+export async function openPageInBrowser(path: string, readText: ReadText, download: Download, dataUrl: DataUrl): Promise<boolean> {
   if (!isPagePath(path)) return false
   const dir = join(folder(), 'pages', randomUUID())
   await mkdir(dir, { recursive: true })
   const file = join(dir, hostFileName(path))
-  await copyDown(file, download, dataUrl)
+  const text = await readText()
+  if (text !== null) await writeFile(file, text)
+  else await copyDown(file, download, dataUrl)
   return (await shell.openPath(file)) === ''
 }
