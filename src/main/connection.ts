@@ -133,7 +133,8 @@ export interface ConnectionDeps {
   /**
    * Conduit's sign-in window, for a login proxy in front of the dashboard or a Hermes that signs in on its own page
    * (browserSignIn.ts). It stays open until `signedIn`, asked with the window's cookies for the dashboard each time
-   * a page there loads, says they pass (the cookies to keep), and rejects when it is closed first.
+   * a page there loads, says they pass (the cookies to keep; null when they don't yet, and a throw when the dashboard
+   * couldn't be asked, to ask again), and rejects when it is closed first.
    */
   browserSignIn?: (
     url: string,
@@ -189,6 +190,8 @@ export class Connection {
   private readonly setTimer: (fn: () => void, ms: number) => unknown
   private readonly newOidc = new WeakSet<SavedConnection>()
   private browserSignIn: AbortController | null = null
+  /** A host the sign-in window just signed in to, dialing and not saved yet: cancelling the sign-in lets it go. */
+  private newBrowser: SavedConnection | null = null
   /** One look at whether a sign-in window's cookies still pass, shared by the requests that were refused together. */
   private browserCheck: Promise<boolean> | null = null
   private readonly clearTimer: (handle: unknown) => void
@@ -265,7 +268,7 @@ export class Connection {
     if (!this.browserSignIn) return
     this.generation++
     this.browserSignIn.abort()
-    if (this.saved && this.newOidc.has(this.saved)) {
+    if (this.saved && (this.newOidc.has(this.saved) || this.saved === this.newBrowser)) {
       this.teardown()
       this.saved = null
       // The host that was dialing was never saved: nothing is connecting any more. A host that
@@ -365,9 +368,14 @@ export class Connection {
         this.browserSignIn = browserAttempt
         const fetchImpl = this.fetchFor(saved)
         // The window closes once its cookies open the dashboard: past the proxy, and past Hermes' own sign-in if it has one.
+        // Cookies that don't pass yet keep the window open; a read that failed for another reason is tried again.
         saved.cookies = await this.deps.browserSignIn(url, saved.headers, browserAttempt.signal, jar =>
-          browserSession(url, jar, fetchImpl).then(session => session.jar, () => null)
+          browserSession(url, jar, fetchImpl).then(session => session.jar, error => {
+            if (error instanceof AuthError && error.signedOut) return null
+            throw error
+          })
         )
+        this.newBrowser = saved
       }
     } catch (error) {
       if (this.browserSignIn === browserAttempt) this.browserSignIn = null
@@ -377,6 +385,7 @@ export class Connection {
     if (generation !== this.generation) {
       if (this.browserSignIn === browserAttempt) this.browserSignIn = null
       if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
+      if (this.newBrowser === saved) this.newBrowser = null
       if (saved.method === 'browser') this.forgetBrowserSession(url, true)
       return { ok: false, error: t('Cancelled.') }
     }
@@ -386,6 +395,7 @@ export class Connection {
     this.setStatus({ ...this.identity(), phase: 'connecting' })
     const error = await this.dial(generation)
     if (this.browserSignIn === browserAttempt) this.browserSignIn = null
+    if (this.newBrowser === saved) this.newBrowser = null
     if (generation !== this.generation) {
       if (saved.oidc) void revokeOidc(url, saved.oidc, this.fetchFor(saved)).catch(() => {})
       if (saved.method === 'browser') this.forgetBrowserSession(url, true)

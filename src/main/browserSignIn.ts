@@ -27,7 +27,7 @@ export interface SignInWindowOptions {
   url: string
   headers?: ProxyHeaders
   signal: AbortSignal
-  /** The cookies to keep when they open the dashboard, else null. */
+  /** The cookies to keep when they open the dashboard, null when they don't yet; throws when the dashboard couldn't be asked. */
   signedIn: (jar: CookieJar) => Promise<CookieJar | null>
   parent?: BrowserWindow | null
 }
@@ -97,7 +97,8 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
       const kept = await signedIn(jar)
       if (kept) finish(kept)
     } catch {
-      // The cookies couldn't be read or tried: the next page, or the next look, tries again.
+      // The cookies couldn't be read, or the dashboard couldn't be asked: the next look tries them again.
+      tried = null
     } finally {
       checking = false
     }

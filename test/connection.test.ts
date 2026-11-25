@@ -753,12 +753,15 @@ describe('a dashboard signed in through the sign-in window', () => {
 
   /** A Hermes behind a login proxy: `passes` says whether the proxy's cookie is still good, `gated` whether Hermes asks for its own session. */
   function proxied(opts: { gated?: boolean } = {}) {
-    const state = { passes: true, token: 'open-1', refused: new Set<string>() }
+    const state = { passes: true, down: false, token: 'open-1', refused: new Set<string>(), hold: null as PromiseWithResolvers<void> | null }
     const seen: { path: string; headers: Headers }[] = []
     const fetchImpl: Fetch = async (input, init = {}) => {
       const path = new URL(String(input)).pathname
       const headers = new Headers(init.headers)
       seen.push({ path, headers })
+      // A dial held mid-way, so a test can act while it is still connecting.
+      if (state.hold) await state.hold.promise
+      if (state.down) return new Response('bad gateway', { status: 502 })
       if (!state.passes || !(headers.get('cookie') ?? '').includes('_proxy=')) return redirect('https://accounts.google.com/login')
       if (state.refused.has(path)) return json({ detail: 'not yours' }, 401)
       if (path === '/api/status') return json({ auth_required: !!opts.gated }, 200, { 'Set-Cookie': '_proxy=renewed; Path=/' })
@@ -770,7 +773,7 @@ describe('a dashboard signed in through the sign-in window', () => {
     const sockets: FakeSocket[] = []
     const statuses: ConnectionStatus[] = []
     const forgotten: string[] = []
-    const windows: { url: string; headers?: Record<string, string>; signal: AbortSignal; signedIn: (jar: Record<string, string>) => Promise<Record<string, string> | null> }[] = []
+    const windows: { url: string; headers?: Record<string, string>; signal: AbortSignal; signedIn: (jar: Record<string, string>) => Promise<Record<string, string> | null>; resolve: (jar: Record<string, string>) => void }[] = []
     let answer: (jar: Record<string, string>) => void = () => {}
     const timers: (() => void)[] = []
     const store = createHostList(() => {}, { hosts: [], active: null })
@@ -778,8 +781,8 @@ describe('a dashboard signed in through the sign-in window', () => {
       fetch: fetchImpl,
       store,
       browserSignIn: (windowUrl, headers, signal, signedIn) => {
-        windows.push({ url: windowUrl, headers, signal, signedIn })
         return new Promise((resolve, reject) => {
+          windows.push({ url: windowUrl, headers, signal, signedIn, resolve })
           answer = resolve
           signal.addEventListener('abort', () => reject(new Error('Sign-in was cancelled.')))
         })
@@ -899,6 +902,55 @@ describe('a dashboard signed in through the sign-in window', () => {
     h.connection.signOut()
     expect(h.forgotten).toEqual([url, url])
     expect(h.connection.current().phase).toBe('signed-out')
+  })
+
+  it('says signed out, with no socket left, when a first sign-in is cancelled after the window closed', async () => {
+    const h = proxied({ gated: true })
+    h.state.hold = Promise.withResolvers<void>()
+    const signingIn = h.signIn({ _proxy: 'first', hermes_session: 's' })
+    await until(() => h.connection.current().phase === 'connecting')
+    h.connection.cancelSignIn()
+    expect(h.connection.current().phase).toBe('signed-out')
+    h.state.hold.resolve()
+    expect(await signingIn).toMatchObject({ ok: false })
+    await tick()
+    expect(h.connection.current()).toMatchObject({ phase: 'signed-out' })
+    expect(h.connection.current().url).toBeUndefined()
+    expect(h.sockets.every(socket => socket.readyState === 3)).toBe(true)
+    expect(h.store.get?.(url)).toBeFalsy()
+    expect(h.forgotten).toEqual([url])
+  })
+
+  it('opens the host that was open again when a sign-in to another is cancelled after the window closed', async () => {
+    const h = proxied()
+    await h.signIn()
+    await until(() => h.connection.current().phase === 'open')
+    const other = 'https://other.example.com'
+    const signingIn = h.connection.signIn({ url: other, method: 'browser' })
+    await until(() => h.windows.length > 1)
+    h.state.hold = Promise.withResolvers<void>()
+    h.windows.at(-1)!.resolve({ _proxy: 'second' })
+    await until(() => h.connection.current().phase === 'connecting' && h.connection.current().url === other)
+    h.connection.cancelSignIn()
+    h.state.hold.resolve()
+    h.state.hold = null
+    expect(await signingIn).toMatchObject({ ok: false })
+    await until(() => h.connection.current().phase === 'open')
+    expect(h.connection.current()).toMatchObject({ phase: 'open', url })
+    expect(h.store.get?.(other)).toBeFalsy()
+  })
+
+  it('asks the window to try again when the dashboard couldn’t be asked, and to wait when the cookies don’t pass', async () => {
+    const h = proxied()
+    const signingIn = h.connection.signIn({ url, method: 'browser' })
+    await until(() => h.windows.length > 0)
+    expect(await h.windows[0]!.signedIn({})).toBeNull()
+    h.state.down = true
+    await expect(h.windows[0]!.signedIn({ _proxy: 'first' })).rejects.toThrow()
+    h.state.down = false
+    expect(await h.windows[0]!.signedIn({ _proxy: 'first' })).toEqual({ _proxy: 'renewed' })
+    h.connection.cancelSignIn()
+    await signingIn
   })
 
   it('says so when this build has no sign-in window', async () => {
