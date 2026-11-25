@@ -2865,7 +2865,7 @@ function Shell({
             onOpenBoard={() => setSection('tasks')}
             chips={pulseHostChips}
             onPickHost={pickPulseHost}
-            bots={roster.bots}
+            bots={glowBots}
           />
         ) : section === 'room' && shownCopy && shownCopyRoom ? (
           <RoomView
@@ -2965,6 +2965,7 @@ function Shell({
               onEditHost(host)
             }}
             bots={(roster.bots ?? []).map(bot => ({ name: bot.name, title: bot.title }))}
+            pulseBots={glowBots}
             profile={settingsProfile}
             profileTiles={profileTiles ?? []}
             tileBadge={tileBadge}
@@ -3091,6 +3092,7 @@ function Settings({
   onAddHost,
   onEditHost,
   bots,
+  pulseBots,
   profile,
   profileTiles,
   tileBadge,
@@ -3118,6 +3120,8 @@ function Settings({
   onAddHost: () => void
   onEditHost: (host: HostSummary) => void
   bots: { name: string; title: string }[]
+  /** Every bot, hidden ones too: Pulse can run in a hidden bot's profile, and its settings name it. */
+  pulseBots: readonly { name: string; title: string }[]
   profile: string
   /** Every profile Settings can switch to, every combined dashboard's included, in the Chats list's order. */
   profileTiles: readonly MixedTile[]
@@ -3313,7 +3317,7 @@ function Settings({
   if (page === 'pulse')
     return (
       <SettingsPane pane={pane}>
-        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} bots={bots} />
+        <PulseSettings onBack={() => setPage('main')} onChanged={() => undefined} bots={pulseBots} />
       </SettingsPane>
     )
   if (page === 'chat')

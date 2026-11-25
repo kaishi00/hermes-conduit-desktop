@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ConnectionStatus } from '@shared/ipc'
 import { dockedPulseUrl } from '@shared/chatWindows'
+import { useBots } from '../state/useBots'
 import { usePulse } from '../state/usePulse'
 import { PulsePage } from './PulsePage'
 
@@ -21,6 +22,8 @@ export function DockedPulse() {
   }, [])
   const host = status?.url ?? ''
   const pulse = usePulse(status?.phase === 'open', true)
+  // That dashboard's bots, hidden ones too, so its Pulse settings name the profile Pulse runs in by its bot's title.
+  const roster = useBots(status?.phase === 'open', host, { withSessions: false })
   if (!host) return <div className="chat-window-page" />
   return (
     <div className="chat-window-page">
@@ -36,6 +39,7 @@ export function DockedPulse() {
             ...(target.id ? {} : { fresh: true })
           })
         }
+        bots={[...(roster.bots ?? []), ...roster.hidden]}
       />
     </div>
   )
