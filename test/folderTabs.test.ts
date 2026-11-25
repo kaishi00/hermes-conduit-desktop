@@ -104,5 +104,6 @@ describe('the Folder’s file tabs', () => {
     expect(to).toBe('C:\\w\\b.txt')
     expect(renameTabs(tabs, 'C:\\w\\a.txt', to).files[0].entry).toEqual({ path: 'C:\\w\\b.txt', name: 'b.txt' })
     expect(childPath('/r/', 'x')).toBe('/r/x')
+    expect(childPath('C:\\', 'x')).toBe('C:\\x')
   })
 })

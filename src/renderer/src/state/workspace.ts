@@ -138,7 +138,8 @@ export function parentPath(path: string): string {
 /** `name` inside `folder`, joined with the separator the folder's path uses (a Windows host's backslash). */
 export function childPath(folder: string, name: string): string {
   const trimmed = folder.replace(/[\\/]+$/, '')
-  const sep = trimmed.includes('\\') && !trimmed.includes('/') ? '\\' : '/'
+  // A drive root ("C:\\", or "C:" once trimmed) is a Windows path too.
+  const sep = (trimmed.includes('\\') && !trimmed.includes('/')) || /^[A-Za-z]:$/.test(trimmed) ? '\\' : '/'
   return `${trimmed}${sep}${name}`
 }
 

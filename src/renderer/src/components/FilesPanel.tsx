@@ -376,7 +376,8 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
     setFiles(current => closeTab(current, file.entry.path))
   }
   const tabStrip =
-    files.files.length > 1 || (!open && files.files.length) ? (
+    // One tab shows too while its folder couldn't be listed, so a click can try again.
+    files.files.length > 1 || (!open && files.files.length) || (open?.entry.isDirectory && open.error) ? (
       <div className="ws-tabs" role="tablist">
         {files.files.map(file => (
           <div key={file.entry.path} className={`ws-tab${file.entry.path === files.active ? ' on' : ''}`}>

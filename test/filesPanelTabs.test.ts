@@ -4,10 +4,18 @@ import { createRoot } from 'react-dom/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const reads: string[] = []
+let fsListFails = 0
 vi.mock('../src/renderer/src/gateway', () => ({
   gateway: {
     http: async (_method: string, path: string) => {
       const url = new URL(path, 'http://x')
+      if (url.pathname === '/api/fs/list') {
+        if (fsListFails > 0) {
+          fsListFails--
+          throw new Error('Hermes didn’t answer')
+        }
+        return { entries: [{ name: 'c.txt', path: '/elsewhere/c.txt' }] }
+      }
       if (url.pathname.endsWith('/list')) {
         return { entries: [{ name: 'a.txt', path: '/r/a.txt', mtime: 1 }, { name: 'b.txt', path: '/r/b.txt', mtime: 1 }] }
       }
@@ -24,6 +32,7 @@ vi.mock('../src/renderer/src/gateway', () => ({
 
 beforeEach(() => {
   reads.length = 0
+  fsListFails = 0
   localStorage.clear()
   ;(window as unknown as { conduit: unknown }).conduit = new Proxy(
     { platform: 'linux' } as Record<string, unknown>,
@@ -73,6 +82,27 @@ describe('the Folder’s file tabs (issue 454)', () => {
     await settle()
     expect(host.querySelector('.ws-code')?.textContent).toContain('text of /r/b.txt')
     expect(host.querySelector('.ws-tabs')).toBeNull()
+    act(() => root.unmount())
+  })
+
+  it('a folder a reply named that couldn’t be listed shows its tab, and a click lists it again', async () => {
+    fsListFails = 1
+    const path = '../src/renderer/src/components/FilesPanel.tsx'
+    const { FilesPanel } = (await import(/* @vite-ignore */ path)) as { FilesPanel: unknown }
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    act(() =>
+      root.render(createElement(FilesPanel as never, { root: '/r', refreshKey: 0, reveal: { path: '/elsewhere/', id: 1 }, onInsertPath: () => {}, onClose: () => {} } as never))
+    )
+    await settle()
+    expect(host.querySelector('.ws-viewer .error-text')?.textContent).toContain('Hermes didn’t answer')
+    const tab = host.querySelector('.ws-tab [role="tab"]') as HTMLButtonElement
+    expect(tab).not.toBeNull()
+    act(() => tab.click())
+    await settle()
+    expect(host.querySelector('.ws-viewer .error-text')).toBeNull()
+    expect(host.querySelector('.ws-folder')?.textContent).toContain('c.txt')
     act(() => root.unmount())
   })
 })
