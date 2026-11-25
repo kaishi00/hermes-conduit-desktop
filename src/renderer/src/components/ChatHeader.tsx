@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import { VOICE_MODES, voiceModeTitle, type VoiceMode } from '../state/gptLive'
 import { statusText, workTone, type WorkItem } from '../state/work'
@@ -67,6 +67,11 @@ export function ChatHeader({
 }) {
   const more = useHeaderMenu()
   const items = menu?.length ? menu : null
+  // The menu went away with its chat (another chat opened, or none): an open one closes with it.
+  const closeMore = more.setOpen
+  useEffect(() => {
+    if (!items) closeMore(null)
+  }, [items === null, closeMore])
   return (
     <div className="chat-head soft">
       <div className="chat-titles">

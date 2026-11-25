@@ -48,6 +48,8 @@ describe('a site’s icon for a link', () => {
       'https://192.168.1.4/x',
       'https://[::1]/x',
       'https://nas.local/x',
+      'https://nas.local./x',
+      'https://localhost./x',
       'https://hermes.internal/x',
       'https://user:secret@example.com/x'
     ])

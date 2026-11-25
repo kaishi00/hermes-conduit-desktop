@@ -21,7 +21,8 @@ export function faviconUrl(href: string | undefined): string | null {
     return null
   }
   if (url.protocol !== 'https:' || url.username || url.password) return null
-  const host = url.hostname.toLowerCase()
+  // A name may end in a dot (`nas.local.`): the same host, so the same answer.
+  const host = url.hostname.toLowerCase().replace(/\.+$/, '')
   if (!host.includes('.') || /^[\d.]+$/.test(host) || host.startsWith('[') || /\.(local|lan|internal|home|test|localhost)$/.test(host)) return null
   if (noIcon.has(url.host)) return null
   return `https://${url.host}/favicon.ico`
