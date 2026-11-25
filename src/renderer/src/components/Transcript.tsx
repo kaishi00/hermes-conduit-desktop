@@ -20,7 +20,8 @@ import { Markdown, StreamingMarkdown } from './Markdown'
 import { GatewayPicture, PictureImage, PictureProfile } from './Picture'
 import { gateway } from '../gateway'
 import { readDataUrlPath } from '../state/gatewayPictures'
-import { saveHostFile, sayIfFailed } from '../state/saveMedia'
+import { openPageInBrowser, saveHostFile, sayIfFailed } from '../state/saveMedia'
+import { FileViewer, viewerKind } from './FileViewer'
 import { formatDate, locale, t } from '@shared/i18n'
 import { blockquote, copyableReply, excerpt, parseReplyEnvelope, sameQuotedText, type QuoteRequest } from '../state/quote'
 import { BoardFollowUps, BoardView } from './BoardView'
@@ -374,14 +375,20 @@ export function quoteRequest(content: { text: string } | { reply: { author: stri
 
 const MEDIA_ICONS: Record<ReturnType<typeof mediaKind>, IconName> = { image: 'image', audio: 'audio', video: 'video', file: 'file' }
 
-/** A file Hermes delivered (`MEDIA:`) or a message named (`@file:`): its name, with the full path on hover. */
+/**
+ * A file Hermes delivered (`MEDIA:`) or a message named (`@file:`): its name,
+ * with the full path on hover. Open shows it in the viewer, as the phone's
+ * card opens it; a page also opens in the browser (desktop#554).
+ */
 function FileCard({ path, label, link }: { path: string; label?: string; link?: boolean }) {
   const profile = useContext(PictureProfile)
   const [audio, setAudio] = useState<'loading' | 'failed' | { src: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [viewing, setViewing] = useState(false)
   const name = label || (link ? path : baseName(path))
   const folder = path.slice(0, Math.max(0, path.length - baseName(path).length)).replace(/[\\/]+$/, '')
   const kind = mediaKind(path)
+  const page = viewerKind(path) === 'page'
   const play = async () => {
     setAudio('loading')
     try {
@@ -400,6 +407,7 @@ function FileCard({ path, label, link }: { path: string; label?: string; link?: 
       setSaving(false)
     }
   }
+  const closeViewer = useCallback(() => setViewing(false), [])
   return (
     <div className="file-card" title={path}>
       <div className="file-card-row">
@@ -417,6 +425,14 @@ function FileCard({ path, label, link }: { path: string; label?: string; link?: 
                 {t('Play')}
               </button>
             ) : null}
+            <button className="secondary" onClick={() => setViewing(true)}>
+              {t('Open')}
+            </button>
+            {page ? (
+              <button className="secondary" onClick={() => void openPageInBrowser(path, profile)}>
+                {t('Open in Browser')}
+              </button>
+            ) : null}
             <button className="secondary" disabled={saving} onClick={() => void download()}>
               {t('Download')}
             </button>
@@ -426,6 +442,9 @@ function FileCard({ path, label, link }: { path: string; label?: string; link?: 
       {audio === 'loading' ? <span className="meta">{t('Loading…')}</span> : null}
       {audio === 'failed' ? <span className="meta error-text">{t("Couldn't open this file")}</span> : null}
       {audio && typeof audio === 'object' ? <audio className="file-audio" controls autoPlay src={audio.src} /> : null}
+      {viewing ? (
+        <FileViewer path={path} name={name} profile={profile} saving={saving} onDownload={() => void download()} onClose={closeViewer} />
+      ) : null}
     </div>
   )
 }

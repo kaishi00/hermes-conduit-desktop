@@ -29,9 +29,9 @@ const HEIGHT_SCRIPT =
 
 const pages = new Map<string, string>()
 
-/** Before the app is ready. */
-export function registerPageScheme(): void {
-  protocol.registerSchemesAsPrivileged([{ scheme: PAGE_SCHEME, privileges: { standard: true, secure: true } }])
+/** Before the app is ready, with the other schemes Conduit serves: Electron keeps only the last call's list. */
+export function registerPageScheme(...others: Electron.CustomScheme[]): void {
+  protocol.registerSchemesAsPrivileged([{ scheme: PAGE_SCHEME, privileges: { standard: true, secure: true } }, ...others])
 }
 
 /** Once the app is ready. */
