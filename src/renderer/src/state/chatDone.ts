@@ -32,6 +32,13 @@ export const donePath = (profile?: string | null) =>
 /** The ids a mark is kept under: the lineage root first, then the row's own. */
 export const doneIds = (row: ChatRow): string[] => [...new Set([row.lineageRoot, row.id].filter((id): id is string => !!id))].slice(0, MAX_IDS)
 
+/** `marks` with `key`'s replaced by `done`; `marks` itself when they say the same. */
+export function withProfileMarks(marks: DoneMarks, key: string, done: DoneMark[]): DoneMarks {
+  const before = marks?.[key]
+  if (before && before.length === done.length && JSON.stringify(before) === JSON.stringify(done)) return marks
+  return { ...(marks ?? {}), [key]: done }
+}
+
 /** The route's answer; null when it isn't one. */
 export function parseDone(body: unknown): DoneMark[] | null {
   const rows = body && typeof body === 'object' ? (body as Record<string, unknown>).done : undefined
@@ -44,8 +51,9 @@ export function parseDone(body: unknown): DoneMark[] | null {
 }
 
 export function isDone(marks: DoneMarks, row: ChatRow): boolean {
-  const ids = new Set(doneIds(row))
-  return !!marks?.[profileKey(row.profile)]?.some(mark => mark.ids.some(id => ids.has(id)))
+  // Two ids at most: no Set made per row on each draw of the list (desktop#543).
+  const ids = doneIds(row)
+  return !!marks?.[profileKey(row.profile)]?.some(mark => mark.ids.some(id => ids.includes(id)))
 }
 
 /** The chat marked done, or open again, before the plugin answers. */
@@ -79,7 +87,8 @@ export function useChatDone(http: Http, connected: boolean, profiles: string[], 
       readAt.current.set(profileKey(profile), Date.now())
       try {
         const done = parseDone(await http('GET', donePath(profile)))
-        if (done && hostRef.current === askedHost) setMarks(current => ({ ...(current ?? {}), [profileKey(profile)]: done }))
+        // The same answer keeps the marks object, so the list doesn't work everything out again (desktop#543).
+        if (done && hostRef.current === askedHost) setMarks(current => withProfileMarks(current, profileKey(profile), done))
       } catch {
         // An older plugin, or the host away: the marks stay as they were.
       }

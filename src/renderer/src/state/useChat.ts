@@ -13,7 +13,7 @@ import { noteChatSession } from './expiredQuestions'
 import { connectionFrom, connectionOwner, type ConnectionCard } from './connections'
 import { isRuntimeGone } from './runtimeGone'
 import { gateway, GatewayError } from '../gateway'
-import { forgetTranscripts, keepTranscript, keptTranscript } from './transcriptCache'
+import { forgetTranscripts, keepTranscript, keptOlderAt, keptTranscript } from './transcriptCache'
 import { TranscriptStore } from './transcriptStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { contextFromUsage, parseBreakdown, type ContextWindow } from './context'
@@ -486,7 +486,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (!connected) created.current = null
     if (storedId && storedId === created.current) {
       drawn.current = storedId
-      return () => keepTranscript(storedId, profile, transcriptRef.current, host)
+      return () => keepTranscript(storedId, profile, transcriptRef.current, host, olderNow.current)
     }
     created.current = null
     const ticket = ++request.current
@@ -526,7 +526,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     setLoading(true)
     // A chat left a moment ago draws as it was while its resume runs, which replaces it (desktop#201).
     // So does the chat a drop left on screen: it isn't blanked while it's read again.
-    const cached = keptTranscript(storedId, profile, host) ?? (dropped.current === storedId && drawn.current === storedId ? transcriptRef.current : null)
+    const keptCopy = keptTranscript(storedId, profile, host)
+    // The pages a reader scrolled up through before leaving: kept over the resume, not read again (desktop#540).
+    const keptOlder = keptCopy ? keptOlderAt(storedId, profile, host) : null
+    const cached = keptCopy ?? (dropped.current === storedId && drawn.current === storedId ? transcriptRef.current : null)
     dropped.current = null
     drawn.current = storedId
     dispatch({ type: 'reset', state: cached ?? emptyTranscript })
@@ -550,11 +553,19 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           title: result.info?.title,
           ...chatSettings(result.info)
         })
-        // The rows the pages before this one still hold are read as the reader scrolls up.
-        olderNow.current = open.older ?? null
-        setOlder(open.older ?? null)
         // The tool answers the kept copy had come along, so only new ones are read (desktop#293).
         let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), cached)
+        // The rows the pages before this one still hold are read as the reader scrolls up. Pages read
+        // before the chat was left stay, as a catch-up keeps them; rows were only added since, so the
+        // next page asked for can serve rows already drawn, never skip one.
+        let olderAt = open.older ?? null
+        const pages = keptCopy && keptOlder && olderAt ? olderPagesOf(keptCopy, state) : []
+        if (pages.length && keptOlder && olderAt) {
+          state = prependOlder(state, pages)
+          olderAt = { offset: Math.max(olderAt.offset, keptOlder.offset), more: keptOlder.more }
+        }
+        olderNow.current = olderAt
+        setOlder(olderAt)
         state = withInflight(state, result)
         state = withPendingConnection(state, result)
         dispatch({ type: 'reset', state })
@@ -592,7 +603,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         openingChat.current = null
       })
     // Leaving the chat keeps its transcript for coming back.
-    return () => keepTranscript(storedId, profile, transcriptRef.current, host)
+    return () => keepTranscript(storedId, profile, transcriptRef.current, host, olderNow.current)
   }, [storedId, profile, sessionAuthority, connected, folder, host])
 
   // Live events for this chat.

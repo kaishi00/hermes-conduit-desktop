@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react'
 import type { ContextWindow } from '../state/context'
 import { Icon } from './icons'
 import { t } from '@shared/i18n'
@@ -130,6 +130,20 @@ export function Composer({
   const picker = useRef<HTMLInputElement>(null)
   const recorder = useRecorder()
   const [transcribing, setTranscribing] = useState(false)
+  // The recording's meter moves on the page each frame, not through a draw of the composer (desktop#545).
+  const meterOff = useRef<(() => void) | null>(null)
+  const meter = useCallback(
+    (bar: HTMLSpanElement | null) => {
+      meterOff.current?.()
+      meterOff.current = null
+      if (!bar) return
+      bar.style.transform = 'scaleX(0)'
+      meterOff.current = recorder.onLevel(level => {
+        bar.style.transform = `scaleX(${Math.min(1, level * 2.5)})`
+      })
+    },
+    [recorder.onLevel]
+  )
 
   useEffect(() => {
     area.current?.focus()
@@ -780,7 +794,7 @@ export function Composer({
                 <span className="voice-dot" />
                 <span className="voice-time">{durationLabel(recorder.elapsed)}</span>
                 <span className="voice-meter" aria-label={t('Microphone input level')}>
-                  <span style={{ transform: `scaleX(${Math.min(1, recorder.level * 2.5)})` }} />
+                  <span ref={meter} />
                 </span>
                 <button className="secondary" onClick={recorder.cancel}>
                   {t('Cancel')}

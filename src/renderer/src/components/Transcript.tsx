@@ -522,10 +522,13 @@ function sameReply(a: { text: string; streaming?: boolean; boards?: readonly Pla
   return a.text === b.text && a.streaming === b.streaming && sameBoards(a.boards, b.boards)
 }
 
-/** A board where its reply's line placed it; its follow-ups go under the reply. */
-function PlacedBoardView({ board }: { board?: PlacedBoard }) {
-  return board ? <BoardView board={board.board} /> : null
-}
+/** A board where its reply's line placed it; its follow-ups go under the reply. Kept while the reply streams (desktop#542). */
+const PlacedBoardView = memo(
+  function PlacedBoardView({ board }: { board?: PlacedBoard }) {
+    return board ? <BoardView board={board.board} /> : null
+  },
+  (a, b) => a.board?.board === b.board?.board
+)
 
 export function clock(ms?: number): string {
   return ms ? formatDate(ms, { hour: 'numeric', minute: '2-digit' }) : ''

@@ -196,7 +196,7 @@ import { parseProjects, type Project, type ProjectChat } from './state/projects'
 import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
-import { loadMarks, saveMarks, toggleStar, isStarred, showsUnread, type ChatMarks } from './state/chatMarks'
+import { loadMarks, saveMarksSoon, toggleStar, isStarred, showsUnread, type ChatMarks } from './state/chatMarks'
 import { readRowFor, useOpenChatRead } from './state/openChatRead'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
@@ -723,12 +723,14 @@ function Shell({
   const [carriedBot, setCarriedBot] = useState<NewBotCarry | null>(null)
   const [botNotice, setBotNotice] = useState<string | null>(null)
   // A call is the open chat's: another chat, or another screen, ends it. A
-  // new chat getting its id from the call's first message is the same chat.
+  // new chat getting its id from its first message is the same chat (onSend
+  // notes it); any other chat opened from the new-chat draft ends a call
+  // started there (desktop#538).
   const callChat = useRef(selected.id)
   useEffect(() => {
     const was = callChat.current
     callChat.current = selected.id
-    if (was !== null && was !== selected.id) endCall()
+    if (was !== selected.id) endCall()
   }, [selected.id])
   useEffect(() => endCall(), [selected.profile, section])
   // A call from Hermes answered here: its chat opens, then the call starts in it (after the resets above).
@@ -1255,6 +1257,8 @@ function Shell({
   mutedRef.current = (sessionId: string) => !!muteOfTarget(chatMute.mutes, muteRowRef.current(sessionId))
   const chatMuteRef = useRef(chatMute.mutes)
   chatMuteRef.current = chatMute.mutes
+  const turnMuteReadsRef = useRef(chatMute.turnReads)
+  turnMuteReadsRef.current = chatMute.turnReads
   // A chat whose profile isn't known is asked of every profile: those the
   // list shows and every bot's, so one with no listed rows is asked too
   // (hermes-conduit #3143).
@@ -1266,7 +1270,7 @@ function Shell({
     (change: (current: ChatMarks) => ChatMarks) =>
       setMarks(current => {
         const next = change(current)
-        if (next !== current) saveMarks(markHost, next)
+        if (next !== current) saveMarksSoon(markHost, next)
         return next
       }),
     [markHost]
@@ -1312,6 +1316,7 @@ function Shell({
         clearExpired(chat.liveId)
       }
       if (created) {
+        callChat.current = created
         setSelected(s => ({ ...s, id: created }))
         void list.refresh()
       }
@@ -1851,11 +1856,13 @@ function Shell({
         }
         if (event.type !== 'message.complete' || isWatching(sid, watching.current.liveId, watching.current.onChats)) return
         const spec = turnNotification(sid, event.payload, chats.current.get(sid))
-        if (!spec || mutedRef.current(sid)) return
-        // A mute set on another device since the last read: asked at once.
-        // A chat this window never opened is asked under what Needs you knows
+        // Notifications off: the mutes aren't asked at all (desktop#539).
+        if (!spec || mutedRef.current(sid) || !notificationsEnabled()) return
+        // A mute set on another device since the last read: asked then, each
+        // profile's answer shared for a few seconds by the turns after it. A
+        // chat this window never opened is asked under what Needs you knows
         // of it, or under every listed profile when nothing does.
-        void turnNotifies(muteHttp, chatMuteRef.current, muteRowRef.current(sid), muteProfilesRef.current).then(notifies => {
+        void turnNotifies(muteHttp, chatMuteRef.current, muteRowRef.current(sid), muteProfilesRef.current, turnMuteReadsRef.current).then(notifies => {
           if (notifies) void notify(spec, sid)
         })
       }),

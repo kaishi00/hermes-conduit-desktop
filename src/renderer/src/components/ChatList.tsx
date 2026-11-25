@@ -410,9 +410,9 @@ export function ChatList({
     // Another combined host's chats, only in All with no filter: found by title or by the host's name. Another
     // dashboard's face shows only its profile's, and none of this dashboard's.
     const others = otherProfile
-      ? otherRows.filter(r => r.host === otherProfile.host && sameProfile(r, otherProfile.name) && (!q || searchFold(`${r.title} ${r.preview ?? ''}`).includes(q)))
+      ? otherRows.filter(r => r.host === otherProfile.host && sameProfile(r, otherProfile.name) && (!q || searchText(r).includes(q)))
       : !profile && !active.length
-        ? otherRows.filter(r => !q || searchFold(`${r.title} ${r.preview ?? ''} ${badgeFor?.(r.host)?.name ?? ''}`).includes(q))
+        ? otherRows.filter(r => !q || searchText(r).includes(q) || searchFold(badgeFor?.(r.host)?.name ?? '').includes(q))
         : []
     const sections = sectionRows(grouped ? filtered : [...filtered, ...others])
     // The Pinned section in the person's order, arranged from every pinned chat the profile shown has.

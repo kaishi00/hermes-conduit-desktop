@@ -10,7 +10,7 @@ import type { HostSummary, KeptHost, KeptHostState } from '../../../shared/ipc'
 import { t } from '../../../shared/i18n'
 import { badgeLetters } from '../../../shared/hostNames'
 import { WAITING_POLL_MS, waitingFromResponse, waitingPath, type WaitingRow } from './needsYou'
-import { CHAT_LIST_PAGE, CHAT_LIST_PATH, rowsFromResponse, type ChatRow } from './chats'
+import { CHAT_LIST_PAGE, CHAT_LIST_PATH, keepSameRows, rowsFromResponse, type ChatRow } from './chats'
 import { keptRosters, rosterFromProfiles, type Bot } from './bots'
 import { PULSE, parseFeed } from './pulse'
 import type { ArtifactItem } from './artifacts'
@@ -271,7 +271,8 @@ export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatR
     for (const url of [...byHost.current.keys()]) if (!urls.includes(url)) byHost.current.delete(url)
     for (const url of [...keptChatsRead]) if (!urls.includes(url)) keptChatsRead.delete(url)
     for (const url of [...profiles.current.keys()]) if (!urls.includes(url)) profiles.current.delete(url)
-    const show = () => setRows([...byHost.current.values()].flat())
+    // Rows that say the same keep their objects, and the list its array, so a poll that brings nothing new redraws nothing (desktop#543).
+    const show = () => setRows(previous => keepSameRows(previous, [...byHost.current.values()].flat()))
     show()
     if (!urls.length) return
     let stopped = false
@@ -292,7 +293,7 @@ export function useKeptChats(kept: readonly KeptHost[], on: boolean): OtherChatR
           const outcomes = await Promise.all(paths.map(path => window.conduit.keptHttp(url, path)))
           if (stopped || !outcomes.some(o => o.ok)) return
           // A profile whose read failed keeps nothing back: the rest still show.
-          byHost.current.set(url, mergeKeptChats(url, outcomes.filter(o => o.ok).map(o => (o as { result: unknown }).result)))
+          byHost.current.set(url, keepSameRows(byHost.current.get(url) ?? null, mergeKeptChats(url, outcomes.filter(o => o.ok).map(o => (o as { result: unknown }).result))))
           keptChatsRead.add(url)
         })
       )

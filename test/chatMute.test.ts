@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { muteIds, muteOf, muteOfTarget, mutePath, muteProfilesToAsk, parseMutes, settingMute, turnNotifies } from '../src/renderer/src/state/chatMute'
+import { muteIds, muteOf, muteOfTarget, mutePath, muteProfilesToAsk, parseMutes, settingMute, turnNotifies, TurnMuteReads, TURN_MUTE_READ_MS, type MuteTarget } from '../src/renderer/src/state/chatMute'
 import type { ChatRow } from '../src/renderer/src/state/chats'
 
 const row = (id: string, extra: Partial<ChatRow> = {}): ChatRow => ({ id, title: id, pinned: false, ...extra })
@@ -103,5 +103,29 @@ describe("a finished turn's notification and the chat's mute (hermes-conduit iss
     ]
     expect(muteProfilesToAsk(['default', 'work'], bots)).toEqual(['default', 'scout', 'work'])
     expect(muteProfilesToAsk([], [])).toEqual([])
+  })
+})
+
+describe('mutes read for finished turns (desktop#539)', () => {
+  it('ask each profile once for the turns ending within a few seconds, and again after', async () => {
+    const asked: string[] = []
+    const http = async (_method: 'GET' | 'PUT', path: string) => {
+      asked.push(path)
+      return { chats: path.includes('work') ? [{ session_ids: ['muted'], remaining_s: null }] : [] }
+    }
+    const reads = new TurnMuteReads(http)
+    const target = (id: string): MuteTarget => ({ id, title: id, pinned: false, profileUnknown: true })
+    const answers = await Promise.all([
+      turnNotifies(http, null, target('a'), ['default', 'work'], reads),
+      turnNotifies(http, null, target('muted'), ['default', 'work'], reads),
+      turnNotifies(http, null, { ...target('b'), profileUnknown: false, profile: 'work' }, ['default', 'work'], reads)
+    ])
+    expect(answers).toEqual([true, false, true])
+    expect(asked).toEqual([mutePath('default'), mutePath('work')])
+    await reads.mutes('work', Date.now() + TURN_MUTE_READ_MS)
+    expect(asked.length).toBe(3)
+    reads.forget()
+    await reads.mutes('default')
+    expect(asked.length).toBe(4)
   })
 })

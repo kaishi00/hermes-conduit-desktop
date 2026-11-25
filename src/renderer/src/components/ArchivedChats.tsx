@@ -59,6 +59,17 @@ type View = {
   actionErrors: Map<string, Action>
 }
 
+/** A row's words for the search, folded once per row object rather than on every keystroke (desktop#544). */
+const archivedSearchTexts = new WeakMap<ArchivedRow, string>()
+function archivedSearchText(row: ArchivedRow): string {
+  let text = archivedSearchTexts.get(row)
+  if (text === undefined) {
+    text = searchFold(`${row.title} ${row.id} ${row.preview ?? ''} ${row.profile || 'default'} ${row.source ?? ''} ${row.model ?? ''}`)
+    archivedSearchTexts.set(row, text)
+  }
+  return text
+}
+
 const rowKey = (row: ChatRow) => `${(row.profile || 'default').toLowerCase()}\0${row.id}`
 const sameProfile = (rowProfile: string | undefined, profile: string) => (rowProfile || 'default').toLowerCase() === profile.toLowerCase()
 const voiceUnavailable = (row: ChatRow, voice: VoiceList) =>
@@ -174,7 +185,7 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
     }
   }
 
-  /** Read at most a batch at a time; a full last page offers another batch. */
+  /** Reads up to CHAT_LIST_MAX_PAGES pages, each shown as it lands; a full last page offers another batch. */
   const load = async (ticket: Life, reset = false) => {
     if (!isCurrent(ticket) || ticket.loading) return
     ticket.loading = true
@@ -342,7 +353,7 @@ export function ArchivedChats({ host, profile, visibleVoiceIds, onClose, onResto
   const rows = shown.rows.filter(row =>
     (!profile || sameProfile(row.profile, profile)) &&
     !(visibleVoiceIds?.has(row.id) && isArchivedVoiceChat(row, shown.voice)) &&
-    (!needle || searchFold(`${row.title} ${row.id} ${row.preview ?? ''} ${row.profile || 'default'} ${row.source ?? ''} ${row.model ?? ''}`).includes(needle))
+    (!needle || archivedSearchText(row).includes(needle))
   )
   const unread = shown.unread.filter(item => !profile || sameProfile(item.profile, profile))
 
