@@ -98,12 +98,16 @@ export function ToolsetPage({ name, label, profile, onBack }: Props) {
     setModels(keptModels ? parseModels(keptModels) : null)
     setNotice(null)
     setKeys({})
+    setWorking(null)
+    setError(null)
+    setModelsError(null)
     void load()
   }, [name, profile, hasModels, load])
 
   /** A change in turn with every other config save; the page reads again after it. */
   const change = async (id: string, write: () => Promise<void>) => {
-    const mine = generation.current
+    // A new generation, so a read still in flight from before the change can't land over it.
+    const mine = ++generation.current
     setWorking(id)
     setNotice(null)
     try {
@@ -120,7 +124,8 @@ export function ToolsetPage({ name, label, profile, onBack }: Props) {
     change(backend.name, async () => {
       const body: Record<string, unknown> = { provider: backend.name }
       if (profile !== 'default') body.profile = profile
-      const answer = (await inTurn(() => gateway.http('PUT', providerPath(name, profile), body))) as { needs_nous_auth?: unknown } | null
+      const answer = (await inTurn(() => gateway.http('PUT', providerPath(name, profile), body))) as { needs_nous_auth?: unknown; error?: unknown } | null
+      if (typeof answer?.error === 'string' && answer.error) throw new Error(answer.error)
       // Shown as Hermes now holds it; the models are the new backend's.
       setBackends(shown => shown && choosingBackend(shown, backend.name))
       setModels(null)
@@ -204,6 +209,8 @@ export function ToolsetPage({ name, label, profile, onBack }: Props) {
         ) : (
           <p className="meta">{t('Loading…')}</p>
         )
+      ) : !hasModels ? (
+        <p className="meta">{t('This tool has no backends to set up.')}</p>
       ) : null}
       {models ? (
         <section className="pset-section">

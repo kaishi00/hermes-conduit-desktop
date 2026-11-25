@@ -130,7 +130,7 @@ export const pluginModelsMissing = (e: unknown) => {
   return code === 404 || code === 405 || code === 501
 }
 
-/** The backend's models: the plugin's answer, else Hermes'. Returns the path answered too, for keeping. */
+/** The backend's models: the plugin's answer, else Hermes'. The caller keeps either under Hermes' models path. */
 export async function readModels(http: Http, name: string, profile: string): Promise<unknown> {
   try {
     return await http('GET', pluginModelsPath(name, profile))
