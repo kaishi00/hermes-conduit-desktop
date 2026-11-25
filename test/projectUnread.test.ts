@@ -6,7 +6,7 @@ import type { ProjectChat } from '../src/renderer/src/state/projects'
 
 const marks = (extra: Partial<ChatMarks> = {}): ChatMarks => ({ stars: [], seen: {}, baseline: 1000, unread: [], ...extra })
 const row = (id: string, activeAt: number, unread = false): ChatRow => ({ id, title: `listed ${id}`, activeAt, pinned: false, unread })
-const chat = (id: string, lastActive?: number): ProjectChat => ({ id, title: `project ${id}`, lastActive })
+const chat = (id: string, lastActive?: number, profile?: string): ProjectChat => ({ id, title: `project ${id}`, lastActive, profile })
 
 describe('a project chat’s unread dot (issue 527)', () => {
   it('uses the list’s copy when there is one, and the project’s own fields when there is not', () => {
@@ -14,6 +14,10 @@ describe('a project chat’s unread dot (issue 527)', () => {
     // The list's row is newer and carries Hermes' flag; the project's stale copy would miss both.
     expect(projectChatUnread(m, chat('a', 900), [row('a', 2000, true)], null)).toBe(true)
     expect(projectChatUnread(m, chat('a', 900), [], null)).toBe(false)
+    // The fallback row must keep both the project's activity time and its profile,
+    // or the dot follows a stale copy (Eric's note on DeepSeek's finding).
+    expect(projectChatUnread(m, chat('a', 2000), [], null)).toBe(true)
+    expect(projectChatUnread(marks({ unread: ['work\ta'] }), chat('a', 900, 'work'), [], null)).toBe(true)
     expect(projectChatUnread(marks({ unread: ['default\ta'] }), chat('a', 2000), [], null)).toBe(true)
   })
 

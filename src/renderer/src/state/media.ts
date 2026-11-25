@@ -273,7 +273,9 @@ export function withoutBoardLines(text: string): string {
     if (fence) {
       if (fenceMatch && fenceMatch[1]!.startsWith(fence)) fence = null
     } else if (fenceMatch) fence = fenceMatch[1]!
-    else if (line.includes('::conduit-board{') && !line.trim().startsWith('>') && !line.includes('|')) {
+    else if (line.includes('::conduit-board{') && !line.trim().startsWith('>') &&
+      // A `|` in prose is not a table row; only a real row keeps its directive.
+      !(/^\s*\|.*\|\s*$/.test(line) || (line.match(/\|/g)?.length ?? 0) >= 2)) {
       let words = line
       const found = [...line.matchAll(BOARD_LINE)].filter(match => {
         const index = match.index ?? 0

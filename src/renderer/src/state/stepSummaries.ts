@@ -224,17 +224,38 @@ export function setSummariesEnabled(on: boolean): void {
 
 type Entry = [scope: string, toolId: string, summary: string]
 
-function entries(): Entry[] {
+// The parsed store, kept while the stored text is the same: each run row asks
+// for its summary on every transcript render, streaming frames included
+// (desktop#541). A write here or in another window changes the text.
+let parsed: { raw: string | null; list: readonly Entry[]; index: Map<string, string> } | null = null
+
+function read(): { list: readonly Entry[]; index: Map<string, string> } {
+  let raw: string | null
   try {
-    const list = JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]') as unknown
-    return Array.isArray(list) ? list.filter((e): e is Entry => Array.isArray(e) && e.length === 3 && e.every(v => typeof v === 'string')) : []
+    raw = localStorage.getItem(SAVED_KEY)
   } catch {
-    return []
+    raw = null
   }
+  if (parsed && parsed.raw === raw) return parsed
+  let list: Entry[] = []
+  try {
+    const found = JSON.parse(raw ?? '[]') as unknown
+    if (Array.isArray(found)) list = found.filter((e): e is Entry => Array.isArray(e) && e.length === 3 && e.every(v => typeof v === 'string'))
+  } catch {
+    list = []
+  }
+  const index = new Map<string, string>()
+  for (const [scope, toolId, summary] of list) if (!index.has(`${scope}\n${toolId}`)) index.set(`${scope}\n${toolId}`, summary)
+  parsed = { raw, list, index }
+  return parsed
+}
+
+function entries(): Entry[] {
+  return [...read().list]
 }
 
 export function savedSummary(scope: string, toolId: string): string | null {
-  return entries().find(e => e[0] === scope && e[1] === toolId)?.[2] ?? null
+  return read().index.get(`${scope}\n${toolId}`) ?? null
 }
 
 /** A summary's scope: the host and the profile, so a host's go when it's signed out. */

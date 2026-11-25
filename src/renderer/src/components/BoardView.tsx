@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { t } from '@shared/i18n'
 import { dialable, list, mailtoLink, number, people, share, smsLink, strings, text, textRecipient, type Board, type Card, type Person } from '../state/boards'
 import { Icon } from './icons'
@@ -7,9 +7,11 @@ import { Markdown } from './Markdown'
 /**
  * The cards a conduit_show call showed: drawn here for the plainer kinds,
  * stacked or as tabs, else the board's Markdown. Its follow-ups, while it's
- * the last turn's last board, send as the user's next message.
+ * the last turn's last board, send as the user's next message. Drawn again
+ * only for another board (boards are made new, never changed in place), so a
+ * board placed in a streaming reply isn't rebuilt every frame (desktop#542).
  */
-export function BoardView({ board, onFollowUp }: { board: Board; onFollowUp?: (text: string) => void }) {
+export const BoardView = memo(function BoardView({ board, onFollowUp }: { board: Board; onFollowUp?: (text: string) => void }) {
   const [tab, setTab] = useState(0)
   const shown = board.tabs ? [board.cards[Math.min(tab, board.cards.length - 1)]!] : board.cards
   return (
@@ -37,7 +39,7 @@ export function BoardView({ board, onFollowUp }: { board: Board; onFollowUp?: (t
       {onFollowUp && board.next.length ? <BoardFollowUps next={board.next} onFollowUp={onFollowUp} /> : null}
     </div>
   )
-}
+})
 
 /** A board's follow-ups: under the board at its own row, or under the reply that placed it. */
 export function BoardFollowUps({ next, onFollowUp }: { next: string[]; onFollowUp: (text: string) => void }) {

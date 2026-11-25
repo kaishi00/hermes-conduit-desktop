@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { forgetSummaries, saveSummary, savedSummary, summaryScope } from '../src/renderer/src/state/stepSummaries'
 
 const store = new Map<string, string>()
@@ -53,5 +53,22 @@ describe('telling a step summary question', () => {
           'Reply with the sentence only.'
       )
     ).toBe(true)
+  })
+})
+
+describe('reading saved summaries (desktop#541)', () => {
+  it('parses the store once while its text stays the same, and again after a write', () => {
+    store.clear()
+    saveSummary(summaryScope('h', 'default'), 'call_aaaaaaaaaaaa', 'Read the logs')
+    const parse = vi.spyOn(JSON, 'parse')
+    try {
+      for (let i = 0; i < 5; i++) expect(savedSummary(summaryScope('h', 'default'), 'call_aaaaaaaaaaaa')).toBe('Read the logs')
+      expect(savedSummary(summaryScope('h', 'default'), 'call_other')).toBeNull()
+      expect(parse.mock.calls.length).toBeLessThanOrEqual(1)
+      store.set('conduit.stepRunSummaries', JSON.stringify([[summaryScope('h', 'default'), 'call_aaaaaaaaaaaa', 'Another window wrote']]))
+      expect(savedSummary(summaryScope('h', 'default'), 'call_aaaaaaaaaaaa')).toBe('Another window wrote')
+    } finally {
+      parse.mockRestore()
+    }
   })
 })

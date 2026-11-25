@@ -3,7 +3,7 @@ import { act } from 'react'
 import { describe, expect, it } from 'vitest'
 import { renderHook } from './hookHarness'
 import { isUnread, type ChatMarks } from '../src/renderer/src/state/chatMarks'
-import { useOpenChatRead } from '../src/renderer/src/state/openChatRead'
+import { openRowIn, readRowFor, useOpenChatRead } from '../src/renderer/src/state/openChatRead'
 import type { ChatRow } from '../src/renderer/src/state/chats'
 
 const row = (id: string, activeAt: number, unread = false): ChatRow => ({ id, title: id, activeAt, pinned: false, unread })
@@ -35,6 +35,23 @@ function mount(start: Props) {
   }
   return { show, toggle, unmount: hook.unmount, marks: () => marks, writes }
 }
+
+describe('the row App reads for the open chat (issue 527)', () => {
+  it('finds a voice or auto-archived row the plain chat list leaves out', () => {
+    const voiceRow = row('voice-1', 2000, true)
+    // App reads from `listedRows` (withVoice), while `list.rows` has no such row.
+    expect(openRowIn([row('a', 1000)], 'voice-1')).toBeUndefined()
+    expect(openRowIn([row('a', 1000), voiceRow], 'voice-1')).toBe(voiceRow)
+    expect(openRowIn([voiceRow], null)).toBeUndefined()
+  })
+
+  it('falls back to the plain list for chats the listed rows filter out', () => {
+    const workRow = row('work-1', 3000)
+    expect(readRowFor([], [workRow], 'work-1')).toBe(workRow)
+    expect(readRowFor([workRow], [], 'work-1')).toBe(workRow)
+    expect(readRowFor([], [workRow], null)).toBeUndefined()
+  })
+})
 
 describe('the open chat’s read state', () => {
   it('reads the open chat as read, its new activity too', () => {

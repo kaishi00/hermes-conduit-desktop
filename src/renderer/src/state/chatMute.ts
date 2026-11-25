@@ -7,7 +7,7 @@
  * reset names its parent as root); the plugin's answer names every session a
  * compaction carried the chat through, so a compacted chat still finds it.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { t } from '../../../shared/i18n'
 import type { ChatRow } from './chats'
 
@@ -60,10 +60,28 @@ export function parseMutes(body: unknown, now = Date.now()): ChatMute[] | null {
   })
 }
 
+/**
+ * `mutes` with `key`'s replaced by `found`; `mutes` itself when they say the
+ * same, a timed mute's end read again within a couple of seconds included, so
+ * a read every 30 seconds doesn't redraw the list (desktop#543).
+ */
+export function withProfileMutes(mutes: ChatMutes, key: string, found: ChatMute[]): ChatMutes {
+  const before = mutes?.[key]
+  const same =
+    !!before &&
+    before.length === found.length &&
+    before.every((mute, i) => {
+      const other = found[i]!
+      const ends = mute.until === null || other.until === null ? mute.until === other.until : Math.abs(mute.until - other.until) < 2_000
+      return ends && mute.ids.length === other.ids.length && mute.ids.every((id, j) => id === other.ids[j])
+    })
+  return same ? mutes : { ...(mutes ?? {}), [key]: found }
+}
+
 /** The row's mute while it lasts, else null. */
 export function muteOf(mutes: ChatMutes, row: ChatRow, now = Date.now()): ChatMute | null {
-  const ids = new Set(muteIds(row))
-  return mutes?.[profileKey(row.profile)]?.find(mute => mute.ids.some(id => ids.has(id)) && (mute.until === null || mute.until > now)) ?? null
+  const id = row.id
+  return mutes?.[profileKey(row.profile)]?.find(mute => !!id && mute.ids.includes(id) && (mute.until === null || mute.until > now)) ?? null
 }
 
 /** The chat muted (`seconds`, null for until unmuted) or unmuted (0) before the plugin answers. */
@@ -106,11 +124,38 @@ export function muteOfTarget(mutes: ChatMutes, target: MuteTarget, now = Date.no
   return null
 }
 
-/** readMuted for a target: each listed profile asked when its own isn't known (none listed: the default). */
-export async function readMutedTarget(http: Http, target: MuteTarget, profiles: string[]): Promise<boolean> {
-  if (!target.profileUnknown) return readMuted(http, target)
-  const names = profiles.length ? profiles : ['default']
-  return (await Promise.all(names.map(profile => readMuted(http, { ...target, profile })))).some(Boolean)
+/** How long a profile's mutes read for a finished turn answer the turns after it (desktop#539). */
+export const TURN_MUTE_READ_MS = 5_000
+
+/**
+ * The mutes read for finished turns, each profile's answer shared for
+ * TURN_MUTE_READ_MS: a busy host's turns ending together ask the plugin once,
+ * not once each. Forgotten when this window sets a mute, or the host changes.
+ */
+export class TurnMuteReads {
+  private readonly kept = new Map<string, { at: number; mutes: Promise<ChatMute[]> }>()
+  constructor(private readonly http: Http) {}
+
+  mutes(profile: string | undefined, now = Date.now()): Promise<ChatMute[]> {
+    const key = profileKey(profile)
+    const held = this.kept.get(key)
+    if (held && now - held.at < TURN_MUTE_READ_MS) return held.mutes
+    // Can't tell is not muted.
+    const mutes = this.http('GET', mutePath(profile)).then(body => parseMutes(body) ?? [], () => [])
+    this.kept.set(key, { at: now, mutes })
+    return mutes
+  }
+
+  forget(): void {
+    this.kept.clear()
+  }
+}
+
+/** Whether the plugin has the target muted: each listed profile asked when its own isn't known (none listed: the default). */
+async function readMutedTarget(reads: TurnMuteReads, target: MuteTarget, profiles: string[]): Promise<boolean> {
+  const names = !target.profileUnknown ? [target.profile] : profiles.length ? profiles : ['default']
+  const answers = await Promise.all(names.map(profile => reads.mutes(profile)))
+  return names.some((profile, i) => !!muteOf({ [profileKey(profile)]: answers[i]! }, { ...target, profile }))
 }
 
 /**
@@ -130,12 +175,18 @@ export function muteProfilesToAsk(listed: string[], bots: { name: string; isDefa
 /**
  * Whether a chat's finished turn notifies here: not while it's muted, as the
  * plugin doesn't push it, by the mutes read so far, and then asked at once
- * for a mute set on another device since. Approvals and questions don't come
+ * for a mute set on another device since (`reads`, shared for a few seconds). Approvals and questions don't come
  * through here: they notify whatever the mute, as on the phone.
  */
-export async function turnNotifies(http: Http, mutes: ChatMutes, target: MuteTarget, profiles: string[]): Promise<boolean> {
+export async function turnNotifies(
+  http: Http,
+  mutes: ChatMutes,
+  target: MuteTarget,
+  profiles: string[],
+  reads: TurnMuteReads = new TurnMuteReads(http)
+): Promise<boolean> {
   if (muteOfTarget(mutes, target)) return false
-  return !(await readMutedTarget(http, target, profiles))
+  return !(await readMutedTarget(reads, target, profiles))
 }
 
 /**
@@ -149,12 +200,14 @@ export function useChatMute(http: Http, connected: boolean, profiles: string[], 
   // A read that started before a write answers with the old mutes: it's dropped.
   const wroteAt = useRef(new Map<string, number>())
   const hostRef = useRef(host)
+  const turnReads = useMemo(() => new TurnMuteReads(http), [http])
   useEffect(() => {
     hostRef.current = host
     readAt.current.clear()
     wroteAt.current.clear()
+    turnReads.forget()
     setMutes(null)
-  }, [host])
+  }, [host, turnReads])
 
   const read = useCallback(
     async (profile: string) => {
@@ -165,7 +218,7 @@ export function useChatMute(http: Http, connected: boolean, profiles: string[], 
       try {
         const found = parseMutes(await http('GET', mutePath(profile)))
         if (!found || hostRef.current !== askedHost || (wroteAt.current.get(key) ?? 0) >= started) return
-        setMutes(current => ({ ...(current ?? {}), [key]: found }))
+        setMutes(current => withProfileMutes(current, key, found))
       } catch {
         // An older plugin, or the host away: the mutes stay as they were.
       }
@@ -201,6 +254,7 @@ export function useChatMute(http: Http, connected: boolean, profiles: string[], 
       const askedHost = hostRef.current
       const profileName = row.profile ?? 'default'
       wroteAt.current.set(profileKey(profileName), Date.now())
+      turnReads.forget()
       setMutes(current => settingMute(current, row, seconds))
       http('PUT', mutePath(row.profile), { session_ids: muteIds(row), mute_s: seconds })
         .then(body => {
@@ -212,11 +266,11 @@ export function useChatMute(http: Http, connected: boolean, profiles: string[], 
           void read(profileName)
         })
     },
-    [http, read, onError]
+    [http, read, onError, turnReads]
   )
 
   // `tick` changes when a timed mute ends, so what reads the mutes reads them again.
-  return { mutes, available: mutes !== null, setMute, tick }
+  return { mutes, available: mutes !== null, setMute, tick, turnReads }
 }
 
 /** When a timed mute ends, for its menu: the time today, else the day and time. */

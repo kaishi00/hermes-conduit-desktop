@@ -103,8 +103,9 @@ export function shortcutGroups(mac: boolean, sections: readonly GoTo[] = GO_TO, 
         row(t('Make Text Bigger'), 'text-bigger'),
         row(t('Make Text Smaller'), 'text-smaller'),
         row(t('Make Text Normal Size'), 'text-normal'),
-        // The wheel, with Ctrl on a Mac too; a key's name like Enter and Esc, so not translated.
-        { title: t('Chat text size'), keys: ['Ctrl+Scroll'] }
+        // Ctrl is the key on a Mac too (⌘+Scroll is a different gesture); a key's name
+        // like Enter and Esc, so the glyph stays literal in every language.
+        { title: t('Zoom the chat text with the wheel'), keys: ['Ctrl+Scroll'] }
       ]
     },
     { title: '', rows: [row(t('Keyboard Shortcuts'), 'shortcuts')] }
@@ -149,7 +150,7 @@ export function scaleFromStorage(event: Pick<StorageEvent, 'key' | 'newValue'>):
 }
 
 /** A wheel event as `wheelSteps` reads it. */
-export type WheelTurn = Pick<WheelEvent, 'deltaY' | 'deltaMode' | 'ctrlKey' | 'timeStamp'>
+export type WheelTurn = Pick<WheelEvent, 'deltaX' | 'deltaY' | 'deltaMode' | 'ctrlKey' | 'timeStamp'>
 
 /**
  * Ctrl with the scroll wheel changes the chat's text size, up for bigger, one step a notch. A pinch on a
@@ -161,8 +162,10 @@ export function wheelSteps(): (event: WheelTurn) => -1 | 0 | 1 | null {
   let sum = 0
   let last = 0
   return event => {
-    // A sideways turn with Ctrl held still scrolls what's under the pointer.
-    if (!event.ctrlKey || event.deltaY === 0) return null
+    // A sideways turn with Ctrl held still scrolls what's under the pointer. As in
+    // boardScroll.ts, the larger axis decides: a mostly sideways swipe with a little
+    // vertical drift must not add up to a text-size step.
+    if (!event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return null
     // Lines and pages in pixels: a notch of three lines is a step, as a 100 px notch is.
     const delta = event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 100 : 1)
     if (event.timeStamp - last > 400 || Math.sign(delta) !== Math.sign(sum)) sum = 0

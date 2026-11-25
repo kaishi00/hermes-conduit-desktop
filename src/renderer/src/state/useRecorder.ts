@@ -14,12 +14,19 @@ const MIME = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', '
 
 /**
  * The microphone, for a recording: started, then stopped for its audio or
- * cancelled. `level` (0 to 1) moves the meter while it records.
+ * cancelled. Its level (0 to 1) moves the meter while it records: heard
+ * each frame through `onLevel`, never React state, so the composer and the
+ * call aren't drawn again sixty times a second (desktop#545).
  */
 export function useRecorder() {
   const [recording, setRecording] = useState(false)
   const [elapsed, setElapsed] = useState(0)
-  const [level, setLevel] = useState(0)
+  const level = useRef(0)
+  const levelListeners = useRef(new Set<(level: number) => void>())
+  const hearLevel = (value: number) => {
+    level.current = value
+    for (const listener of [...levelListeners.current]) listener(value)
+  }
   const [error, setError] = useState<string | null>(null)
   const parts = useRef<{
     recorder: MediaRecorder
@@ -43,7 +50,7 @@ export function useRecorder() {
     current.stream.getTracks().forEach(track => track.stop())
     void current.context.close().catch(() => undefined)
     setRecording(false)
-    setLevel(0)
+    hearLevel(0)
   }, [])
 
   useEffect(
@@ -96,7 +103,7 @@ export function useRecorder() {
       analyser.getByteTimeDomainData(samples)
       let peak = 0
       for (const sample of samples) peak = Math.max(peak, Math.abs(sample - 128) / 128)
-      setLevel(level => Math.max(peak, level * 0.85))
+      hearLevel(Math.max(peak, level.current * 0.85))
       current.frame = requestAnimationFrame(meter)
     }
     current.frame = requestAnimationFrame(meter)
@@ -134,5 +141,11 @@ export function useRecorder() {
     release()
   }, [release])
 
-  return { recording, elapsed, level, error, start, stop, cancel, clearError: () => setError(null) }
+  /** Hears the level each frame while recording, and 0 when it ends; returns the unsubscribe. */
+  const onLevel = useCallback((listener: (level: number) => void) => {
+    levelListeners.current.add(listener)
+    return () => void levelListeners.current.delete(listener)
+  }, [])
+
+  return { recording, elapsed, onLevel, error, start, stop, cancel, clearError: () => setError(null) }
 }

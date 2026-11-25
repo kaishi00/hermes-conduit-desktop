@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { forgetTranscriptHosts, forgetTranscripts, keepTranscript, keptTranscript, TRANSCRIPT_CACHE_SIZE } from '../src/renderer/src/state/transcriptCache'
+import { forgetTranscriptHosts, forgetTranscripts, keepTranscript, keptOlderAt, keptTranscript, TRANSCRIPT_CACHE_SIZE } from '../src/renderer/src/state/transcriptCache'
 import type { TranscriptState } from '../src/renderer/src/state/transcript'
 
 const state = (text: string, extra: Partial<TranscriptState> = {}): TranscriptState => ({
@@ -71,5 +71,21 @@ describe('the transcripts kept for coming back', () => {
     keepTranscript('new', undefined, state('n'))
     expect(keptTranscript('s1', undefined)).not.toBeNull()
     expect(keptTranscript('s2', undefined)).toBeNull()
+  })
+})
+
+describe('pages read back before a chat was left (desktop#540)', () => {
+  it('keeps where they reached with the transcript, and lets it go with it', () => {
+    keepTranscript('long', undefined, state('paged'), A, { offset: 1500, more: true })
+    expect(keptOlderAt('long', undefined, A)).toEqual({ offset: 1500, more: true })
+    expect(keptOlderAt('long', undefined, B)).toBeNull()
+    keepTranscript('long', undefined, state('read again'), A)
+    expect(keptOlderAt('long', undefined, A)).toBeNull()
+    keepTranscript('long', undefined, state('paged'), A, { offset: 1500, more: false })
+    keepTranscript('long', undefined, state('running', { running: true }), A, { offset: 2000, more: true })
+    expect(keptOlderAt('long', undefined, A)).toBeNull()
+    keepTranscript('long', undefined, state('paged'), A, { offset: 1500, more: false })
+    forgetTranscripts(A)
+    expect(keptOlderAt('long', undefined, A)).toBeNull()
   })
 })

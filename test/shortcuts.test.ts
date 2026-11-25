@@ -49,6 +49,17 @@ describe('glyphs and groups', () => {
     expect(glyphs('toggle-sidebar', false)).toBe('Ctrl+\\')
   })
 
+  it('gives the wheel row its own title on both platforms', () => {
+    const groups = shortcutGroups(true)
+    const group = groups.find(g => g.title === 'Chat text size')
+    expect(group).toBeDefined()
+    const wheel = group!.rows.at(-1)
+    expect(wheel?.title).toBe('Zoom the chat text with the wheel')
+    // Ctrl is the key a Mac user presses here too; entry and Esc stay key names.
+    expect(wheel?.keys).toEqual(['Ctrl+Scroll'])
+    expect(shortcutGroups(false).find(g => g.title === 'Chat text size')?.rows.at(-1)?.title).toBe('Zoom the chat text with the wheel')
+  })
+
   it('lists every pinned section in rail order and Settings under Go to', () => {
     const go = shortcutGroups(true)[1]
     expect(go.rows.map(r => [r.title, r.keys[0]])).toEqual([
@@ -108,7 +119,7 @@ describe('the chat text size across windows (desktop#449)', () => {
 })
 
 describe('Ctrl with the scroll wheel', () => {
-  const turn = (deltaY: number, timeStamp: number, more: Partial<{ ctrlKey: boolean; deltaMode: number }> = {}) => ({ deltaY, timeStamp, ctrlKey: true, deltaMode: 0, ...more })
+  const turn = (deltaY: number, timeStamp: number, more: Partial<{ ctrlKey: boolean; deltaMode: number; deltaX: number }> = {}) => ({ deltaY, deltaX: 0, timeStamp, ctrlKey: true, deltaMode: 0, ...more })
 
   it('steps the text size a notch at a time, up for bigger', async () => {
     const { wheelSteps } = await import('../src/renderer/src/state/shortcuts')
@@ -126,6 +137,16 @@ describe('Ctrl with the scroll wheel', () => {
     expect(wheelSteps()(turn(-100, 0, { ctrlKey: false }))).toBeNull()
     // A sideways turn with Ctrl held.
     expect(wheelSteps()(turn(0, 0))).toBeNull()
+  })
+
+  it('leaves a mostly sideways turn to the page, even with a little vertical drift', async () => {
+    const { wheelSteps } = await import('../src/renderer/src/state/shortcuts')
+    const read = wheelSteps()
+    // A long horizontal swipe with a few pixels of drift must not add up to a text-size step.
+    for (let i = 0; i < 20; i++) expect(read(turn(-5, i * 20, { deltaX: 120 }))).toBeNull()
+    expect(read(turn(100, 500, { deltaX: 100 }))).toBeNull()
+    // A turn that is mostly vertical still steps.
+    expect(read(turn(-100, 600, { deltaX: 5 }))).toBe(1)
   })
 
   it("adds a pinch's small turns up, and starts again after a pause or a turn back", async () => {

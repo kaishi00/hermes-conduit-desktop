@@ -32,6 +32,13 @@ const comparable = (text: string): string =>
  * when it already carries their words, or when it is their words (a model
  * that passed them on as they were).
  */
+/** A script written without spaces has no word boundaries to pad; compare it as a phrase. */
+const containsWords = (haystack: string, words: string): boolean => {
+  if (!words) return true
+  if (!words.includes(' ') && /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(words)) return haystack.includes(words)
+  return ` ${haystack} `.includes(` ${words} `)
+}
+
 export function withUserWords(said: string[], request: string): string {
   if (request.includes(REQUEST_WORDS_MARKER)) return request
   const lines: string[] = []
@@ -49,7 +56,7 @@ export function withUserWords(said: string[], request: string): string {
   }
   if (!lines.length) return request
   const theirs = comparable(lines.join(' '))
-  if (!theirs || ` ${comparable(request)} `.includes(` ${theirs} `)) return request
+  if (!theirs || containsWords(comparable(request), theirs)) return request
   return request + REQUEST_WORDS_MARKER + lines.join('\n')
 }
 
@@ -67,6 +74,9 @@ export class RequestWords {
   private line = ''
   private taken = 0
   private open = false
+  /** Where the answer just read ended: lines before it were that request's, later ones are not. */
+  private boundary = 0
+  private markedLine = ''
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -76,14 +86,25 @@ export class RequestWords {
       // The same line grown, or another one: a line that doesn't continue the last is new.
       // A line still growing when the model spoke goes on as the same line.
       const grown = this.line !== '' && text.startsWith(this.line) && (this.open || text.length > this.line.length)
+      // Whole mode can rewrite the line the answer came from ("Yes" -> "Yes and a cab")
+      // after the model spoke. What was already read as the answer is consumed, not new words.
+      const consumed = !this.open && this.markedLine && text.startsWith(this.markedLine) ? this.markedLine.length : null
+      if (consumed !== null) this.markedLine = ''
       if (!grown && !(this.open && this.line.startsWith(text))) this.close()
       this.line = text
-      this.taken = Math.min(this.taken, text.length)
+      this.taken = consumed !== null ? Math.min(consumed, text.length) : Math.min(this.taken, text.length)
     } else {
       if (!this.open) this.close()
       this.line += text
     }
     this.open = true
+  }
+
+  /** The answer being read ends here; later finished lines belong to the next request. */
+  mark(): void {
+    // A whole-mode line holding the answer closes into `done` later, so count it here.
+    this.boundary = this.done.length + (this.line.trim() ? 1 : 0)
+    this.markedLine = this.line
   }
 
   /** The model spoke: the user's next words start a new line. */
@@ -106,9 +127,17 @@ export class RequestWords {
 
   /** All of it went with a request, or was the user's answer about one. */
   skip(keepLine = false): void {
-    this.done = []
-    // `keepLine`: the line being said began after the answer and is the next request's.
-    if (!keepLine) this.taken = this.line.length
+    // `keepLine`: only clear up to the answer; later lines are the next request's.
+    this.done = keepLine ? this.done.slice(this.boundary) : []
+    // The answer boundary belongs to this request only: a later request can start with
+    // the same word ("Yes") and must not have its prefix consumed again (issue 529 review).
+    this.markedLine = ''
+    // A consumed line is over: a later line can start with the same word without
+    // inheriting its offset or being mistaken for the same growing line.
+    if (!keepLine) {
+      this.line = ''
+      this.taken = 0
+    }
   }
 
   /** What the user said for the request being made, given `waitMs` to arrive and to stop growing. */

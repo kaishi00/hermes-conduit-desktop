@@ -522,10 +522,13 @@ function sameReply(a: { text: string; streaming?: boolean; boards?: readonly Pla
   return a.text === b.text && a.streaming === b.streaming && sameBoards(a.boards, b.boards)
 }
 
-/** A board where its reply's line placed it; its follow-ups go under the reply. */
-function PlacedBoardView({ board }: { board?: PlacedBoard }) {
-  return board ? <BoardView board={board.board} /> : null
-}
+/** A board where its reply's line placed it; its follow-ups go under the reply. Kept while the reply streams (desktop#542). */
+const PlacedBoardView = memo(
+  function PlacedBoardView({ board }: { board?: PlacedBoard }) {
+    return board ? <BoardView board={board.board} /> : null
+  },
+  (a, b) => a.board?.board === b.board?.board
+)
 
 export function clock(ms?: number): string {
   return ms ? formatDate(ms, { hour: 'numeric', minute: '2-digit' }) : ''
@@ -1437,7 +1440,12 @@ export function Transcript({
   const listReveal = pins?.reveal
   const onRevealed = pins?.onRevealed
   const jumpToPin = (pin: { id: string; passage?: string }) => {
-    if (!pinKeys.has(pin.id) && onSeekRow) return setBarReveal({ id: pin.id, passage: pin.passage })
+    if (!pinKeys.has(pin.id) && onSeekRow) {
+      // A bar jump to a pin still being read must end a pending pins-list reveal too:
+      // `reveal` prefers listReveal, so leaving it set would jump back to its pin later.
+      if (listReveal) onRevealed?.()
+      return setBarReveal({ id: pin.id, passage: pin.passage })
+    }
     // This jump is the one asked for now: a pin still being read for, from the bar or the pins list, doesn't take the reader away later.
     setBarReveal(null)
     if (listReveal) onRevealed?.()

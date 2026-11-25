@@ -38,7 +38,7 @@ export interface ChatCallOptions {
   turnsDone: number
   onStop: () => void
   /** Local Live's correction of what it heard, put in the chat's transcript. */
-  onCorrected: (text: string) => void
+  onCorrected: (text: string, redirected?: boolean) => void
   /** A notice for the person: the main window's dialog, or a chat page's notice line. */
   tell: (message: string) => void
 }
@@ -206,12 +206,13 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
 
   // A chat a Classic call made (started with no chat open) is filed under Voice, and archived when the
   // call ends so Hermes Desktop's list keeps the chats people work in; the chat list shows it still.
+  // Only a chat the call's own request made: never one opened while the call waited (desktop#538).
   const classicFresh = useRef<{ fresh: boolean; chat: { id: string; profile?: string } | null }>({ fresh: false, chat: null })
   useEffect(() => {
     const kept = classicFresh.current
     if (calling && callMode === 'classic') {
       if (!kept.fresh && !kept.chat && !chatId) kept.fresh = true
-      if (kept.fresh && !kept.chat && chatId) {
+      if (kept.fresh && !kept.chat && chatId && callSent.current.count > 0) {
         kept.chat = { id: chatId, profile }
         void tagVoiceSession(profile, chatId, 'classic').catch(() => undefined)
       }

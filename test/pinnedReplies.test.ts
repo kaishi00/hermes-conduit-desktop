@@ -25,6 +25,14 @@ describe('pinned replies', () => {
   it('keeps a reply’s start on one line, and labels trimmed', () => {
     expect(excerptOf('  First line\n\n  second   line ')).toBe('First line second line')
     expect(excerptOf('x'.repeat(400))).toHaveLength(280)
+
+    // A reply that is only a board line still gets a stable excerpt, so a pin made
+    // before its row id exists can be found again (issue 526).
+    const boardOnly = '::conduit-board{id="cb-000000000002"}'
+    expect(excerptOf(boardOnly)).toBe(boardOnly)
+
+    // The directive stays internal to matching; the pin bar names the board, not its protocol line.
+    expect(pinTitle(newPin(reply('row-2', boardOnly), 'c', undefined, 'Chat', 3))).toBe('Board')
     expect(normalizedLabel('  ')).toBeUndefined()
     expect(normalizedLabel(' Security\nrecommendations ')).toBe('Security recommendations')
   })

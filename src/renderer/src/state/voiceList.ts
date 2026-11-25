@@ -141,6 +141,24 @@ export async function archiveClassicChat(profile: string | undefined, sessionId:
 
 const EMPTY: VoiceList = { tags: new Map(), callChats: new Map() }
 
+/** Whether two reads of voice's tags say the same, profile by profile. */
+export function sameVoice(a: VoiceList, b: VoiceList): boolean {
+  if (a.tags.size !== b.tags.size || a.callChats.size !== b.callChats.size) return false
+  for (const [profile, tags] of b.tags) {
+    const before = a.tags.get(profile)
+    if (!before || before.size !== tags.size) return false
+    for (const [id, tag] of tags) {
+      const old = before.get(id)
+      if (!old || old.kind !== tag.kind || old.engine !== tag.engine || old.parentId !== tag.parentId || old.parentTitle !== tag.parentTitle) return false
+    }
+  }
+  for (const [profile, chats] of b.callChats) {
+    const before = a.callChats.get(profile)
+    if (!before || before.size !== chats.size || [...chats].some(id => !before.has(id))) return false
+  }
+  return true
+}
+
 /** Voice's tags for every profile the list shows, read again when the list changes, at most every 20 seconds. */
 export function useVoiceList(connected: boolean, profiles: string[], revision: string): VoiceList {
   const [voice, setVoice] = useState<VoiceList>(EMPTY)
@@ -162,7 +180,8 @@ export function useVoiceList(connected: boolean, profiles: string[], revision: s
           callChats.set(profileKey(profile), parsed.callChats)
         })
       )
-      if (live) setVoice({ tags, callChats })
+      // The same answers keep the list's object, so the chat list isn't worked out again (desktop#543).
+      if (live) setVoice(current => (sameVoice(current, { tags, callChats }) ? current : { tags, callChats }))
     }
     const wait = Math.max(0, last.current + 20_000 - Date.now())
     const timer = setTimeout(() => void read(), wait)

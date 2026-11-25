@@ -10,6 +10,24 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { ChatRow } from './chats'
 import { isUnread, markKey, markRead, markUnread, type ChatMarks } from './chatMarks'
 
+/**
+ * The row to use for the open chat's read state. App's `list.rows` leaves out voice
+ * rows that `listedRows` adds (state/voiceList's `withVoice`), so passing the former
+ * leaves an open voice chat's seen time unadvanced (issue 527).
+ */
+export function openRowIn(rows: readonly ChatRow[] | null | undefined, openId: string | null | undefined): ChatRow | undefined {
+  return openId ? rows?.find(row => row.id === openId) : undefined
+}
+
+/**
+ * The listed row first (it carries voice rows), then the plain chat list: `listedRows`
+ * also filters workstream and Pulse-home chats out, and those are still selectable
+ * and must keep marking themselves read (issue 531 review).
+ */
+export function readRowFor(listed: readonly ChatRow[] | null | undefined, all: readonly ChatRow[] | null | undefined, openId: string | null | undefined): ChatRow | undefined {
+  return openRowIn(listed, openId) ?? openRowIn(all, openId)
+}
+
 /** The open chat marked unread: the selection it was marked under, and its row's key. */
 interface KeptUnread {
   openId: string

@@ -99,7 +99,7 @@ interface Props {
   /** Sends a turn as the chat's next message. */
   onSay: (text: string) => void
   /** Shows words the call put into the running reply in the chat. */
-  onCorrected?: (text: string) => void
+  onCorrected?: (text: string, redirected?: boolean) => void
   /** A reply is running in the chat. */
   running: boolean
   /** Counts the chat's finished turns: the next one after a send is its reply. */
@@ -640,7 +640,7 @@ export function LocalLiveCall({
       if (ended.current || turn.current?.id !== id) return
       if (correction !== 'rejected') {
         // What the reply said before the user cut in isn't said again; Hermes' words from here are this turn's.
-        live.current.onCorrected?.(words)
+        live.current.onCorrected?.(words, correction !== 'queued')
         const queued = correction === 'queued'
         followRunning()
         if (queued && follow.current) follow.current.until += 1

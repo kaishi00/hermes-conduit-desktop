@@ -121,7 +121,8 @@ interface Props {
   /** Another dashboard's profile the list shows, from its face; this dashboard's `profile` is null then. */
   otherProfile?: { host: string; name: string } | null
   /** A row's menu (right-click or ⋯): Pin or Unpin, Rename, Archive, Delete. */
-  onPin?: (row: ChatRow) => void
+  /** Returns whether Hermes accepted the change; a refused unpin keeps its saved place. */
+  onPin?: (row: ChatRow) => void | Promise<boolean>
   onRename?: (row: ChatRow, title: string) => void
   onArchive?: (row: ChatRow) => Promise<boolean>
   onDelete?: (row: ChatRow) => void
@@ -409,9 +410,9 @@ export function ChatList({
     // Another combined host's chats, only in All with no filter: found by title or by the host's name. Another
     // dashboard's face shows only its profile's, and none of this dashboard's.
     const others = otherProfile
-      ? otherRows.filter(r => r.host === otherProfile.host && sameProfile(r, otherProfile.name) && (!q || searchFold(`${r.title} ${r.preview ?? ''}`).includes(q)))
+      ? otherRows.filter(r => r.host === otherProfile.host && sameProfile(r, otherProfile.name) && (!q || searchText(r).includes(q)))
       : !profile && !active.length
-        ? otherRows.filter(r => !q || searchFold(`${r.title} ${r.preview ?? ''} ${badgeFor?.(r.host)?.name ?? ''}`).includes(q))
+        ? otherRows.filter(r => !q || searchText(r).includes(q) || searchFold(badgeFor?.(r.host)?.name ?? '').includes(q))
         : []
     const sections = sectionRows(grouped ? filtered : [...filtered, ...others])
     // The Pinned section in the person's order, arranged from every pinned chat the profile shown has.
@@ -1080,8 +1081,14 @@ export function ChatList({
                 <button
                   role="menuitem"
                   onClick={() => {
-                    if (menu.row.pinned) pinOrder.drop(menu.row)
-                    onPin(menu.row)
+                    const result = onPin(menu.row)
+                    // As in the header menu: a refused unpin keeps its place. A caller that
+                    // reports success synchronously drops now; a promise drops on success.
+                    if (menu.row.pinned) {
+                      if (result && typeof (result as Promise<boolean>).then === 'function') {
+                        void (result as Promise<boolean>).then(ok => { if (ok !== false) pinOrder.drop(menu.row) })
+                      } else pinOrder.drop(menu.row)
+                    }
                   }}
                 >
                   {menu.row.pinned ? t('Unpin') : t('Pin')}

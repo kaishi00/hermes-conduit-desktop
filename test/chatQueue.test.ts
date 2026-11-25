@@ -44,6 +44,17 @@ describe('a chat’s queue on the Webapp', () => {
     expect(state.held).toEqual([])
   })
 
+  it('marks a released held message and a live user.message as steers (issue 526)', () => {
+    let state = holdSent(addPendingUser(emptyTranscript, 'turn left', [], 'u-1'), 'u-1', 'a1')
+    expect(releaseHeld(state, 'a1', true).items).toMatchObject([{ kind: 'user', text: 'turn left', steer: true }])
+    state = releaseHeld(state, 'a1')
+    expect(state.items).toMatchObject([{ kind: 'user', text: 'turn left' }])
+    expect(state.items[0]).not.toHaveProperty('steer')
+    // A redirected correction carries display_kind steer; a queued one does not.
+    const live = applyEvent(emptyTranscript, { type: 'user.message', payload: { text: 'turn left', display_kind: 'steer' } })
+    expect(live.items).toMatchObject([{ kind: 'user', text: 'turn left', steer: true }])
+  })
+
   it('drops a withdrawn one, moves an edited one, and brings a steered one back', () => {
     let state = holdSent(addPendingUser(emptyTranscript, 'hello', [], 'u-1'), 'u-1', 'a1')
     state = reholdEdited(state, 'a1', 'a2', 'hello there')

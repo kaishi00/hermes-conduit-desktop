@@ -196,8 +196,8 @@ import { parseProjects, type Project, type ProjectChat } from './state/projects'
 import { useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
-import { loadMarks, saveMarks, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
-import { useOpenChatRead } from './state/openChatRead'
+import { loadMarks, saveMarksSoon, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
+import { readRowFor, useOpenChatRead } from './state/openChatRead'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor, wheelSteps } from './state/shortcuts'
@@ -723,12 +723,14 @@ function Shell({
   const [carriedBot, setCarriedBot] = useState<NewBotCarry | null>(null)
   const [botNotice, setBotNotice] = useState<string | null>(null)
   // A call is the open chat's: another chat, or another screen, ends it. A
-  // new chat getting its id from the call's first message is the same chat.
+  // new chat getting its id from its first message is the same chat (onSend
+  // notes it); any other chat opened from the new-chat draft ends a call
+  // started there (desktop#538).
   const callChat = useRef(selected.id)
   useEffect(() => {
     const was = callChat.current
     callChat.current = selected.id
-    if (was !== null && was !== selected.id) endCall()
+    if (was !== selected.id) endCall()
   }, [selected.id])
   useEffect(() => endCall(), [selected.profile, section])
   // A call from Hermes answered here: its chat opens, then the call starts in it (after the resets above).
@@ -1160,8 +1162,11 @@ function Shell({
         await mutateSession(gateway.http, row.id, row.profile, patch)
       } catch (e) {
         void tell(t('Couldn’t change “{title}”: {reason}', { title: row.title, reason: e instanceof Error ? e.message : String(e) }))
+        list.refresh()
+        return false
       }
       list.refresh()
+      return true
     },
     [list, selected.id, chat.storedId, newChat, updatePins]
   )
@@ -1252,6 +1257,8 @@ function Shell({
   mutedRef.current = (sessionId: string) => !!muteOfTarget(chatMute.mutes, muteRowRef.current(sessionId))
   const chatMuteRef = useRef(chatMute.mutes)
   chatMuteRef.current = chatMute.mutes
+  const turnMuteReadsRef = useRef(chatMute.turnReads)
+  turnMuteReadsRef.current = chatMute.turnReads
   // A chat whose profile isn't known is asked of every profile: those the
   // list shows and every bot's, so one with no listed rows is asked too
   // (hermes-conduit #3143).
@@ -1263,7 +1270,7 @@ function Shell({
     (change: (current: ChatMarks) => ChatMarks) =>
       setMarks(current => {
         const next = change(current)
-        if (next !== current) saveMarks(markHost, next)
+        if (next !== current) saveMarksSoon(markHost, next)
         return next
       }),
     [markHost]
@@ -1275,7 +1282,10 @@ function Shell({
   const openRow = openId ? list.rows?.find(row => row.id === openId) : undefined
   // The open chat reads as read, unless it was marked unread while open (state/openChatRead).
   // Another host's chat docked over it hides it: nothing is open here until it goes.
-  const toggleRead = useOpenChatRead(dockedChat ? null : openId, dockedChat ? undefined : openRow, marks, updateMarks, writeUnread)
+  // Voice and auto-archived rows are only in `listedRows`: using `list.rows` here would
+  // leave an open voice chat's seen time unadvanced, so its dot comes back (issue 527).
+  const readRow = readRowFor(listedRows, list.rows, dockedChat ? null : openId)
+  const toggleRead = useOpenChatRead(dockedChat ? null : openId, readRow, marks, updateMarks, writeUnread)
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
     [respondConnection, reissueConnection, wakeConnection]
@@ -1306,6 +1316,7 @@ function Shell({
         clearExpired(chat.liveId)
       }
       if (created) {
+        callChat.current = created
         setSelected(s => ({ ...s, id: created }))
         void list.refresh()
       }
@@ -1335,8 +1346,10 @@ function Shell({
                 })
             : undefined,
           pin: () => {
-            if (openRow.pinned) dropFromSavedOrder(markHost, openRow, prefsHttp)
-            void chatAction(openRow, { pinned: !openRow.pinned })
+            // As with Archive: only drop the saved place once Hermes has accepted the unpin.
+            void chatAction(openRow, { pinned: !openRow.pinned }).then(ok => {
+              if (ok && openRow.pinned) dropFromSavedOrder(markHost, openRow, prefsHttp)
+            })
           },
           star: { on: isStarred(marks, openRow), toggle: () => updateMarks(current => toggleStar(current, openRow)) },
           done: chatDone.available ? { on: isRowDone(openRow), toggle: () => chatDone.toggle(openRow) } : undefined,
@@ -1839,11 +1852,13 @@ function Shell({
         }
         if (event.type !== 'message.complete' || isWatching(sid, watching.current.liveId, watching.current.onChats)) return
         const spec = turnNotification(sid, event.payload, chats.current.get(sid))
-        if (!spec || mutedRef.current(sid)) return
-        // A mute set on another device since the last read: asked at once.
-        // A chat this window never opened is asked under what Needs you knows
+        // Notifications off: the mutes aren't asked at all (desktop#539).
+        if (!spec || mutedRef.current(sid) || !notificationsEnabled()) return
+        // A mute set on another device since the last read: asked then, each
+        // profile's answer shared for a few seconds by the turns after it. A
+        // chat this window never opened is asked under what Needs you knows
         // of it, or under every listed profile when nothing does.
-        void turnNotifies(muteHttp, chatMuteRef.current, muteRowRef.current(sid), muteProfilesRef.current).then(notifies => {
+        void turnNotifies(muteHttp, chatMuteRef.current, muteRowRef.current(sid), muteProfilesRef.current, turnMuteReadsRef.current).then(notifies => {
           if (notifies) void notify(spec, sid)
         })
       }),
@@ -2458,7 +2473,7 @@ function Shell({
                   tileBadge={tileBadge}
                   otherWaits={otherWaits}
                   onOtherProfile={showOtherProfile}
-                  onPin={row => void chatAction(row, { pinned: !row.pinned })}
+                  onPin={row => chatAction(row, { pinned: !row.pinned })}
                   onRename={(row, title) => void chatAction(row, { title })}
                   onArchive={connected ? row => changeArchived(row, true) : undefined}
                   onArchived={connected ? () => setArchivedOpen(true) : undefined}

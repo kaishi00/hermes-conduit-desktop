@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { CHECK_WAIT_MAX_MS, checkWait, cookieJarOf, isWebPage, pastSignIn, plainUserAgent, signInPartition } from '../src/main/browserSignInRules'
+import { CHECK_WAIT_MAX_MS, checkWait, cookieJarOf, isWebPage, lookRequest, pastSignIn, plainUserAgent, signInPartition } from '../src/main/browserSignInRules'
+
+describe('a page load during an in-flight sign-in check (issue 520)', () => {
+  it('remembers the load and runs it once the check ends', () => {
+    expect(lookRequest(true, true, false)).toEqual({ run: false, pending: true })
+    expect(lookRequest(false, false, true)).toEqual({ run: true, pending: false })
+    // A timer look while checking is not remembered as a load.
+    expect(lookRequest(true, false, false)).toEqual({ run: false, pending: false })
+    // A second load before the check ends stays pending once.
+    expect(lookRequest(true, true, true)).toEqual({ run: false, pending: true })
+  })
+})
 
 describe('the sign-in window’s rules', () => {
   it('keeps one browser session per dashboard address, apart from every other', () => {

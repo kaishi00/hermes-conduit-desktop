@@ -1,3 +1,4 @@
+import { t } from '../../../shared/i18n'
 /**
  * Replies pinned to the top of their chat, after the phone's (#918,
  * Conduit/Models/PinnedReplies.swift): a long answer stays a click away
@@ -51,7 +52,10 @@ export function folded(text: string, limit: number): string {
 
 /** A reply's start as a pin keeps it: its words without the files and boards it carries. */
 export function excerptOf(text: string): string {
-  return folded(copyableReply(text), EXCERPT_LENGTH) || folded(withoutBoardLines(text), EXCERPT_LENGTH)
+  // A reply that is only a board line has no words after the directive is removed.
+  // Its directive is still a stable excerpt, so a pin made before the reply has a
+  // row id can be found again (issue 526).
+  return folded(copyableReply(text), EXCERPT_LENGTH) || folded(withoutBoardLines(text), EXCERPT_LENGTH) || folded(text, EXCERPT_LENGTH)
 }
 
 /** A label on one line; undefined when blank, which clears it. */
@@ -68,7 +72,12 @@ export function normalizedPassage(text: string): string | undefined {
 /** The pinned text on one line: the passage, else the reply's start. */
 export const shownText = (pin: PinnedReply) => (pin.passage ? folded(pin.passage, EXCERPT_LENGTH) : pin.excerpt)
 
-export const pinTitle = (pin: PinnedReply) => pin.label ?? shownText(pin)
+/** The pin bar names a board, never the internal `::conduit-board` directive kept for matching. */
+export const pinTitle = (pin: PinnedReply) => {
+  if (pin.label) return pin.label
+  const words = shownText(pin).replace(/::conduit-board\{[^}]*\}/g, '').trim()
+  return words || t('Board')
+}
 
 /** Whether `text` is this pin's passage, whitespace aside. */
 export function holdsPassage(pin: PinnedReply, text: string): boolean {

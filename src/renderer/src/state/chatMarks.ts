@@ -28,6 +28,7 @@ const storageKey = (host: string) => `conduit.chatMarks.${host}`
 const MARK_LIMIT = 2000
 
 export function loadMarks(host: string, now = Date.now()): ChatMarks {
+  flushMarks(host)
   try {
     const raw = JSON.parse(localStorage.getItem(storageKey(host)) ?? 'null') as Partial<ChatMarks> | null
     if (raw && typeof raw.baseline === 'number') {
@@ -39,6 +40,33 @@ export function loadMarks(host: string, now = Date.now()): ChatMarks {
   }
   return { stars: [], seen: {}, baseline: now, unread: [] }
 }
+
+/** How long a change of marks waits before it's written: the open chat's read time moves with each streamed bump (desktop#543). */
+export const MARKS_SAVE_WAIT_MS = 1_000
+const pendingSaves = new Map<string, { marks: ChatMarks; timer: ReturnType<typeof setTimeout> }>()
+
+/** Writes `host`'s marks a moment from now, the latest change only; a load or the window closing writes them at once. */
+export function saveMarksSoon(host: string, marks: ChatMarks): void {
+  const pending = pendingSaves.get(host)
+  if (pending) {
+    pending.marks = marks
+    return
+  }
+  const timer = setTimeout(() => flushMarks(host), MARKS_SAVE_WAIT_MS)
+  pendingSaves.set(host, { marks, timer })
+}
+
+/** Writes `host`'s pending marks now (every host's when none is named). */
+export function flushMarks(host?: string): void {
+  for (const [key, pending] of [...pendingSaves]) {
+    if (host !== undefined && key !== host) continue
+    clearTimeout(pending.timer)
+    pendingSaves.delete(key)
+    saveMarks(key, pending.marks)
+  }
+}
+
+if (typeof window !== 'undefined') for (const event of ['pagehide', 'beforeunload']) window.addEventListener(event, () => flushMarks())
 
 export function saveMarks(host: string, marks: ChatMarks): void {
   const entries = Object.entries(marks.seen)

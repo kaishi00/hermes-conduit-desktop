@@ -11,7 +11,12 @@ import type { TranscriptState } from './transcript'
 
 export const TRANSCRIPT_CACHE_SIZE = 6
 
+/** Where the pages read back up to: the chat's next older page, and whether there is one (longChat.ts). */
+export type OlderAt = { offset: number; more: boolean }
+
 const kept = new Map<string, TranscriptState>()
+// The older pages a kept transcript holds were read up to here, so coming back keeps them (desktop#540).
+const keptOlder = new Map<string, OlderAt>()
 
 /** Each dashboard's own, so switching between combined dashboards draws the chat it opens at once. */
 const keyOf = (storedId: string, profile: string | undefined, host = '') => `${host}\n${profile || 'default'}\n${storedId}`
@@ -21,16 +26,27 @@ export function settled(state: TranscriptState): boolean {
 }
 
 /** Keeps a chat's transcript as it was left, the newest first out of TRANSCRIPT_CACHE_SIZE. */
-export function keepTranscript(storedId: string | null, profile: string | undefined, state: TranscriptState, host = ''): void {
+export function keepTranscript(storedId: string | null, profile: string | undefined, state: TranscriptState, host = '', older?: OlderAt | null): void {
   if (!storedId) return
   const key = keyOf(storedId, profile, host)
   kept.delete(key)
+  keptOlder.delete(key)
   if (!settled(state)) return
   kept.set(key, state)
+  if (older) keptOlder.set(key, older)
   // Each dashboard keeps its own six, so opening chats on one doesn't push out another's.
   const prefix = `${host}\n`
   const mine = [...kept.keys()].filter(k => k.startsWith(prefix))
-  for (const old of mine.slice(0, Math.max(0, mine.length - TRANSCRIPT_CACHE_SIZE))) kept.delete(old)
+  for (const old of mine.slice(0, Math.max(0, mine.length - TRANSCRIPT_CACHE_SIZE))) {
+    kept.delete(old)
+    keptOlder.delete(old)
+  }
+}
+
+/** Where a kept transcript's pages read back up to, when it holds pages read by scrolling up; null otherwise. */
+export function keptOlderAt(storedId: string, profile: string | undefined, host = ''): OlderAt | null {
+  const key = keyOf(storedId, profile, host)
+  return kept.has(key) ? (keptOlder.get(key) ?? null) : null
 }
 
 /** The transcript kept for a chat, to draw while it resumes; null when none. */
@@ -46,10 +62,12 @@ export function keptTranscript(storedId: string, profile: string | undefined, ho
 /** The chats kept for dashboards no longer saved go. */
 export function forgetTranscriptHosts(hosts: readonly string[]): void {
   for (const key of [...kept.keys()]) if (!hosts.includes(key.slice(0, key.indexOf('\n')))) kept.delete(key)
+  for (const key of [...keptOlder.keys()]) if (!kept.has(key)) keptOlder.delete(key)
 }
 
 /** A dashboard's connection dropped: what was kept for it may not be current. The others' stay. */
 export function forgetTranscripts(host = ''): void {
   const prefix = `${host}\n`
   for (const key of [...kept.keys()]) if (key.startsWith(prefix)) kept.delete(key)
+  for (const key of [...keptOlder.keys()]) if (key.startsWith(prefix)) keptOlder.delete(key)
 }

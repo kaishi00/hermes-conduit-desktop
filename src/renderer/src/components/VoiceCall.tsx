@@ -100,15 +100,32 @@ export function VoiceCall({ profile, onSay, running, turnsDone, lastReply, onSto
     else if (recorder.error) setProblem(recorder.error)
   }, [recorder.error])
 
-  // While listening: the end of what was said is a pause after speech.
+  // While listening: the end of what was said is a pause after speech. Heard each frame from the
+  // microphone, with the orb moved on the page, not drawn again through React (desktop#545).
+  const orb = useRef<HTMLSpanElement | null>(null)
+  const elapsedNow = useRef(0)
+  elapsedNow.current = recorder.elapsed
+  const finishNow = useRef(finishTurn)
+  finishNow.current = finishTurn
   useEffect(() => {
     if (phase !== 'listening' || !recorder.recording) return
-    const now = performance.now()
-    const step = callStep(voice.current, recorder.level, now, recorder.elapsed)
-    voice.current = step.state
-    // Held down, a pause never ends the turn; letting go does (or the longest turn).
-    if (step.done && (!holdToTalk || recorder.elapsed >= MAX_TURN_S)) void finishTurn()
-  }, [recorder.level, recorder.elapsed, phase, recorder.recording])
+    let finished = false
+    const unsubscribe = recorder.onLevel(level => {
+      if (orb.current) orb.current.style.transform = `scale(${micScale(level)})`
+      if (finished) return
+      const step = callStep(voice.current, level, performance.now(), elapsedNow.current)
+      voice.current = step.state
+      // Held down, a pause never ends the turn; letting go does (or the longest turn).
+      if (step.done && (!holdToTalk || elapsedNow.current >= MAX_TURN_S)) {
+        finished = true
+        void finishNow.current()
+      }
+    })
+    return () => {
+      unsubscribe()
+      if (orb.current) orb.current.style.transform = ''
+    }
+  }, [phase, recorder.recording, recorder.onLevel])
 
   async function finishTurn() {
     setPhase('hearing')
@@ -261,7 +278,7 @@ export function VoiceCall({ profile, onSay, running, turnsDone, lastReply, onSto
   return (
     <div className={`voice-call phase-${phase}`} role="region" aria-label={t('Voice call')}>
       <div className="voice-call-status">
-        <span className="voice-call-orb" style={phase === 'listening' ? { transform: `scale(${micScale(recorder.level)})` } : undefined} />
+        <span ref={orb} className="voice-call-orb" />
         <div className="voice-call-words">
           <strong>{status}</strong>
           {problem ? (
