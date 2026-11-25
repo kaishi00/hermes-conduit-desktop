@@ -9,6 +9,7 @@ import {
   rowElement,
   rowIndex,
   rowWindow,
+  scrollStep,
   startAt,
   WINDOW_PAGE,
   WINDOW_ROWS
@@ -186,5 +187,30 @@ describe('a jump to a step in a folded run', () => {
     const whole = build(false)
     revealMessage(whole.container, 'first')
     expect(whole.presses()).toBe(1)
+  })
+})
+
+describe("the transcript's scroll listener (desktop#467)", () => {
+  const at = { jumping: false, atEnd: false, scrollTop: 5_000, start: 300, count: 900, scrolledUp: true }
+
+  it('follows the end there, and only a window the reader scrolled up gives its rows back', () => {
+    expect(scrollStep({ ...at, atEnd: true })).toEqual({ follows: true, start: null })
+    // Every frame of a streaming reply scrolls at the end: a window already on the newest rows stays.
+    expect(scrollStep({ ...at, atEnd: true, scrolledUp: false, start: 700 })).toEqual({ follows: true })
+  })
+
+  it('leaves a reader in the middle of the rows alone', () => {
+    expect(scrollStep(at)).toEqual({ follows: false })
+  })
+
+  it('takes on the rows above near the top, and asks for the stored page once it holds the first row', () => {
+    expect(scrollStep({ ...at, scrollTop: 100 })).toEqual({ follows: false, start: 300 - WINDOW_PAGE })
+    expect(scrollStep({ ...at, scrollTop: 100, start: 120 })).toEqual({ follows: false, start: 0 })
+    expect(scrollStep({ ...at, scrollTop: 0, start: 0 })).toEqual({ follows: false, older: true })
+  })
+
+  it('keeps the window a jump drew until it lands, wherever the scroller is', () => {
+    expect(scrollStep({ ...at, jumping: true, atEnd: true })).toEqual({ follows: false })
+    expect(scrollStep({ ...at, jumping: true, scrollTop: 0, start: 0 })).toEqual({ follows: false })
   })
 })

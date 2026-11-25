@@ -14,7 +14,7 @@
  */
 import { app, BrowserWindow, nativeTheme, session } from 'electron'
 import { AuthError, cookieHeader, type CookieJar } from './auth'
-import { cookieJarOf, isWebPage, pastSignIn, plainUserAgent, signInPartition } from './browserSignInRules'
+import { checkWait, cookieJarOf, isWebPage, pastSignIn, plainUserAgent, signInPartition } from './browserSignInRules'
 import { carriesHeaders, type ProxyHeaders } from './proxyHeaders'
 import { t } from '../shared/i18n'
 
@@ -71,6 +71,9 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
   let checking = false
   /** The cookies the last look tried, so a page that hasn't changed them isn't asked about again. */
   let tried: string | null = null
+  /** Checks in a row that couldn't be made, and until when the timer's looks wait because of them. */
+  let failures = 0
+  let waitUntil = 0
   const timer = setInterval(() => void look(), POLL_MS)
 
   const finish = (jar: CookieJar | null, error?: Error): void => {
@@ -87,6 +90,8 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
 
   async function look(navigated = false): Promise<void> {
     if (finished || checking || window.isDestroyed() || !pastSignIn(contents.getURL(), url)) return
+    // A dashboard that keeps failing the check is asked less often between page loads.
+    if (!navigated && Date.now() < waitUntil) return
     checking = true
     try {
       const jar = cookieJarOf(await store.cookies.get({ url: `${url}/` }))
@@ -95,10 +100,14 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
       if (!navigated && header === tried) return
       tried = header
       const kept = await signedIn(jar)
+      failures = 0
+      waitUntil = 0
       if (kept) finish(kept)
     } catch {
-      // The cookies couldn't be read, or the dashboard couldn't be asked: the next look tries them again.
+      // The cookies couldn't be read, or the dashboard couldn't be asked: a later look tries them again.
       tried = null
+      failures++
+      waitUntil = Date.now() + checkWait(failures, POLL_MS)
     } finally {
       checking = false
     }

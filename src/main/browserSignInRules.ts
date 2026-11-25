@@ -64,3 +64,20 @@ export function isWebPage(url: string): boolean {
     return false
   }
 }
+
+/** How many failed checks in a row the sign-in window makes at its usual pace before it slows down. */
+export const CHECK_FAILURES_AT_PACE = 3
+/** The longest it waits between checks of a dashboard that keeps failing them. */
+export const CHECK_WAIT_MAX_MS = 30_000
+
+/**
+ * How long the sign-in window waits before it asks a dashboard again after
+ * `failures` checks in a row couldn't be made (a 502 behind the proxy, a
+ * ticket route that answers without a ticket): nothing for the first few,
+ * then twice as long each time, up to half a minute (desktop#511). A page
+ * that loads is asked about at once whatever this says.
+ */
+export function checkWait(failures: number, paceMs: number): number {
+  if (failures < CHECK_FAILURES_AT_PACE) return 0
+  return Math.min(CHECK_WAIT_MAX_MS, paceMs * 2 ** (failures - CHECK_FAILURES_AT_PACE + 1))
+}

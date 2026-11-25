@@ -5,7 +5,7 @@ import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
 import { useTranscript } from '../src/renderer/src/state/transcriptStore'
 import { forgetTranscripts } from '../src/renderer/src/state/transcriptCache'
-import { olderRows, storedRow } from '../src/renderer/src/state/longChat'
+import { newestPages, olderRows, storedRow } from '../src/renderer/src/state/longChat'
 import { forgetChatLengths, noteChatLength } from '../src/renderer/src/state/chatLength'
 import { prependOlder } from '../src/renderer/src/state/transcript'
 import type { HistoryRow } from '../src/renderer/src/state/transcript'
@@ -212,6 +212,101 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     hook.unmount()
   })
 
+  it('asks for nothing past a newest read that came back short', async () => {
+    // 700 rows whose newest page is only tool steps: the page before is read for words, and comes back short.
+    pages[0] = Array.from({ length: 500 }, (_, i) => ({ id: 201 + i, role: 'tool', content: 'ok', tool_call_id: `c${i}` }) as HistoryRow)
+    pages[500] = page(1, 200)
+    const hook = mount('big')
+    await settle()
+    expect(hook.result().olderRows).toBe(false)
+    const reads = paths.length
+    await act(async () => {
+      await hook.result().loadOlder()
+    })
+    expect(paths.length).toBe(reads)
+    hook.unmount()
+  })
+
+  it('tells a jump its row is nowhere once the chat has no page left, and reads nothing for a chat opened whole', async () => {
+    noteChatLength('small', 12)
+    resumeRows = page(1, 12)
+    const hook = mount('small')
+    await settle()
+    let missed = 0
+    act(() => void hook.result().seekRow(items => items.some(i => i.key === 'row-9999'), () => missed++))
+    await settle()
+    expect(missed).toBe(1)
+    expect(paths.filter(p => p.includes('offset='))).toEqual([])
+    hook.unmount()
+  })
+
+  it('stops reading pages for a jump that is dropped', async () => {
+    pages[0] = page(1501, 500)
+    pages[500] = page(1001, 500)
+    pages[1000] = page(501, 500)
+    pages[1500] = page(1, 500)
+    const hook = mount('big')
+    await settle()
+    let missed = 0
+    let drop!: () => void
+    act(() => void (drop = hook.result().seekRow(items => items.some(i => i.key === 'row-9999'), () => missed++)))
+    // The first page before is on its way; the jump is dropped before it lands.
+    act(() => drop())
+    await settle()
+    await settle()
+    await settle()
+    expect(paths.map(p => /offset=(\d+)/.exec(p)?.[1])).toEqual(['0', '500'])
+    expect(missed).toBe(0)
+    hook.unmount()
+  })
+
+  it('keeps the earlier-messages line and its page when a reload lands while the page is on its way', async () => {
+    pages[0] = page(501, 500)
+    let release!: () => void
+    const conduit = (window as unknown as { conduit: { httpOutcome: (m: string, p: string) => Promise<unknown> } }).conduit
+    const base = conduit.httpOutcome
+    conduit.httpOutcome = (method, path) =>
+      path.includes('offset=500') ? new Promise(resolve => (release = () => resolve({ ok: true, result: { messages: page(1, 500) } }))) : base(method, path)
+    const hook = mount('big')
+    await settle()
+    act(() => void hook.result().loadOlder())
+    await settle()
+    expect(hook.result().loadingOlder).toBe(true)
+    // /compress reloads the chat's history under the page read.
+    await act(async () => {
+      await hook.result().command('/compress')
+    })
+    await settle()
+    expect(calls.filter(c => c.method === 'session.resume').length).toBe(2)
+    await act(async () => {
+      release()
+    })
+    await settle()
+    // The page belonged to the read before the reload: it draws nothing, and its line ends.
+    expect(hook.result().loadingOlder).toBe(false)
+    expect(hook.result().transcript.items.length).toBe(500)
+    hook.unmount()
+  })
+
+  it('reads no further pages once the pane is gone', async () => {
+    pages[0] = page(1001, 500)
+    // The page before draws nothing new, so the read would go on to the one before it.
+    let release!: () => void
+    const conduit = (window as unknown as { conduit: { httpOutcome: (m: string, p: string) => Promise<unknown> } }).conduit
+    const base = conduit.httpOutcome
+    conduit.httpOutcome = (method, path) =>
+      path.includes('offset=500') ? new Promise(resolve => (release = () => resolve({ ok: true, result: { messages: page(1001, 500) } }))) : base(method, path)
+    pages[1000] = page(1, 300)
+    const hook = mount('big')
+    await settle()
+    act(() => void hook.result().loadOlder())
+    await settle()
+    hook.unmount()
+    release()
+    await settle()
+    expect(paths.filter(p => p.includes('offset=1000'))).toEqual([])
+  })
+
   it('draws the page once when the scroll asks twice while it is on its way', async () => {
     pages[0] = page(201, 500)
     pages[500] = page(1, 200)
@@ -228,6 +323,13 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
 
 describe('the stored page before the drawn rows (desktop#291)', () => {
   const http = async (_method: 'GET', path: string) => ({ messages: pages[Number(/offset=(\d+)/.exec(path)?.[1] ?? 0)] ?? [] })
+
+  it('says whether the newest read reached the first row', async () => {
+    pages[0] = page(201, 500)
+    expect((await newestPages(http, 'big')).more).toBe(true)
+    pages[0] = page(1, 40)
+    expect(await newestPages(http, 'big')).toMatchObject({ more: false })
+  })
 
   it('reads one page by offset, and says whether the chat has more before it', async () => {
     pages[500] = page(1, 500)

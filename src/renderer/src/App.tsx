@@ -58,7 +58,7 @@ import { forgetChatLists } from './state/savedChatList'
 import { forgetKeptAnswers, setKeptAnswersHost } from './state/keptAnswers'
 import { forgetHostCaches } from './state/hostCaches'
 import { keepTabs, launchPage, syncedTabs, type LaunchPage } from './state/launchTab'
-import { PREFS_PATH } from './state/pinnedOrder'
+import { dropFromSavedOrder, PREFS_PATH } from './state/pinnedOrder'
 import { useFollowUps, usePredictions } from './state/usePredictions'
 import { SummaryHost } from './state/useStepSummaries'
 import { chatDraft, composerDrafts } from './state/composerDrafts'
@@ -1336,8 +1336,17 @@ function Shell({
   const headerMenu =
     openRow && section === 'chats' && !dockedChat
       ? chatMenuItems(openRow, {
-          archive: connected ? () => void changeArchived(openRow, true) : undefined,
-          pin: () => void chatAction(openRow, { pinned: !openRow.pinned }),
+          // An unpinned or archived chat leaves the saved pinned order, as from its row's menu (desktop#503).
+          archive: connected
+            ? () =>
+                void changeArchived(openRow, true).then(archived => {
+                  if (archived && openRow.pinned) dropFromSavedOrder(markHost, openRow, prefsHttp)
+                })
+            : undefined,
+          pin: () => {
+            if (openRow.pinned) dropFromSavedOrder(markHost, openRow, prefsHttp)
+            void chatAction(openRow, { pinned: !openRow.pinned })
+          },
           star: { on: isStarred(marks, openRow), toggle: () => updateMarks(current => toggleStar(current, openRow)) },
           done: chatDone.available ? { on: isRowDone(openRow), toggle: () => chatDone.toggle(openRow) } : undefined,
           mute: chatMute.available ? { now: rowMute(openRow), set: seconds => chatMute.setMute(openRow, seconds) } : undefined,

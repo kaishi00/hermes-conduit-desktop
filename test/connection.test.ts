@@ -12,9 +12,11 @@ class FakeSocket extends EventTarget {
   constructor(
     readonly url: string,
     readonly headers: Record<string, string>,
-    opens = true
+    opens: boolean | 'never' = true
   ) {
     super()
+    // A socket still connecting: it never opens by itself.
+    if (opens === 'never') return
     setTimeout(() => {
       if (!opens) {
         this.readyState = 3
@@ -752,7 +754,7 @@ describe('a dashboard signed in through the sign-in window', () => {
   const redirect = (location: string) => new Response(null, { status: 302, headers: { Location: location } })
 
   /** A Hermes behind a login proxy: `passes` says whether the proxy's cookie is still good, `gated` whether Hermes asks for its own session. */
-  function proxied(opts: { gated?: boolean } = {}) {
+  function proxied(opts: { gated?: boolean; heldSockets?: boolean } = {}) {
     const state = { passes: true, down: false, token: 'open-1', refused: new Set<string>(), hold: null as PromiseWithResolvers<void> | null }
     const seen: { path: string; headers: Headers }[] = []
     const fetchImpl: Fetch = async (input, init = {}) => {
@@ -789,7 +791,7 @@ describe('a dashboard signed in through the sign-in window', () => {
       },
       forgetBrowser: forgotUrl => forgotten.push(forgotUrl),
       createSocket: (socketUrl, headers) => {
-        const socket = new FakeSocket(socketUrl, headers)
+        const socket = new FakeSocket(socketUrl, headers, opts.heldSockets ? 'never' : true)
         sockets.push(socket)
         return socket as unknown as WebSocketLike
       },
@@ -919,6 +921,20 @@ describe('a dashboard signed in through the sign-in window', () => {
     expect(h.sockets.every(socket => socket.readyState === 3)).toBe(true)
     expect(h.store.get?.(url)).toBeFalsy()
     expect(h.forgotten).toEqual([url])
+  })
+
+  it('leaves no socket behind when the sign-in is cancelled while its socket connects', async () => {
+    // The browser analogue of the OIDC test above (desktop#511): the dial is past browserSession, on the socket itself.
+    const h = proxied({ heldSockets: true })
+    const signingIn = h.signIn()
+    await until(() => h.sockets.length > 0)
+    expect(h.sockets).toHaveLength(1)
+    h.connection.cancelSignIn()
+    expect(await signingIn).toMatchObject({ ok: false })
+    await tick()
+    expect(h.sockets.every(socket => socket.readyState === 3)).toBe(true)
+    expect(h.connection.current().phase).toBe('signed-out')
+    expect(h.store.get?.(url)).toBeFalsy()
   })
 
   it('opens the host that was open again when a sign-in to another is cancelled after the window closed', async () => {

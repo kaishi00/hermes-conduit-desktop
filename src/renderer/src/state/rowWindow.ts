@@ -46,6 +46,38 @@ export function nearTop(scrollTop: number): boolean {
   return scrollTop <= WINDOW_EDGE
 }
 
+/** What a scroll finds: where the scroller is, and the window it drew. */
+export interface ScrollAt {
+  /** A jump to a row is still scrolling to it. */
+  jumping: boolean
+  /** The scroller is at its end. */
+  atEnd: boolean
+  scrollTop: number
+  /** The first row the window draws. */
+  start: number
+  /** The rows the chat holds. */
+  count: number
+  /** The reader scrolled the window up from the chat's newest rows. */
+  scrolledUp: boolean
+}
+
+/**
+ * What a scroll does (the transcript's scroll listener): whether the reader
+ * follows the end from here (`follows`), the start the window takes on
+ * (`start`: null is the chat's newest rows; left out, the window stays), and
+ * whether the stored page before the chat's first row is asked for (`older`).
+ * A jump on its way keeps its window and follows nothing. At the end, only a
+ * window the reader scrolled up gives its rows back, since every frame of a
+ * streaming reply scrolls there too. Near the top the window takes on the
+ * rows above it, and once it holds the chat's first row, the page before.
+ */
+export function scrollStep(at: ScrollAt): { follows: boolean; start?: number | null; older?: boolean } {
+  if (at.jumping) return { follows: false }
+  if (at.atEnd) return at.scrolledUp ? { follows: true, start: null } : { follows: true }
+  if (!nearTop(at.scrollTop)) return { follows: false }
+  return at.start !== 0 ? { follows: false, start: olderStart(at.start, at.count) } : { follows: false, older: true }
+}
+
 /** The row holding the item `key`, as drawn: one row of its own, or the run it joined. -1 when the chat has no such row. */
 export function rowIndex(rows: readonly Row[], key: string): number {
   for (let i = 0; i < rows.length; i++) {

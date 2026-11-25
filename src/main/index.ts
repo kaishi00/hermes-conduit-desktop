@@ -499,7 +499,8 @@ function registerIpc(): void {
   })
   ipcMain.on(IPC.setLanguage, (_event, choice: LanguageChoice) => {
     chooseLanguage(choice)
-    if (isMac) Menu.setApplicationMenu(macMenu())
+    // Not while Settings listens for Quick Ask's keys: the reload below ends the pick, which puts the menu back in the new language.
+    if (isMac && !recordingIn) Menu.setApplicationMenu(macMenu())
     tray.refresh()
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.reload()
