@@ -1,4 +1,5 @@
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import { keepPlaceOnScale } from '../state/chatScale'
 import { flushSync } from 'react-dom'
 import { mediaKind, splitReply, withoutBoardLines } from '../state/media'
 import { PagePreview, ReplyPage } from './PagePreview'
@@ -1300,6 +1301,9 @@ export function Transcript({
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
   }, [])
+
+  // A text size change keeps the reader on the reply they were reading (chatScale.ts).
+  useEffect(() => (scroller.current ? keepPlaceOnScale(scroller.current) : undefined), [])
 
   // A jump to a row the window left out — a pin, a quote, Show in Chat — draws that row's
   // part of the window before the jump looks for it (rowWindow.ts).

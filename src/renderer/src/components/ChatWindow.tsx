@@ -1,3 +1,4 @@
+import { drawChatScale } from '../state/chatScale'
 import { applyScale, nextScale, readScale, scaleFromStorage, scaleStep, shortcutFor, wheelSteps } from '../state/shortcuts'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { t } from '@shared/i18n'
@@ -96,7 +97,7 @@ export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
   // in another window shows here (desktop#449).
   useEffect(() => {
     let scale = readScale()
-    document.documentElement.style.setProperty('--chat-scale', String(scale))
+    drawChatScale(scale)
     const step = (by: -1 | 0 | 1 | null) => {
       // Docked in the main window too: keys pressed in the pane never reach that window's page, and the
       // size it writes reaches every window.
@@ -114,7 +115,7 @@ export function ChatWindow({ chat: request }: { chat: ChatWindowRequest }) {
       const next = scaleFromStorage(event)
       if (next === null) return
       scale = next
-      document.documentElement.style.setProperty('--chat-scale', String(next))
+      drawChatScale(next)
     }
     const read = wheelSteps()
     const onWheel = (event: WheelEvent) => {
