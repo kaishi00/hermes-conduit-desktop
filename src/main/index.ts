@@ -36,7 +36,7 @@ import {
 } from '../shared/ipc'
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
-import { pageUrl, registerPageScheme, servePages } from './pages'
+import { pageServed, pageUrl, registerPageScheme, servePages } from './pages'
 import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile } from './viewFiles'
 import { isPagePath, pageDownloadDecision, type PageRead } from '../shared/viewFileRules'
 import { confineNavigation } from './navigation'
@@ -1037,6 +1037,7 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle(IPC.pageUrl, (_event, html: unknown) => pageUrl(html))
+  ipcMain.handle(IPC.pageServed, (_event, url: unknown) => pageServed(url))
   // From the window that asks: a call's screenshot steps the main window aside, Quick ask's steps itself aside.
   ipcMain.handle(IPC.screenshot, event => captureScreen(BrowserWindow.fromWebContents(event.sender) ?? mainWindow))
   ipcMain.handle(IPC.liveOpenMinted, async (event, path: unknown) => {

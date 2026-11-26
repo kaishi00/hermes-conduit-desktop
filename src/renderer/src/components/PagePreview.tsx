@@ -6,8 +6,8 @@ import { PictureProfile } from './Picture'
 import { inSelectMenu } from './Select'
 import { openPageInBrowser } from '../state/saveMedia'
 import { isPagePath } from '@shared/viewFileRules'
-import { pictureHost } from '../state/gatewayPictures'
-import { notePage, prunePages, rememberedPage, type PageCache } from '../state/pagePreviewCache'
+import { pictureHost, refused } from '../state/gatewayPictures'
+import { notePage, pageCacheKey, prunePages, rememberedPage, type PageCache } from '../state/pagePreviewCache'
 
 const PLACEHOLDER = 280
 const MIN_HEIGHT = 60
@@ -15,26 +15,55 @@ const MAX_HEIGHT = 900
 
 // Pages already read, per dashboard and profile: a chat scrolled back draws them again at once.
 const kept: PageCache = new Map()
-
-/** Drops the other dashboards' page copies when this window switches host. */
-export function setPageHost(host: string): void {
-  prunePages(kept, host)
-}
+/** Reads in flight, so blocks of the same page drawn together share one. */
+const reading = new Map<string, Promise<string | null>>()
+let keptHost: string | null = null
 
 /** A page's address on the page scheme, read from this host once; null when it can't be shown. */
 export async function pageAddress(path: string, profile?: string): Promise<string | null> {
   const host = pictureHost()
-  const known = rememberedPage(kept, path, profile, host)
-  if (known !== undefined) return known
-  let url: string | null = null
-  try {
-    const preview = parsePreview(await gateway.http('GET', readTextPath(path, profile), undefined, 30_000))
-    url = preview.binary || preview.truncated ? null : await window.conduit.pageUrl(preview.text)
-  } catch {
-    url = null
+  // Every window follows its own host (the main window, Quick Ask, a docked room): another
+  // dashboard's copies go as this one's first page is asked for.
+  if (host !== keptHost) {
+    keptHost = host
+    prunePages(kept, host)
+    reading.clear()
   }
-  notePage(kept, path, profile, host, url)
-  return url
+  const key = pageCacheKey(path, profile, host)
+  const known = rememberedPage(kept, path, profile, host)
+  if (known === null) return null
+  // The main process keeps the newest 40 pages: one it forgot is read again rather than drawn as "Not found".
+  if (known !== undefined) {
+    if (await window.conduit.pageServed(known).catch(() => true)) return known
+    if (kept.get(key)?.url === known) kept.delete(key)
+  }
+  let read = reading.get(key)
+  if (!read) {
+    read = readPage(path, profile).then(({ url, refused: wasRefused }) => {
+      // An answer that lands after a host switch belongs to the old dashboard.
+      if (reading.get(key) === read) notePage(kept, path, profile, host, url, wasRefused)
+      return url
+    })
+    reading.set(key, read)
+    void read.finally(() => {
+      if (reading.get(key) === read) reading.delete(key)
+    })
+  }
+  return read
+}
+
+async function readPage(path: string, profile?: string): Promise<{ url: string | null; refused: boolean }> {
+  let preview
+  try {
+    preview = parsePreview(await gateway.http('GET', readTextPath(path, profile), undefined, 30_000))
+  } catch (error) {
+    // Gone or not allowed is Hermes' answer; a timeout or a dropped connection may read next time.
+    return { url: null, refused: refused(error) }
+  }
+  if (preview.binary || preview.truncated) return { url: null, refused: true }
+  const url = await window.conduit.pageUrl(preview.text).catch(() => undefined)
+  // Too big to serve is the page's own; a failed call to the main process may work next time.
+  return url === undefined ? { url: null, refused: false } : { url, refused: url === null }
 }
 
 /** A page in a sandboxed frame: its own scripts run, it keeps nothing and reaches nothing but its height. */
