@@ -447,7 +447,7 @@ function FileCard({ path, label, link }: { path: string; label?: string; link?: 
       {audio === 'failed' ? <span className="meta error-text">{t("Couldn't open this file")}</span> : null}
       {audio && typeof audio === 'object' ? <audio className="file-audio" controls autoPlay src={audio.src} /> : null}
       {viewing ? (
-        <FileViewer path={path} name={name} profile={profile} saving={saving} onDownload={() => void download()} onClose={closeViewer} />
+        <FileViewer file={{ path, profile, saving, onDownload: () => void download() }} name={name} onClose={closeViewer} />
       ) : null}
     </div>
   )

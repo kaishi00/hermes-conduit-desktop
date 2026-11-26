@@ -2704,6 +2704,32 @@ html[data-window='quick'] body {
   font: inherit;
 }
 
+/* A staged file's thumbnail and name open its preview (desktop#611). */
+.staged-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.staged-open:hover .staged-name {
+  text-decoration: underline;
+}
+
+.staged-open > svg {
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  flex: none;
+}
+
 .staged-name.link {
   cursor: pointer;
   text-decoration: underline dotted;
@@ -13445,4 +13471,635 @@ button.rail-brand-button:hover {
 .ws-panel ::-webkit-scrollbar-thumb,
 .ws-panel::-webkit-scrollbar-thumb {
   border-width: 3px 5px 3px 3px;
+}
+
+/* The workbench beside a chat with a folder (Eric, 2026-11-26, "B · Project mode"; issues 450 to 453):
+   the chat's folder as a project, its views on the chat tabs' strip, its terminals in a drawer below. */
+.bench {
+  width: var(--bench-width, 640px);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: var(--list);
+}
+
+.bench-head {
+  height: 48px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 14px;
+}
+
+.bench-head > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+}
+
+.bench-title {
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bench-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bench-branch svg {
+  width: 12px;
+  height: 12px;
+}
+
+.bench-head .spacer {
+  flex: 1;
+}
+
+.bench-head .staged-remove {
+  width: 28px;
+  height: 28px;
+}
+
+.bench-head .staged-remove svg {
+  width: 16px;
+  height: 16px;
+}
+
+.bench-tabs {
+  padding: 0 10px 8px;
+}
+
+.ws-tab.fixed > button[role='tab'] {
+  padding-right: 10px;
+}
+
+.ws-tab.ended {
+  opacity: 0.6;
+}
+
+.ws-tab-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.ws-tabs-end {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.bench-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+  border-top: 1px solid var(--line);
+}
+
+.bench-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bench-view[hidden] {
+  display: none;
+}
+
+.bench-note {
+  padding: 14px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.bench-note p {
+  margin: 0 0 8px;
+}
+
+.bench-empty {
+  margin: auto;
+  max-width: 340px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.bench-empty.small {
+  padding: 12px;
+}
+
+.bench-empty p {
+  margin: 0;
+}
+
+/* Files inside the bench: the bench draws the frame. */
+.ws-embedded {
+  width: auto;
+  flex: 1;
+  border-left: 0;
+  background: none;
+}
+
+.ws-embedded .ws-head {
+  height: 40px;
+}
+
+/* Changes: the lists on one side, the picked file's diff on the other; stacked on a narrow bench. */
+.changes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.changes-side {
+  width: 300px;
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+}
+
+.changes-diff {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@container (max-width: 620px) {
+  .changes {
+    flex-direction: column;
+  }
+
+  .changes-side {
+    width: auto;
+    max-height: 55%;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.git-branch {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.git-branch .spacer,
+.git-list-head .spacer,
+.diff-head .spacer {
+  flex: 1;
+}
+
+.git-branch-name {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-branch-name:hover {
+  background: var(--surface-hover);
+}
+
+.git-branch-name svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.git-branches {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 10px;
+  z-index: 20;
+  width: min(280px, calc(100% - 20px));
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--glass-line);
+  border-radius: 12px;
+  background: var(--menu);
+  box-shadow: var(--glass-shadow);
+}
+
+.git-branch-row {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-branch-row:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.git-branch-row.on {
+  color: var(--accent);
+  font-weight: 600;
+  cursor: default;
+}
+
+.git-branch-row.new {
+  color: var(--accent);
+}
+
+.git-branch-row .meta {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.git-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.git-icon:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.git-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.git-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.git-commit {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 8px;
+}
+
+.git-commit textarea {
+  min-height: 52px;
+  max-height: 160px;
+  resize: vertical;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.git-commit textarea:focus {
+  outline: none;
+  border-color: var(--accent-line);
+}
+
+.git-failed {
+  margin: 0 10px 8px;
+  font-size: 12px;
+}
+
+.git-lists {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.git-list-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 4px 12px;
+  background: var(--list);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.git-row {
+  display: flex;
+  align-items: center;
+  margin: 0 6px;
+  border-radius: 8px;
+}
+
+.git-row:hover,
+.git-row.on {
+  background: var(--surface-hover);
+}
+
+.git-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-letter {
+  flex: none;
+  width: 14px;
+  font: 600 11px var(--mono);
+  text-align: center;
+  color: var(--text-3);
+}
+
+.git-letter.added,
+.git-letter.untracked {
+  color: var(--success);
+}
+
+.git-letter.modified,
+.git-letter.renamed,
+.git-letter.copied {
+  color: var(--warning);
+}
+
+.git-letter.deleted,
+.git-letter.conflict {
+  color: var(--danger);
+}
+
+.git-name {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-folder {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.git-counts {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  gap: 4px;
+  font: 11px var(--mono);
+}
+
+.git-counts .plus {
+  color: var(--success);
+}
+
+.git-counts .minus {
+  color: var(--danger);
+}
+
+.git-row-actions {
+  flex: none;
+  display: none;
+  padding-right: 2px;
+}
+
+.git-row:hover .git-row-actions,
+.git-row:focus-within .git-row-actions {
+  display: inline-flex;
+}
+
+.git-row:hover .git-counts,
+.git-row:focus-within .git-counts {
+  display: none;
+}
+
+/* A file's diff, line by line, with both sides' line numbers. */
+.diff-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.diff-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.diff-lines {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  font: 12px/18px var(--mono);
+}
+
+.diff-line {
+  display: flex;
+  min-width: max-content;
+}
+
+.diff-num {
+  flex: none;
+  width: 44px;
+  padding-right: 8px;
+  text-align: right;
+  color: var(--text-4);
+  user-select: none;
+}
+
+.diff-sign {
+  flex: none;
+  width: 16px;
+  color: var(--text-3);
+  user-select: none;
+}
+
+.diff-text {
+  white-space: pre;
+  padding-right: 16px;
+}
+
+.diff-line.add {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.diff-line.add .diff-sign {
+  color: var(--success);
+}
+
+.diff-line.remove {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.diff-line.remove .diff-sign {
+  color: var(--danger);
+}
+
+.diff-hunk {
+  padding: 4px 12px;
+  background: var(--accent-soft);
+  color: var(--text-3);
+  white-space: pre;
+}
+
+.diff-note {
+  padding: 6px 12px;
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: 12px;
+}
+
+/* The terminals' drawer under the bench's views, its height dragged by the line above it. */
+.bench-drawer-line {
+  flex: none;
+  height: 5px;
+  margin: -2px 0;
+  position: relative;
+  z-index: 2;
+  cursor: row-resize;
+}
+
+.bench-drawer-line:hover {
+  background: var(--accent-line);
+}
+
+.bench-drawer-frame {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.bench-drawer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bench-drawer-tabs {
+  padding: 6px 10px;
+}
+
+.bench-drawer.folded .bench-drawer-tabs {
+  padding-bottom: 6px;
+}
+
+.bench-drawer-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--code-bg);
+}
+
+.bench-terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 0 0 10px;
+}
+
+.bench-terminal[hidden] {
+  display: none;
+}
+
+.bench-terminal .xterm,
+.bench-terminal .xterm-viewport {
+  height: 100%;
+  background: transparent !important;
+}
+
+.bench-drawer-body[hidden] {
+  display: none;
 }

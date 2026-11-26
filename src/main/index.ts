@@ -37,7 +37,7 @@ import {
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
 import { pageServed, pageUrl, registerPageScheme, servePages } from './pages'
-import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile } from './viewFiles'
+import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile, viewStagedFile } from './viewFiles'
 import { isPagePath, pageDownloadDecision, type PageRead } from '../shared/viewFileRules'
 import { confineNavigation } from './navigation'
 import { endSocket, LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
@@ -848,6 +848,16 @@ function registerIpc(): void {
       if (key) viewCopies.delete(key)
     }
   })
+  ipcMain.handle(IPC.viewStagedFile, async (_event, name: unknown, mime: unknown, base64: unknown): Promise<{ url: string } | { error: string }> => {
+    if (typeof name !== 'string' || typeof mime !== 'string' || typeof base64 !== 'string') return { error: t("Couldn't open this file") }
+    try {
+      const url = await viewStagedFile(name, mime, base64)
+      return url ? { url } : { error: t("Couldn't open this file") }
+    } catch (error) {
+      console.warn('Conduit: staged file preview failed', error)
+      return { error: t("Couldn't open this file") }
+    }
+  })
   ipcMain.handle(IPC.openHostPageInBrowser, async (event, path: unknown, profile: unknown): Promise<string | null> => {
     const routes = typeof path === 'string' && path ? copyRoutes(event.sender.id, path, profile) : null
     if (!routes) return t("Couldn't open this file")
@@ -1235,6 +1245,7 @@ function macMenu(): Menu {
         { label: t('Make Text Normal Size'), accelerator: 'Cmd+0', click: textSize('text-normal') },
         { type: 'separator' },
         { label: t('Show or Hide Sidebar'), accelerator: 'Cmd+\\', click: command('toggle-sidebar') },
+        { label: t('Show or Hide Workbench'), accelerator: 'Cmd+B', click: command('toggle-workbench') },
         { type: 'separator' },
         ...go,
         { type: 'separator' },

@@ -1,7 +1,7 @@
 /**
  * Conduit's keyboard shortcuts, after the phone's catalog: ⌘N New Chat, ⌘F
  * Search, ⌘. Stop, ⌘, Settings, ⌘1 to ⌘6 the sections, ⌘+ ⌘− ⌘0 (and Ctrl with the scroll wheel) the chat's
- * text size, ⌘\ the chat list and ⌘/ this list. The Mac's menu bar holds them there; Windows
+ * text size, ⌘\ the chat list, ⌘B the workbench and ⌘/ this list. The Mac's menu bar holds them there; Windows
  * has no menu bar, so the window reads Ctrl and the same key.
  */
 import { t } from '../../../shared/i18n'
@@ -22,6 +22,7 @@ const KEYS: Partial<Record<MenuAction, string[]>> = {
   'text-normal': ['0'],
   shortcuts: ['/', '?'],
   'toggle-sidebar': ['\\'],
+  'toggle-workbench': ['b'],
   'go-1': ['1'],
   'go-2': ['2'],
   'go-3': ['3'],
@@ -89,6 +90,9 @@ export function shortcutGroups(mac: boolean, sections: readonly GoTo[] = GO_TO, 
         { title: t('Send'), keys: [mac ? '↩' : 'Enter'] },
         { title: t('Stop'), keys: [glyphs('stop', mac), 'Esc'] },
         row(t('Show or Hide Sidebar'), 'toggle-sidebar'),
+        // The workbench beside a chat with a folder, and its terminals, as an editor's keys.
+        row(t('Show or Hide Workbench'), 'toggle-workbench'),
+        { title: t('Show or Hide Terminals'), keys: [mac ? '⌘`' : 'Ctrl+`'] },
         // The tabs over the chat column (issue 423): Ctrl on a Mac too, as its browsers take it.
         { title: t('Next Tab'), keys: [mac ? '⌃⇥' : 'Ctrl+Tab'] },
         { title: t('Previous Tab'), keys: [mac ? '⌃⇧⇥' : 'Ctrl+Shift+Tab'] },

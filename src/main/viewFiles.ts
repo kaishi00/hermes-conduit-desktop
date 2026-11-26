@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { copyDown, hostFileName, type DataUrl, type Download, type ReadText } from './hostFiles'
-import { FILE_SCHEME, KEPT_VIEWS, byteRange, isPagePath, pageReadResult, viewedFileUrl, viewedType } from '../shared/viewFileRules'
+import { FILE_SCHEME, KEPT_VIEWS, byteRange, isPagePath, pageReadResult, stagedViewName, viewedFileUrl, viewedType } from '../shared/viewFileRules'
 
 interface View {
   file: string
@@ -70,6 +70,28 @@ export async function viewHostFile(path: string, download: Download, dataUrl: Da
   const id = randomUUID()
   const file = join(folder(), id)
   await copyDown(file, download, dataUrl, cancel)
+  return keepView(id, file, type, path)
+}
+
+/**
+ * Writes a file staged in the composer (its bytes, base64) for the viewer and
+ * gives its address, so it's checked before it's sent as a sent file is
+ * (desktop#611); null when the viewer doesn't show it from a copy. The copy
+ * is one of the six kept, as a file card's.
+ */
+export async function viewStagedFile(name: string, mime: string, base64: string): Promise<string | null> {
+  const viewed = stagedViewName(name, mime)
+  const type = viewed ? viewedType(viewed) : null
+  if (!viewed || !type) return null
+  await mkdir(folder(), { recursive: true })
+  const id = randomUUID()
+  const file = join(folder(), id)
+  await writeFile(file, Buffer.from(base64, 'base64'))
+  return keepView(id, file, type, viewed)
+}
+
+/** Serves a copy under `id`, removing the oldest past the six kept. */
+function keepView(id: string, file: string, type: string, path: string): string {
   views.set(id, { file, type })
   while (views.size > KEPT_VIEWS) {
     const [oldest, view] = views.entries().next().value!

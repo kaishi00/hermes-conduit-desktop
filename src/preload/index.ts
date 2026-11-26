@@ -106,6 +106,7 @@ const api: ConduitApi = {
   saveHostFile: (path, profile) => ipcRenderer.invoke(IPC.saveHostFile, path, profile),
   viewHostFile: (path, profile, ticket) => ipcRenderer.invoke(IPC.viewHostFile, path, profile, ticket),
   cancelViewHostFile: ticket => ipcRenderer.send(IPC.cancelViewHostFile, ticket),
+  viewStagedFile: (name, mime, base64) => ipcRenderer.invoke(IPC.viewStagedFile, name, mime, base64),
   openHostPageInBrowser: (path, profile) => ipcRenderer.invoke(IPC.openHostPageInBrowser, path, profile),
   saveBytes: (name, bytes) => ipcRenderer.invoke(IPC.saveBytes, name, bytes),
   saveKanbanAttachment: (id, board, filename) => ipcRenderer.invoke(IPC.saveKanbanAttachment, id, board, filename),

@@ -6,8 +6,9 @@ import { createPortal } from 'react-dom'
  * the page itself rather than where it's opened from. A chat's transcript
  * fades under its header with a mask and scales with the chat's text size,
  * and either would cut such a view to the transcript and scale it past the
- * window's edges (desktop#606).
+ * window's edges (desktop#606). With no page (a test drawing to a string),
+ * it draws in place.
  */
 export function OverWindow({ children }: { children: ReactNode }) {
-  return createPortal(children, document.body)
+  return typeof document === 'undefined' ? <>{children}</> : createPortal(children, document.body)
 }
