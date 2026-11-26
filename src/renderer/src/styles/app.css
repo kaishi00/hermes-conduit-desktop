@@ -12938,6 +12938,8 @@ main.docked-pulse.pulse-page {
   overflow: auto;
   margin: 0;
   padding: 16px 20px;
+  /* On the page, outside the transcript: the body's user-select: none would make it uncopyable. */
+  user-select: text;
 }
 
 .file-viewer-markdown {

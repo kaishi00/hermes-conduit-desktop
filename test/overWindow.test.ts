@@ -18,6 +18,13 @@ describe('views that cover the window (desktop#606)', () => {
     }
   })
 
+  it('keep what they had inside the reply: selectable text and its text styles', () => {
+    const viewer = readFileSync(join(components, 'FileViewer.tsx'), 'utf8')
+    expect(viewer).toMatch(/className="page-full file-viewer assistant"/)
+    const css = readFileSync(join(__dirname, '../src/renderer/src/styles/app.css'), 'utf8')
+    expect(css).toMatch(/\.file-viewer-text \{[^}]*user-select: text;/)
+  })
+
   it('portal to the document body', () => {
     const source = readFileSync(join(components, 'OverWindow.tsx'), 'utf8')
     expect(source).toMatch(/createPortal\(children, document\.body\)/)

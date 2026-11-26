@@ -128,9 +128,10 @@ export function FileViewer({
         return <iframe className="file-viewer-pdf" title={name} src={shown.url} />
     }
   }
+  // `assistant`: drawn on the page now, it keeps the reply's text styles (Markdown, code) it had inside the reply.
   return (
     <OverWindow>
-      <div className="page-full file-viewer" role="dialog" aria-label={name}>
+      <div className="page-full file-viewer assistant" role="dialog" aria-label={name}>
         <div className="page-full-head">
           <span className="page-preview-name" title={path}>
             {name}
