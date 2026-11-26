@@ -7,6 +7,7 @@ import { draftAgents, type OwnHermesBot } from './state/roomDrafts'
 import { arrange, farBotFor, mixedTiles, orderedBots, useBotOrder, useMixedBotOrder, useSyncedOrder, type MixedTile } from './state/botOrder'
 import { STATUS_PATH as PLUGIN_STATUS_PATH, pluginStatus } from './state/plugin'
 import { hostName, rememberHostNames } from './state/hostNames'
+import { brandAlert, useAway } from './state/connectionAlert'
 import { HOST_NAME_MAX } from '@shared/hostNames'
 import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '@shared/ipc'
 import { BotsHome, useReplyFace, type BotAction, type BotsDraft } from './components/BotsHome'
@@ -347,7 +348,7 @@ export function App() {
             onAddHost={() => void switchEndingCall(null).then(ok => ok && setAdding(true))}
             onEditHost={host => void switchEndingCall(null).then(ok => ok && setEditing(host))}
             onRepair={() => status.url && setRepairing(savedHost(status.hosts, status.url))}
-            brand={<Brand {...brand} inRail />}
+            brand={brand}
           />
         </SummaryHost.Provider>
       )}
@@ -406,8 +407,8 @@ function Shell({
   onAddHost: () => void
   onEditHost: (host: HostSummary) => void
   onRepair: () => void
-  /** The brand and Hermes switcher, at the top of the rail's island. */
-  brand: ReactNode
+  /** The brand and Hermes switcher, at the top of the rail's island (Brand with `inRail`). */
+  brand: ComponentProps<typeof Brand>
 }) {
   // Before any picture is read for this host: its pictures are kept under it.
   useState(() => setAvatarHost(status.url ?? ''))
@@ -532,6 +533,8 @@ function Shell({
   }, [])
   // A chat's apps card opens Settings > Capabilities > Browse Apps.
   const [appsRequest, setAppsRequest] = useState<AppsRequest | null>(null)
+  // The rail brand's Your Picture: Settings opens on Appearance, where it's chosen.
+  const [appearanceRequest, setAppearanceRequest] = useState<number | null>(null)
   useEffect(
     () =>
       onAppsDirectory(request => {
@@ -2385,6 +2388,22 @@ function Shell({
   // While an update started here has Hermes away, the banner follows it instead of a bare "reconnecting".
   const hostUpdate = useHostActions(status.url ?? '').update
   const updateAway = updateBanner(hostUpdate)
+  // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26).
+  const away = useAway(status.phase)
+  const connectionAlert = brandAlert({
+        phase: status.phase,
+        error: status.error,
+        retryInSeconds: status.retryInSeconds,
+        away,
+        currentUrl: status.url,
+        hosts: status.hosts,
+        kept: keptHosts,
+        name: hostName,
+        onRetry: () => void window.conduit.reconnect(),
+        onRepair,
+        onSignIn: url => brand.onSwitch?.(url),
+        updating: !!updateAway
+      })
   useEffect(() => {
     if (connected && status.url) hostReachable(status.url)
   }, [connected, status.url, hostUpdate.kind])
@@ -2565,14 +2584,11 @@ function Shell({
         />
       ) : null}
       {ring ? <IncomingCall key={ring.id} ring={ring} onAnswer={() => answerRing(ring)} onDecline={missed => declineRing(ring, missed)} /> : null}
-      {status.phase !== 'open' ? (
+      {/* Only an update started here has a banner while Hermes is away; otherwise the dashboard button says so. */}
+      {status.phase !== 'open' && updateAway ? (
         <div className="banner" role="status">
           <span className={updateAway === 'updating' || updateAway === 'restarting' ? 'spinner' : 'dot warn'} />
-          {updateAway
-            ? updateAwayText(updateAway)
-            : status.phase === 'connecting'
-              ? t('Connecting to Hermes…')
-              : `${status.error ?? t('Not connected.')}${status.retryInSeconds ? ` ${t('Trying again in {seconds}s.', { seconds: status.retryInSeconds })}` : ''}`}
+          {updateAwayText(updateAway)}
           {status.phase === 'reconnecting' ? <button onClick={() => void window.conduit.reconnect()}>{t('Try now')}</button> : null}
           {status.phase === 'reconnecting' && status.url ? <button onClick={onRepair}>{t('Repair Connection')}</button> : null}
         </div>
@@ -2595,12 +2611,26 @@ function Shell({
           onShowSidebar={() => hideList(false)}
           pulseUnseen={pulse.feed?.unseen ?? 0}
           needsCount={needsCount}
-          connected={connected}
-          hostLabel={status.hostLabel}
           onSelect={selectRailSection}
           onSettings={() => setSection('settings')}
           onChangeLayout={changeRailLayout}
-          brand={brand}
+          brand={
+            <Brand
+              {...brand}
+              inRail
+              alert={connectionAlert}
+              picture={personPicture.served ? personPicture.picture : null}
+              badge={status.url ? badgeFor(status.url) : null}
+              onPicture={
+                personPicture.served
+                  ? () => {
+                      setSection('settings')
+                      setAppearanceRequest(Date.now())
+                    }
+                  : undefined
+              }
+            />
+          }
           faces={
             (section === 'chats' || section === 'room' || section === 'bots') && listHidden && profileTiles ? (
               <RailFaces
@@ -3208,6 +3238,8 @@ function Shell({
             linkRequest={linkRequest}
             onLinkRequestTaken={() => setLinkRequest(null)}
             personPicture={personPicture}
+            appearanceRequest={appearanceRequest}
+            onAppearanceRequestTaken={() => setAppearanceRequest(null)}
             onNewChatWith={
               connected
                 ? draft => {
@@ -3335,6 +3367,8 @@ function Settings({
   linkRequest,
   onLinkRequestTaken,
   personPicture,
+  appearanceRequest,
+  onAppearanceRequestTaken,
   onNewChatWith,
   onOpensOn,
   opensHere
@@ -3369,6 +3403,9 @@ function Settings({
   onLinkRequestTaken: () => void
   /** The picture you show in rooms over Links. */
   personPicture: PersonPicture
+  /** The rail brand's Your Picture asked for Appearance. */
+  appearanceRequest: number | null
+  onAppearanceRequestTaken: () => void
   /** A new chat with `draft` in its composer, for the user to send (Try a test call, Have Hermes watch for this). */
   onNewChatWith?: (draft: string) => void
 }) {
@@ -3408,6 +3445,11 @@ function Settings({
     setPage('capabilities')
     onAppsRequestTaken()
   }, [appsRequest, onAppsRequestTaken])
+  useEffect(() => {
+    if (appearanceRequest === null) return
+    setPage('appearance')
+    onAppearanceRequestTaken()
+  }, [appearanceRequest, onAppearanceRequestTaken])
   // A link into Models, taken once: it opens on that profile.
   const [modelsProfile, setModelsProfile] = useState<{ profile: string; n: number } | null>(null)
   useEffect(() => {
@@ -3511,7 +3553,7 @@ function Settings({
   if (page === 'appearance')
     return (
       <SettingsPane pane={pane}>
-        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} opensHere={opensHere} />
+        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} opensHere={opensHere} personPicture={personPicture} />
       </SettingsPane>
     )
   if (page === 'multiplayer' && status.url)

@@ -28,8 +28,6 @@ export interface SectionRailProps {
   onShowSidebar: () => void
   pulseUnseen: number
   needsCount: number
-  connected: boolean
-  hostLabel?: string
   onSelect: (section: RailSection) => void
   onSettings: () => void
   onChangeLayout: (next: RailLayout) => void
@@ -59,8 +57,6 @@ export function SectionRail({
   onShowSidebar,
   pulseUnseen,
   needsCount,
-  connected,
-  hostLabel,
   onSelect,
   onSettings,
   onChangeLayout,
@@ -259,12 +255,6 @@ export function SectionRail({
         >
           <NavGlyph name="settings" />
         </button>
-        <span
-          className={`dot${connected ? '' : ' warn'}`}
-          role="img"
-          aria-label={connected ? t('Connected') : t('Not connected')}
-          title={connected ? t('Connected to {host}', { host: hostLabel ?? '' }) : t('Not connected')}
-        />
       </nav>
       {menu ? (
         <div

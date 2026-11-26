@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import type { HostSummary } from '@shared/ipc'
 import { Icon } from './icons'
 import { t } from '@shared/i18n'
-import { hostBadge, keptStateLabel, useKeptHosts } from '../state/keptHosts'
+import { hostBadge, keptStateLabel, useKeptHosts, type HostBadge } from '../state/keptHosts'
+import { lookPictureUrl } from '../state/roomLooks'
 import { HostBadgeMark } from './CombinedDashboards'
 import { appIconUrl, useAppIcon } from '../state/appIcon'
 import { hostName } from '../state/hostNames'
+import type { BrandAlert } from '../state/connectionAlert'
 
 interface BrandProps {
   subtitle?: string
@@ -27,9 +29,25 @@ interface Props extends BrandProps {
  * (the floating glass shell, Eric 2026-11-26), where it's the mark alone over
  * the host's name and the list opens beside it.
  */
-export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = false }: BrandProps & { inRail?: boolean }) {
+/** The rail's brand only: you on this Hermes (Eric, 2026-11-26). */
+interface RailBrandProps {
+  inRail?: boolean
+  /** Your picture on this Hermes (Multiplayer's, kept on Hermes), drawn in place of the app's mark. */
+  picture?: string | null
+  /** This dashboard's badge in a combined group, on the picture, so the button still says which Hermes. */
+  badge?: HostBadge | null
+  /** Opens where your picture is chosen (Settings > Appearance > You). */
+  onPicture?: () => void
+  /** Only when something's wrong; null draws nothing. */
+  alert?: BrandAlert | null
+}
+
+export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = false, picture, badge, onPicture, alert }: BrandProps & RailBrandProps) {
   const [open, setOpen] = useState(false)
   const switchable = hosts.length > 1 && !!onSwitch
+  // In the rail, the list also holds Your Picture, so it opens with one Hermes too.
+  const actions = inRail ? (alert?.actions ?? []) : []
+  const opens = switchable || (inRail && !!onPicture) || actions.length > 0
   // Combined dashboards: how each one beside this one is doing.
   const kept = useKeptHosts()
   const icon = useAppIcon()
@@ -40,7 +58,7 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
   useEffect(() => {
     if (!open) return
     // As the rail's menus: focus lands on the Hermes you're on, and Escape gives it back to the button.
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])]
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"]') ?? [])]
     ;(items.find(item => item.getAttribute('aria-checked') === 'true') ?? items[0])?.focus()
     const close = () => setOpen(false)
     const onKey = (e: KeyboardEvent) => {
@@ -74,7 +92,7 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
   const moveFocus = (e: ReactKeyboardEvent) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
     e.preventDefault()
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])]
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"]') ?? [])]
     if (!items.length) return
     const at = items.indexOf(document.activeElement as HTMLElement)
     const next =
@@ -94,8 +112,26 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
         if (next && !e.currentTarget.contains(next) && !toggleRef.current?.contains(next)) setOpen(false)
       }}
     >
+      {actions.map(action => (
+        <button
+          key={action.label}
+          role="menuitem"
+          onClick={() => {
+            setOpen(false)
+            action.run()
+          }}
+        >
+          <span className="host-check" />
+          <span className="host-text">
+            <span className="host-label">{action.label}</span>
+          </span>
+        </button>
+      ))}
+      {actions.length && hosts.length ? <div className="host-menu-sep" role="separator" /> : null}
       {hosts.map(host => {
-        const state = host.url === currentUrl ? null : (kept.find(k => k.url === host.url)?.state ?? null)
+        // The one you're on says so only while it isn't connected; every other one says how it's doing.
+        const keptState = host.url === currentUrl ? null : kept.find(k => k.url === host.url)?.state
+        const state = host.url === currentUrl ? (inRail ? (alert?.here ?? null) : null) : keptState ? keptStateLabel(keptState) : null
         const badge = hostBadge(hosts, host.url, hostName)
         return (
           <button
@@ -104,21 +140,58 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
             aria-checked={host.url === currentUrl}
             onClick={() => {
               setOpen(false)
-              if (host.url !== currentUrl) onSwitch!(host.url)
+              if (host.url !== currentUrl) onSwitch?.(host.url)
             }}
           >
             <span className="host-check">{host.url === currentUrl ? '✓' : ''}</span>
             {badge ? <HostBadgeMark badge={badge} /> : null}
             <span className="host-text">
               <span className="host-label">{hostName(host.url)}</span>
-              {state ? <span className="meta">{keptStateLabel(state)}</span> : null}
+              {state ? <span className="meta">{state}</span> : null}
             </span>
           </button>
         )
       })}
+      {inRail && onPicture ? (
+        <>
+          {switchable || actions.length ? <div className="host-menu-sep" role="separator" /> : null}
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onPicture()
+            }}
+          >
+            <span className="host-check" />
+            <span className="host-text">
+              <span className="host-label">{picture ? t('Change Your Picture…') : t('Choose Your Picture…')}</span>
+            </span>
+          </button>
+        </>
+      ) : null}
     </div>
   ) : null
-  const mark = <img className="brand-mark" src={appIconUrl(icon)} alt="" aria-hidden="true" draggable={false} />
+  const pictureUrl = inRail ? lookPictureUrl(picture ? { picture } : null) : null
+  const mark = pictureUrl ? (
+    <span className="brand-mark brand-you" aria-hidden="true">
+      <img src={pictureUrl} alt="" draggable={false} />
+      {badge ? (
+        <span className="brand-you-badge">
+          <HostBadgeMark badge={badge} />
+        </span>
+      ) : null}
+    </span>
+  ) : inRail && badge ? (
+    // In a combined group the badge says which Hermes, on the app's mark too.
+    <span className="brand-mark-badged" aria-hidden="true">
+      <img className="brand-mark" src={appIconUrl(icon)} alt="" draggable={false} />
+      <span className="brand-you-badge">
+        <HostBadgeMark badge={badge} />
+      </span>
+    </span>
+  ) : (
+    <img className="brand-mark" src={appIconUrl(icon)} alt="" aria-hidden="true" draggable={false} />
+  )
   const toggle = (e: MouseEvent) => {
     e.stopPropagation()
     setOpen(o => !o)
@@ -126,6 +199,15 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
 
   if (inRail) {
     const label = subtitle ? `Conduit · ${subtitle}` : 'Conduit'
+    // No name under the mark (Eric, 2026-11-26): it's in the tooltip and the list; only Sign In is written there.
+    const host =
+      alert?.tone === 'signIn' ? (
+        <span className="rail-brand-host rail-brand-sign-in">{t('Sign In')}</span>
+      ) : null
+    const state = alert ? <span className={`rail-brand-state ${alert.tone}`} aria-hidden="true" /> : null
+    // The tooltip says what a press does: switch Hermes, or choose your picture with one Hermes.
+    const does = switchable ? t('Switch Hermes') : onPicture ? (picture ? t('Change Your Picture…') : t('Choose Your Picture…')) : null
+    const tip = [label, alert?.text, does].filter(Boolean).join('\n')
     return (
       <div
         className="rail-brand host-switch"
@@ -135,15 +217,29 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
           e.stopPropagation()
         }}
       >
-        {switchable ? (
-          <button className="rail-brand-button" ref={toggleRef} aria-haspopup="menu" aria-expanded={open} aria-label={t('Switch Hermes')} title={`${label}\n${t('Switch Hermes')}`} onClick={toggle}>
-            {mark}
-            {subtitle ? <span className="rail-brand-host">{subtitle}</span> : null}
+        {opens ? (
+          <button
+            className="rail-brand-button"
+            ref={toggleRef}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-label={[label, alert?.text, does].filter(Boolean).join(', ')}
+            title={tip}
+            onClick={toggle}
+          >
+            <span className="rail-brand-mark">
+              {mark}
+              {state}
+            </span>
+            {host}
           </button>
         ) : (
-          <div className="rail-brand-button" role="img" aria-label={label} title={label}>
-            {mark}
-            {subtitle ? <span className="rail-brand-host">{subtitle}</span> : null}
+          <div className="rail-brand-button" role="img" aria-label={[label, alert?.text].filter(Boolean).join(', ')} title={tip}>
+            <span className="rail-brand-mark">
+              {mark}
+              {state}
+            </span>
+            {host}
           </div>
         )}
         {menu}
