@@ -54,6 +54,8 @@ function mount(send: (text: string) => Promise<boolean | string>) {
 }
 
 afterEach(() => {
+  // A mode switch keeps the mode picked (Settings > Voice): the next case starts in Classic again.
+  localStorage.clear()
   tagged.mockClear()
   archived.mockClear()
   say = null
@@ -134,6 +136,24 @@ describe('a Classic call started in the new-chat draft (desktop#538)', () => {
     expect(archived).not.toHaveBeenCalled()
     act(() => view.call().end())
     await act(async () => undefined)
+    expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
+    view.unmount()
+  })
+
+  it('files and archives its chat once, after the call ends, when it switched modes with its first send in flight (#620 review)', async () => {
+    let resolve: (sent: boolean | string) => void = () => undefined
+    const view = mount(() => new Promise(done => (resolve = done)))
+    act(() => view.call().start())
+    act(() => say!('Book a table for six tonight'))
+    act(() => view.call().header.onMode('gemini'))
+    act(() => view.call().end())
+    await act(async () => undefined)
+    expect(tagged).not.toHaveBeenCalled()
+    expect(archived).not.toHaveBeenCalled()
+    await act(async () => resolve('made-by-call'))
+    expect(tagged).toHaveBeenCalledTimes(1)
+    expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
+    expect(archived).toHaveBeenCalledTimes(1)
     expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
     view.unmount()
   })
