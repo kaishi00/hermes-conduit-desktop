@@ -21,10 +21,41 @@ afterEach(() => {
 describe('bots answering in any chat, and what they are doing there', () => {
   it('takes the ids of chats working or streaming, not waiting, idle or starting', async () => {
     const { answeringIds } = await import('../src/renderer/src/state/liveStatus')
-    expect(answeringIds({ sessions: [{ id: 'rt1', session_key: 'k1', status: 'working' }, { id: 'rt2', status: 'idle' }] })).toEqual(['rt1', 'k1'])
-    expect(answeringIds({ sessions: [{ id: 'rt3', status: 'streaming' }] })).toEqual(['rt3'])
-    expect(answeringIds({ sessions: [{ id: 'a', status: 'waiting' }, { id: 'b', status: 'starting' }] })).toEqual([])
+    const src = 'tui'
+    expect(answeringIds({ sessions: [{ id: 'rt1', session_key: 'k1', status: 'working', source: src }, { id: 'rt2', status: 'idle', source: null }] })).toEqual(['rt1', 'k1'])
+    expect(answeringIds({ sessions: [{ id: 'rt3', status: 'streaming', source: src }] })).toEqual(['rt3'])
+    expect(answeringIds({ sessions: [{ id: 'a', status: 'waiting', source: src }, { id: 'b', status: 'starting', source: src }] })).toEqual([])
     expect(answeringIds(null)).toEqual([])
+  })
+
+  it("leaves out a legacy registry's rows, which list every profile's chats whichever is named", async () => {
+    const { answeringIds } = await import('../src/renderer/src/state/liveStatus')
+    // The legacy sidecar's rows carry no `source`: one bot's turn would light every bot on the dashboard.
+    expect(answeringIds({ sessions: [{ id: 'rt1', session_key: 'k1', status: 'working' }] })).toEqual([])
+    // One row without it is enough to tell the answer isn't one profile's.
+    expect(answeringIds({ sessions: [{ id: 'rt1', status: 'working', source: 'tui' }, { id: 'rt2', status: 'idle' }] })).toEqual([])
+  })
+
+  it("lights only the bot whose own registry runs the turn, not every bot on a legacy dashboard", async () => {
+    // Furina's turn, as a legacy sidecar answers every profile's read: no bot is counted from it.
+    rpc.mockResolvedValue({ sessions: [{ id: 'rt-furina', session_key: 'k-furina', status: 'working' }] })
+    http.mockResolvedValue({ ok: true, steps: { 'rt-furina': { phase: 'tool', tool: 'terminal', since: 1 } } })
+    const { useAnsweringBots } = await import('../src/renderer/src/state/liveStatus')
+    const { stepTitle } = await import('../src/renderer/src/state/liveDoing')
+    let seen: ReadonlyMap<string, string | null> = new Map([['x', null]])
+    function Probe() {
+      seen = useAnsweringBots(true, ['furina', 'raiden', 'nahida'], 0, stepTitle)
+      return null
+    }
+    const root = createRoot(document.createElement('div'))
+    await act(async () => root.render(createElement(Probe)))
+    await act(async () => {
+      for (let i = 0; i < 4; i++) await Promise.resolve()
+    })
+    expect(rpc).toHaveBeenCalledTimes(3)
+    expect([...seen]).toEqual([])
+    expect(http).not.toHaveBeenCalled()
+    act(() => root.unmount())
   })
 
   it("picks the newest step among a bot's answering chats, and only theirs", async () => {
@@ -56,7 +87,7 @@ describe('bots answering in any chat, and what they are doing there', () => {
   it("reads each bot's registry, then the steps of the bots answering, the default profile without a profile", async () => {
     vi.useFakeTimers()
     rpc.mockImplementation((_method: string, params: { profile?: string }) =>
-      Promise.resolve({ sessions: [{ id: `rt-${params.profile ?? 'default'}`, status: params.profile ? 'working' : 'idle' }] })
+      Promise.resolve({ sessions: [{ id: `rt-${params.profile ?? 'default'}`, status: params.profile ? 'working' : 'idle', source: 'tui' }] })
     )
     http.mockImplementation((_method: string, path: string) =>
       path.endsWith('profile=furina')
