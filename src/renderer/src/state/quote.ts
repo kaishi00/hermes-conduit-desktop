@@ -126,7 +126,7 @@ export function copyableReply(text: string): string {
   return splitReply(withoutBoardLines(text))
     // `splitReply` is called without board ids here, so no board block can appear;
     // the branch only keeps the union exhaustive.
-    .map(block => (block.kind === 'markdown' ? block.text.trim() : block.kind === 'board' ? '' : block.path))
+    .map(block => (block.kind === 'markdown' ? block.text.trim() : block.kind === 'board' ? '' : block.kind === 'page' ? block.html : block.path))
     .filter(Boolean)
     .join('\n\n')
 }

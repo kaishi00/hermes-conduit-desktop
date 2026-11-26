@@ -230,17 +230,17 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
       }
       return
     }
-    // Ended with its first send still in flight: the chat that send makes is still this call's.
-    if (kept.fresh && !kept.chat && !kept.ended) {
+    // Still running in another mode: the call's real end files and archives its chat (#617 review).
+    if (calling) return
+    if (kept.fresh && !kept.chat && createdByCall) {
+      void tagVoiceSession(kept.profile, createdByCall, 'classic').catch(() => undefined)
+      kept.chat = { id: createdByCall, profile: kept.profile }
+    } else if (kept.fresh && !kept.chat) {
+      // Ended with its first send still in flight: the chat that send makes is still this call's.
       kept.ended = true
       return
     }
-    if (kept.ended && !kept.chat && createdByCall) {
-      void tagVoiceSession(kept.profile, createdByCall, 'classic').catch(() => undefined)
-      kept.chat = { id: createdByCall, profile: kept.profile }
-    }
     if (kept.chat) void archiveClassicChat(kept.chat.profile, kept.chat.id).catch(() => undefined)
-    if (kept.ended && !kept.chat) return
     classicFresh.current = { fresh: false, chat: null, ended: false }
   }, [calling, callMode, chatId, profile, createdByCall])
 

@@ -4,6 +4,8 @@
  * `splitLeadingFileReferences`, and the voice background-job brief).
  */
 import { inbound } from './teammateMessages'
+import { t } from '../../../shared/i18n'
+import { withPagesSaid, withoutTags } from './htmlInReplies'
 
 /** The brief a Conduit voice conversation puts before a background job's instructions. */
 // A list preview can end inside it, before its closing bracket.
@@ -171,7 +173,7 @@ export function previewText(raw: string): string {
   // A folded preview has the stored context on the same line as the words.
   // It can be cut off anywhere, even inside the marker.
   if (attachments.length || CONTEXT_REFERENCE.test(raw)) text = text.replace(/\s*---(?:\s[\s\S]*)?$/, '')
-  const said = plainReferences(text, true).replace(/\s+/g, ' ').trim()
+  const said = withoutTags(withPagesSaid(plainReferences(text, true), `🗂 ${t('Page')}`)).replace(/\s+/g, ' ').trim()
   // A teammate's delivery previews as "Atlas: what it said".
   const teammate = inbound(said)
   const words = teammate ? `${teammate.sender}: ${teammate.body}` : said
@@ -192,7 +194,7 @@ export function cleanTitle(title: string): string {
 
 /** Markdown down to a line a notification can show. */
 export function plainLine(text: string, max = 180): string {
-  const plain = text
+  const plain = withoutTags(withPagesSaid(text, `🗂 ${t('Page')}`))
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/^\s*(?:MEDIA:|\[\[(?:audio_as_voice|as_document)\]\]).*$/gim, ' ')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')

@@ -10,15 +10,16 @@
  * CommonMark and GFM alike: not indented (a list item's continuation, an
  * indented code block), and not a list item (a loose list stays one list,
  * its numbering and spacing kept). A reply with a link reference or
- * footnote definition, or an HTML block that can run across blank lines,
- * isn't split at all, since those reach across blocks.
+ * footnote definition, an HTML block that can run across blank lines, or a
+ * `<details>` fold (htmlInReplies), isn't split at all, since those reach
+ * across blocks.
  */
 
 // A backtick fence's info string has no backtick (CommonMark), or the line is a paragraph.
 const FENCE = /^\s{0,3}(`{3,}(?!.*`)|~{3,})/
 const LIST_ITEM = /^\s{0,3}([-*+]|\d{1,9}[.)])(\s|$)/
 // A definition counts inside a quote or list item too: it reaches the whole reply.
-const REACHES_ACROSS = /^(?:\s{0,3}(?:>|[-*+]|\d{1,9}[.)])\s?)*\s{0,3}(\[[^\]]+\]:|<(!--|script|pre|style|textarea|\?|![A-Za-z]|!\[CDATA\[))/im
+const REACHES_ACROSS = /^(?:\s{0,3}(?:>|[-*+]|\d{1,9}[.)])\s?)*\s{0,3}(\[[^\]]+\]:|<(!--|script|pre|style|textarea|details|\?|![A-Za-z]|!\[CDATA\[))/im
 
 export function markdownBlocks(text: string): string[] {
   if (REACHES_ACROSS.test(text)) return [text]
