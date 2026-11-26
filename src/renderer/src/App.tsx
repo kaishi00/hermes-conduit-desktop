@@ -297,6 +297,12 @@ export function App() {
     forgetHostCaches(hostList ? hostList.split('\n') : [])
   }, [hostList])
 
+  // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26), worked out here so
+  // the title bar's brand, which stands in for the rail's while a banner is up, shows it too (desktop#594).
+  const away = useAway(phase ?? 'signed-out')
+  const keptForAlert = useKeptHosts(url ?? '')
+  const updateAway = updateBanner(useHostActions(url ?? '').update)
+
   if (!status) return <div className="app" />
   const signedOut = status.phase === 'signed-out' || (status.phase === 'failed' && !status.url)
   // The open window: everything but the lock, sign-in and dashboard pick, which keep the brand in the title bar.
@@ -307,15 +313,33 @@ export function App() {
     !(repairing && status.phase !== 'open') &&
     !(status.phase === 'signed-out' && status.choosing && status.hosts?.length) &&
     !(signedOut || status.phase === 'failed')
+  const switchTo = async (url: string) => {
+    if (!(await switchEndingCall(hostName(url)))) return
+    setRepairing(null)
+    void window.conduit.switchHost(url)
+  }
+  const onRepair = () => status.url && setRepairing(savedHost(status.hosts, status.url))
   const brand = {
     subtitle: signedOut ? undefined : status.hostLabel,
     hosts: status.hosts,
     currentUrl: status.url,
-    onSwitch: async (url: string) => {
-      if (!(await switchEndingCall(hostName(url)))) return
-      setRepairing(null)
-      void window.conduit.switchHost(url)
-    }
+    onSwitch: switchTo,
+    alert: inShell
+      ? brandAlert({
+          phase: status.phase,
+          error: status.error,
+          retryInSeconds: status.retryInSeconds,
+          away,
+          currentUrl: status.url,
+          hosts: status.hosts,
+          kept: keptForAlert,
+          name: hostName,
+          onRetry: () => void window.conduit.reconnect(),
+          onRepair,
+          onSignIn: url => void switchTo(url),
+          updating: !!updateAway
+        })
+      : null
   }
   return (
     <div className="app">
@@ -347,7 +371,7 @@ export function App() {
             status={status}
             onAddHost={() => void switchEndingCall(null).then(ok => ok && setAdding(true))}
             onEditHost={host => void switchEndingCall(null).then(ok => ok && setEditing(host))}
-            onRepair={() => status.url && setRepairing(savedHost(status.hosts, status.url))}
+            onRepair={onRepair}
             brand={brand}
           />
         </SummaryHost.Provider>
@@ -2388,22 +2412,6 @@ function Shell({
   // While an update started here has Hermes away, the banner follows it instead of a bare "reconnecting".
   const hostUpdate = useHostActions(status.url ?? '').update
   const updateAway = updateBanner(hostUpdate)
-  // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26).
-  const away = useAway(status.phase)
-  const connectionAlert = brandAlert({
-        phase: status.phase,
-        error: status.error,
-        retryInSeconds: status.retryInSeconds,
-        away,
-        currentUrl: status.url,
-        hosts: status.hosts,
-        kept: keptHosts,
-        name: hostName,
-        onRetry: () => void window.conduit.reconnect(),
-        onRepair,
-        onSignIn: url => brand.onSwitch?.(url),
-        updating: !!updateAway
-      })
   useEffect(() => {
     if (connected && status.url) hostReachable(status.url)
   }, [connected, status.url, hostUpdate.kind])
@@ -2618,7 +2626,6 @@ function Shell({
             <Brand
               {...brand}
               inRail
-              alert={connectionAlert}
               picture={personPicture.served ? personPicture.picture : null}
               badge={status.url ? badgeFor(status.url) : null}
               onPicture={
