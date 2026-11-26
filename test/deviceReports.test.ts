@@ -62,5 +62,6 @@ describe('device reports', () => {
     expect(countsAsCrash({ type: 'GPU', reason: 'launch-failed', exitCode: 1002 }, false)).toBe(false)
     expect(countsAsCrash({ type: 'Utility', reason: 'killed', exitCode: 15 }, false)).toBe(false)
     expect(countsAsCrash({ type: 'Utility', reason: 'killed', exitCode: 9 }, false)).toBe(true)
+    expect(countsAsCrash({ type: 'renderer', reason: 'killed', exitCode: 15 }, false)).toBe(true)
   })
 })
