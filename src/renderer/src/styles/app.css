@@ -13103,6 +13103,11 @@ button.rail-brand-button:hover {
   scrollbar-width: none;
 }
 
+/* Only the strip gives way when the rail runs short; the rail's own buttons and dot keep their size. */
+.rail:has(> .rail-faces) > :not(.rail-faces, .spacer) {
+  flex-shrink: 0;
+}
+
 .rail-faces::-webkit-scrollbar {
   display: none;
 }
