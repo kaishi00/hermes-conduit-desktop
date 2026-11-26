@@ -44,6 +44,8 @@ interface Props {
   onClose: () => void
   /** The side panel's tabs, atop it. */
   tabs?: ReactNode
+  /** Drawn inside the workbench, which has its own frame and close. */
+  embedded?: boolean
 }
 
 type Listed = WorkspaceListing | { error: string } | 'loading'
@@ -74,7 +76,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
  * row's menu makes. Without the plugin's routes it browses and reads through
  * Hermes' own, and offers no search or changes.
  */
-export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, onClose, tabs }: Props) {
+export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, onClose, tabs, embedded = false }: Props) {
   const [plugin, setPlugin] = useState<boolean | null>(null)
   const [listings, setListings] = useState<Record<string, Listed>>({})
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([root]))
@@ -537,7 +539,7 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
     ) : null
 
   return (
-    <aside className="ws-panel" aria-label={t('Files')}>
+    <aside className={embedded ? 'ws-panel ws-embedded' : 'ws-panel'} aria-label={t('Files')}>
       {tabs}
       <div className="ws-head">
         <Icon name="folder" />
@@ -555,9 +557,11 @@ export function FilesPanel({ root, profile, refreshKey, reveal, onInsertPath, on
         <button className="staged-remove" aria-label={t('Refresh')} title={t('Refresh')} onClick={refresh}>
           ↻
         </button>
-        <button className="staged-remove" aria-label={t('Close')} title={t('Close')} onClick={onClose}>
-          <Icon name="close" />
-        </button>
+        {embedded ? null : (
+          <button className="staged-remove" aria-label={t('Close')} title={t('Close')} onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        )}
       </div>
       {note ? (
         <div className="model-note" role="status">

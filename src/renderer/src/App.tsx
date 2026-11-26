@@ -53,6 +53,8 @@ import {
 } from './state/workspaceTabs'
 import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
 import { absolutePath, pathForDraft } from './state/workspace'
+import { Workbench } from './components/Workbench'
+import { BENCH_COLUMN, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
 import { FileLinks } from './components/Markdown'
 import { WorkLinks, type WorkLinkActions } from './components/WorkLinkCard'
 import { usePulse } from './state/usePulse'
@@ -227,6 +229,7 @@ import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { LoginItemSetting } from './components/LoginItemSetting'
 import { HideDockSetting } from './components/HideDockSetting'
+import { TerminalSettings } from './components/TerminalSettings'
 import { SectionRail } from './components/SectionRail'
 import { fallbackAfterUnpin, launchInstead, pinnedSections, readRailLayout, resolveInitialSection, setSectionPinned, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
@@ -607,6 +610,8 @@ function Shell({
         setSection('chats')
         hideList(false)
       }
+    } else if (action === 'toggle-workbench') {
+      if (section === 'chats' && chat.cwd && !dockedRef.current) showBench(!benchShown)
     } else if (action === 'search') {
       setArchivedOpen(false)
       setSection('chats')
@@ -652,6 +657,8 @@ function Shell({
     const onKey = (event: KeyboardEvent) => {
       const action = shortcutFor(event, false)
       if (!action) return
+      // A terminal keeps Ctrl+B (readline, tmux's prefix): the workbench's key goes to the shell there.
+      if (action === 'toggle-workbench' && event.target instanceof Element && event.target.closest('.bench-terminal')) return
       event.preventDefault()
       runShortcut.current(action)
     }
@@ -717,7 +724,19 @@ function Shell({
       // Kept for this window only.
     }
   }, [])
-  // A file path in a reply opens in the Folder.
+  // The workbench beside a chat with a folder (Eric, 2026-11-26, "B · Project mode"): ⌘B or Ctrl+B, or the header's button.
+  // Open, it takes the side panel's place and tucks the chat list to its faces, until the list is shown again.
+  const [benchOpen, setBenchOpen] = useState(readBenchOpen)
+  const [benchKeepsList, setBenchKeepsList] = useState(false)
+  const benchShown = section === 'chats' && !!chat.cwd && benchOpen && !dockedChat
+  const showBench = useCallback((open: boolean) => {
+    setBenchOpen(open)
+    writeBenchOpen(open)
+    setBenchKeepsList(false)
+  }, [])
+  const benchShownRef = useRef(benchShown)
+  benchShownRef.current = benchShown
+  // A file path in a reply opens in the Folder, or in the workbench's Files while it's open.
   const [reveal, setReveal] = useState<{ path: string; id: number } | null>(null)
   const cwd = chat.cwd
   const openPath = useMemo(
@@ -725,6 +744,7 @@ function Shell({
       cwd
         ? (path: string) => {
             setReveal(current => ({ path: absolutePath(path, cwd), id: (current?.id ?? 0) + 1 }))
+            if (benchShownRef.current) return
             lastTab.current = 'files'
             setArtifactsOpen(false)
             setWorkOpen(false)
@@ -1016,6 +1036,8 @@ function Shell({
   const lastTab = useRef<PanelTab>('work')
   const openTab = (tab: PanelTab | null) => {
     if (tab) lastTab.current = tab
+    // The side panel and the workbench share the room beside the chat: one at a time.
+    if (tab && benchShown) showBench(false)
     setArtifactsOpen(tab === 'chat')
     setWorkOpen(tab === 'work')
     showFiles(tab === 'files')
@@ -1035,11 +1057,24 @@ function Shell({
     return () => window.removeEventListener('resize', resized)
   }, [])
   // The chat list hidden (the « at its top, ⌘\ or Ctrl+\, or a drag past its least width) until the » atop the rail brings it back.
-  const [listHidden, setListHidden] = useState(readListHidden)
-  const hideList = useCallback((hidden: boolean) => {
-    setListHidden(hidden)
-    writeListHidden(hidden)
-  }, [])
+  const [listHiddenPref, setListHidden] = useState(readListHidden)
+  // The workbench tucks the list to its faces; showing the list again keeps it beside the bench until the bench closes.
+  const listHidden = listHiddenPref || (benchShown && !benchKeepsList)
+  const hideList = useCallback(
+    (hidden: boolean) => {
+      if (benchShownRef.current) {
+        setBenchKeepsList(!hidden)
+        if (!hidden && listHiddenPref) {
+          setListHidden(false)
+          writeListHidden(false)
+        }
+        return
+      }
+      setListHidden(hidden)
+      writeListHidden(hidden)
+    },
+    [listHiddenPref]
+  )
   // Hidden, the Bots sidebar lost its scroll (display: none); shown again, it goes back to its spot.
   useShownAgain(listHidden, () => botSideScroll.opened())
   // Combined dashboards: the other hosts kept connected beside this one...
@@ -1057,6 +1092,14 @@ function Shell({
   const listWidth = shownListWidth(listLive ?? listStored, windowWidth - listColumn)
   const listTaken = (section === 'chats' || section === 'room' || section === 'bots') && listHidden ? 0 : (listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28))) + listColumn
   const panelWidth = shownPanelWidth(panelLive ?? panelStored, windowWidth, listTaken)
+  const [benchStored, setBenchStored] = useState(() => readWidth(BENCH_COLUMN))
+  const [benchLive, setBenchLive] = useState<number | null>(null)
+  const benchWidth = shownBenchWidth(benchLive ?? benchStored, windowWidth, listTaken)
+  const commitBench = (width: number | null) => {
+    setBenchLive(null)
+    setBenchStored(width)
+    writeWidth(BENCH_COLUMN, width)
+  }
   // A chat beside the open one: only where both fit, else the pane hides until the window widens.
   const [beside, setBeside] = useState<BesideChat | null>(null)
   const besideBot = beside ? roster.bots?.find(b => b.name === (beside.profile ?? 'default')) : undefined
@@ -2629,7 +2672,8 @@ function Shell({
         style={
           {
             ...(listWidth !== null ? { '--list-width': `${listWidth}px` } : {}),
-            ...(panelWidth !== null ? { '--panel-width': `${panelWidth}px` } : {})
+            ...(panelWidth !== null ? { '--panel-width': `${panelWidth}px` } : {}),
+            '--bench-width': `${benchWidth}px`
           } as CSSProperties
         }
       >
@@ -2815,12 +2859,22 @@ function Shell({
                     ? { label: t("Bot's Screen"), on: screenOpen, onClick: () => window.conduit.openScreenWindow({ profile: screenProfile, botName: botTitle, ...(status.url ? { host: status.url } : {}) }) }
                     : undefined
                 }
+                bench={
+                  chat.cwd && section === 'chats'
+                    ? {
+                        label: benchShown ? t('Hide Workbench') : t('Show Workbench'),
+                        title: `${benchShown ? t('Hide Workbench') : t('Show Workbench')} (${navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl+'}B)`,
+                        on: benchShown,
+                        onClick: () => showBench(!benchShown)
+                      }
+                    : undefined
+                }
                 panel={
                   panelTabs.length
                     ? {
-                        label: shownTab ? t('Hide side panel') : t('Show side panel'),
-                        on: !!shownTab,
-                        onClick: () => openTab(shownTab ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0]),
+                        label: shownTab && !benchShown ? t('Hide side panel') : t('Show side panel'),
+                        on: !!shownTab && !benchShown,
+                        onClick: () => openTab(shownTab && !benchShown ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0]),
                         dot: workDot && shownTab !== 'work' ? workDot : null
                       }
                     : undefined
@@ -2990,10 +3044,22 @@ function Shell({
                 mentionBots={mentionBots}
               />
             </main>
-            {dockedChat ? null : (artifactsOpen && selected.id) || showWork || (filesOpen && chat.cwd) || (beside && besideFits) ? (
+            {benchShown && chat.cwd ? (
+              <>
+                <ColumnDivider label={t('Workbench width')} bounds={BENCH_COLUMN} sign={-1} width={benchWidth} onLive={setBenchLive} onCommit={commitBench} />
+                <Workbench
+                  root={chat.cwd}
+                  profile={selected.profile}
+                  refreshKey={turnsDone}
+                  reveal={reveal}
+                  onInsertPath={path => setQuote(quoteRequest({ insert: pathForDraft(path) }))}
+                  onClose={() => showBench(false)}
+                />
+              </>
+            ) : dockedChat ? null : (artifactsOpen && selected.id) || showWork || (filesOpen && chat.cwd) || (beside && besideFits) ? (
               <ColumnDivider label={t('Side panel width')} bounds={PANEL_COLUMN} sign={-1} width={panelWidth} onLive={setPanelLive} onCommit={commitPanel} />
             ) : null}
-            {dockedChat ? null : artifactsOpen && selected.id ? (
+            {dockedChat || benchShown ? null : artifactsOpen && selected.id ? (
               <ArtifactsPanel
                 profile={selected.profile}
                 sessionIds={[selected.id]}
@@ -3650,7 +3716,9 @@ function Settings({
           bots={bots}
           profile={profile}
           onBack={() => setPage('main')}
-        />
+        >
+          {page === 'workspace' ? <TerminalSettings /> : null}
+        </ConfigPage>
       </SettingsPane>
     )
   if (page === 'memory')
