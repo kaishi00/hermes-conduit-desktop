@@ -72,6 +72,20 @@ export function viewedType(path: string): string | null {
   return VIEWED_TYPES[extensionOf(path)] ?? null
 }
 
+/**
+ * The name a file staged in the composer is viewed under (desktop#611): its
+ * own when its extension is one the viewer shows from a copy, else its name
+ * with the extension of its type when that type is one (a picture pasted
+ * without a name's extension), else null.
+ */
+export function stagedViewName(name: string, mime: string): string | null {
+  if (viewedType(name)) return name
+  const type = mime.toLowerCase().split(';')[0].trim()
+  // An audio-only WebM is served as WebM, which an <audio> plays.
+  const ext = type === 'audio/webm' ? 'webm' : Object.keys(VIEWED_TYPES).find(key => VIEWED_TYPES[key] === type)
+  return ext ? `${name}.${ext}` : null
+}
+
 /** A page: an .html, .htm or .xhtml file, drawn in the sandboxed frame or opened in the browser from a copy. */
 export const isPagePath = (path: string) => ['html', 'htm', 'xhtml'].includes(extensionOf(path))
 

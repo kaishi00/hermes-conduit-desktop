@@ -47953,5 +47953,20 @@
     "tr": "[Kabuk {code} koduyla sonlandı]",
     "zh-Hans": "[shell 已结束，代码 {code}]",
     "zh-Hant": "[shell 已結束，代碼 {code}]"
+  },
+  "Preview {name}": {
+    "de": "Vorschau von {name}",
+    "es": "Vista previa de {name}",
+    "fr": "Aperçu de {name}",
+    "id": "Pratinjau {name}",
+    "it": "Anteprima di {name}",
+    "ja": "{name}をプレビュー",
+    "ko": "{name} 미리 보기",
+    "pl": "Podgląd: {name}",
+    "pt-BR": "Pré-visualizar {name}",
+    "ru": "Просмотр: {name}",
+    "tr": "{name} önizlemesi",
+    "zh-Hans": "预览 {name}",
+    "zh-Hant": "預覽 {name}"
   }
 }
