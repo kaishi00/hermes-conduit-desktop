@@ -81,7 +81,8 @@ export function viewedType(path: string): string | null {
 export function stagedViewName(name: string, mime: string): string | null {
   if (viewedType(name)) return name
   const type = mime.toLowerCase().split(';')[0].trim()
-  const ext = Object.keys(VIEWED_TYPES).find(key => VIEWED_TYPES[key] === type)
+  // An audio-only WebM is served as WebM, which an <audio> plays.
+  const ext = type === 'audio/webm' ? 'webm' : Object.keys(VIEWED_TYPES).find(key => VIEWED_TYPES[key] === type)
   return ext ? `${name}.${ext}` : null
 }
 

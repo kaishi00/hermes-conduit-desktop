@@ -30,7 +30,9 @@ type Shown = { url: string } | { text: string } | { error: string } | null
 /** How a file staged in the composer is shown: by its name, or its type when its name doesn't say; a page as its text, since it isn't on the host to draw. */
 export function stagedViewerKind(staged: Pick<StagedAttachment, 'name' | 'mime'>): ViewerKind {
   const kind = viewerKind(stagedViewName(staged.name, staged.mime) ?? staged.name)
-  return kind === 'page' ? 'text' : kind
+  if (kind === 'page') return 'text'
+  // A recording in a video container (an audio-only .webm) plays as sound.
+  return kind === 'video' && staged.mime.toLowerCase().startsWith('audio/') ? 'audio' : kind
 }
 
 /** A staged file's words, or null when its bytes aren't UTF-8 text. */
