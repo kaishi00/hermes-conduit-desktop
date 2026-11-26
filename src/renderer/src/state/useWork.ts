@@ -122,6 +122,7 @@ export function useWorkSessions(profiles: string[], connected: boolean): { sessi
   useEffect(() => {
     if (!connected || !profiles.length) return
     let live = true
+    const last = new Map<string, WorkSnapshot>()
     const read = async () => {
       const answers = await Promise.all(
         profiles.map(profile =>
@@ -132,6 +133,11 @@ export function useWorkSessions(profiles: string[], connected: boolean): { sessi
         )
       )
       if (!live) return
+      // A failed read keeps what that bot last said, so one plugin hiccup neither drops its row's step nor stops the poll.
+      answers.forEach((answer, index) => {
+        if (answer) last.set(profiles[index]!, answer)
+        else answers[index] = last.get(profiles[index]!) ?? null
+      })
       const byBot = new Map<string, BotWork>()
       answers.forEach((answer, index) => {
         if (answer) byBot.set(profiles[index]!, { working: answer.working, needsYou: answer.needsYou, doing: botDoing(answer) })
