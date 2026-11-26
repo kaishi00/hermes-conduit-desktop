@@ -8,8 +8,11 @@ import { TERMINALS_CAPABILITY } from '../state/terminals'
 
 /** The plugin's /workspace/preview route: a Browser tab's pages from the host. */
 const PREVIEW_CAPABILITY = 'workspace-preview'
-import { BENCH_VIEWS, MAX_PAGES, pageKey, readDrawer, readPages, writeDrawer, writePages, type BenchPage, type BenchView, type DrawerState } from '../state/workbench'
+import { commandAt, stepPath } from '../state/benchTimeline'
+import type { TranscriptStore } from '../state/transcriptStore'
+import { BENCH_VIEWS, MAX_PAGES, pageKey, shownView, readDrawer, readPages, writeDrawer, writePages, type BenchPage, type BenchView, type DrawerState } from '../state/workbench'
 import { baseName } from '../state/workspace'
+import { BenchTimeline, useBenchSteps } from './BenchTimeline'
 import { BrowserView } from './BrowserView'
 import { ChangesView } from './ChangesView'
 import { FilesPanel } from './FilesPanel'
@@ -30,6 +33,8 @@ export function Workbench({
   profile,
   refreshKey,
   reveal,
+  transcript,
+  onShowStep,
   onInsertPath,
   onClose
 }: {
@@ -38,6 +43,10 @@ export function Workbench({
   refreshKey: number
   /** A file a reply named: the bench shows it in Files. */
   reveal?: { path: string; id: number } | null
+  /** The chat's transcript, which the timeline reads its steps from. */
+  transcript: TranscriptStore
+  /** The timeline landed on a step: the chat shows it. */
+  onShowStep: (key: string) => void
   onInsertPath: (path: string) => void
   onClose: () => void
 }) {
@@ -49,6 +58,40 @@ export function Workbench({
   const [hostKey, setHostKey] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<DrawerState>(readDrawer)
   const [opened, setOpened] = useState<{ path: string; id: number } | null>(null)
+  // The timeline's step (issue 453), or null while it follows the chat.
+  const steps = useBenchSteps(transcript)
+  const [at, setAt] = useState<string | null>(null)
+  const [botTurn, setBotTurn] = useState(0)
+  const showTimer = useRef(0)
+  useEffect(() => () => window.clearTimeout(showTimer.current), [])
+  const stepAt = at === null ? null : (steps.find(step => step.key === at) ?? null)
+  // Another chat or folder starts at Now: a step's key names a row of one chat only.
+  const firstStep = steps[0]?.key
+  useEffect(() => {
+    window.clearTimeout(showTimer.current)
+    setAt(null)
+    setBotTurn(0)
+  }, [root, profile, firstStep])
+  const pickStep = (key: string | null, chosen = false) => {
+    // Whatever was waiting to show goes: Now, another step or another chat wins.
+    window.clearTimeout(showTimer.current)
+    setAt(key)
+    const step = key === null ? null : steps.find(s => s.key === key)
+    if (!step) return
+    // Every view moves to the step: the chat, the bot's commands, and Files to the step's file.
+    // A drag passes many steps: the views move to the one it stops on, so no file opens for a step passed over.
+    const land = () => {
+      onShowStep(step.key)
+      if (commandAt(steps, step.key)) setBotTurn(turn => turn + 1)
+      if (step.path) {
+        setOpened({ path: stepPath(step.path, root), id: (opens.current += 1) })
+        // Picked from the list, the file comes forward; a drag leaves the view in front where it is.
+        if (chosen) setView('files')
+      }
+    }
+    if (chosen) land()
+    else showTimer.current = window.setTimeout(land, 160)
+  }
   const bench = useRef<HTMLElement>(null)
   // Each open has an id of its own, so the same file opened twice opens twice.
   const opens = useRef(0)
@@ -106,8 +149,7 @@ export function Workbench({
     setPages(current => (current.length >= MAX_PAGES ? current : [...current, page]))
     setView(pageKey(page))
   }
-  // A tab the view names but the strip didn't take (a ninth, or a folder's tabs just swapped in): the Changes view shows.
-  const shown = view.startsWith('page:') && !pages.some(p => pageKey(p) === view) ? 'changes' : view
+  const shown = shownView(view, pages)
   const changePage = useCallback((next: BenchPage) => setPages(current => current.map(p => (p.id === next.id ? next : p))), [])
   const closePage = (page: BenchPage) => {
     const at = pages.findIndex(p => p.id === page.id)
@@ -250,6 +292,7 @@ export function Workbench({
         ariaLabel={t('Workbench')}
         className="bench-tabs"
       />
+      <BenchTimeline steps={steps} at={stepAt ? stepAt.key : null} onPick={pickStep} />
       <div className="bench-body">
         <div className="bench-view" hidden={shown !== 'changes'}>
           {plugin === null ? (
@@ -269,11 +312,21 @@ export function Workbench({
           </div>
         ))}
       </div>
-      {plugin?.terminals ? (
+      {plugin ? (
         <>
           {drawer.folded ? null : <div className="bench-drawer-line" role="separator" aria-orientation="horizontal" aria-label={t('Terminal height')} onPointerDown={startDrag} />}
           <div className="bench-drawer-frame" style={drawer.folded ? undefined : { height: drawer.height }}>
-            <TerminalDrawer key={`${profile ?? ''}\t${root}`} root={root} profile={profile} folded={drawer.folded} onFold={() => changeDrawer({ ...drawer, folded: !drawer.folded })} />
+            <TerminalDrawer
+              key={`${profile ?? ''}\t${root}`}
+              root={root}
+              profile={profile}
+              folded={drawer.folded}
+              onFold={() => changeDrawer({ ...drawer, folded: !drawer.folded })}
+              shells={plugin.terminals}
+              steps={steps}
+              at={stepAt ? (commandAt(steps, stepAt.key) ?? '') : null}
+              botTurn={botTurn}
+            />
           </div>
         </>
       ) : null}

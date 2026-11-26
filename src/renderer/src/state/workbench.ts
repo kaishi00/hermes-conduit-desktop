@@ -60,6 +60,10 @@ export function writePages(root: string, pages: BenchPage[]): void {
 
 export const pageKey = (page: BenchPage) => `page:${page.id}`
 
+/** The view the bench shows: the one picked, or Changes when it names a Browser tab the strip doesn't have (a ninth, or another folder's). */
+export const shownView = (view: string, pages: readonly BenchPage[]): string =>
+  view.startsWith('page:') && !pages.some(p => pageKey(p) === view) ? 'changes' : view
+
 export const BENCH_COLUMN: ColumnBounds = { key: 'conduit.benchWidth', min: 420, max: 1600 }
 /** Beside an open bench the chat narrows to a column, down to this. */
 export const CHAT_BESIDE_BENCH = 360

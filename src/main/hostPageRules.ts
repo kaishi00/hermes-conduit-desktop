@@ -4,7 +4,7 @@
  * unwrapped, the cookies a dev server set, and where a Browser tab may go.
  * Kept free of Electron so they're tested on their own.
  */
-import { HOST_PAGE_SCHEME, hostPageParts, hostPageUrl, localLink } from '../shared/browserAddress'
+import { HOST_PAGE_SCHEME, hostPageParts, hostPageUrl, isLoopbackHost, localLink } from '../shared/browserAddress'
 import { opensExternally } from './linkPolicy'
 
 export const PAGE_HEADERS = 'X-Conduit-Page-Headers'
@@ -126,23 +126,11 @@ export function answerHeaders(raw: string | null, origin: string, local: string,
  * *.localhost, a trailing dot included. A web page never reaches these.
  */
 export function namesThisComputer(url: string): boolean {
-  let host: string
   try {
-    host = new URL(url).hostname.toLowerCase()
+    return isLoopbackHost(new URL(url).hostname)
   } catch {
     return false
   }
-  host = host.replace(/\.$/, '').replace(/^\[|\]$/g, '')
-  if (host === 'localhost' || host.endsWith('.localhost')) return true
-  if (/^127(\.\d{1,3}){3}$/.test(host) || host === '0.0.0.0') return true
-  if (host === '::1' || host === '::' || /^0*:(0*:)*0*:?1$/.test(host)) return true
-  // IPv4-mapped (::ffff:127.0.0.1, which URL writes as ::ffff:7f00:1) and IPv4-compatible forms.
-  const mapped = /^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host)
-  if (mapped) {
-    const high = parseInt(mapped[1]!, 16)
-    return high >> 8 === 127 || (high === 0 && parseInt(mapped[2]!, 16) === 0)
-  }
-  return /^::(?:ffff:)?127(\.\d{1,3}){3}$/.test(host)
 }
 
 export type BrowserKind = 'host' | 'web'

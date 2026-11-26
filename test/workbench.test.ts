@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { BENCH_COLUMN, CHAT_BESIDE_BENCH, DRAWER_DEFAULT, readBenchOpen, readDrawer, shownBenchWidth, writeBenchOpen, writeDrawer } from '../src/renderer/src/state/workbench'
+import { BENCH_COLUMN, CHAT_BESIDE_BENCH, DRAWER_DEFAULT, readBenchOpen, readDrawer, shownBenchWidth, shownView, writeBenchOpen, writeDrawer } from '../src/renderer/src/state/workbench'
 import { RAIL_WIDTH } from '../src/renderer/src/state/columnWidths'
 
 const store = new Map<string, string>()
@@ -34,5 +34,14 @@ describe('workbench', () => {
     expect(readDrawer()).toEqual({ height: 120, folded: true })
     store.set('conduit.benchDrawer', 'not json')
     expect(readDrawer()).toEqual(DRAWER_DEFAULT)
+  })
+})
+
+describe('the view the bench shows', () => {
+  it('falls back to Changes for a Browser tab the strip doesn’t have', () => {
+    const pages = [{ id: 'a', url: null, nav: 0 }]
+    expect(shownView('page:a', pages)).toBe('page:a')
+    expect(shownView('page:b', pages)).toBe('changes')
+    expect(shownView('files', [])).toBe('files')
   })
 })

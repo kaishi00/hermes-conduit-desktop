@@ -14156,3 +14156,270 @@ button.rail-brand-button:hover {
   border: 0;
   background: #fff;
 }
+
+/* The workbench's timeline (issue 453): the chat's steps on a scrubber over the bench. */
+.bench-timeline {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 8px;
+  min-width: 0;
+}
+
+.bench-timeline-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 42%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bench-timeline-step:hover,
+.bench-timeline-step[aria-expanded='true'] {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.bench-timeline-step .ico {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.bench-timeline-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.bench-timeline-step .meta,
+.bench-timeline-list .meta {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.bench-timeline-track {
+  position: relative;
+  flex: 1;
+  min-width: 80px;
+  height: 22px;
+  cursor: pointer;
+  touch-action: none;
+  border-radius: 6px;
+  margin: 0 6px;
+}
+
+.bench-timeline-track:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+
+.bench-timeline-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--line-strong);
+}
+
+.bench-timeline-tick {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 8px;
+  margin: -4px 0 0 -1px;
+  border-radius: 1px;
+  background: var(--text-4);
+  pointer-events: none;
+}
+
+.bench-timeline-tick.tick-ask {
+  height: 12px;
+  margin-top: -6px;
+  background: var(--text-2);
+}
+
+.bench-timeline-tick.tick-command {
+  background: var(--accent);
+}
+
+.bench-timeline-tick.tick-edit {
+  background: var(--success);
+}
+
+.bench-timeline-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  pointer-events: none;
+}
+
+.bench-timeline-thumb.live {
+  background: var(--surface);
+  border: 2px solid var(--accent);
+}
+
+.bench-timeline-now {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bench-timeline-now:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.bench-timeline-list {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 10px;
+  right: 10px;
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  background: var(--menu);
+  box-shadow: var(--glass-shadow);
+}
+
+.bench-timeline-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bench-timeline-list button:hover,
+.bench-timeline-list button.on {
+  background: var(--surface-hover);
+}
+
+.bench-timeline-list .ico {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+
+.bench-timeline-list .bench-timeline-title {
+  flex: 1;
+}
+
+.bench-timeline-detail {
+  margin-left: 6px;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+/* The bot's command terminal: its commands in this chat, read-only. */
+.bench-bot-commands {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.bench-bot-commands[hidden] {
+  display: none;
+}
+
+.bench-bot-command {
+  padding: 4px 6px;
+  border-radius: 6px;
+  scroll-margin-top: 6px;
+}
+
+.bench-bot-command.on {
+  background: var(--accent-soft);
+}
+
+.bench-bot-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.bench-bot-line > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bench-bot-line .meta {
+  flex: none;
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.bench-bot-prompt {
+  color: var(--accent);
+  user-select: none;
+}
+
+.bench-bot-command pre {
+  margin: 2px 0 0 16px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-2);
+  font: inherit;
+}
+
+.bench-bot-exit {
+  margin-left: 16px;
+  color: var(--danger);
+  font-family: var(--font);
+  font-size: 11.5px;
+}
+
+.bench-bot-commands .bench-note {
+  font-family: var(--font);
+}
