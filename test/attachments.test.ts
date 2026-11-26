@@ -9,6 +9,12 @@ import {
   stagePaste,
   titlePreview,
   tooLargeMessage,
+  voiceTooLargeMessage,
+  attachmentLimitMB,
+  attachmentLimitBytes,
+  setAttachmentLimitMB,
+  isRiskyAttachmentLimit,
+  ATTACHMENT_LIMIT_KEY,
   roomUploadKind,
   typedPicture,
   withPictureExtension,
@@ -70,9 +76,32 @@ describe('the prompt', () => {
     expect(formatReferenceValue('a`b c')).toBe('"a`b c"')
   })
 
-  it('names the limit that refused a file', () => {
-    expect(tooLargeMessage(['big.mov'])).toBe('big.mov is larger than the 16 MB attachment limit.')
-    expect(tooLargeMessage(['a', 'b'])).toBe('These files are larger than the 16 MB attachment limit: a, b.')
+  it('names the limit that refused a file, and where to raise it', () => {
+    const hint = ' You can raise the limit in Settings › Attachments.'
+    expect(tooLargeMessage(['big.mov'], 16)).toBe(`big.mov is larger than the 16 MB attachment limit.${hint}`)
+    expect(tooLargeMessage(['a', 'b'], 32)).toBe(`These files are larger than the 32 MB attachment limit: a, b.${hint}`)
+    expect(voiceTooLargeMessage(8)).toBe(`This voice message is larger than the 8 MB attachment limit.${hint}`)
+    // At the host's maximum there is nothing to raise.
+    expect(tooLargeMessage(['huge.mov'], 256)).toBe('huge.mov is larger than the 256 MB attachment limit.')
+  })
+
+  it('keeps the attachment limit on this computer, 16 MB by default, at most 256 MB', () => {
+    const saved = new Map<string, string>()
+    const storage = { getItem: (key: string) => saved.get(key) ?? null, setItem: (key: string, value: string) => void saved.set(key, value) }
+    expect(attachmentLimitMB(storage)).toBe(16)
+    expect(setAttachmentLimitMB(64, storage)).toBe(64)
+    expect(saved.get(ATTACHMENT_LIMIT_KEY)).toBe('64')
+    expect(attachmentLimitMB(storage)).toBe(64)
+    expect(attachmentLimitBytes(64)).toBe(64 * 1024 * 1024)
+    saved.set(ATTACHMENT_LIMIT_KEY, '9999')
+    expect(attachmentLimitMB(storage)).toBe(256)
+    saved.set(ATTACHMENT_LIMIT_KEY, 'junk')
+    expect(attachmentLimitMB(storage)).toBe(16)
+    const broken = { getItem: () => { throw new Error('private') }, setItem: () => { throw new Error('private') } }
+    expect(attachmentLimitMB(broken)).toBe(16)
+    expect(setAttachmentLimitMB(32, broken)).toBe(32)
+    expect(isRiskyAttachmentLimit(16)).toBe(false)
+    expect(isRiskyAttachmentLimit(32)).toBe(true)
   })
 })
 
