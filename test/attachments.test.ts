@@ -11,6 +11,7 @@ import {
   tooLargeMessage,
   roomUploadKind,
   typedPicture,
+  withPictureExtension,
   roomUploadProblem,
   uploadAttachments,
   uploadRoomAttachments,
@@ -191,6 +192,14 @@ describe('a picture sent as it is', () => {
     expect(typedPicture('flyer.jpg', b64(png))).toEqual({ name: 'flyer.png', mime: 'image/png' })
     expect(typedPicture('IMG_1.JPG', b64([0xff, 0xd8, 0xff, 0xe0]))).toEqual({ name: 'IMG_1.JPG', mime: 'image/jpeg' })
     expect(typedPicture('cat.png', b64(png))).toEqual({ name: 'cat.png', mime: 'image/png' })
+  })
+
+  it('replaces any picture extension and drops trailing dots', () => {
+    expect(typedPicture('photo.heic', b64(png))).toEqual({ name: 'photo.png', mime: 'image/png' })
+    expect(typedPicture('Apple.', b64(png))).toEqual({ name: 'Apple.png', mime: 'image/png' })
+    expect(withPictureExtension('Event 8.30', 'jpg')).toBe('Event 8.30.jpg')
+    expect(withPictureExtension('IMG_1.HEIC', 'jpg')).toBe('IMG_1.jpg')
+    expect(withPictureExtension('', 'png')).toBe('image.png')
   })
 
   it('is no picture when Hermes wouldn’t take its bytes as one', () => {
