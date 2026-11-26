@@ -94,7 +94,7 @@ export function brandAlert(inputs: Inputs): BrandAlert | null {
 }
 
 /** How long the Hermes you're on has been away; back to 'no' as soon as it's open again. */
-export function useAway(phase: ConnectionPhase, shown = AWAY_SHOWN_MS, long = DOWN_LONG_MS): Away {
+export function useAway(phase: ConnectionPhase, host = '', shown = AWAY_SHOWN_MS, long = DOWN_LONG_MS): Away {
   const gone = phase === 'connecting' || phase === 'reconnecting'
   const [away, setAway] = useState<Away>('no')
   useEffect(() => {
@@ -102,6 +102,6 @@ export function useAway(phase: ConnectionPhase, shown = AWAY_SHOWN_MS, long = DO
     if (!gone) return
     const timers = [setTimeout(() => setAway('shown'), shown), setTimeout(() => setAway('long'), long)]
     return () => timers.forEach(clearTimeout)
-  }, [gone, shown, long])
+  }, [gone, host, shown, long]) // Another Hermes starts its own wait.
   return away
 }
