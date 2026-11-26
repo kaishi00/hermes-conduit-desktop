@@ -140,7 +140,7 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
             aria-checked={host.url === currentUrl}
             onClick={() => {
               setOpen(false)
-              if (host.url !== currentUrl) onSwitch!(host.url)
+              if (host.url !== currentUrl) onSwitch?.(host.url)
             }}
           >
             <span className="host-check">{host.url === currentUrl ? '✓' : ''}</span>
@@ -208,7 +208,9 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
         <span className="rail-brand-host">{subtitle}</span>
       ) : null
     const state = alert ? <span className={`rail-brand-state ${alert.tone}`} aria-hidden="true" /> : null
-    const tip = alert ? `${label}\n${alert.text}` : switchable ? `${label}\n${t('Switch Hermes')}` : label
+    // The tooltip says what a press does: switch Hermes, or choose your picture with one Hermes.
+    const does = switchable ? t('Switch Hermes') : onPicture ? (picture ? t('Change Your Picture…') : t('Choose Your Picture…')) : null
+    const tip = [label, alert?.text, does].filter(Boolean).join('\n')
     return (
       <div
         className="rail-brand host-switch"

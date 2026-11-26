@@ -60,7 +60,7 @@ export function YourPicture({ picture, title, caption }: { picture: PersonPictur
         <input
           ref={input}
           type="file"
-          accept="image/png,image/jpeg,image/gif,image/webp,image/heic"
+          accept="image/png,image/jpeg,image/gif,image/webp"
           hidden
           onChange={e => {
             const file = e.target.files?.[0]
