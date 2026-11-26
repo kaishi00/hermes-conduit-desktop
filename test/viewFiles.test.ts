@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { byteRange, isPagePath, isViewedFileUrl, pageDownloadDecision, pageReadResult, viewedFileUrl, viewedType, viewerFrame } from '../src/shared/viewFileRules'
+import { byteRange, isPagePath, isViewedFileUrl, pageDownloadDecision, pageReadResult, stagedViewName, viewedFileUrl, viewedType, viewerFrame } from '../src/shared/viewFileRules'
 import { frameStays } from '../src/main/linkPolicy'
 
 beforeAll(() => {
@@ -80,6 +80,41 @@ describe('a file the chat’s file card opens (desktop#554)', () => {
     const clip = renderToStaticMarkup(createElement(Reply as never, { text: 'MEDIA:/srv/out/clip.mp4' }))
     expect(clip).toContain('>Open<')
     expect(clip).not.toContain('Open in Browser')
+  })
+})
+
+describe('a file staged in the composer, opened from its chip (desktop#611)', () => {
+  it('is viewed under its own name, or its type’s extension when its name doesn’t say', () => {
+    expect(stagedViewName('shot.png', 'image/png')).toBe('shot.png')
+    expect(stagedViewName('Screenshot', 'image/png')).toBe('Screenshot.png')
+    expect(stagedViewName('memo', 'application/pdf')).toBe('memo.pdf')
+    expect(stagedViewName('voice', 'audio/webm;codecs=opus')).toBeNull()
+    expect(stagedViewName('take', 'video/webm')).toBe('take.webm')
+    expect(stagedViewName('notes.txt', 'text/plain')).toBeNull()
+  })
+
+  it('is shown by its kind, a page as its text, its words read from its bytes, with no Download', async () => {
+    const viewer = '../src/renderer/src/components/FileViewer.tsx'
+    const { stagedViewerKind, stagedText, FileViewer } = (await import(/* @vite-ignore */ viewer)) as {
+      stagedViewerKind: (s: { name: string; mime: string }) => string
+      stagedText: (base64: string) => string | null
+      FileViewer: unknown
+    }
+    expect(stagedViewerKind({ name: 'shot.png', mime: 'image/png' })).toBe('image')
+    expect(stagedViewerKind({ name: 'Pasted image', mime: 'image/jpeg' })).toBe('image')
+    expect(stagedViewerKind({ name: 'paper.pdf', mime: '' })).toBe('pdf')
+    expect(stagedViewerKind({ name: 'clip.mov', mime: 'video/quicktime' })).toBe('video')
+    expect(stagedViewerKind({ name: 'voice.m4a', mime: 'audio/mp4' })).toBe('audio')
+    expect(stagedViewerKind({ name: 'site.html', mime: 'text/html' })).toBe('text')
+    expect(stagedViewerKind({ name: 'README.md', mime: 'text/markdown' })).toBe('markdown')
+    expect(stagedText(Buffer.from('olá, mundo').toString('base64'))).toBe('olá, mundo')
+    expect(stagedText(Buffer.from([0xff, 0xd8, 0xff, 0x00]).toString('base64'))).toBeNull()
+    expect(stagedText(Buffer.from('a\u0000b').toString('base64'))).toBeNull()
+    const staged = { id: '1', name: 'notes.txt', kind: 'file', mime: 'text/plain', size: 5, base64: Buffer.from('hello').toString('base64') }
+    const page = renderToStaticMarkup(createElement(FileViewer as never, { file: { staged }, name: 'notes.txt', onClose: () => {} }))
+    expect(page).toContain('>Done<')
+    expect(page).not.toContain('Download')
+    expect(page).not.toContain('Open in Browser')
   })
 })
 

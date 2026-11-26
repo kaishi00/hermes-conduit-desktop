@@ -2704,6 +2704,32 @@ html[data-window='quick'] body {
   font: inherit;
 }
 
+/* A staged file's thumbnail and name open its preview (desktop#611). */
+.staged-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.staged-open:hover .staged-name {
+  text-decoration: underline;
+}
+
+.staged-open > svg {
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  flex: none;
+}
+
 .staged-name.link {
   cursor: pointer;
   text-decoration: underline dotted;

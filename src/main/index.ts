@@ -37,7 +37,7 @@ import {
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
 import { pageServed, pageUrl, registerPageScheme, servePages } from './pages'
-import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile } from './viewFiles'
+import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile, viewStagedFile } from './viewFiles'
 import { isPagePath, pageDownloadDecision, type PageRead } from '../shared/viewFileRules'
 import { confineNavigation } from './navigation'
 import { endSocket, LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
@@ -846,6 +846,15 @@ function registerIpc(): void {
       return { error: openFailure(error) }
     } finally {
       if (key) viewCopies.delete(key)
+    }
+  })
+  ipcMain.handle(IPC.viewStagedFile, async (_event, name: unknown, mime: unknown, base64: unknown): Promise<{ url: string } | { error: string }> => {
+    if (typeof name !== 'string' || typeof mime !== 'string' || typeof base64 !== 'string') return { error: t("Couldn't open this file") }
+    try {
+      const url = await viewStagedFile(name, mime, base64)
+      return url ? { url } : { error: t("Couldn't open this file") }
+    } catch {
+      return { error: t("Couldn't open this file") }
     }
   })
   ipcMain.handle(IPC.openHostPageInBrowser, async (event, path: unknown, profile: unknown): Promise<string | null> => {

@@ -288,6 +288,12 @@ export interface ConduitApi {
   viewHostFile(path: string, profile?: string, ticket?: string): Promise<{ url: string } | { error: string }>
   /** Stops a viewer's copy still downloading, by its ticket: the viewer closed or moved to another file. */
   cancelViewHostFile(ticket: string): void
+  /**
+   * Writes a picture, sound, video or PDF staged in the composer (its bytes,
+   * base64) for the viewer its chip opens, and gives the copy's address on
+   * the file scheme, or what went wrong (desktop#611).
+   */
+  viewStagedFile(name: string, mime: string, base64: string): Promise<{ url: string } | { error: string }>
   /** Copies a page (.html, .htm, .xhtml) on the Hermes host down and opens it in the default browser; null, or what went wrong (desktop#554). */
   openHostPageInBrowser(path: string, profile?: string): Promise<string | null>
   /** Saves bytes already on hand (a picture's data) where the person picks; false when they didn't. */
@@ -562,6 +568,7 @@ export const IPC = {
   saveHostFile: 'conduit:save-host-file',
   viewHostFile: 'conduit:view-host-file',
   cancelViewHostFile: 'conduit:cancel-view-host-file',
+  viewStagedFile: 'conduit:view-staged-file',
   openHostPageInBrowser: 'conduit:open-host-page-in-browser',
   saveBytes: 'conduit:save-bytes',
   saveKanbanAttachment: 'conduit:save-kanban-attachment',

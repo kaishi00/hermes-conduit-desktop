@@ -15,6 +15,8 @@ import { insertingMention, mentionCandidates, mentionQueryAt, mentionTag } from 
 import type { Bot } from '../state/bots'
 import { carriesReply, excerpt, insertQuote, replyEnvelope, type QuoteRequest, type ReplyReference } from '../state/quote'
 import { ask } from '../state/dialogs'
+import { createPortal } from 'react-dom'
+import { FileViewer } from './FileViewer'
 
 /** The last folder of a path, the way the phone's chip shows it. */
 function folderName(path: string): string {
@@ -120,6 +122,13 @@ export function Composer({
 }: Props) {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<StagedAttachment[]>([])
+  /** The staged file its chip opened in the viewer, to check before it's sent (desktop#611); it closes once the file leaves the composer. */
+  const [viewingId, setViewingId] = useState<string | null>(null)
+  const viewing = viewingId ? (attachments.find(a => a.id === viewingId) ?? null) : null
+  const closeViewer = useCallback(() => {
+    setViewingId(null)
+    area.current?.focus()
+  }, [])
   const [notice, setNotice] = useState<string | null>(null)
   const [staging, setStaging] = useState(0)
   const [dragging, setDragging] = useState(false)
@@ -682,14 +691,19 @@ export function Composer({
         {attachments.length || staging ? (
           <div className="staged">
             {attachments.map(a => (
-              <span key={a.id} className="staged-chip" title={a.pastedText !== undefined ? t('Click to put the text back in the message') : a.name}>
-                {a.kind === 'image' ? <img src={`data:${a.mime};base64,${a.base64}`} alt="" /> : <Icon name="file" />}
+              <span key={a.id} className="staged-chip" title={a.pastedText !== undefined ? t('Click to put the text back in the message') : t('Preview {name}', { name: a.name })}>
                 {a.pastedText !== undefined ? (
-                  <button className="staged-name link" onClick={() => unpaste(a)}>
-                    {displayName(a.name)}
-                  </button>
+                  <>
+                    <Icon name="file" />
+                    <button className="staged-name link" onClick={() => unpaste(a)}>
+                      {displayName(a.name)}
+                    </button>
+                  </>
                 ) : (
-                  <span className="staged-name">{displayName(a.name)}</span>
+                  <button className="staged-open" aria-label={t('Preview {name}', { name: displayName(a.name) })} onClick={() => setViewingId(a.id)}>
+                    {a.kind === 'image' ? <img src={`data:${a.mime};base64,${a.base64}`} alt="" /> : <Icon name="file" />}
+                    <span className="staged-name">{displayName(a.name)}</span>
+                  </button>
                 )}
                 <button className="staged-remove" aria-label={t('Remove {name}', { name: displayName(a.name) })} onClick={() => remove(a.id)}>
                   <Icon name="close" />
@@ -699,6 +713,7 @@ export function Composer({
             {staging ? <span className="staged-chip busy">{t('Attaching…')}</span> : null}
           </div>
         ) : null}
+        {viewing ? createPortal(<FileViewer file={{ staged: viewing }} name={displayName(viewing.name)} onClose={closeViewer} />, document.body) : null}
         {picked ? (
           <div className="slash-suggestions" role="listbox" aria-label={t('Slash commands')}>
             {suggestions.map((command, i) => (

@@ -46978,5 +46978,20 @@
     "tr": "Yanıtını bekliyor",
     "zh-Hans": "正在等你回答",
     "zh-Hant": "正在等你回答"
+  },
+  "Preview {name}": {
+    "de": "Vorschau von {name}",
+    "es": "Vista previa de {name}",
+    "fr": "Aperçu de {name}",
+    "id": "Pratinjau {name}",
+    "it": "Anteprima di {name}",
+    "ja": "{name}をプレビュー",
+    "ko": "{name} 미리 보기",
+    "pl": "Podgląd: {name}",
+    "pt-BR": "Pré-visualizar {name}",
+    "ru": "Просмотр: {name}",
+    "tr": "{name} önizlemesi",
+    "zh-Hans": "预览 {name}",
+    "zh-Hant": "預覽 {name}"
   }
 }
