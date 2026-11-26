@@ -233,7 +233,7 @@ export function ChangesView({
           </span>
         </button>
         <span className="git-row-actions">
-          {!inStaged && state !== 'deleted' ? (
+          {!inStaged && state !== 'deleted' && !file.secret ? (
             <button className="git-icon" title={t('Open File')} aria-label={t('Open File')} onClick={() => onOpenFile(hostPath(status.top, file.path))}>
               <Icon name="file" />
             </button>

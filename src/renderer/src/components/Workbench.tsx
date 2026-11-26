@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
-import { STATUS_PATH, askPluginStatus, serves } from '../state/plugin'
+import { STATUS_PATH, askAgainMs, askPluginStatus, serves } from '../state/plugin'
 import { GIT_CAPABILITY, lists, type GitStatus } from '../state/sourceControl'
 import { TERMINALS_CAPABILITY } from '../state/terminals'
 import { BENCH_VIEWS, readDrawer, writeDrawer, type BenchView, type DrawerState } from '../state/workbench'
@@ -44,14 +44,24 @@ export function Workbench({
   // Each open has an id of its own, so the same file opened twice opens twice.
   const opens = useRef(0)
 
+  // What the plugin serves; an ask that couldn't tell (a timeout, a restart) is asked again rather than read as an old plugin.
   useEffect(() => {
     let live = true
-    void askPluginStatus(() => gateway.http('GET', STATUS_PATH, undefined, 8_000)).then(status => {
-      if (!live) return
-      setPlugin({ git: !!status && serves(status, [GIT_CAPABILITY]), terminals: !!status && serves(status, [TERMINALS_CAPABILITY]) })
-    })
+    let timer = 0
+    const ask = (attempt: number) =>
+      void askPluginStatus(() => gateway.http('GET', STATUS_PATH, undefined, 8_000)).then(status => {
+        if (!live) return
+        if (status === null) {
+          timer = window.setTimeout(() => ask(attempt + 1), askAgainMs(attempt))
+          return
+        }
+        setPlugin({ git: serves(status, [GIT_CAPABILITY]), terminals: serves(status, [TERMINALS_CAPABILITY]) })
+      })
+    setPlugin(null)
+    ask(0)
     return () => {
       live = false
+      window.clearTimeout(timer)
     }
   }, [root, profile])
   useEffect(() => setGit(null), [root, profile])
@@ -78,18 +88,23 @@ export function Workbench({
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === '`') {
         e.preventDefault()
-        setDrawer(current => {
-          const next = { ...current, folded: !current.folded }
-          writeDrawer(next)
-          return next
-        })
+        keep.current = true
+        setDrawer(current => ({ ...current, folded: !current.folded }))
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // The drawer's height, dragged by the line above it.
+  // The drawer's height, dragged by the line above it, and kept once the drag ends.
+  const dragEnd = useRef<(() => void) | null>(null)
+  useEffect(() => () => dragEnd.current?.(), [])
+  const keep = useRef(false)
+  useEffect(() => {
+    if (!keep.current) return
+    keep.current = false
+    writeDrawer(drawer)
+  }, [drawer])
   const startDrag = (e: React.PointerEvent) => {
     const panel = bench.current
     if (!panel) return
@@ -98,14 +113,17 @@ export function Workbench({
     const startHeight = drawer.height
     const most = panel.clientHeight - 160
     const move = (ev: PointerEvent) => setDrawer(current => ({ ...current, folded: false, height: Math.round(Math.max(120, Math.min(most, startHeight + startY - ev.clientY))) }))
-    const up = () => {
+    const stop = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      setDrawer(current => {
-        writeDrawer(current)
-        return current
-      })
+      dragEnd.current = null
     }
+    const up = () => {
+      stop()
+      keep.current = true
+      setDrawer(current => ({ ...current }))
+    }
+    dragEnd.current = stop
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }

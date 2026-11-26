@@ -14021,3 +14021,7 @@ button.rail-brand-button:hover {
   height: 100%;
   background: transparent !important;
 }
+
+.bench-drawer-body[hidden] {
+  display: none;
+}

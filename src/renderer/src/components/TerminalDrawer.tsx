@@ -125,28 +125,27 @@ export function TerminalDrawer({
           </button>
         }
       />
-      {folded ? null : (
-        <div className="bench-drawer-body">
-          {listed === 'loading' ? (
-            <div className="bench-note">{t('Loading…')}</div>
-          ) : 'error' in listed ? (
-            <div className="bench-note">{listed.error}</div>
-          ) : !listed.available ? (
-            <div className="bench-note">{listed.reason ?? t('Terminals aren’t available on this Hermes.')}</div>
-          ) : !terminals.length ? (
-            <div className="bench-empty small">
-              <p className="meta">{t('A terminal here is a shell on the Hermes host, in this chat’s folder. It keeps running while Conduit is closed.')}</p>
-              <button className="primary" disabled={starting} onClick={() => void start()}>
-                {t('New Terminal')}
-              </button>
-            </div>
-          ) : null}
-          {failed ? <div className="bench-note error-text">{failed}</div> : null}
-          {terminals.map(row => (
-            <TerminalView key={row.id} row={row} profile={profile} shown={row.id === shownId} onEnded={code => ended(row.id, code)} onGone={() => gone(row.id)} />
-          ))}
-        </div>
-      )}
+      {/* Folded, the views stay mounted, so their shells keep their sockets and screens. */}
+      <div className="bench-drawer-body" hidden={folded}>
+        {listed === 'loading' ? (
+          <div className="bench-note">{t('Loading…')}</div>
+        ) : 'error' in listed ? (
+          <div className="bench-note">{listed.error}</div>
+        ) : !listed.available ? (
+          <div className="bench-note">{listed.reason ?? t('Terminals aren’t available on this Hermes.')}</div>
+        ) : !terminals.length ? (
+          <div className="bench-empty small">
+            <p className="meta">{t('A terminal here is a shell on the Hermes host, in this chat’s folder. It keeps running while Conduit is closed.')}</p>
+            <button className="primary" disabled={starting} onClick={() => void start()}>
+              {t('New Terminal')}
+            </button>
+          </div>
+        ) : null}
+        {failed ? <div className="bench-note error-text">{failed}</div> : null}
+        {terminals.map(row => (
+          <TerminalView key={row.id} row={row} profile={profile} shown={row.id === shownId && !folded} onEnded={code => ended(row.id, code)} onGone={() => gone(row.id)} />
+        ))}
+      </div>
     </section>
   )
 }

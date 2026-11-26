@@ -657,6 +657,8 @@ function Shell({
     const onKey = (event: KeyboardEvent) => {
       const action = shortcutFor(event, false)
       if (!action) return
+      // A terminal keeps Ctrl+B (readline, tmux's prefix): the workbench's key goes to the shell there.
+      if (action === 'toggle-workbench' && event.target instanceof Element && event.target.closest('.bench-terminal')) return
       event.preventDefault()
       runShortcut.current(action)
     }
