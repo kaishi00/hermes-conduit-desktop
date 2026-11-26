@@ -121,12 +121,12 @@ describe('chat archive menus', () => {
       byProfile: { coder: [coder.id, second.id] },
       mixed: [`coder\u001f${coder.id}`, `coder\u001f${second.id}`]
     }))
-    await renderList({ rows: [coder, second], onArchive: () => pending, onPin: () => {} })
+    await renderList({ rows: [coder, second], onArchive: () => pending, onPin: async () => true })
 
     rightClick(row('Coder chat'))
     act(() => menuItem('Archive')!.click())
     rightClick(row('Second chat'))
-    act(() => menuItem('Unpin')!.click())
+    await act(async () => menuItem('Unpin')!.click())
     expect(JSON.parse(localStorage.getItem('conduit.pinnedChatOrder.')!)).toEqual({
       byProfile: { coder: [coder.id] },
       mixed: [`coder\u001f${coder.id}`]
@@ -136,6 +136,27 @@ describe('chat archive menus', () => {
       await pending
     })
     expect(JSON.parse(localStorage.getItem('conduit.pinnedChatOrder.')!)).toEqual({ byProfile: { coder: [] }, mixed: [] })
+  })
+
+  it.each([true, false])('drops an unpinned row from the latest order only once the unpin is taken (%s, desktop#520)', async taken => {
+    const second = { id: 'second-chat', title: 'Second chat', activeAt: now - 1, pinned: true, profile: 'coder' }
+    let finish!: (result: boolean) => void
+    const pending = new Promise<boolean>(resolve => { finish = resolve })
+    const order = JSON.stringify({ byProfile: { coder: [coder.id, second.id] }, mixed: [`coder\u001f${coder.id}`, `coder\u001f${second.id}`] })
+    localStorage.setItem('conduit.pinnedChatOrder.', order)
+    await renderList({ rows: [coder, second], onPin: () => pending })
+
+    rightClick(row('Coder chat'))
+    act(() => menuItem('Unpin')!.click())
+    expect(host.querySelector('.row-menu')).toBeNull()
+    expect(localStorage.getItem('conduit.pinnedChatOrder.')).toBe(order)
+    await act(async () => {
+      finish(taken)
+      await pending
+    })
+    expect(JSON.parse(localStorage.getItem('conduit.pinnedChatOrder.')!)).toEqual(
+      taken ? { byProfile: { coder: [second.id] }, mixed: [`coder\u001f${second.id}`] } : JSON.parse(order)
+    )
   })
 
   it('does not offer Archive without its callback', async () => {

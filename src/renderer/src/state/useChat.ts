@@ -418,6 +418,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   // send), a question dismissed beside another chat finds its card by it (expiredQuestions).
   useEffect(() => noteChatSession(chat.storedId, chat.liveId), [chat.storedId, chat.liveId])
   const [loading, setLoading] = useState(false)
+  /** Failed opens being read again (reloadHistory with no live id): a jump waits for them (desktop#520). */
+  const [reopening, setReopening] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const liveId = useRef<string | null>(null)
   /** Tool ids a completed history read could not settle, kept per chat for this window. */
@@ -711,6 +713,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     const stored = chatRef.current.storedId
     if (!stored) return
     const ticket = ++request.current
+    // A failed open read again (a send's openSettled) sets no loading state: a jump asked for meanwhile
+    // waits for it rather than being answered missed, and is looked for again once it ends (desktop#520).
+    const reopens = liveId.current === null
+    if (reopens) setReopening(n => n + 1)
     const olderWas = olderNow.current
     const params: Record<string, unknown> = { session_id: stored, cols: 96, source: 'desktop' }
     if (profile) params.profile = profile
@@ -754,6 +760,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       }
     } catch {
       // The chat as drawn stays; the next open reads it.
+    } finally {
+      if (reopens) setReopening(n => n - 1)
     }
   }, [profile, sessionAuthority])
 
@@ -1537,11 +1545,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // While the open is still in flight, wait: its first page or a live id can still settle.
     // Once it has settled without either (a failed open), there are no pages to read and
     // the jump must be answered, not left pending until another jump or a chat switch.
-    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null || (error !== null && !loading)) {
+    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null || (error !== null && !loading && !reopening)) {
       wanted.current = null
       seek.missed?.()
     } else void loadOlder()
-  }, [loadOlder, transcriptRef, error, loading])
+  }, [loadOlder, transcriptRef, error, loading, reopening])
   const seekRow = useCallback(
     (found: (items: readonly TranscriptItem[]) => boolean, missed?: () => void) => {
       const seek: NonNullable<typeof wanted.current> = { found, missed }

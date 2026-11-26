@@ -10,6 +10,15 @@ describe('a page load during an in-flight sign-in check (issue 520)', () => {
     // A second load before the check ends stays pending once.
     expect(lookRequest(true, true, true)).toEqual({ run: false, pending: true })
   })
+
+  it('does not keep the load the check started on to check it twice (desktop#520)', () => {
+    // did-finish-load for the load whose did-navigate began the check.
+    expect(lookRequest(true, true, false, true)).toEqual({ run: false, pending: false })
+    // A load that came after the check began is kept.
+    expect(lookRequest(true, true, false, false)).toEqual({ run: false, pending: true })
+    // Out of a check, a load always runs.
+    expect(lookRequest(false, true, false, true)).toEqual({ run: true, pending: false })
+  })
 })
 
 describe('the sign-in window’s rules', () => {
