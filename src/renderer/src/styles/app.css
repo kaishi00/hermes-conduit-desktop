@@ -66,6 +66,14 @@ a:hover {
   flex: none;
 }
 
+/* The section glyphs (navGlyphs.tsx): solid, so no stroke from .ico. */
+.glyph {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: block;
+}
+
 .app {
   height: 100%;
   display: flex;

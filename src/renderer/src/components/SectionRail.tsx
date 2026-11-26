@@ -13,19 +13,11 @@ import {
   type RailLayout
 } from '../state/railSections'
 import { glyphs, sectionTitle, shortcutForSection } from '../state/shortcuts'
-import { Icon, type IconName } from './icons'
+import { Icon } from './icons'
+import { NavGlyph } from './navGlyphs'
 
 /** A rail button's own drag type, so a dropped section never lands in a text field as its name. */
 const RAIL_MOVE = 'application/x-conduit-rail-move'
-
-const SECTION_ICONS: Record<RailSection, IconName> = {
-  bots: 'bots',
-  chats: 'chats',
-  tasks: 'tasks',
-  pulse: 'pulse',
-  artifacts: 'paperclip',
-  needs: 'bell'
-}
 
 export interface SectionRailProps {
   layout: RailLayout
@@ -236,7 +228,7 @@ export function SectionRail({
                   setDropTarget(null)
                 }}
               >
-                <Icon name={SECTION_ICONS[section]} />
+                <NavGlyph name={section} />
                 {section === 'pulse' && pulseUnseen > 0 && activeSection !== 'pulse' ? (
                   <span className="badge">{pulseUnseen > 99 ? '99+' : pulseUnseen}</span>
                 ) : null}
@@ -255,7 +247,7 @@ export function SectionRail({
           aria-current={settingsSelected ? 'page' : undefined}
           onClick={onSettings}
         >
-          <Icon name="settings" />
+          <NavGlyph name="settings" />
         </button>
         <span
           className={`dot${connected ? '' : ' warn'}`}
