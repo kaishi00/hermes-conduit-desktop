@@ -126,10 +126,10 @@ export interface Draft {
 }
 
 /** A new request: held for the user's OK, or sent now as `request`, the user's own words with it. */
-export type Asked = { held: Record<string, string> } | { request: string }
+export type Asked = { held: Record<string, string> } | { request: string; said: string[] }
 
 export type Release =
-  | { send: true; tool: HeldTool; request: string }
+  | { send: true; tool: HeldTool; request: string; said: string[] }
   | { send: false; result: Record<string, string> }
 
 /** Words this soon after the request's own are still the request (its transcript trails the call). */
@@ -202,7 +202,17 @@ export class AskFirst {
     // The model let a held request go on the user's no without send_request: a bare no was about that one.
     if (answered) said = said.filter(words => !isBareNo(words))
     const held = this.hold(tool, request, said)
-    return held ? { held } : { request: withUserWords(said, request) }
+    return held ? { held } : { request: withUserWords(said, request), said }
+  }
+
+  /**
+   * Hermes' answer to a job sent with `said`: one it refused gives the words
+   * back for the retry; one whose outcome is unknown (`delivery: unknown`)
+   * keeps them sent (hermes-conduit #3337).
+   */
+  settle(said: string[], result: Record<string, string>): Record<string, string> {
+    if (result.status === 'error' && result.delivery !== 'unknown') this.words.giveBack(said)
+    return result
   }
 
   /** A correction to running work, with what the user said themselves. */
@@ -261,7 +271,7 @@ export class AskFirst {
         this.draft = null
         // Their yes, and anything said while it waited, was this request's: none of it goes with the next one.
         this.words.skip(this.nextLineBegan)
-        return { send: true, tool: waiting.tool, request: withUserWords(waiting.said, adding(answer.addition, waiting.request)) }
+        return { send: true, tool: waiting.tool, request: withUserWords(waiting.said, adding(answer.addition, waiting.request)), said: waiting.said }
       case 'no':
       case 'notYet':
         if (answer.change) {

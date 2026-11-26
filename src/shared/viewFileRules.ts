@@ -1,3 +1,19 @@
+/** What a page's read-text route answered: its text, a flag to download it as a page, or nothing usable. */
+export type PageRead = string | { page: true } | null
+
+/** How save-host-file answers an HTML download: stream it, take it as the page, or use the data URL. */
+export function pageDownloadDecision(path: string, html: boolean, read: PageRead): 'stream' | 'page' | 'data-url' {
+  if (!html) return 'stream'
+  if (!isPagePath(path)) return 'data-url'
+  return read ? 'page' : 'data-url'
+}
+
+export function pageReadResult(read: PageRead): { text?: string; asPage: boolean } | null {
+  if (typeof read === 'string') return { text: read, asPage: false }
+  if (read && read.page) return { asPage: true }
+  return null
+}
+
 /**
  * The rules for a host file a chat's file card opens in Conduit's viewer
  * (desktop#554): which files are copied down to be shown, the type each is
@@ -54,6 +70,20 @@ export function extensionOf(path: string): string {
 /** The type a copy of `path` is served as, or null when the viewer doesn't show it from a copy. */
 export function viewedType(path: string): string | null {
   return VIEWED_TYPES[extensionOf(path)] ?? null
+}
+
+/**
+ * The name a file staged in the composer is viewed under (desktop#611): its
+ * own when its extension is one the viewer shows from a copy, else its name
+ * with the extension of its type when that type is one (a picture pasted
+ * without a name's extension), else null.
+ */
+export function stagedViewName(name: string, mime: string): string | null {
+  if (viewedType(name)) return name
+  const type = mime.toLowerCase().split(';')[0].trim()
+  // An audio-only WebM is served as WebM, which an <audio> plays.
+  const ext = type === 'audio/webm' ? 'webm' : Object.keys(VIEWED_TYPES).find(key => VIEWED_TYPES[key] === type)
+  return ext ? `${name}.${ext}` : null
 }
 
 /** A page: an .html, .htm or .xhtml file, drawn in the sandboxed frame or opened in the browser from a copy. */

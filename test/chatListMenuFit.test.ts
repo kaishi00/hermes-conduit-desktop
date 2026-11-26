@@ -40,7 +40,7 @@ describe('the chat row menu', () => {
           runningIds: new Set<string>(),
           onSelect: () => {},
           onNewChat: () => {},
-          onPin: () => {},
+          onPin: async () => true,
           onRename: () => {},
           onArchive: async () => true
         } as never)

@@ -226,6 +226,9 @@ export interface ConduitApi {
   setAppLock(on: boolean): Promise<boolean>
   askHostAtLaunch(): Promise<boolean>
   setAskHostAtLaunch(on: boolean): Promise<boolean>
+  /** The Mac's Hide from the Dock while every window is closed (main/dockPresence.ts); null off the Mac. */
+  hideDock(): Promise<boolean | null>
+  setHideDock(on: boolean): Promise<boolean | null>
   /** Asks for Touch ID or Windows Hello and, once given, opens the saved hosts. */
   unlock(): Promise<boolean>
   /** Crash and freeze reports kept on this computer, and those Conduit still asks about. */
@@ -285,6 +288,12 @@ export interface ConduitApi {
   viewHostFile(path: string, profile?: string, ticket?: string): Promise<{ url: string } | { error: string }>
   /** Stops a viewer's copy still downloading, by its ticket: the viewer closed or moved to another file. */
   cancelViewHostFile(ticket: string): void
+  /**
+   * Writes a picture, sound, video or PDF staged in the composer (its bytes,
+   * base64) for the viewer its chip opens, and gives the copy's address on
+   * the file scheme, or what went wrong (desktop#611).
+   */
+  viewStagedFile(name: string, mime: string, base64: string): Promise<{ url: string } | { error: string }>
   /** Copies a page (.html, .htm, .xhtml) on the Hermes host down and opens it in the default browser; null, or what went wrong (desktop#554). */
   openHostPageInBrowser(path: string, profile?: string): Promise<string | null>
   /** Saves bytes already on hand (a picture's data) where the person picks; false when they didn't. */
@@ -344,6 +353,10 @@ export interface ConduitApi {
   /** A live call's socket opened with a single-use token the host mints at `path` (Gemini Live); the token stays in the main process. */
   /** A page Hermes drew, served on its own scheme for a sandboxed frame; null when it's too large. */
   pageUrl(html: string): Promise<string | null>
+  /** The key a workbench Browser tab's host page names the dashboard on screen by (hostPageUrl); null while signed out. */
+  hostPageKey(): Promise<string | null>
+  /** Whether the main process still serves a page address it gave (it keeps the newest 40). */
+  pageServed(url: string): Promise<boolean>
   /** The screen Conduit's window is on, as a PNG data URL, with the window out of the way; null when it can't be captured (no permission). */
   screenshot(): Promise<string | null>
   liveOpenMinted(path: string): Promise<{ ok: true; id: string; model: string | null; voice: string | null } | { ok: false; error: string; code?: number }>
@@ -446,6 +459,7 @@ export type MenuAction =
   | 'text-normal'
   | 'shortcuts'
   | 'toggle-sidebar'
+  | 'toggle-workbench'
   | 'go-1'
   | 'go-2'
   | 'go-3'
@@ -557,6 +571,7 @@ export const IPC = {
   saveHostFile: 'conduit:save-host-file',
   viewHostFile: 'conduit:view-host-file',
   cancelViewHostFile: 'conduit:cancel-view-host-file',
+  viewStagedFile: 'conduit:view-staged-file',
   openHostPageInBrowser: 'conduit:open-host-page-in-browser',
   saveBytes: 'conduit:save-bytes',
   saveKanbanAttachment: 'conduit:save-kanban-attachment',
@@ -579,6 +594,8 @@ export const IPC = {
   setAppLock: 'conduit:set-app-lock',
   askHost: 'conduit:ask-host',
   setAskHost: 'conduit:set-ask-host',
+  hideDock: 'conduit:hide-dock',
+  setHideDock: 'conduit:set-hide-dock',
   unlock: 'conduit:unlock',
   wakeModels: 'conduit:wake-models',
   wakeDownload: 'conduit:wake-download',
@@ -609,6 +626,8 @@ export const IPC = {
   liveOpen: 'conduit:live-open',
   liveOpenMinted: 'conduit:live-open-minted',
   pageUrl: 'conduit:page-url',
+  hostPageKey: 'conduit:host-page-key',
+  pageServed: 'conduit:page-served',
   screenshot: 'conduit:screenshot',
   liveSend: 'conduit:live-send',
   screenOpen: 'conduit:screen-open',

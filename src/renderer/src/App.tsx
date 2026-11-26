@@ -7,6 +7,7 @@ import { draftAgents, type OwnHermesBot } from './state/roomDrafts'
 import { arrange, farBotFor, mixedTiles, orderedBots, useBotOrder, useMixedBotOrder, useSyncedOrder, type MixedTile } from './state/botOrder'
 import { STATUS_PATH as PLUGIN_STATUS_PATH, pluginStatus } from './state/plugin'
 import { hostName, rememberHostNames } from './state/hostNames'
+import { brandAlert, useAway } from './state/connectionAlert'
 import { HOST_NAME_MAX } from '@shared/hostNames'
 import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '@shared/ipc'
 import { BotsHome, useReplyFace, type BotAction, type BotsDraft } from './components/BotsHome'
@@ -52,8 +53,11 @@ import {
 } from './state/workspaceTabs'
 import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
 import { absolutePath, pathForDraft } from './state/workspace'
+import { Workbench } from './components/Workbench'
+import { BENCH_COLUMN, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
 import { FileLinks } from './components/Markdown'
 import { WorkLinks, type WorkLinkActions } from './components/WorkLinkCard'
+import { readChatAhead } from './state/readAhead'
 import { usePulse } from './state/usePulse'
 import { Icon } from './components/icons'
 import { useMouseBack } from './state/mouseBack'
@@ -64,6 +68,7 @@ import { RailFaces } from './components/RailFaces'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
+import { liveDoing, stepTitle } from './state/liveDoing'
 import { lastReplyOf } from './state/transcriptReads'
 import { useRevealRow } from './state/revealRow'
 import { forgetSummaries } from './state/stepSummaries'
@@ -213,7 +218,7 @@ import { openRoomChatHere } from './state/roomChatOpen'
 import { DockedRoomFrame } from './components/DockedRoom'
 import type { DockedRoomRequest } from '@shared/chatWindows'
 import { parseProjects, type Project, type ProjectChat } from './state/projects'
-import { useLiveStatus } from './state/liveStatus'
+import { useAnsweringBots, useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, saveMarksSoon, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
@@ -224,6 +229,8 @@ import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { LoginItemSetting } from './components/LoginItemSetting'
+import { HideDockSetting } from './components/HideDockSetting'
+import { TerminalSettings } from './components/TerminalSettings'
 import { SectionRail } from './components/SectionRail'
 import { fallbackAfterUnpin, launchInstead, pinnedSections, readRailLayout, resolveInitialSection, setSectionPinned, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
@@ -294,6 +301,12 @@ export function App() {
     forgetHostCaches(hostList ? hostList.split('\n') : [])
   }, [hostList])
 
+  // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26), worked out here so
+  // the title bar's brand, which stands in for the rail's while a banner is up, shows it too (desktop#594).
+  const away = useAway(phase ?? 'signed-out', url ?? '')
+  const keptForAlert = useKeptHosts(url ?? '')
+  const updateAway = updateBanner(useHostActions(url ?? '').update)
+
   if (!status) return <div className="app" />
   const signedOut = status.phase === 'signed-out' || (status.phase === 'failed' && !status.url)
   // The open window: everything but the lock, sign-in and dashboard pick, which keep the brand in the title bar.
@@ -304,15 +317,33 @@ export function App() {
     !(repairing && status.phase !== 'open') &&
     !(status.phase === 'signed-out' && status.choosing && status.hosts?.length) &&
     !(signedOut || status.phase === 'failed')
+  const switchTo = async (url: string) => {
+    if (!(await switchEndingCall(hostName(url)))) return
+    setRepairing(null)
+    void window.conduit.switchHost(url)
+  }
+  const onRepair = () => status.url && setRepairing(savedHost(status.hosts, status.url))
   const brand = {
     subtitle: signedOut ? undefined : status.hostLabel,
     hosts: status.hosts,
     currentUrl: status.url,
-    onSwitch: async (url: string) => {
-      if (!(await switchEndingCall(hostName(url)))) return
-      setRepairing(null)
-      void window.conduit.switchHost(url)
-    }
+    onSwitch: switchTo,
+    alert: inShell
+      ? brandAlert({
+          phase: status.phase,
+          error: status.error,
+          retryInSeconds: status.retryInSeconds,
+          away,
+          currentUrl: status.url,
+          hosts: status.hosts,
+          kept: keptForAlert,
+          name: hostName,
+          onRetry: () => void window.conduit.reconnect(),
+          onRepair,
+          onSignIn: url => void switchTo(url),
+          updating: !!updateAway
+        })
+      : null
   }
   return (
     <div className="app">
@@ -344,8 +375,8 @@ export function App() {
             status={status}
             onAddHost={() => void switchEndingCall(null).then(ok => ok && setAdding(true))}
             onEditHost={host => void switchEndingCall(null).then(ok => ok && setEditing(host))}
-            onRepair={() => status.url && setRepairing(savedHost(status.hosts, status.url))}
-            brand={<Brand {...brand} inRail />}
+            onRepair={onRepair}
+            brand={brand}
           />
         </SummaryHost.Provider>
       )}
@@ -404,8 +435,8 @@ function Shell({
   onAddHost: () => void
   onEditHost: (host: HostSummary) => void
   onRepair: () => void
-  /** The brand and Hermes switcher, at the top of the rail's island. */
-  brand: ReactNode
+  /** The brand and Hermes switcher, at the top of the rail's island (Brand with `inRail`). */
+  brand: ComponentProps<typeof Brand>
 }) {
   // Before any picture is read for this host: its pictures are kept under it.
   useState(() => setAvatarHost(status.url ?? ''))
@@ -500,6 +531,8 @@ function Shell({
   // reply runs that, not App, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
   const runningStatus = useTranscriptValue(transcriptStore, state => state.status)
+  // The open reply's current step, for its bot's line in the Bots list.
+  const liveDoingNow = useTranscriptValue(transcriptStore, state => (state.running ? liveDoing(state.items) : null))
   const transcriptPlan = useTranscriptValue(transcriptStore, state => state.plan)
 
   // The chat list's profile: a new chat starts in it.
@@ -530,6 +563,8 @@ function Shell({
   }, [])
   // A chat's apps card opens Settings > Capabilities > Browse Apps.
   const [appsRequest, setAppsRequest] = useState<AppsRequest | null>(null)
+  // The rail brand's Your Picture: Settings opens on Appearance, where it's chosen.
+  const [appearanceRequest, setAppearanceRequest] = useState<number | null>(null)
   useEffect(
     () =>
       onAppsDirectory(request => {
@@ -576,6 +611,8 @@ function Shell({
         setSection('chats')
         hideList(false)
       }
+    } else if (action === 'toggle-workbench') {
+      if (section === 'chats' && chat.cwd && !dockedRef.current) showBench(!benchShown)
     } else if (action === 'search') {
       setArchivedOpen(false)
       setSection('chats')
@@ -621,6 +658,8 @@ function Shell({
     const onKey = (event: KeyboardEvent) => {
       const action = shortcutFor(event, false)
       if (!action) return
+      // A terminal keeps Ctrl+B (readline, tmux's prefix): the workbench's key goes to the shell there.
+      if (action === 'toggle-workbench' && event.target instanceof Element && event.target.closest('.bench-terminal')) return
       event.preventDefault()
       runShortcut.current(action)
     }
@@ -686,7 +725,19 @@ function Shell({
       // Kept for this window only.
     }
   }, [])
-  // A file path in a reply opens in the Folder.
+  // The workbench beside a chat with a folder (Eric, 2026-11-26, "B · Project mode"): ⌘B or Ctrl+B, or the header's button.
+  // Open, it takes the side panel's place and tucks the chat list to its faces, until the list is shown again.
+  const [benchOpen, setBenchOpen] = useState(readBenchOpen)
+  const [benchKeepsList, setBenchKeepsList] = useState(false)
+  const benchShown = section === 'chats' && !!chat.cwd && benchOpen && !dockedChat
+  const showBench = useCallback((open: boolean) => {
+    setBenchOpen(open)
+    writeBenchOpen(open)
+    setBenchKeepsList(false)
+  }, [])
+  const benchShownRef = useRef(benchShown)
+  benchShownRef.current = benchShown
+  // A file path in a reply opens in the Folder, or in the workbench's Files while it's open.
   const [reveal, setReveal] = useState<{ path: string; id: number } | null>(null)
   const cwd = chat.cwd
   const openPath = useMemo(
@@ -694,6 +745,7 @@ function Shell({
       cwd
         ? (path: string) => {
             setReveal(current => ({ path: absolutePath(path, cwd), id: (current?.id ?? 0) + 1 }))
+            if (benchShownRef.current) return
             lastTab.current = 'files'
             setArtifactsOpen(false)
             setWorkOpen(false)
@@ -920,6 +972,7 @@ function Shell({
   useEffect(() => {
     if (inBotChat) readResolvedWork()
   }, [inBotChat, readResolvedWork])
+  const statusHost = status.url ?? ''
   const workLinkActions = useMemo<WorkLinkActions>(() => {
     // The open list first, then the Resolved page, as the phone's cards read them.
     const known = [...(workSnapshot?.items ?? []), ...(workResolved ?? [])]
@@ -947,9 +1000,10 @@ function Shell({
       titleOf: sessionId => {
         const item = ofSession(sessionId)
         return item ? shownTitle(item) : listRows?.find(r => r.id === sessionId)?.title || undefined
-      }
+      },
+      readAhead: (sessionId, profile) => readChatAhead(sessionId, profile ?? selected.profile, statusHost)
     }
-  }, [workSnapshot, workResolved, readResolvedWork, listRows, inBotChat, selected.profile, workSessions])
+  }, [workSnapshot, workResolved, readResolvedWork, listRows, inBotChat, selected.profile, workSessions, statusHost])
   // The bot's screen (Hermes' Bot Screen), offered only where the host can have one, as the phone checks.
   const screenProfile = selected.profile ?? 'default'
   // It opens in a window of its own, so the chat's text and tool output stay in view (Eric, 2026-11-21).
@@ -985,6 +1039,8 @@ function Shell({
   const lastTab = useRef<PanelTab>('work')
   const openTab = (tab: PanelTab | null) => {
     if (tab) lastTab.current = tab
+    // The side panel and the workbench share the room beside the chat: one at a time.
+    if (tab && benchShown) showBench(false)
     setArtifactsOpen(tab === 'chat')
     setWorkOpen(tab === 'work')
     showFiles(tab === 'files')
@@ -1004,11 +1060,24 @@ function Shell({
     return () => window.removeEventListener('resize', resized)
   }, [])
   // The chat list hidden (the « at its top, ⌘\ or Ctrl+\, or a drag past its least width) until the » atop the rail brings it back.
-  const [listHidden, setListHidden] = useState(readListHidden)
-  const hideList = useCallback((hidden: boolean) => {
-    setListHidden(hidden)
-    writeListHidden(hidden)
-  }, [])
+  const [listHiddenPref, setListHidden] = useState(readListHidden)
+  // The workbench tucks the list to its faces; showing the list again keeps it beside the bench until the bench closes.
+  const listHidden = listHiddenPref || (benchShown && !benchKeepsList)
+  const hideList = useCallback(
+    (hidden: boolean) => {
+      if (benchShownRef.current) {
+        setBenchKeepsList(!hidden)
+        if (!hidden && listHiddenPref) {
+          setListHidden(false)
+          writeListHidden(false)
+        }
+        return
+      }
+      setListHidden(hidden)
+      writeListHidden(hidden)
+    },
+    [listHiddenPref]
+  )
   // Hidden, the Bots sidebar lost its scroll (display: none); shown again, it goes back to its spot.
   useShownAgain(listHidden, () => botSideScroll.opened())
   // Combined dashboards: the other hosts kept connected beside this one...
@@ -1026,6 +1095,14 @@ function Shell({
   const listWidth = shownListWidth(listLive ?? listStored, windowWidth - listColumn)
   const listTaken = (section === 'chats' || section === 'room' || section === 'bots') && listHidden ? 0 : (listWidth ?? Math.min(320, Math.max(240, windowWidth * 0.28))) + listColumn
   const panelWidth = shownPanelWidth(panelLive ?? panelStored, windowWidth, listTaken)
+  const [benchStored, setBenchStored] = useState(() => readWidth(BENCH_COLUMN))
+  const [benchLive, setBenchLive] = useState<number | null>(null)
+  const benchWidth = shownBenchWidth(benchLive ?? benchStored, windowWidth, listTaken)
+  const commitBench = (width: number | null) => {
+    setBenchLive(null)
+    setBenchStored(width)
+    writeWidth(BENCH_COLUMN, width)
+  }
   // A chat beside the open one: only where both fit, else the pane hides until the window widens.
   const [beside, setBeside] = useState<BesideChat | null>(null)
   const besideBot = beside ? roster.bots?.find(b => b.name === (beside.profile ?? 'default')) : undefined
@@ -1719,11 +1796,15 @@ function Shell({
     },
     [showRoom]
   )
+  // Every bot answering in some chat, the open one's at once (Eric, 2026-11-26: not only the chat open).
+  const answeringNames = useMemo(() => botNames.slice(0, 24), [botNames])
+  // ...with the step each is on there, from the plugin (the open chat's own comes live below).
+  const answering = useAnsweringBots(connected, answeringNames, turnsDone, stepTitle)
   const runningProfiles = useMemo(() => {
-    const names = new Set<string>()
+    const names = new Set<string>(answering.keys())
     if (running && selected.profile) names.add(selected.profile)
     return names
-  }, [running, selected.profile])
+  }, [answering, running, selected.profile])
 
   // Needs you: the requests this window holds, and every profile's waiting list.
   const requests = useRequests()
@@ -2428,10 +2509,24 @@ function Shell({
   }, [presented.waiting])
 
   /** A room's private chat with one of your agents: kept, or made and told its room; Wrap Up asks it for notes once it's open. */
+  // Counts every move to another chat, section or room (one room to another in the room pane too), so a
+  // room's chat that opens late can tell the user moved on.
+  const roomChatNavigation = useRef(0)
+  useEffect(() => {
+    roomChatNavigation.current += 1
+  }, [selected.id, section, openRoom?.roomId, shownCopy?.id, dockedRoom?.host, dockedRoom?.id])
   const openRoomChatWith = useCallback(
     async (room: Room, agent: RoomChatAgent, wrapUp: boolean) => {
+      const at = roomChatNavigation.current
       const opened = await openRoomChatHere(room.roomId, room.name, agent.profile, status.sessionAuthority === true)
+      // Wrap Up's ask goes once that chat is open, now or when they open it from the list.
       if (wrapUp) pendingAsk.current = { text: wrapUpPrompt(), storedId: opened.chatId, profile: agent.profile }
+      // Moved on while it opened (a gone chat's replacement takes a while): it waits in the list, and
+      // nothing is pulled over where they went (hermes-conduit #3323's viewport fence).
+      if (roomChatNavigation.current !== at) {
+        list.refresh()
+        return
+      }
       setSelected({ id: opened.chatId, profile: agent.profile, title: opened.title })
       setSection('chats')
       list.refresh()
@@ -2492,6 +2587,8 @@ function Shell({
     bots: orderedRoster,
     error: roster.error,
     runningProfiles: runningProfiles,
+    liveDoing: liveDoingNow ? { bot: selected.profile ?? 'default', text: liveDoingNow } : null,
+    otherChatsDoing: answering,
     rooms: orderedRooms,
     canStartRooms: groupRooms.capabilities?.supported === true && connected,
     onOpen: openBot,
@@ -2563,14 +2660,11 @@ function Shell({
         />
       ) : null}
       {ring ? <IncomingCall key={ring.id} ring={ring} onAnswer={() => answerRing(ring)} onDecline={missed => declineRing(ring, missed)} /> : null}
-      {status.phase !== 'open' ? (
+      {/* Only an update started here has a banner while Hermes is away; otherwise the dashboard button says so. */}
+      {status.phase !== 'open' && updateAway ? (
         <div className="banner" role="status">
           <span className={updateAway === 'updating' || updateAway === 'restarting' ? 'spinner' : 'dot warn'} />
-          {updateAway
-            ? updateAwayText(updateAway)
-            : status.phase === 'connecting'
-              ? t('Connecting to Hermes…')
-              : `${status.error ?? t('Not connected.')}${status.retryInSeconds ? ` ${t('Trying again in {seconds}s.', { seconds: status.retryInSeconds })}` : ''}`}
+          {updateAwayText(updateAway)}
           {status.phase === 'reconnecting' ? <button onClick={() => void window.conduit.reconnect()}>{t('Try now')}</button> : null}
           {status.phase === 'reconnecting' && status.url ? <button onClick={onRepair}>{t('Repair Connection')}</button> : null}
         </div>
@@ -2581,7 +2675,8 @@ function Shell({
         style={
           {
             ...(listWidth !== null ? { '--list-width': `${listWidth}px` } : {}),
-            ...(panelWidth !== null ? { '--panel-width': `${panelWidth}px` } : {})
+            ...(panelWidth !== null ? { '--panel-width': `${panelWidth}px` } : {}),
+            '--bench-width': `${benchWidth}px`
           } as CSSProperties
         }
       >
@@ -2593,12 +2688,25 @@ function Shell({
           onShowSidebar={() => hideList(false)}
           pulseUnseen={pulse.feed?.unseen ?? 0}
           needsCount={needsCount}
-          connected={connected}
-          hostLabel={status.hostLabel}
           onSelect={selectRailSection}
           onSettings={() => setSection('settings')}
           onChangeLayout={changeRailLayout}
-          brand={brand}
+          brand={
+            <Brand
+              {...brand}
+              inRail
+              picture={personPicture.served ? personPicture.picture : null}
+              badge={status.url ? badgeFor(status.url) : null}
+              onPicture={
+                personPicture.served
+                  ? () => {
+                      setSection('settings')
+                      setAppearanceRequest(Date.now())
+                    }
+                  : undefined
+              }
+            />
+          }
           faces={
             (section === 'chats' || section === 'room' || section === 'bots') && listHidden && profileTiles ? (
               <RailFaces
@@ -2756,12 +2864,22 @@ function Shell({
                     ? { label: t("Bot's Screen"), on: screenOpen, onClick: () => window.conduit.openScreenWindow({ profile: screenProfile, botName: botTitle, ...(status.url ? { host: status.url } : {}) }) }
                     : undefined
                 }
+                bench={
+                  chat.cwd && section === 'chats'
+                    ? {
+                        label: benchShown ? t('Hide Workbench') : t('Show Workbench'),
+                        title: `${benchShown ? t('Hide Workbench') : t('Show Workbench')} (${navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl+'}B)`,
+                        on: benchShown,
+                        onClick: () => showBench(!benchShown)
+                      }
+                    : undefined
+                }
                 panel={
                   panelTabs.length
                     ? {
-                        label: shownTab ? t('Hide side panel') : t('Show side panel'),
-                        on: !!shownTab,
-                        onClick: () => openTab(shownTab ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0]),
+                        label: shownTab && !benchShown ? t('Hide side panel') : t('Show side panel'),
+                        on: !!shownTab && !benchShown,
+                        onClick: () => openTab(shownTab && !benchShown ? null : panelTabs.includes(lastTab.current) ? lastTab.current : panelTabs[0]),
                         dot: workDot && shownTab !== 'work' ? workDot : null
                       }
                     : undefined
@@ -2931,10 +3049,22 @@ function Shell({
                 mentionBots={mentionBots}
               />
             </main>
-            {dockedChat ? null : (artifactsOpen && selected.id) || showWork || (filesOpen && chat.cwd) || (beside && besideFits) ? (
+            {benchShown && chat.cwd ? (
+              <>
+                <ColumnDivider label={t('Workbench width')} bounds={BENCH_COLUMN} sign={-1} width={benchWidth} onLive={setBenchLive} onCommit={commitBench} />
+                <Workbench
+                  root={chat.cwd}
+                  profile={selected.profile}
+                  refreshKey={turnsDone}
+                  reveal={reveal}
+                  onInsertPath={path => setQuote(quoteRequest({ insert: pathForDraft(path) }))}
+                  onClose={() => showBench(false)}
+                />
+              </>
+            ) : dockedChat ? null : (artifactsOpen && selected.id) || showWork || (filesOpen && chat.cwd) || (beside && besideFits) ? (
               <ColumnDivider label={t('Side panel width')} bounds={PANEL_COLUMN} sign={-1} width={panelWidth} onLive={setPanelLive} onCommit={commitPanel} />
             ) : null}
-            {dockedChat ? null : artifactsOpen && selected.id ? (
+            {dockedChat || benchShown ? null : artifactsOpen && selected.id ? (
               <ArtifactsPanel
                 profile={selected.profile}
                 sessionIds={[selected.id]}
@@ -2958,6 +3088,7 @@ function Shell({
                 onReload={() => void work.reload()}
                 onAnswered={() => void waiting.refresh()}
                 openChat={{ storedId: selected.id, liveId: chat.liveId, botChat: selected.botChat === true || !!openBotChat }}
+                onReadAhead={item => readChatAhead(item.sessionId, selected.profile, statusHost)}
                 onOpenChat={item => {
                   // The panel is the bot tab's list of its work: its rows keep the bots beside the chat they open.
                   setBotsSide(true)
@@ -3208,6 +3339,8 @@ function Shell({
             linkRequest={linkRequest}
             onLinkRequestTaken={() => setLinkRequest(null)}
             personPicture={personPicture}
+            appearanceRequest={appearanceRequest}
+            onAppearanceRequestTaken={() => setAppearanceRequest(null)}
             onNewChatWith={
               connected
                 ? draft => {
@@ -3335,6 +3468,8 @@ function Settings({
   linkRequest,
   onLinkRequestTaken,
   personPicture,
+  appearanceRequest,
+  onAppearanceRequestTaken,
   onNewChatWith,
   onOpensOn,
   opensHere
@@ -3369,6 +3504,9 @@ function Settings({
   onLinkRequestTaken: () => void
   /** The picture you show in rooms over Links. */
   personPicture: PersonPicture
+  /** The rail brand's Your Picture asked for Appearance. */
+  appearanceRequest: number | null
+  onAppearanceRequestTaken: () => void
   /** A new chat with `draft` in its composer, for the user to send (Try a test call, Have Hermes watch for this). */
   onNewChatWith?: (draft: string) => void
 }) {
@@ -3408,6 +3546,11 @@ function Settings({
     setPage('capabilities')
     onAppsRequestTaken()
   }, [appsRequest, onAppsRequestTaken])
+  useEffect(() => {
+    if (appearanceRequest === null) return
+    setPage('appearance')
+    onAppearanceRequestTaken()
+  }, [appearanceRequest, onAppearanceRequestTaken])
   // A link into Models, taken once: it opens on that profile.
   const [modelsProfile, setModelsProfile] = useState<{ profile: string; n: number } | null>(null)
   useEffect(() => {
@@ -3511,7 +3654,7 @@ function Settings({
   if (page === 'appearance')
     return (
       <SettingsPane pane={pane}>
-        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} opensHere={opensHere} />
+        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} opensHere={opensHere} personPicture={personPicture} />
       </SettingsPane>
     )
   if (page === 'multiplayer' && status.url)
@@ -3579,7 +3722,9 @@ function Settings({
           bots={bots}
           profile={profile}
           onBack={() => setPage('main')}
-        />
+        >
+          {page === 'workspace' ? <TerminalSettings /> : null}
+        </ConfigPage>
       </SettingsPane>
     )
   if (page === 'memory')
@@ -3785,6 +3930,7 @@ function Settings({
           <AskDashboardSetting hosts={status.hosts?.length ?? 0} />
           <CombineDashboardsSetting hosts={status.hosts ?? []} />
           <LoginItemSetting />
+          <HideDockSetting />
           <UpdatesSetting />
         </dl>
       </section>

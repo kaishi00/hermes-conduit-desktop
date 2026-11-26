@@ -76,6 +76,9 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
   let waitUntil = 0
   /** A page load seen while a check was in flight, to run when it ends. */
   let pendingLook = false
+  /** Navigations so far, and how many there were when the check in flight started: a load is new only past it. */
+  let loads = 0
+  let checkLoads = 0
   const timer = setInterval(() => void look(), POLL_MS)
 
   const finish = (jar: CookieJar | null, error?: Error): void => {
@@ -90,9 +93,11 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
   const abort = (): void => finish(null)
   signal.addEventListener('abort', abort, { once: true })
 
-  async function look(navigated = false): Promise<void> {
+  async function look(navigated = false, loadFinished = false): Promise<void> {
     if (finished) return
-    const request = lookRequest(checking, navigated, pendingLook)
+    // The end of a load a check already started on asks only if its cookies changed, as a timer look does.
+    if (loadFinished && !checking && loads === checkLoads) navigated = false
+    const request = lookRequest(checking, navigated, pendingLook, loads === checkLoads)
     if (request.pending) pendingLook = true
     // A load during an in-flight check is kept for the look that follows it;
     // a timer look during back-off stays skipped.
@@ -100,6 +105,7 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
     if (request.run && pendingLook) pendingLook = false
     if (window.isDestroyed() || !pastSignIn(contents.getURL(), url)) return
     checking = true
+    checkLoads = loads
     try {
       const jar = cookieJarOf(await store.cookies.get({ url: `${url}/` }))
       const header = cookieHeader(jar)
@@ -117,6 +123,8 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
       waitUntil = Date.now() + checkWait(failures, POLL_MS)
     } finally {
       checking = false
+      // A load that came while this check ran is looked at now, not at the next tick.
+      if (pendingLook) void look()
     }
   }
 
@@ -144,11 +152,15 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
     if (!isWebPage(target)) event.preventDefault()
   })
   contents.on('did-navigate', () => {
+    loads++
     nameSite()
     void look(true)
   })
-  contents.on('did-navigate-in-page', () => void look(true))
-  contents.on('did-finish-load', () => void look(true))
+  contents.on('did-navigate-in-page', () => {
+    loads++
+    void look(true)
+  })
+  contents.on('did-finish-load', () => void look(true, true))
   contents.on('did-fail-load', (_event, code, description, _target, isMainFrame) => {
     if (!isMainFrame || code === ERR_ABORTED) return
     finish(null, new AuthError(t('The sign-in page didn’t load ({reason}).', { reason: description || String(code) })))

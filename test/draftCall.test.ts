@@ -26,9 +26,10 @@ import { emptyTranscript } from '../src/renderer/src/state/transcript'
 // The node test tsconfig has no JSX: the hook is loaded the way the other render tests load components.
 interface ChatCallState {
   calling: boolean
+  header: { onMode: (mode: string) => void }
   start: () => void
   end: () => void
-  view: (late: { requests: unknown[]; onSend: (text: string) => Promise<boolean> }) => unknown
+  view: (late: { requests: unknown[]; onSend: (text: string) => Promise<boolean | string> }) => unknown
 }
 let useChatCall: (options: Record<string, unknown>) => ChatCallState
 beforeAll(async () => {
@@ -36,7 +37,7 @@ beforeAll(async () => {
   ;({ useChatCall } = (await import(/* @vite-ignore */ component)) as { useChatCall: typeof useChatCall })
 })
 
-function mount(send: (text: string) => Promise<boolean>) {
+function mount(send: (text: string) => Promise<boolean | string>) {
   const store = new TranscriptStore(emptyTranscript)
   let call: ChatCallState
   const root = createRoot(document.createElement('div'))
@@ -53,6 +54,8 @@ function mount(send: (text: string) => Promise<boolean>) {
 }
 
 afterEach(() => {
+  // A mode switch keeps the mode picked (Settings > Voice): the next case starts in Classic again.
+  localStorage.clear()
   tagged.mockClear()
   archived.mockClear()
   say = null
@@ -74,15 +77,83 @@ describe('a Classic call started in the new-chat draft (desktop#538)', () => {
   })
 
   it('files and archives the chat its own first request made', async () => {
-    const view = mount(async () => true)
+    const view = mount(async () => 'made-by-call')
     act(() => view.call().start())
     expect(say).not.toBeNull()
-    await act(async () => say!('Book a table for six tonight'))
+    // The new chat opens before the send that made it resolves.
     view.draw('made-by-call')
+    await act(async () => say!('Book a table for six tonight'))
     await act(async () => undefined)
     expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
     act(() => view.call().end())
     await act(async () => undefined)
+    expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
+    view.unmount()
+  })
+
+  it('never files a chat opened while its first send was still in flight (desktop#529)', async () => {
+    let resolve: (sent: boolean | string) => void = () => undefined
+    const view = mount(() => new Promise(done => (resolve = done)))
+    act(() => view.call().start())
+    act(() => say!('Book a table for six tonight'))
+    view.draw('chat-x')
+    await act(async () => undefined)
+    expect(tagged).not.toHaveBeenCalled()
+    await act(async () => resolve(false))
+    expect(tagged).not.toHaveBeenCalled()
+    act(() => view.call().end())
+    await act(async () => undefined)
+    expect(archived).not.toHaveBeenCalled()
+    view.unmount()
+  })
+
+  it('files and archives its chat when its first send resolves after the call ended (#613 review)', async () => {
+    let resolve: (sent: boolean | string) => void = () => undefined
+    const view = mount(() => new Promise(done => (resolve = done)))
+    act(() => view.call().start())
+    act(() => say!('Book a table for six tonight'))
+    view.draw('chat-x')
+    act(() => view.call().end())
+    await act(async () => undefined)
+    expect(tagged).not.toHaveBeenCalled()
+    await act(async () => resolve('made-by-call'))
+    expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
+    expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
+    expect(archived).not.toHaveBeenCalledWith('work', 'chat-x')
+    view.unmount()
+  })
+
+  it('keeps its chat until the call ends when it switches to another mode mid-call (#617 review)', async () => {
+    const view = mount(async () => 'made-by-call')
+    act(() => view.call().start())
+    await act(async () => say!('Book a table for six tonight'))
+    view.draw('made-by-call')
+    await act(async () => undefined)
+    expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
+    act(() => view.call().header.onMode('gemini'))
+    await act(async () => undefined)
+    expect(view.call().calling).toBe(true)
+    expect(archived).not.toHaveBeenCalled()
+    act(() => view.call().end())
+    await act(async () => undefined)
+    expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
+    view.unmount()
+  })
+
+  it('files and archives its chat once, after the call ends, when it switched modes with its first send in flight (#620 review)', async () => {
+    let resolve: (sent: boolean | string) => void = () => undefined
+    const view = mount(() => new Promise(done => (resolve = done)))
+    act(() => view.call().start())
+    act(() => say!('Book a table for six tonight'))
+    act(() => view.call().header.onMode('gemini'))
+    act(() => view.call().end())
+    await act(async () => undefined)
+    expect(tagged).not.toHaveBeenCalled()
+    expect(archived).not.toHaveBeenCalled()
+    await act(async () => resolve('made-by-call'))
+    expect(tagged).toHaveBeenCalledTimes(1)
+    expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
+    expect(archived).toHaveBeenCalledTimes(1)
     expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
     view.unmount()
   })

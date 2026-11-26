@@ -270,6 +270,24 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
     ])
   })
 
+  it('reads the page before as the reader scrolls up, as a long chat does (desktop#520)', async () => {
+    const words500 = Array.from({ length: 500 }, (_, i) => ({ id: 2000 + i, role: i % 2 ? 'assistant' : 'user', content: `line ${2000 + i}` }))
+    // The compact resume is refused too: only the 4130 path opens this chat.
+    serve([words500, [{ id: 1, role: 'user', content: 'the first words' }]])
+    noteChatLength('long', 10)
+    const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })
+    await settle()
+    expect(resumeParams.map(p => p.omit_messages === true)).toEqual([false, true])
+    expect(hook.result().olderRows).toBe(true)
+    await act(async () => {
+      await hook.result().loadOlder()
+    })
+    const all = words(hook.result().transcript)
+    // The note stays on top; the page before goes under it.
+    expect(all.slice(0, 2)).toEqual(['This chat is too long to open whole, so Conduit shows its newest messages.', 'the first words'])
+    expect(hook.result().olderRows).toBe(false)
+  })
+
   it('reads the page before one of only tool steps, so the chat opens on words', async () => {
     serve([steps(1000, 500), [{ id: 999, role: 'user', content: 'New mail arrived' }]])
     const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })
@@ -523,9 +541,10 @@ describe('a chat picked while offline (desktop#283)', () => {
 
 describe('tool answers on opening a chat again (desktop#293)', () => {
   it.each([
-    ['fills them from the kept copy instead of reading the REST page again', true, 1, 'a'],
-    ['reads the REST page again for a call the kept copy has no arguments for', false, 2, 'c']
-  ])('%s', async (_label, withArgs, reads, id) => {
+    // The page the open read to size the chat up (desktop#291) already answers a call with its arguments (desktop#612).
+    ['fills them from the kept copy instead of reading the REST page again', true, 0, 0, 'a'],
+    ['reads the REST page again for a call the kept copy has no arguments for', false, 1, 2, 'c']
+  ])('%s', async (_label, withArgs, first, reads, id) => {
     const paths: string[] = []
     const conduit = (window as unknown as { conduit: { httpOutcome: unknown } }).conduit
     conduit.httpOutcome = async (_method: string, path: string) => {
@@ -539,7 +558,7 @@ describe('tool answers on opening a chat again (desktop#293)', () => {
     const tool = () => hook.result().transcript.items.find(i => i.kind === 'tool') as { result?: string } | undefined
     expect(tool()?.result).toBe('a.txt')
     // The page read to size the chat up (desktop#291) isn't a tool-answers read.
-    expect(boardReads()).toHaveLength(1)
+    expect(boardReads()).toHaveLength(first)
     hook.rerender({ storedId: 'b', connected: true, url: 'h1' })
     await settle()
     hook.rerender({ storedId: id, connected: true, url: 'h1' })

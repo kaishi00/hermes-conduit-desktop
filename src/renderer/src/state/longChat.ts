@@ -18,7 +18,7 @@
  */
 import { GatewayError } from '../gateway'
 import { t } from '../../../shared/i18n'
-import { fromHistory, type HistoryRow, type TranscriptItem } from './transcript'
+import { attachBoards, fromHistory, toolAnswers, toolArgs, toolNames, type HistoryRow, type TranscriptItem, type TranscriptState } from './transcript'
 
 /** Hermes' refusal of a resume carrying the whole transcript. */
 export const RESUME_TOO_LONG = 4130
@@ -132,6 +132,17 @@ export function newestPageItems(rows: HistoryRow[], tooLong = false): Transcript
     ? [{ kind: 'notice', key: 'long-chat', text: t('This chat is too long to open whole, so Conduit shows its newest messages.'), tone: 'info' }]
     : []
   return [...note, ...fromHistory(rows)]
+}
+
+/**
+ * Stored rows drawn as a chat's stand-in while its resume runs, with their
+ * tool details: a chat whose length the list doesn't give (a bot's
+ * workstream, its Bot Chat) shows the page its open read first, or one read
+ * ahead, instead of nothing (desktop#612).
+ */
+export function rowsStandIn(rows: HistoryRow[]): TranscriptState {
+  const page = { messages: rows }
+  return attachBoards({ items: newestPageItems(rows), running: false }, toolAnswers(page), toolArgs(page), toolNames(page))
 }
 
 /** What a running long chat's open reads again: a resume's turn, its queue and a card waiting on the user. */

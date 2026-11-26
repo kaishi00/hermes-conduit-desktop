@@ -76,4 +76,25 @@ describe("Settings' Quick Ask keys while they are picked", () => {
     click('Change')
     expect(host.querySelector('[role="alert"]')).toBeNull()
   })
+  it('reads the line again when the window comes back from another app (desktop#520)', async () => {
+    // The saved keys another app had: the line shows until the keys are read again as free.
+    state = { ...state, registered: false }
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await settle()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Another app is using')
+    state = { ...state, registered: true }
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await settle()
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+
+    // Keys just refused: back from the other app, the line is gone, and Change tells again.
+    set.mockResolvedValue({ ...state, changed: false })
+    click('Change')
+    act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, shiftKey: true, cancelable: true })))
+    await settle()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Another app is using')
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await settle()
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
 })

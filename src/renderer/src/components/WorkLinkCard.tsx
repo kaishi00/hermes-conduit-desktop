@@ -16,6 +16,8 @@ export interface WorkLinkActions {
   chatOf?: (ref: string) => { sessionId: string; profile?: string } | undefined
   /** A listed chat's name, for a reference's link. */
   titleOf: (sessionId: string) => string | undefined
+  /** Reads a card's chat ahead as the pointer or focus reaches it, so its click draws it at once (desktop#612). */
+  readAhead?: (sessionId: string, profile?: string) => void
 }
 
 export const WorkLinks = createContext<WorkLinkActions | null>(null)
@@ -43,8 +45,16 @@ export function WorkLinkCard({ link }: { link: WorkLink }) {
             ? 'stop'
             : 'check'
   const open = t('Open {ref}’s chat', { ref: link.ref })
+  const readAhead = () => actions?.readAhead?.(link.sessionId, link.profile)
   return (
-    <button className="work-link-card" title={open} disabled={!actions} onClick={() => actions?.open(link.sessionId, link.profile)}>
+    <button
+      className="work-link-card"
+      title={open}
+      disabled={!actions}
+      onPointerEnter={readAhead}
+      onFocus={readAhead}
+      onClick={() => actions?.open(link.sessionId, link.profile)}
+    >
       <span className={`status-mark${tone ? ` tone-${tone}` : ' tone-link'}`} aria-hidden="true">
         <Icon name={mark} />
       </span>

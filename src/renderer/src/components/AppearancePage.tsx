@@ -25,6 +25,8 @@ import { gateway } from '../gateway'
 import { Icon } from './icons'
 import { APP_ICONS, appIconUrl, chooseAppIcon, useAppIcon } from '../state/appIcon'
 import { useMouseBack } from '../state/mouseBack'
+import type { PersonPicture } from '../state/useRoomLooks'
+import { YourPicture } from './YourPicture'
 
 const pageTitle = (page: LaunchPage) =>
   page === 'bots' ? t('Bots') : page === 'chats' ? t('Chats') : page === 'tasks' ? t('Tasks') : page === 'pulse' ? t('Pulse') : t('Artifacts')
@@ -67,9 +69,12 @@ export function AppearancePage({
   host,
   onBack,
   onOpensOn,
-  opensHere
+  opensHere,
+  personPicture
 }: {
   host: string
+  /** Your picture on this Hermes, drawn at the top of the rail (and in rooms); none where Hermes doesn't keep one. */
+  personPicture?: PersonPicture
   onBack: () => void
   /** A page was chosen to open on: the window pins its section in the rail, where an unpinned one wouldn't open. */
   onOpensOn?: (page: LaunchPage) => void
@@ -167,6 +172,14 @@ export function AppearancePage({
           ))}
         </div>
       </section>
+
+      {personPicture?.served ? (
+        <YourPicture
+          picture={personPicture}
+          title={t('You')}
+          caption={t('Shown at the top of the sidebar for this Hermes, in place of the app icon, and beside your messages in group chats with other people.')}
+        />
+      ) : null}
 
       <section className="pset-section">
         <h2>{t('Accent color')}</h2>

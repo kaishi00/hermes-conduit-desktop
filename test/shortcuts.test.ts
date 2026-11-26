@@ -85,7 +85,7 @@ describe('glyphs and groups', () => {
 
   it('lists Quick Ask with its keys, and leaves it out without any', () => {
     expect(shortcutGroups(true, undefined, '⌥Space')[0].rows.at(-1)?.keys).toEqual(['⌥Space'])
-    expect(shortcutGroups(true)[0].rows).toHaveLength(7)
+    expect(shortcutGroups(true)[0].rows).toHaveLength(9)
   })
 
   it('lists the chat tabs’ keys, Ctrl on a Mac too', () => {

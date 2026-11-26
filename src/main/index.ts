@@ -36,8 +36,10 @@ import {
 } from '../shared/ipc'
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
-import { pageUrl, registerPageScheme, servePages } from './pages'
-import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile } from './viewFiles'
+import { pageServed, pageUrl, registerPageScheme, servePages } from './pages'
+import { HOST_PAGE_PRIVILEGES, attachedBrowserKind, browserFrameKind, confineBrowserPage, hostPageKey, serveHostPages } from './hostPages'
+import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile, viewStagedFile } from './viewFiles'
+import { isPagePath, pageDownloadDecision, type PageRead } from '../shared/viewFileRules'
 import { confineNavigation } from './navigation'
 import { endSocket, LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
 import { pluginRelease } from './pluginRelease'
@@ -45,7 +47,7 @@ import { cleanHeaders } from './proxyHeaders'
 import { KeptHosts } from './keptHosts'
 import { readServerCertificate } from './serverCertificate'
 import { writeFile } from 'node:fs/promises'
-import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath } from './hostFiles'
+import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath, copyDown } from './hostFiles'
 import { Connection, DISPLAY_SOCKET_PATH } from './connection'
 import { Pairing } from './pairing'
 import { createFileStore } from './store'
@@ -58,6 +60,7 @@ import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
 import { parseScreenKey, releaseScreen } from '../shared/screenWindows'
 import { ConduitTray } from './tray'
+import { DockPresence } from './dockPresence'
 import { applyAppIcon, watchNewWindows } from './appIcon'
 import { watchEditMenu } from './editMenu'
 import { launchedAtLogin, loginItemState, openStartupSettings, setLoginItem } from './loginItem'
@@ -66,6 +69,8 @@ import {
   askHostAtLaunch,
   chooseAppIcon,
   chooseAskHost,
+  chooseHideDock,
+  hideDockWhenClosed,
   chooseQuickAskAccelerator,
   quickAskAccelerator,
   chooseLanguage,
@@ -127,6 +132,14 @@ function sendCommand(action: MenuAction): void {
 }
 
 const quickAsk = new QuickAsk()
+
+/** The Mac's Hide from the Dock (desktop#586): the Dock icon only while a window of Conduit's own is open. */
+const dockPresence = isMac && app.dock
+  ? new DockPresence(
+      { hide: () => app.dock!.hide(), show: () => app.dock!.show(), isVisible: () => app.dock!.isVisible() },
+      () => BrowserWindow.getAllWindows().some(window => !window.isDestroyed() && !quickAsk.owns(window) && (window.isVisible() || window.isMinimized()))
+    )
+  : null
 
 const tray = new ConduitTray({
   quickAsk: () => quickAsk.toggle(),
@@ -195,6 +208,22 @@ function dockedPages(): Electron.WebContents[] {
  */
 function watchDockedChats(window: BrowserWindow): void {
   window.webContents.on('will-attach-webview', (event, preferences, params) => {
+    // A workbench Browser tab (hostPages.ts): its own session, no preload, nothing of the app's.
+    if (browserFrameKind(params.src, params.partition)) {
+      delete (preferences as { preloadURL?: string }).preloadURL
+      delete preferences.preload
+      preferences.contextIsolation = true
+      preferences.sandbox = true
+      preferences.nodeIntegration = false
+      preferences.nodeIntegrationInSubFrames = false
+      preferences.webSecurity = true
+      preferences.allowRunningInsecureContent = false
+      return
+    }
+    if (params.partition) {
+      event.preventDefault()
+      return
+    }
     const host = dockedFrameHost(params.src, window.webContents.getURL())
     if (!host || host === shownHost || !chatWindowDashboards().includes(host)) {
       event.preventDefault()
@@ -209,6 +238,11 @@ function watchDockedChats(window: BrowserWindow): void {
     preferences.webSecurity = true
   })
   window.webContents.on('did-attach-webview', (_event, page) => {
+    const browser = attachedBrowserKind(page)
+    if (browser) {
+      confineBrowserPage(page, browser)
+      return
+    }
     const id = page.id
     dockedChats.add(id)
     confineNavigation(page)
@@ -261,6 +295,19 @@ app.on('browser-window-created', (_event, window) => {
     eventRouter.forget(id)
     windowHosts.delete(id)
   })
+  if (dockPresence) {
+    // A window shown while the Dock icon was hidden can open behind the app in front: it comes forward once the icon is back.
+    window.on('show', () =>
+      dockPresence.update(() => {
+        if (!window.isDestroyed() && window.isVisible()) window.focus()
+      })
+    )
+    const update = () => dockPresence.update()
+    window.on('hide', update)
+    window.on('minimize', update)
+    window.on('restore', update)
+    window.on('closed', update)
+  }
 })
 
 /** The chat windows' own BrowserWindows, so a notification can find the one that has its chat. */
@@ -454,6 +501,8 @@ function createWindow(): void {
   window.on('ready-to-show', () => {
     if (!startInTray) window.show()
     startInTray = false
+    // Hide from the Dock takes over once the window has shown, or stayed in the tray, so a launch doesn't flicker the icon.
+    dockPresence?.setEnabled(hideDockWhenClosed())
   })
   window.on('close', event => {
     if (quitting) return
@@ -550,6 +599,15 @@ function registerIpc(): void {
   ipcMain.handle(IPC.unlock, () => unlock())
   ipcMain.handle(IPC.askHost, () => askHostAtLaunch())
   ipcMain.handle(IPC.setAskHost, (_event, on: unknown) => typeof on === 'boolean' && chooseAskHost(on))
+  ipcMain.handle(IPC.hideDock, () => (dockPresence ? hideDockWhenClosed() : null))
+  ipcMain.handle(IPC.setHideDock, (_event, on: unknown) => {
+    if (!dockPresence) return null
+    if (typeof on !== 'boolean') return hideDockWhenClosed()
+    // As the other settings do, an unsaved choice still applies until Conduit quits.
+    chooseHideDock(on)
+    dockPresence.setEnabled(on)
+    return on
+  })
   ipcMain.on(IPC.openChat, (_event, chat: OpenChatRequest) => {
     quickAsk.hide()
     showWindow()
@@ -627,7 +685,15 @@ function registerIpc(): void {
   })
   ipcMain.on(IPC.quickAskExpanded, (_event, expanded: unknown) => quickAsk.setExpanded(typeof expanded === 'number' ? expanded : expanded === true))
   const quickAskShortcut = () => ({ accelerator: quickAsk.accelerator, registered: quickAsk.registered })
-  ipcMain.handle(IPC.quickAskShortcut, quickAskShortcut)
+  ipcMain.handle(IPC.quickAskShortcut, () => {
+    // Saved keys another app held are asked for again: it may have let go of them since (desktop#520).
+    // Never mid-pick, when they are let go on purpose.
+    if (!recordingIn && quickAsk.accelerator && !quickAsk.registered) {
+      quickAsk.resume()
+      tray.setQuickAsk(quickAsk.registered ? quickAsk.accelerator : null)
+    }
+    return quickAskShortcut()
+  })
   ipcMain.handle(IPC.setQuickAskShortcut, (_event, accelerator: unknown) => {
     const next = accelerator === null ? null : validAccelerator(accelerator) ? accelerator : undefined
     const changed = next !== undefined && quickAsk.change(next)
@@ -720,8 +786,26 @@ function registerIpc(): void {
       const through = connectionOf(event.sender.id)
       if (!through) throw new Error(t("Couldn't open this file"))
       const response = await through.download(hostFilePath('download', path, shownProfile), stop.signal)
-      // A dashboard that serves its page for a route it doesn't know has no download route.
-      if (/text\/html/i.test(response.headers.get('content-type') ?? '')) throw Object.assign(new Error('no download route'), { code: 404 })
+      const html = /text\/html/i.test(response.headers.get('content-type') ?? '')
+      // A dashboard answering an unknown route with its own page is not the file, even
+      // when the path is a page: ask read-text first (issue 564 review).
+      let read: PageRead = null
+      if (html && isPagePath(path)) {
+        const routes = copyRoutes(event.sender.id, path, profile)
+        try {
+          read = routes ? await routes.readText() : null
+        } catch {
+          read = null
+        }
+      }
+      const decision = pageDownloadDecision(path, html, read)
+      if (decision === 'data-url') throw Object.assign(new Error('no download route'), { code: 404 })
+      if (decision === 'page') {
+        const routes = copyRoutes(event.sender.id, path, profile)
+        // The save dialog has no viewer ticket, so there is no cancel signal to pass.
+        await copyDown(picked.filePath, async () => response, routes?.dataUrl ?? (async () => null), undefined, true)
+        return 'saved'
+      }
       if (!response.body) throw new Error(t("Couldn't open this file"))
       await streamToFile(response.body as import('node:stream/web').ReadableStream, picked.filePath, () => stop.abort())
       return 'saved'
@@ -748,13 +832,17 @@ function registerIpc(): void {
     const shownProfile = typeof profile === 'string' ? profile : undefined
     return {
       download: (signal: AbortSignal) => through.download(hostFilePath('download', path, shownProfile), signal),
-      dataUrl: async () => {
-        const answer = await through.http<{ dataUrl?: unknown; data_url?: unknown }>('GET', hostFilePath('read-data-url', path, shownProfile))
+      dataUrl: async (signal?: AbortSignal) => {
+        const answer = await through.http<{ dataUrl?: unknown; data_url?: unknown }>('GET', hostFilePath('read-data-url', path, shownProfile), undefined, 30_000, signal)
         return dataUrlBytes(answer?.dataUrl ?? answer?.data_url)
       },
       readText: async () => {
-        const answer = await through.http<{ text?: unknown; binary?: unknown; truncated?: unknown }>('GET', hostFilePath('read-text', path, shownProfile))
-        return typeof answer?.text === 'string' && answer.binary !== true && answer.truncated !== true ? answer.text : null
+        const answer: unknown = await through.http('GET', hostFilePath('read-text', path, shownProfile))
+        // A dashboard answering an unknown route with its own HTML page is not a file read as text.
+        if (typeof answer === 'string') throw Object.assign(new Error('no readable page'), { code: 415 })
+        const row = answer && typeof answer === 'object' ? answer as { text?: unknown; binary?: unknown; truncated?: unknown } : null
+        if (row?.truncated === true || row?.binary === true) return { page: true as const }
+        return typeof row?.text === 'string' ? row.text : null
       }
     }
   }
@@ -780,6 +868,16 @@ function registerIpc(): void {
       return { error: openFailure(error) }
     } finally {
       if (key) viewCopies.delete(key)
+    }
+  })
+  ipcMain.handle(IPC.viewStagedFile, async (_event, name: unknown, mime: unknown, base64: unknown): Promise<{ url: string } | { error: string }> => {
+    if (typeof name !== 'string' || typeof mime !== 'string' || typeof base64 !== 'string') return { error: t("Couldn't open this file") }
+    try {
+      const url = await viewStagedFile(name, mime, base64)
+      return url ? { url } : { error: t("Couldn't open this file") }
+    } catch (error) {
+      console.warn('Conduit: staged file preview failed', error)
+      return { error: t("Couldn't open this file") }
     }
   })
   ipcMain.handle(IPC.openHostPageInBrowser, async (event, path: unknown, profile: unknown): Promise<string | null> => {
@@ -971,6 +1069,8 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle(IPC.pageUrl, (_event, html: unknown) => pageUrl(html))
+  ipcMain.handle(IPC.hostPageKey, () => (shownHost ? hostPageKey(shownHost) : null))
+  ipcMain.handle(IPC.pageServed, (_event, url: unknown) => pageServed(url))
   // From the window that asks: a call's screenshot steps the main window aside, Quick ask's steps itself aside.
   ipcMain.handle(IPC.screenshot, event => captureScreen(BrowserWindow.fromWebContents(event.sender) ?? mainWindow))
   ipcMain.handle(IPC.liveOpenMinted, async (event, path: unknown) => {
@@ -1058,12 +1158,14 @@ if (!app.requestSingleInstanceLock()) {
   })
   app.on('will-quit', () => globalShortcut.unregisterAll())
   app.setAppUserModelId('dev.conduit.desktop')
-  registerPageScheme(FILE_SCHEME_PRIVILEGES)
+  registerPageScheme(FILE_SCHEME_PRIVILEGES, HOST_PAGE_PRIVILEGES)
   // A root installed on this computer covers the dashboard's calls and sockets, as on the phone.
   trustSystemRoots()
   void app.whenReady().then(() => {
     servePages()
     serveViewedFiles()
+    // The workbench's host pages go to the dashboard on screen, the one its chat is on.
+    serveHostPages(() => (shownHost ? { url: shownHost, pageRequest: (path, method, headers, body, signal) => connection.pageRequest(path, method, headers, body, signal) } : null))
     setLanguage(resolvedLanguage())
     chooseTheme(themeChoice(), false)
     watchNewWindows()
@@ -1168,6 +1270,7 @@ function macMenu(): Menu {
         { label: t('Make Text Normal Size'), accelerator: 'Cmd+0', click: textSize('text-normal') },
         { type: 'separator' },
         { label: t('Show or Hide Sidebar'), accelerator: 'Cmd+\\', click: command('toggle-sidebar') },
+        { label: t('Show or Hide Workbench'), accelerator: 'Cmd+B', click: command('toggle-workbench') },
         { type: 'separator' },
         ...go,
         { type: 'separator' },
@@ -1193,6 +1296,7 @@ async function captureScreen(win: BrowserWindow | null): Promise<string | null> 
   const shown = !!win && win.isVisible() && !win.isMinimized()
   try {
     if (shown) {
+      dockPresence?.hold()
       win!.hide()
       await new Promise(resolve => setTimeout(resolve, 300))
     }
@@ -1204,8 +1308,12 @@ async function captureScreen(win: BrowserWindow | null): Promise<string | null> 
     return null
   } finally {
     if (shown) {
-      win!.show()
-      win!.focus()
+      // A chat or screen window closed during the capture is gone; the hold goes back either way.
+      if (!win!.isDestroyed()) {
+        win!.show()
+        win!.focus()
+      }
+      dockPresence?.release()
     }
   }
 }

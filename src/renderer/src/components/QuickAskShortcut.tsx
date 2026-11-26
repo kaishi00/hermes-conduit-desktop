@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { QuickAskShortcut } from '@shared/ipc'
 import { DEFAULT_QUICK_ASK_ACCELERATOR, acceleratorFromEvent, acceleratorLabel } from '@shared/accelerator'
 import { t } from '@shared/i18n'
@@ -14,11 +14,24 @@ export function QuickAskShortcutSetting() {
   const [recording, setRecording] = useState(false)
   const [refused, setRefused] = useState<string | null>(null)
   const platform = window.conduit.platform
+  // Settings left mid-pick: the read made as listening ends lands after the row is gone.
+  const mounted = useRef(true)
   useEffect(() => {
     let live = true
-    void window.conduit.quickAskShortcut().then(next => live && setShortcut(next))
+    mounted.current = true
+    const read = () => void window.conduit.quickAskShortcut().then(next => live && setShortcut(next))
+    read()
+    // Back from another app, which may have let go of the keys it held: the line about them is
+    // read again rather than kept until the next Change (desktop#520).
+    const onFocus = () => {
+      setRefused(null)
+      read()
+    }
+    window.addEventListener('focus', onFocus)
     return () => {
       live = false
+      mounted.current = false
+      window.removeEventListener('focus', onFocus)
     }
   }, [])
   const choose = async (accelerator: string | null) => {
@@ -50,7 +63,7 @@ export function QuickAskShortcutSetting() {
       window.removeEventListener('blur', onBlur)
       window.conduit.setQuickAskRecording(false)
       // The keys were asked for again as listening ended: another app may have let go of them since, or taken them.
-      void window.conduit.quickAskShortcut().then(setShortcut)
+      void window.conduit.quickAskShortcut().then(next => mounted.current && setShortcut(next))
     }
   }, [recording, platform])
   if (!shortcut) return null

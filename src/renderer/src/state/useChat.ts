@@ -63,7 +63,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, mergedOlderAt, newestPageItems, newestPages, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
+import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, mergedOlderAt, newestPageItems, newestPages, olderRows, rowsSince, rowsStandIn, settleRunning } from './longChat'
 import { knownChatLength, noteChatLength } from './chatLength'
 import { CATCH_UP_FOCUS_MS, CATCH_UP_RELOAD_MS, CATCH_UP_SETTLE_MS, catchUpStep, newestRowId, readOver, tipOf } from './chatCatchUp'
 
@@ -155,11 +155,16 @@ interface OpenTranscript {
  * compact resume under a note, which still takes messages, and brings its
  * newest stored rows; without them the refusal stands, since it says what to do.
  */
-async function resumeChat(params: Record<string, unknown>, storedId: string, profile: string | undefined): Promise<OpenTranscript> {
+async function resumeChat(
+  params: Record<string, unknown>,
+  storedId: string,
+  profile: string | undefined,
+  onShortPage?: (rows: HistoryRow[]) => void
+): Promise<OpenTranscript> {
   const http = (method: 'GET', path: string) => gateway.http(method, path)
   // A chat the list says fits one page resumes whole, without that page read first (chatLength.ts).
   const fits = (knownChatLength(storedId) ?? LONG_CHAT_PAGE) < LONG_CHAT_PAGE
-  const bounded = fits ? null : await boundedOpen(http, params, storedId, profile).catch(() => null)
+  const bounded = fits ? null : await boundedOpen(http, params, storedId, profile, onShortPage).catch(() => null)
   if (bounded) return bounded
   try {
     const result = await resumeSettled(params)
@@ -171,16 +176,17 @@ async function resumeChat(params: Record<string, unknown>, storedId: string, pro
     const compact = { ...params, omit_messages: true }
     const result = await resumeSettled(compact)
     const stored = result.stored_session_id ?? storedId
-    const rows = await newestRows(http, stored, profile).catch(() => [] as HistoryRow[])
+    const { rows, more } = await newestPages(http, stored, profile).catch(() => ({ rows: [] as HistoryRow[], more: false }))
     // No rows to draw: the refusal, which says what to do, beats a note over nothing.
     if (!rows.length) throw e
+    // The pages before are read as the reader scrolls up, as a long chat's are (desktop#520, from #486).
+    const older = { offset: rows.length, more }
     // Read again after its pages, so its turn and its rows are as they are now (longChat.ts).
-    if (result.running)
-      return {
-        ...(await settleRunning(() => gateway.rpc<ResumeResult>('session.resume', compact), held => rowsSince(http, held, stored, profile), result, rows)),
-        tooLong: true
-      }
-    return { result, rows, tooLong: true }
+    if (result.running) {
+      const settled = await settleRunning(() => gateway.rpc<ResumeResult>('session.resume', compact), held => rowsSince(http, held, stored, profile), result, rows)
+      return { ...settled, older: { ...older, offset: settled.rows.length }, tooLong: true }
+    }
+    return { result, rows, older, tooLong: true }
   }
 }
 
@@ -191,16 +197,21 @@ async function resumeChat(params: Record<string, unknown>, storedId: string, pro
  * newest (desktop#291). A shorter chat — or one with nothing stored yet, or a
  * gateway that won't resume compact — answers null, and the whole resume runs
  * as it did. Only a chat whose length the list didn't give, or gave as a page
- * or more, comes here.
+ * or more, comes here. The short page it read is the whole chat, so
+ * `onShortPage` draws it while that resume runs (desktop#612).
  */
 async function boundedOpen(
   http: (method: 'GET', path: string) => Promise<unknown>,
   params: Record<string, unknown>,
   storedId: string,
-  profile: string | undefined
+  profile: string | undefined,
+  onShortPage?: (rows: HistoryRow[]) => void
 ): Promise<OpenTranscript | null> {
   const { rows, more } = await newestPages(http, storedId, profile)
-  if (rows.length < LONG_CHAT_PAGE) return null
+  if (rows.length < LONG_CHAT_PAGE) {
+    if (rows.length) onShortPage?.(rows)
+    return null
+  }
   const compact = { ...params, omit_messages: true }
   const result = await resumeSettled(compact)
   const stored = result.stored_session_id ?? storedId
@@ -214,9 +225,12 @@ async function boundedOpen(
 
 /** The transcript a resume draws: its rows, or a chat opened on its newest stored rows with their tool details. */
 function resumedTranscript(result: ResumeResult, rows: HistoryRow[] | null, tooLong = false): TranscriptState {
+  const items = rows ? newestPageItems(rows, tooLong) : fromHistory(result.messages ?? [])
   const state: TranscriptState = {
-    items: rows ? newestPageItems(rows, tooLong) : fromHistory(result.messages ?? []),
+    items,
     running: result.running === true,
+    // A running chat joined partway still has a turn boundary: its resumed rows.
+    turnFrom: result.running === true ? items.length : undefined,
     plan: parsePlan(result.todo_state)
   }
   return rows ? attachBoards(state, toolAnswers({ messages: rows }), toolArgs({ messages: rows }), toolNames({ messages: rows })) : state
@@ -415,6 +429,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   // send), a question dismissed beside another chat finds its card by it (expiredQuestions).
   useEffect(() => noteChatSession(chat.storedId, chat.liveId), [chat.storedId, chat.liveId])
   const [loading, setLoading] = useState(false)
+  /** Failed opens being read again (reloadHistory with no live id): a jump waits for them (desktop#520). */
+  const [reopening, setReopening] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const liveId = useRef<string | null>(null)
   /** Tool ids a completed history read could not settle, kept per chat for this window. */
@@ -543,7 +559,18 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (profile) params.profile = profile
     // The transcript without every stored picture's bytes; the session authority refuses the flag.
     if (!sessionAuthority) params.inline_images = false
-    openingChat.current = resumeChat(params, storedId, profile)
+    // With nothing drawn, a short chat's first read (one the list gives no length for, like a bot's workstream)
+    // shows while its whole resume runs, which replaces it (desktop#612).
+    // Its tool details stand in for the resume's, as a kept copy's do, so they aren't read a second time.
+    let pageCopy: TranscriptState | null = null
+    const showPage = cached
+      ? undefined
+      : (rows: HistoryRow[]) => {
+          if (ticket !== request.current) return
+          pageCopy = rowsStandIn(rows)
+          dispatch({ type: 'reset', state: pageCopy })
+        }
+    openingChat.current = resumeChat(params, storedId, profile, showPage)
       .then(open => {
         if (ticket !== request.current) return
         const { result, rows } = open
@@ -561,7 +588,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           ...chatSettings(result.info)
         })
         // The tool answers the kept copy had come along, so only new ones are read (desktop#293).
-        let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), cached)
+        let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), cached ?? pageCopy)
         // The rows the pages before this one still hold are read as the reader scrolls up. Pages read
         // before the chat was left stay, as a catch-up keeps them; rows were only added since, so the
         // next page asked for can serve rows already drawn, never skip one.
@@ -708,6 +735,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     const stored = chatRef.current.storedId
     if (!stored) return
     const ticket = ++request.current
+    // A failed open read again (a send's openSettled) sets no loading state: a jump asked for meanwhile
+    // waits for it rather than being answered missed, and is looked for again once it ends (desktop#520).
+    const reopens = liveId.current === null
+    if (reopens) setReopening(n => n + 1)
     const olderWas = olderNow.current
     const params: Record<string, unknown> = { session_id: stored, cols: 96, source: 'desktop' }
     if (profile) params.profile = profile
@@ -751,6 +782,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       }
     } catch {
       // The chat as drawn stays; the next open reads it.
+    } finally {
+      if (reopens) setReopening(n => n - 1)
     }
   }, [profile, sessionAuthority])
 
@@ -1534,11 +1567,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // While the open is still in flight, wait: its first page or a live id can still settle.
     // Once it has settled without either (a failed open), there are no pages to read and
     // the jump must be answered, not left pending until another jump or a chat switch.
-    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null || (error !== null && !loading)) {
+    else if (olderNow.current ? !olderNow.current.more : liveId.current !== null || (error !== null && !loading && !reopening)) {
       wanted.current = null
       seek.missed?.()
     } else void loadOlder()
-  }, [loadOlder, transcriptRef, error, loading])
+  }, [loadOlder, transcriptRef, error, loading, reopening])
   const seekRow = useCallback(
     (found: (items: readonly TranscriptItem[]) => boolean, missed?: () => void) => {
       const seek: NonNullable<typeof wanted.current> = { found, missed }

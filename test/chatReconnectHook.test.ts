@@ -3,6 +3,7 @@ import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
+import { forgetTranscripts } from '../src/renderer/src/state/transcriptCache'
 
 type Listener = (event: { type: string; session_id?: string; payload?: unknown }) => void
 let listeners: Listener[] = []
@@ -19,6 +20,8 @@ const emit = (event: { type: string; session_id?: string; payload?: unknown }) =
 const resumeCalls = () => calls.filter(c => c.method === 'session.resume').length
 
 beforeEach(() => {
+  // A chat an earlier test left (mid-turn ones too, desktop#612) would draw before its resume answers.
+  forgetTranscripts('https://h')
   listeners = []
   calls = []
   reads = []

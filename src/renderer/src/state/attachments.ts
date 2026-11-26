@@ -201,6 +201,46 @@ export function pictureType(bytes: Uint8Array): string | null {
   return null
 }
 
+const PICTURE_EXTENSIONS: Record<string, string[]> = {
+  'image/png': ['png'],
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/gif': ['gif'],
+  'image/webp': ['webp']
+}
+const OTHER_PICTURE_EXTENSIONS = ['heic', 'heif', 'avif', 'bmp', 'tif', 'tiff', 'svg', 'jxl']
+
+/**
+ * `name` with the picture extension `ext`: a picture extension it already has
+ * is replaced, any other ending ("Event 8.30", a domain) stays part of the
+ * name, and trailing dots go, as on the phone (issue 3331).
+ */
+export function withPictureExtension(name: string, ext: string): string {
+  const trimmed = name.replace(/\.+$/, '')
+  const dot = trimmed.lastIndexOf('.')
+  const current = dot > 0 ? trimmed.slice(dot + 1).toLowerCase() : ''
+  const isPicture = Object.values(PICTURE_EXTENSIONS).flat().includes(current) || OTHER_PICTURE_EXTENSIONS.includes(current)
+  const stem = isPicture ? trimmed.slice(0, dot) : trimmed
+  return `${stem || 'image'}.${ext}`
+}
+
+/**
+ * A picture's type from its bytes, and its name with that type's extension,
+ * or null when Hermes wouldn't take the bytes as a picture. Hermes stages a
+ * picture under its name's extension, so a name ending in something else
+ * ("Event 8.30") gets the extension added and a wrong picture extension
+ * ("flyer.jpg" holding a PNG) is replaced, as on the phone (issue 3331).
+ */
+export function typedPicture(name: string, base64: string): { name: string; mime: string } | null {
+  if (!base64) return null
+  const mime = pictureType(firstBytes(base64, 16))
+  if (!mime) return null
+  const extensions = PICTURE_EXTENSIONS[mime]
+  const dot = name.lastIndexOf('.')
+  const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
+  if (extensions.includes(ext)) return { name, mime }
+  return { name: withPictureExtension(name, extensions[0]), mime }
+}
+
 function isPlainText(base64: string): boolean {
   try {
     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))

@@ -23,7 +23,7 @@ describe('asking first, tool modes', () => {
     ask.modelSpoke()
     c.tick(3000)
     ask.heard('Yes, and make it for four')
-    expect(await ask.release()).toEqual({ send: true, tool: 'ask_thread', request: adding('Yes, and make it for four', 'Book a table for two') })
+    expect(await ask.release()).toMatchObject({ send: true, tool: 'ask_thread', request: adding('Yes, and make it for four', 'Book a table for two') })
     expect(ask.draft).toBeNull()
   })
 

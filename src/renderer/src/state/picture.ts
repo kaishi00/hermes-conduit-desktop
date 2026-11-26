@@ -4,9 +4,10 @@
  * 0.85), or PNG when some of its pixels are see-through, as on the phone; one
  * that size or smaller, a GIF, or one the resize wouldn't make smaller goes as
  * it is. A picture in a type providers don't read (BMP, TIFF...) goes as JPEG
- * when Chromium can draw it, else as a file.
+ * when Chromium can draw it, else as a file. A picture that goes as it is
+ * takes its type from its bytes and a name with that type's extension.
  */
-import { isPicture, type StagedAttachment } from './attachments'
+import { isPicture, pictureType, typedPicture, withPictureExtension, type StagedAttachment } from './attachments'
 
 const LONG_EDGE = 2048
 const JPEG_QUALITY = 0.85
@@ -21,11 +22,6 @@ function readBase64(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('read failed'))
     reader.readAsDataURL(blob)
   })
-}
-
-function withExtension(name: string, ext: string): string {
-  const dot = name.lastIndexOf('.')
-  return `${dot > 0 ? name.slice(0, dot) : name || 'image'}.${ext}`
 }
 
 /** Whether any pixel is see-through. */
@@ -64,17 +60,30 @@ async function redraw(file: Blob, force: boolean): Promise<{ blob: Blob; mime: s
 
 /** A file as the composer stages it. */
 export async function stageFile(file: File, id: string): Promise<StagedAttachment> {
-  const mime = (file.type || '').toLowerCase()
-  const name = file.name || (mime.startsWith('image/') ? withExtension('image', mime.split('/')[1] ?? 'png') : 'file')
+  let mime = (file.type || '').toLowerCase()
+  // A file whose name doesn't say it's a picture ("Event 8.30") is one when
+  // its bytes are (issue 3331).
+  if (!mime || mime === 'application/octet-stream') {
+    mime = pictureType(new Uint8Array(await file.slice(0, 16).arrayBuffer())) ?? mime
+  }
+  const name = file.name || (mime.startsWith('image/') ? withPictureExtension('image', mime.split('/')[1] ?? 'png') : 'file')
   if (mime.startsWith('image/') && mime !== 'image/svg+xml') {
     const provider = isPicture(mime)
     if (mime !== 'image/gif') {
       const drawn = await redraw(file, !provider)
       if (drawn && (!provider || drawn.blob.size < file.size)) {
-        return { id, name: withExtension(name, drawn.ext), kind: 'image', mime: drawn.mime, size: drawn.blob.size, base64: await readBase64(drawn.blob) }
+        return { id, name: withPictureExtension(name, drawn.ext), kind: 'image', mime: drawn.mime, size: drawn.blob.size, base64: await readBase64(drawn.blob) }
       }
     }
-    if (provider) return { id, name, kind: 'image', mime, size: file.size, base64: await readBase64(file) }
+    if (provider) {
+      // Its bytes say what it is, and its name follows (issue 3331); bytes
+      // that aren't a picture Hermes takes go as a file, since a provider
+      // refuses the whole message over a picture it can't read.
+      const base64 = await readBase64(file)
+      const typed = typedPicture(name, base64)
+      if (typed) return { id, name: typed.name, kind: 'image', mime: typed.mime, size: file.size, base64 }
+      return { id, name, kind: 'file', mime, size: file.size, base64 }
+    }
   }
   return { id, name, kind: 'file', mime: mime || 'application/octet-stream', size: file.size, base64: await readBase64(file) }
 }

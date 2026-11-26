@@ -4,29 +4,67 @@ import { gateway } from '../gateway'
 import { parsePreview, readTextPath } from '../state/workspace'
 import { PictureProfile } from './Picture'
 import { inSelectMenu } from './Select'
+import { OverWindow } from './OverWindow'
 import { openPageInBrowser } from '../state/saveMedia'
 import { isPagePath } from '@shared/viewFileRules'
+import { pictureHost, refused } from '../state/gatewayPictures'
+import { notePage, pageCacheKey, prunePages, rememberedPage, type PageCache } from '../state/pagePreviewCache'
 
 const PLACEHOLDER = 280
 const MIN_HEIGHT = 60
 const MAX_HEIGHT = 900
 
-// Pages already read, by profile and path: a chat scrolled back draws them again at once.
-const kept = new Map<string, string | null>()
+// Pages already read, per dashboard and profile: a chat scrolled back draws them again at once.
+const kept: PageCache = new Map()
+/** Reads in flight, so blocks of the same page drawn together share one. */
+const reading = new Map<string, Promise<string | null>>()
+let keptHost: string | null = null
 
-/** A page's address on the page scheme, read from the host once; null when it can't be shown. */
+/** A page's address on the page scheme, read from this host once; null when it can't be shown. */
 export async function pageAddress(path: string, profile?: string): Promise<string | null> {
-  const key = `${profile ?? ''}|${path}`
-  if (kept.has(key)) return kept.get(key)!
-  let url: string | null = null
-  try {
-    const preview = parsePreview(await gateway.http('GET', readTextPath(path, profile), undefined, 30_000))
-    url = preview.binary || preview.truncated ? null : await window.conduit.pageUrl(preview.text)
-  } catch {
-    url = null
+  const host = pictureHost()
+  // Every window follows its own host (the main window, Quick Ask, a docked room): another
+  // dashboard's copies go as this one's first page is asked for.
+  if (host !== keptHost) {
+    keptHost = host
+    prunePages(kept, host)
+    reading.clear()
   }
-  kept.set(key, url)
-  return url
+  const key = pageCacheKey(path, profile, host)
+  const known = rememberedPage(kept, path, profile, host)
+  if (known === null) return null
+  // The main process keeps the newest 40 pages: one it forgot is read again rather than drawn as "Not found".
+  if (known !== undefined) {
+    if (await window.conduit.pageServed(known).catch(() => true)) return known
+    if (kept.get(key)?.url === known) kept.delete(key)
+  }
+  let read = reading.get(key)
+  if (!read) {
+    read = readPage(path, profile).then(({ url, refused: wasRefused }) => {
+      // An answer that lands after a host switch belongs to the old dashboard.
+      if (reading.get(key) === read) notePage(kept, path, profile, host, url, wasRefused)
+      return url
+    })
+    reading.set(key, read)
+    void read.finally(() => {
+      if (reading.get(key) === read) reading.delete(key)
+    })
+  }
+  return read
+}
+
+async function readPage(path: string, profile?: string): Promise<{ url: string | null; refused: boolean }> {
+  let preview
+  try {
+    preview = parsePreview(await gateway.http('GET', readTextPath(path, profile), undefined, 30_000))
+  } catch (error) {
+    // Gone or not allowed is Hermes' answer; a timeout or a dropped connection may read next time.
+    return { url: null, refused: refused(error) }
+  }
+  if (preview.binary || preview.truncated) return { url: null, refused: true }
+  const url = await window.conduit.pageUrl(preview.text).catch(() => undefined)
+  // Too big to serve is the page's own; a failed call to the main process may work next time.
+  return url === undefined ? { url: null, refused: false } : { url, refused: url === null }
 }
 
 /** A page in a sandboxed frame: its own scripts run, it keeps nothing and reaches nothing but its height. */
@@ -58,9 +96,6 @@ export function PageFrame({ url, title, height, onHeight }: { url: string; title
 export function PagePreview({ path, name, fallback }: { path: string; name: string; fallback: ReactNode }) {
   const profile = useContext(PictureProfile)
   const [url, setUrl] = useState<string | null | undefined>(undefined)
-  const [height, setHeight] = useState(PLACEHOLDER)
-  const [cut, setCut] = useState(false)
-  const [full, setFull] = useState(false)
   useEffect(() => {
     let live = true
     setUrl(undefined)
@@ -69,6 +104,50 @@ export function PagePreview({ path, name, fallback }: { path: string; name: stri
       live = false
     }
   }, [path, profile])
+  if (url === null) return <>{fallback}</>
+  return (
+    <PageCard
+      url={url}
+      name={name}
+      title={path}
+      browser={isPagePath(path) ? () => void openPageInBrowser(path, profile) : undefined}
+    />
+  )
+}
+
+/**
+ * HTML written in the reply itself, after the phone's HTMLPreviewBlock: drawn as a `::preview` page is, once
+ * nothing more will join it; while the reply is still writing it, its room waits with a line saying so.
+ */
+export function ReplyPage({ html, ready }: { html: string; ready: boolean }) {
+  const [url, setUrl] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (!ready) return
+    let live = true
+    void window.conduit.pageUrl(html).then(address => live && setUrl(address))
+    return () => {
+      live = false
+    }
+  }, [html, ready])
+  if (!ready) {
+    return (
+      <div className="page-preview">
+        <div className="page-frame page-frame-loading page-frame-writing" style={{ height: PLACEHOLDER }}>
+          <span className="meta">{t('Drawing the page when it’s finished…')}</span>
+        </div>
+      </div>
+    )
+  }
+  // A page too large to keep stays as the HTML it is.
+  if (url === null) return <pre className="page-source">{html}</pre>
+  return <PageCard url={url} name={t('Page')} title={t('Page')} />
+}
+
+/** A page's card in a message: its name, Open full screen, and the page up to 900 px, the rest full screen. */
+function PageCard({ url, name, title, browser }: { url: string | undefined; name: string; title: string; browser?: () => void }) {
+  const [height, setHeight] = useState(PLACEHOLDER)
+  const [cut, setCut] = useState(false)
+  const [full, setFull] = useState(false)
   useEffect(() => {
     if (!full) return
     const onKey = (event: KeyboardEvent) => {
@@ -81,9 +160,8 @@ export function PagePreview({ path, name, fallback }: { path: string; name: stri
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [full])
-  if (url === null) return <>{fallback}</>
   return (
-    <div className="page-preview" title={path}>
+    <div className="page-preview" title={title}>
       <div className="page-preview-head">
         <span className="page-preview-name">{name}</span>
         <button className="link" disabled={!url} onClick={() => setFull(true)}>
@@ -105,20 +183,22 @@ export function PagePreview({ path, name, fallback }: { path: string; name: stri
       )}
       {cut ? <div className="meta page-preview-cut">{t('The page goes on. Open it full screen to see the rest.')}</div> : null}
       {full && url ? (
-        <div className="page-full" role="dialog" aria-label={name}>
-          <div className="page-full-head">
-            <span className="page-preview-name">{name}</span>
-            {isPagePath(path) ? (
-              <button className="secondary" onClick={() => void openPageInBrowser(path, profile)}>
-                {t('Open in Browser')}
+        <OverWindow>
+          <div className="page-full" role="dialog" aria-label={name}>
+            <div className="page-full-head">
+              <span className="page-preview-name">{name}</span>
+              {browser ? (
+                <button className="secondary" onClick={browser}>
+                  {t('Open in Browser')}
+                </button>
+              ) : null}
+              <button className="secondary" onClick={() => setFull(false)}>
+                {t('Done')}
               </button>
-            ) : null}
-            <button className="secondary" onClick={() => setFull(false)}>
-              {t('Done')}
-            </button>
+            </div>
+            <PageFrame url={url} title={name} />
           </div>
-          <PageFrame url={url} title={name} />
-        </div>
+        </OverWindow>
       ) : null}
     </div>
   )

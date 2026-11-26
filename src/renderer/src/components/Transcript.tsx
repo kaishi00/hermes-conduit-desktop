@@ -1,7 +1,7 @@
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { flushSync } from 'react-dom'
 import { mediaKind, splitReply, withoutBoardLines } from '../state/media'
-import { PagePreview } from './PagePreview'
+import { PagePreview, ReplyPage } from './PagePreview'
 import { baseName, type Attachment } from '../state/text'
 import { displayName } from '../state/attachments'
 import type { PendingRequest } from '@shared/ipc'
@@ -28,6 +28,7 @@ import { blockquote, copyableReply, excerpt, parseReplyEnvelope, sameQuotedText,
 import { BoardFollowUps, BoardView } from './BoardView'
 import { placeBoards, sameBoards, type PlacedBoard } from '../state/boards'
 import { DEFAULT_DISPLAY, type ChatDisplay } from '../state/display'
+import { toolTitle } from '../state/liveDoing'
 import { readAloud, stopReading, useReadingKey } from '../state/readAloud'
 import { VOICE_FILE_PREFIX, parseVoiceMessage } from '../state/voice'
 import { foldRuns, isStep, span, spanText, type Row } from '../state/runs'
@@ -446,7 +447,7 @@ function FileCard({ path, label, link }: { path: string; label?: string; link?: 
       {audio === 'failed' ? <span className="meta error-text">{t("Couldn't open this file")}</span> : null}
       {audio && typeof audio === 'object' ? <audio className="file-audio" controls autoPlay src={audio.src} /> : null}
       {viewing ? (
-        <FileViewer path={path} name={name} profile={profile} saving={saving} onDownload={() => void download()} onClose={closeViewer} />
+        <FileViewer file={{ path, profile, saving, onDownload: () => void download() }} name={name} onClose={closeViewer} />
       ) : null}
     </div>
   )
@@ -516,6 +517,8 @@ export const Reply = memo(function Reply({
           <PlacedBoardView key={block.id} board={boards?.find(board => board.id === block.id)} />
         ) : block.kind === 'preview' ? (
           <PagePreview key={i} path={block.path} name={baseName(block.path)} fallback={<FileCard path={block.path} />} />
+        ) : block.kind === 'page' ? (
+          <ReplyPage key={i} html={block.html} ready={block.complete || !streaming} />
         ) : mediaKind(block.path) === 'image' ? (
           <GatewayPicture
             key={i}
@@ -554,28 +557,6 @@ const PlacedBoardView = memo(
 
 export function clock(ms?: number): string {
   return ms ? formatDate(ms, { hour: 'numeric', minute: '2-digit' }) : ''
-}
-
-/** "terminal" → "Ran a command", the way the phone names its tool steps. */
-function toolTitle(name: string, done: boolean): string {
-  const known: Record<string, [string, string]> = {
-    terminal: [t('Running a command'), t('Ran a command')],
-    execute_code: [t('Running code'), t('Ran code')],
-    read_file: [t('Reading a file'), t('Read a file')],
-    write_file: [t('Writing a file'), t('Wrote a file')],
-    patch: [t('Editing a file'), t('Edited a file')],
-    search_files: [t('Searching files'), t('Searched files')],
-    web_search: [t('Searching the web'), t('Searched the web')],
-    web_extract: [t('Reading a page'), t('Read a page')],
-    browser_navigate: [t('Opening a page'), t('Opened a page')],
-    memory: [t('Updating memory'), t('Updated memory')],
-    todo: [t('Updating the plan'), t('Updated the plan')],
-    delegate_task: [t('Handing off a task'), t('Handed off a task')]
-  }
-  const pair = known[name]
-  if (pair) return done ? pair[1] : pair[0]
-  const words = name.replace(/[_.-]+/g, ' ').trim()
-  return done ? words.charAt(0).toUpperCase() + words.slice(1) : `${words.charAt(0).toUpperCase()}${words.slice(1)}…`
 }
 
 interface ItemProps {

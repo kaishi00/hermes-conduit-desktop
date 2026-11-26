@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { looksLikePath } from '../state/workspace'
 import { faviconFailed, faviconUrl, fileType } from '../state/linkMarks'
 import { remarkDesktopCards } from '../state/desktopCards'
+import { remarkHtmlTags, withFoldsApart } from '../state/htmlInReplies'
 import { markdownBlocks } from '../state/markdownBlocks'
 import { DesktopCard } from './DesktopCard'
 import { Icon } from './icons'
@@ -13,7 +14,8 @@ import { WorkLinks } from './WorkLinkCard'
 import { t } from '@shared/i18n'
 
 // A single newline is a line break, as replies are written for chat, not for a page.
-const plugins = [remarkGfm, remarkBreaks, remarkDesktopCards]
+// The few tags that read as text draw (htmlInReplies); any other HTML stays text.
+const plugins = [remarkGfm, remarkBreaks, remarkDesktopCards, remarkHtmlTags]
 
 /** Opens a file path a reply names in inline code, in the Folder; null where there's no folder. */
 export const FileLinks = createContext<((path: string) => void) | null>(null)
@@ -195,7 +197,7 @@ const components: Components = {
   } as object)
 }
 
-/** A reply's markdown. Raw HTML in it stays text; links open in the browser, links to chats in the app. */
+/** A reply's markdown. Its text tags draw (htmlInReplies), other raw HTML stays text; links open in the browser, links to chats in the app. */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
     <ReactMarkdown
@@ -203,7 +205,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
       urlTransform={urlTransform}
       components={components}
     >
-      {text}
+      {withFoldsApart(text)}
     </ReactMarkdown>
   )
 })

@@ -2,9 +2,94 @@ import { describe, expect, it } from 'vitest'
 import { boardFrom, dialable, mailtoLink, people, placeBoards, sameBoards, share, smsLink, textRecipient } from '../src/renderer/src/state/boards'
 import { namingFiles, splitReply, withoutBoardLines } from '../src/renderer/src/state/media'
 import { copyableReply, sameQuotedText } from '../src/renderer/src/state/quote'
+import { addPendingUser, applyEvent, emptyTranscript } from '../src/renderer/src/state/transcript'
+import type { TranscriptItem, TranscriptState } from '../src/renderer/src/state/transcript'
 
 const stats = { type: 'stats', title: 'Today', stats: [{ label: 'Steps', value: '8,412' }] }
 const map = { type: 'map', title: 'Route', places: [] }
+
+describe('a queued prompt between a board and its reply (issue 550)', () => {
+  it('keeps a prompt queued through the running turn’s reply events (real applyEvent sequence)', () => {
+    const board = { ...stats, cards: [stats], tabs: false, next: [], line: 'cb-000000000003' }
+    let state: TranscriptState = {
+      ...emptyTranscript,
+      items: [{ kind: 'tool', key: 't1', name: 'conduit_show', status: 'done', board } as unknown as TranscriptItem]
+    }
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    state = addPendingUser(state, 'then order a cab', [], 'u-real')
+    state = applyEvent(state, { type: 'message.delta', payload: { text: 'Here:\n::conduit-board{id="cb-000000000003"}' } })
+    state = applyEvent(state, { type: 'message.complete', payload: { text: 'Here:\n::conduit-board{id="cb-000000000003"}' } })
+    // The queued prompt is still queued, so the board belongs to the earlier turn's reply.
+    expect(state.items.find(i => i.key === 'u-real')).toMatchObject({ pending: true })
+    const assistant = state.items.find(i => i.kind === 'assistant')!
+    const placed = placeBoards(state.items)
+    expect(placed.hidden).toEqual(new Set(['t1']))
+    expect(placed.placed?.get(assistant.key)?.map(b => b.id)).toEqual(['cb-000000000003'])
+
+    // The queued prompt's own turn starts: its row is confirmed and moved after the
+    // earlier turn's rows, so the board stays where the earlier reply wrote its line.
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    const after = placeBoards(state.items)
+    expect(state.items.find(i => i.key === 'u-real')).toMatchObject({ pending: false, kind: 'user' })
+    expect(state.items.findIndex(i => i.key === 'u-real')).toBeGreaterThan(state.items.findIndex(i => i.kind === 'assistant'))
+    expect(after.placed?.get(assistant.key)?.map(b => b.id)).toEqual(['cb-000000000003'])
+  })
+
+  it('keeps a prompt queued when a running turn was resumed partway', () => {
+    const board = { ...stats, cards: [stats], tabs: false, next: [], line: 'cb-000000000004' }
+    // resumedTranscript now sets turnFrom to the end of the resumed rows for a running chat.
+    let state: TranscriptState = {
+      ...emptyTranscript,
+      running: true,
+      turnFrom: 1,
+      items: [{ kind: 'tool', key: 't1', name: 'conduit_show', status: 'done', board } as unknown as TranscriptItem]
+    }
+    state = addPendingUser(state, 'and a cab', [], 'u-resume')
+    state = applyEvent(state, { type: 'message.delta', payload: { text: 'Here:\n::conduit-board{id="cb-000000000004"}' } })
+    expect(state.items.find(i => i.key === 'u-resume')).toMatchObject({ pending: true })
+    expect(placeBoards(state.items).hidden).toEqual(new Set(['t1']))
+  })
+
+  it('confirms only the oldest queued prompt when its turn starts', () => {
+    let state: TranscriptState = { ...emptyTranscript, items: [] }
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    state = addPendingUser(state, 'A', [], 'u-a')
+    state = addPendingUser(state, 'B', [], 'u-b')
+    state = applyEvent(state, { type: 'message.delta', payload: { text: 'reply A' } })
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    const keys = state.items.map(i => i.key)
+    expect(state.items.find(i => i.key === 'u-a')).toMatchObject({ pending: false })
+    expect(state.items.find(i => i.key === 'u-b')).toMatchObject({ pending: true })
+    expect(keys.indexOf('u-a')).toBeLessThan(keys.indexOf('u-b'))
+    expect(keys.indexOf('u-a')).toBeGreaterThan(keys.findIndex(i => i.startsWith('a')))
+  })
+
+  it('confirms a pending row on a reply when turnFrom was lost (replay gap)', () => {
+    let state: TranscriptState = { ...emptyTranscript, items: [] }
+    state = addPendingUser(state, 'go', [], 'u-gap')
+    state = applyEvent(state, { type: 'message.delta', payload: { text: 'on it' } })
+    expect(state.items.find(i => i.key === 'u-gap')).toMatchObject({ pending: false })
+  })
+
+  it('does not end the turn for a prompt still waiting on the gateway', () => {
+    const board = { ...stats, cards: [stats], tabs: false, next: [], line: 'cb-000000000001' }
+    const withQueued = placeBoards([
+      { kind: 'tool', key: 't1', board },
+      { kind: 'user', key: 'u1', text: 'then do it', pending: true },
+      { kind: 'assistant', key: 'a1', text: 'Here:\n::conduit-board{id="cb-000000000001"}' }
+    ])
+    expect(withQueued.hidden).toEqual(new Set(['t1']))
+    expect(withQueued.placed?.get('a1')?.map(b => b.id)).toEqual(['cb-000000000001'])
+    // A confirmed prompt still starts a new turn and leaves the earlier board at its row.
+    const confirmed = placeBoards([
+      { kind: 'tool', key: 't1', board },
+      { kind: 'user', key: 'u1', text: 'then do it' },
+      { kind: 'assistant', key: 'a1', text: 'Here:\n::conduit-board{id="cb-000000000001"}' }
+    ])
+    expect(confirmed.hidden?.size ?? 0).toBe(0)
+    expect(confirmed.placed?.size ?? 0).toBe(0)
+  })
+})
 
 describe('boards', () => {
   it('draws a board of kinds it knows, with its tabs and follow-ups', () => {
@@ -94,7 +179,7 @@ describe('boards', () => {
   it('leaves a board at its row without the line, for a later turn’s line, or for an example', () => {
     expect(placeBoards([user, row, reply('a1', 'Here it is.')]).hidden.size).toBe(0)
     expect(placeBoards([user, row, reply('a1', 'Here.'), { kind: 'user', key: 'u2', text: 'And?' }, reply('a2', line)]).hidden.size).toBe(0)
-    for (const example of ['```\n' + line + '\n```', `> ${line}`, `\`${line}\``, `| ${line} | x |`])
+    for (const example of ['```\n' + line + '\n```', `> ${line}`, `\`${line}\``, `| a | b |\n| --- | --- |\n| ${line} | x |`, `a | b\n--- | ---\n${line} | x`])
       expect(placeBoards([user, row, reply('a1', example)]).hidden.size).toBe(0)
   })
 
@@ -134,10 +219,26 @@ describe('boards', () => {
     expect(sameQuotedText(raw, withoutBoardLines(raw))).toBe(false)
     // A line in a quote or a table stays, as the reply draws it.
     expect(withoutBoardLines(`> ${line}`)).toBe(`> ${line}`)
+    // A table is a header with a rule under it, outer pipes or not, as the phone reads it (desktop#526).
+    const table = `a | b\n--- | ---\n${line} | x\nmore | rows`
+    expect(withoutBoardLines(table)).toBe(table)
+    expect(withoutBoardLines(`Before.\n\n${table}\n\nAfter ${line}`)).toBe(`Before.\n\n${table}\n\nAfter`)
+    // Prose with pipes is not a table: its line goes.
+    expect(withoutBoardLines(`Pick A | B | C ${line}`)).toBe('Pick A | B | C')
+    // A fenced rule under a pipe line doesn't make a table.
+    expect(withoutBoardLines('Pick A | B\n```\n--- | ---\n```')).toBe('Pick A | B\n```\n--- | ---\n```')
     // The first call of a turn to name an id keeps it.
     const again = { ...row, key: 't2' }
     expect([...placeBoards([user, row, again, reply('a1', line)]).hidden]).toEqual(['t1'])
     expect(splitReply(`Before\n${line}`)).toEqual([{ kind: 'markdown', text: `Before\n${line}` }])
+  })
+
+  it('places a board on a prose line with a pipe, never in a table (desktop#526)', () => {
+    const boards = new Set([id])
+    expect(splitReply(`Pick A | B ${line}`, boards)).toEqual([{ kind: 'markdown', text: 'Pick A | B' }, { kind: 'board', id }])
+    expect(placeBoards([user, row, reply('a1', `Pick A | B ${line}`)]).hidden.size).toBe(1)
+    const table = `| a | b |\n| --- | --- |\n| ${line} | x |`
+    expect(splitReply(table, boards)).toEqual([{ kind: 'markdown', text: table }])
   })
 
   it('tells two lists of the same placed boards as one', () => {

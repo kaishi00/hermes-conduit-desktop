@@ -9,7 +9,7 @@
 import { app, net, type BrowserWindow } from 'electron'
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { kept, offered, processName, RELAY_REPORTS, reportBody, type DeviceReport } from '../shared/deviceReports'
+import { countsAsCrash, kept, offered, processName, RELAY_REPORTS, reportBody, type DeviceReport } from '../shared/deviceReports'
 
 const file = () => join(app.getPath('userData'), 'device-reports.json')
 const freezeFile = () => join(app.getPath('userData'), 'freeze-under-way.json')
@@ -119,8 +119,12 @@ export function watchDeviceReports(onChange: () => void) {
   } catch {
     // None.
   }
+  let quitting = false
+  app.on('before-quit', () => {
+    quitting = true
+  })
   app.on('render-process-gone', (_event, contents, details) => {
-    if (details.reason === 'clean-exit') return
+    if (!countsAsCrash({ type: 'renderer', reason: details.reason, exitCode: details.exitCode }, quitting)) return
     record({ kind: 'crash', process: 'window', reason: details.reason, exitCode: details.exitCode })
     // The window loads again (not over and over), so the card shows.
     if (Date.now() - lastReload > 30_000 && !contents.isDestroyed()) {
@@ -129,7 +133,7 @@ export function watchDeviceReports(onChange: () => void) {
     }
   })
   app.on('child-process-gone', (_event, details) => {
-    if (details.reason === 'clean-exit') return
+    if (!countsAsCrash({ type: details.type, reason: details.reason, exitCode: details.exitCode }, quitting)) return
     record({ kind: 'crash', process: processName(details.type, details.name ?? details.serviceName), reason: details.reason, exitCode: details.exitCode })
   })
 }

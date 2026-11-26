@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { endLine, fieldText, kept, offered, processName, reportBody, type DeviceReport } from '../src/shared/deviceReports'
+import { countsAsCrash, endLine, fieldText, kept, offered, processName, reportBody, type DeviceReport } from '../src/shared/deviceReports'
 
 const DAY = 86_400_000
 const report = (over: Partial<DeviceReport> = {}): DeviceReport => ({
@@ -52,5 +52,16 @@ describe('device reports', () => {
     expect(hang.diagnostic.crashDiagnostics).toEqual([])
     expect(hang.diagnostic.hangDiagnostics[0]!.diagnosticMetaData.hangDuration).toBe('3.0 sec')
     for (const field of [body.app_version, body.build, body.os, body.device]) expect(field).toMatch(/^[\p{L}\p{N} ()._,:+-]{1,64}$/u)
+  })
+
+  it('asks only about real crashes, not a quit, a GPU that never started or a SIGTERM', () => {
+    expect(countsAsCrash({ type: 'renderer', reason: 'crashed', exitCode: 139 }, false)).toBe(true)
+    expect(countsAsCrash({ type: 'GPU', reason: 'crashed', exitCode: 34 }, false)).toBe(true)
+    expect(countsAsCrash({ type: 'renderer', reason: 'crashed', exitCode: 139 }, true)).toBe(false)
+    expect(countsAsCrash({ type: 'GPU', reason: 'clean-exit', exitCode: 0 }, false)).toBe(false)
+    expect(countsAsCrash({ type: 'GPU', reason: 'launch-failed', exitCode: 1002 }, false)).toBe(false)
+    expect(countsAsCrash({ type: 'Utility', reason: 'killed', exitCode: 15 }, false)).toBe(false)
+    expect(countsAsCrash({ type: 'Utility', reason: 'killed', exitCode: 9 }, false)).toBe(true)
+    expect(countsAsCrash({ type: 'renderer', reason: 'killed', exitCode: 15 }, false)).toBe(true)
   })
 })

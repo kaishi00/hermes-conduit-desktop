@@ -3,6 +3,7 @@ import { t } from '@shared/i18n'
 import type { MixedTile } from '../state/botOrder'
 import type { HostBadge } from '../state/keptHosts'
 import type { BotWork } from '../state/useWork'
+import { WorkRing } from './WorkRing'
 import { BotAvatar } from './BotsHome'
 import { HostBadgeMark } from './CombinedDashboards'
 
@@ -66,13 +67,15 @@ export function RailFaces({
               e.stopPropagation()
             }}
           >
-            <BotAvatar bot={bot} size={34} host={tile.own ? undefined : tile.host} />
+            <span className="rail-face-avatar">
+              <BotAvatar bot={bot} size={34} host={tile.own ? undefined : tile.host} />
+              {needs || busy ? <WorkRing needs={needs ? work!.needsYou : 0} /> : null}
+            </span>
             {badge ? (
               <span className="rail-face-badge">
                 <HostBadgeMark badge={badge} />
               </span>
             ) : null}
-            {needs || busy ? <span className={`rail-face-running${needs ? ' needs' : ''}`} aria-hidden="true" /> : null}
           </button>
         )
       })}

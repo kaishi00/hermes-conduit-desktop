@@ -95,6 +95,11 @@ export class QuickAsk {
     this.window?.hide()
   }
 
+  /** Whether this is Quick Ask's own window, which floats without the Dock icon (dockPresence.ts). */
+  owns(window: BrowserWindow): boolean {
+    return window === this.window
+  }
+
   destroy(): void {
     this.window?.destroy()
     this.window = null

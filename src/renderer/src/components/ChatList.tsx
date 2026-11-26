@@ -125,7 +125,7 @@ interface Props {
   otherProfile?: { host: string; name: string } | null
   /** A row's menu (right-click or ⋯): Pin or Unpin, Rename, Archive, Delete. */
   /** Returns whether Hermes accepted the change; a refused unpin keeps its saved place. */
-  onPin?: (row: ChatRow) => void | Promise<boolean>
+  onPin?: (row: ChatRow) => Promise<boolean>
   onRename?: (row: ChatRow, title: string) => void
   onArchive?: (row: ChatRow) => Promise<boolean>
   onDelete?: (row: ChatRow) => void
@@ -1124,14 +1124,16 @@ export function ChatList({
                 <button
                   role="menuitem"
                   onClick={() => {
-                    const result = onPin(menu.row)
-                    // As in the header menu: a refused unpin keeps its place. A caller that
-                    // reports success synchronously drops now; a promise drops on success.
-                    if (menu.row.pinned) {
-                      if (result && typeof (result as Promise<boolean>).then === 'function') {
-                        void (result as Promise<boolean>).then(ok => { if (ok !== false) pinOrder.drop(menu.row) })
-                      } else pinOrder.drop(menu.row)
-                    }
+                    // As Archive above: the row and scope are taken now, and a refused unpin keeps its place.
+                    const row = menu.row
+                    const scope = searchScope
+                    setMenu(null)
+                    void onPin(row).then(
+                      ok => {
+                        if (ok && row.pinned && latest.current.searchScope === scope) latest.current.dropPin(row)
+                      },
+                      () => undefined
+                    )
                   }}
                 >
                   {menu.row.pinned ? t('Unpin') : t('Pin')}

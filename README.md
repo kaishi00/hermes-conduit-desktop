@@ -15,7 +15,8 @@ phone does.
 ![Conduit for desktop: the Chats list beside a chat with Hermes](docs/media/chats.webp)
 
 Your chats, bots, group chats and Needs you (approvals and questions), in a
-window of their own. Send pictures and files (attach, paste or drop them),
+window of their own. Send pictures and files (attach, paste or drop them,
+and click one to preview it before it goes),
 pop a chat out into its own window, ask from anywhere with Quick Ask, call
 your bot with the phone's voice modes, and keep several Hermes hosts
 side by side. Close the window and Conduit stays in the tray (the menu bar
