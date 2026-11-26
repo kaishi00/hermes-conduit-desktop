@@ -60,6 +60,7 @@ import { useMouseBack } from './state/mouseBack'
 import { NeedsYou } from './components/NeedsYou'
 import { SignIn } from './components/SignIn'
 import { Brand, TitleBar } from './components/TitleBar'
+import { RailFaces } from './components/RailFaces'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
@@ -2598,6 +2599,16 @@ function Shell({
           onSettings={() => setSection('settings')}
           onChangeLayout={changeRailLayout}
           brand={brand}
+          faces={
+            (section === 'chats' || section === 'room' || section === 'bots') && listHidden && orderedRoster ? (
+              <RailFaces
+                bots={orderedRoster}
+                openProfile={section === 'chats' && selected.botChat && !dockedChat ? selected.profile : undefined}
+                running={runningProfiles}
+                onOpen={openBot}
+              />
+            ) : undefined
+          }
         />
         {/* Chats stays mounted once shown, hidden while another section is open, so coming back doesn't rebuild every row and the open transcript. */}
         {chatsShown ? (

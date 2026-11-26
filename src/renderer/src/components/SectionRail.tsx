@@ -35,6 +35,8 @@ export interface SectionRailProps {
   onChangeLayout: (next: RailLayout) => void
   /** The app's mark and Hermes switcher, at the top of the island (Brand with `inRail`). */
   brand?: ReactNode
+  /** The bots' faces under the sections while the list is hidden (RailFaces). */
+  faces?: ReactNode
 }
 
 interface MenuState {
@@ -62,7 +64,8 @@ export function SectionRail({
   onSelect,
   onSettings,
   onChangeLayout,
-  brand
+  brand,
+  faces
 }: SectionRailProps) {
   const mac = window.conduit.platform === 'darwin'
   const pinned = pinnedSections(layout)
@@ -243,6 +246,7 @@ export function SectionRail({
             )
           })}
         </div>
+        {faces}
         <span className="spacer" />
         <button
           className="railbtn"
