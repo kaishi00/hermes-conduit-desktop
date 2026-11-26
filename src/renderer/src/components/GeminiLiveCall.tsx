@@ -428,7 +428,7 @@ export function GeminiLiveCall({
             callNames.current.set(event.id, SEND_REQUEST)
             return toChat(event.id, release.request)
           }
-          void jobs.current?.start(release.request).then(result => !ended.current && answer(result))
+          void jobs.current?.start(release.request).then(result => !ended.current && answer(askFirst.current.settle(release.said, result)))
         })
         return
       case SET_ASK_FIRST: {
@@ -445,7 +445,7 @@ export function GeminiLiveCall({
         void askFirst.current.ask(START_JOB, (event.args.instructions ?? '').trim()).then(asked => {
           if (ended.current) return
           if ('held' in asked) return answer(asked.held)
-          void jobs.current?.start(asked.request).then(result => !ended.current && answer(result))
+          void jobs.current?.start(asked.request).then(result => !ended.current && answer(askFirst.current.settle(asked.said, result)))
         })
         return
       }
