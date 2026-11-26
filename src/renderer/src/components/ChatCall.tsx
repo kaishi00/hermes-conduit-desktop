@@ -212,19 +212,36 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
   // A chat a Classic call made (started with no chat open) is filed under Voice, and archived when the
   // call ends so Hermes Desktop's list keeps the chats people work in; the chat list shows it still.
   // Only a chat the call's own request made: never one opened while the call waited (desktop#538).
-  const classicFresh = useRef<{ fresh: boolean; chat: { id: string; profile?: string } | null }>({ fresh: false, chat: null })
+  // The id comes from the send itself (createdByCall), not the chat on screen: the call's chat may open after
+  // another one did, or after the call ended, and is filed (and archived) then (desktop#613 review).
+  type ClassicFresh = { fresh: boolean; profile?: string; chat: { id: string; profile?: string } | null; ended: boolean }
+  const classicFresh = useRef<ClassicFresh>({ fresh: false, chat: null, ended: false })
   useEffect(() => {
+    if (calling && classicFresh.current.ended) classicFresh.current = { fresh: false, chat: null, ended: false }
     const kept = classicFresh.current
     if (calling && callMode === 'classic') {
-      if (!kept.fresh && !kept.chat && !chatId) kept.fresh = true
-      if (kept.fresh && !kept.chat && chatId && chatId === createdByCall) {
-        kept.chat = { id: chatId, profile }
-        void tagVoiceSession(profile, chatId, 'classic').catch(() => undefined)
+      if (!kept.fresh && !kept.chat && !chatId) {
+        kept.fresh = true
+        kept.profile = profile
+      }
+      if (kept.fresh && !kept.chat && createdByCall) {
+        kept.chat = { id: createdByCall, profile: kept.profile }
+        void tagVoiceSession(kept.profile, createdByCall, 'classic').catch(() => undefined)
       }
       return
     }
+    // Ended with its first send still in flight: the chat that send makes is still this call's.
+    if (kept.fresh && !kept.chat && !kept.ended) {
+      kept.ended = true
+      return
+    }
+    if (kept.ended && !kept.chat && createdByCall) {
+      void tagVoiceSession(kept.profile, createdByCall, 'classic').catch(() => undefined)
+      kept.chat = { id: createdByCall, profile: kept.profile }
+    }
     if (kept.chat) void archiveClassicChat(kept.chat.profile, kept.chat.id).catch(() => undefined)
-    classicFresh.current = { fresh: false, chat: null }
+    if (kept.ended && !kept.chat) return
+    classicFresh.current = { fresh: false, chat: null, ended: false }
   }, [calling, callMode, chatId, profile, createdByCall])
 
   // While a call runs here, its dashboard holds the user's call presence, so a call from Hermes doesn't ring over it.
