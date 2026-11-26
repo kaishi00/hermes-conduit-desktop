@@ -63,7 +63,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, mergedOlderAt, newestPageItems, newestPages, newestRows, olderRows, rowsSince, settleRunning } from './longChat'
+import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, mergedOlderAt, newestPageItems, newestPages, olderRows, rowsSince, settleRunning } from './longChat'
 import { knownChatLength, noteChatLength } from './chatLength'
 import { CATCH_UP_FOCUS_MS, CATCH_UP_RELOAD_MS, CATCH_UP_SETTLE_MS, catchUpStep, newestRowId, readOver, tipOf } from './chatCatchUp'
 
@@ -171,16 +171,17 @@ async function resumeChat(params: Record<string, unknown>, storedId: string, pro
     const compact = { ...params, omit_messages: true }
     const result = await resumeSettled(compact)
     const stored = result.stored_session_id ?? storedId
-    const rows = await newestRows(http, stored, profile).catch(() => [] as HistoryRow[])
+    const { rows, more } = await newestPages(http, stored, profile).catch(() => ({ rows: [] as HistoryRow[], more: false }))
     // No rows to draw: the refusal, which says what to do, beats a note over nothing.
     if (!rows.length) throw e
+    // The pages before are read as the reader scrolls up, as a long chat's are (desktop#520, from #486).
+    const older = { offset: rows.length, more }
     // Read again after its pages, so its turn and its rows are as they are now (longChat.ts).
-    if (result.running)
-      return {
-        ...(await settleRunning(() => gateway.rpc<ResumeResult>('session.resume', compact), held => rowsSince(http, held, stored, profile), result, rows)),
-        tooLong: true
-      }
-    return { result, rows, tooLong: true }
+    if (result.running) {
+      const settled = await settleRunning(() => gateway.rpc<ResumeResult>('session.resume', compact), held => rowsSince(http, held, stored, profile), result, rows)
+      return { ...settled, older: { ...older, offset: settled.rows.length }, tooLong: true }
+    }
+    return { result, rows, older, tooLong: true }
   }
 }
 
