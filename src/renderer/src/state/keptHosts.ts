@@ -704,7 +704,8 @@ export function sameBotWork(a: ReadonlyMap<string, BotWork>, b: ReadonlyMap<stri
   if (a.size !== b.size) return false
   for (const [key, work] of a) {
     const other = b.get(key)
-    if (!other || other.working !== work.working || other.needsYou !== work.needsYou) return false
+    // The step under its name too, or a far bot's line keeps its first step for the whole run.
+    if (!other || other.working !== work.working || other.needsYou !== work.needsYou || (other.doing ?? null) !== (work.doing ?? null)) return false
   }
   return true
 }

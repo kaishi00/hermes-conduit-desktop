@@ -836,7 +836,7 @@ export function BotsHome({
           const status = pill?.text ?? (busy ? t("Working") : null);
           // The step it's on: the open chat's live step, else another chat's (the plugin's live steps), else its workstream's; never the chat's last message (Eric, 2026-11-26).
           const doingNow =
-            (tile.own && liveDoing?.bot === bot.name ? liveDoing.text : null) || (tile.own ? otherChatsDoing?.get(bot.name) : null) || botWork?.doing || null;
+            (tile.own && liveDoing?.bot.toLowerCase() === bot.name.toLowerCase() ? liveDoing.text : null) || (tile.own ? otherChatsDoing?.get(bot.name) : null) || botWork?.doing || null;
           return (
             <button
               key={tile.key}
