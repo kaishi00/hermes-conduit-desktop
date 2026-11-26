@@ -151,6 +151,8 @@ interface Props {
   bots: Bot[] | null;
   error: string | null;
   runningProfiles: ReadonlySet<string>;
+  /** What the open chat's reply is doing now ("Running a command"), for its bot while it answers. */
+  liveDoing?: string | null;
   rooms: Room[] | null;
   canStartRooms: boolean;
   onOpen: (bot: Bot) => void;
@@ -267,6 +269,7 @@ export function BotsHome({
   bots,
   error,
   runningProfiles,
+  liveDoing,
   rooms,
   canStartRooms,
   onOpen,
@@ -828,6 +831,8 @@ export function BotsHome({
           const needs = pill?.needs ? botWork!.needsYou : 0;
           const busy = !needs && (!!pill || (tile.own && runningProfiles.has(bot.name)));
           const status = pill?.text ?? (busy ? t("Working") : null);
+          // The step it's on: the open chat's live step, else its workstream's; never the chat's last message (Eric, 2026-11-26).
+          const doingNow = (tile.own && runningProfiles.has(bot.name) ? liveDoing : null) || botWork?.doing || null;
           return (
             <button
               key={tile.key}
@@ -868,9 +873,9 @@ export function BotsHome({
                   <span className="meta bot-side-pill needs">{pill!.text}</span>
                 ) : busy ? (
                   <>
-                    {/* What it's doing now, else its last line, shimmering while it works. */}
-                    <span className="meta bot-side-working">{botWork?.doing || bot.lastLine || t("Working")}</span>
-                    {botWork?.doing || bot.lastLine ? <span className="sr-only">{status}</span> : null}
+                    {/* What it's doing now, else Working, shimmering while it works. */}
+                    <span className="meta bot-side-working">{doingNow || t("Working")}</span>
+                    {doingNow ? <span className="sr-only">{status}</span> : null}
                   </>
                 ) : bot.lastLine ? (
                   <span className="meta">{bot.lastLine}</span>

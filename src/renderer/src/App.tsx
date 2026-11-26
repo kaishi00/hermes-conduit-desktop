@@ -66,6 +66,7 @@ import { RailFaces } from './components/RailFaces'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
+import { liveDoing } from './state/liveDoing'
 import { lastReplyOf } from './state/transcriptReads'
 import { useRevealRow } from './state/revealRow'
 import { forgetSummaries } from './state/stepSummaries'
@@ -528,6 +529,8 @@ function Shell({
   // reply runs that, not App, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
   const runningStatus = useTranscriptValue(transcriptStore, state => state.status)
+  // The open reply's current step, for its bot's line in the Bots list.
+  const liveDoingNow = useTranscriptValue(transcriptStore, state => (state.running ? liveDoing(state.items) : null))
   const transcriptPlan = useTranscriptValue(transcriptStore, state => state.plan)
 
   // The chat list's profile: a new chat starts in it.
@@ -2522,6 +2525,7 @@ function Shell({
     bots: orderedRoster,
     error: roster.error,
     runningProfiles: runningProfiles,
+    liveDoing: liveDoingNow,
     rooms: orderedRooms,
     canStartRooms: groupRooms.capabilities?.supported === true && connected,
     onOpen: openBot,

@@ -29,9 +29,13 @@ describe('a bot at work, on its face', () => {
     expect(needs.querySelector('.work-ring-count')?.textContent).toBe('3')
   })
 
-  it('shows what a working bot is doing now, else its last line, shimmering, and the words for needs you (BotsHome.tsx)', () => {
+  it('shows what a working bot is doing now, else Working (never its last message), shimmering, and the words for needs you (BotsHome.tsx)', () => {
     const src = readFileSync(join(__dirname, '../src/renderer/src/components/BotsHome.tsx'), 'utf8')
-    expect(src).toMatch(/<span className="meta bot-side-working">\{botWork\?\.doing \|\| bot\.lastLine \|\| t\("Working"\)\}<\/span>/)
+    expect(src).toMatch(/const doingNow = \(tile\.own && runningProfiles\.has\(bot\.name\) \? liveDoing : null\) \|\| botWork\?\.doing \|\| null;/)
+    expect(src).toMatch(/<span className="meta bot-side-working">\{doingNow \|\| t\("Working"\)\}<\/span>/)
+    const app = readFileSync(join(__dirname, '../src/renderer/src/App.tsx'), 'utf8')
+    expect(app).toMatch(/useTranscriptValue\(transcriptStore, state => \(state\.running \? liveDoing\(state\.items\) : null\)\)/)
+    expect(app).toMatch(/liveDoing: liveDoingNow,/)
     expect(src).toMatch(/\{needs \? \(\s*<span className="meta bot-side-pill needs">/)
     expect(src).toMatch(/\{needs \|\| busy \? <WorkRing needs=\{needs\} \/> : null\}/)
   })
@@ -66,5 +70,19 @@ describe('what a bot is doing now', () => {
     ).toBe('Run the full suite')
     // No checklist step in progress: the tool step it's on.
     expect(botDoing({ items: [item('W4', 'running', 1, [], 'Running a command')] })).toBe('Running a command')
+  })
+})
+
+describe('what the open reply is doing now', () => {
+  it('names the running step, Thinking… while it reasons, and nothing for the words or before it starts', async () => {
+    const { liveDoing } = await import('../src/renderer/src/state/liveDoing')
+    const user = { kind: 'user', key: 'u', text: 'Run the tests' } as const
+    const tool = (name: string, status: 'running' | 'done') => ({ kind: 'tool', key: `t-${name}`, toolId: name, name, status }) as const
+    expect(liveDoing([user, tool('terminal', 'running')])).toBe('Running a command')
+    expect(liveDoing([user, tool('read_file', 'done'), tool('patch', 'running')])).toBe('Editing a file')
+    expect(liveDoing([user, tool('terminal', 'done'), { kind: 'thinking', key: 'r', text: '…', streaming: true }])).toBe('Thinking…')
+    expect(liveDoing([user, { kind: 'assistant', key: 'a', text: 'Done', streaming: true }])).toBeNull()
+    // An earlier turn's step that never closed isn't this one's.
+    expect(liveDoing([tool('terminal', 'running'), user])).toBeNull()
   })
 })
