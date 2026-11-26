@@ -168,6 +168,17 @@ describe('text tags in a reply', () => {
     expect(draw('<details> is the tag.\n\nAfter.')).not.toContain('reply-fold')
   })
 
+  it('leaves prose starting with <details> as prose when the closing tags after it are other folds’ or in code', () => {
+    const html = draw('<details> makes a section.\n\n<details>\n<summary>S</summary>\nbody\n</details>')
+    expect(html.startsWith('&lt;details&gt; makes a section.')).toBe(true)
+    expect(html).toContain('<details class="reply-fold"><summary>S</summary><p>body</p></details>')
+    expect(draw('<details> makes a section.\n\n```\n</details>\n```')).not.toContain('reply-fold')
+  })
+
+  it('folds a compact fold whose body has an arrow in it', () => {
+    expect(draw('<details><summary>Flow</summary>input -> parse\nthen render\n</details>')).toContain('<details class="reply-fold"><summary>Flow</summary>')
+  })
+
   it('reads open only as an attribute, never inside a quoted value', () => {
     expect(draw('<details title="open me">\n<summary>S</summary>\nBody\n</details>')).toBe('<details class="reply-fold"><summary>S</summary><p>Body</p></details>')
     expect(draw('<details data-x="a>b"><summary>S</summary>Body</details>')).toBe('<details class="reply-fold"><summary>S</summary><p>Body</p></details>')
