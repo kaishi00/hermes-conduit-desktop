@@ -26,19 +26,49 @@ const comparable = (text: string): string =>
     .filter(Boolean)
     .join(' ')
 
+/** Letters an unspaced answer needs before it's looked for inside the request's words (the phone's `unspacedMinimum`). */
+const UNSPACED_MINIMUM = 3
+/** Han, Hiragana and Katakana: scripts written without spaces. Korean is written with spaces, so it takes the whole-word check. */
+const unspaced = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
+const letter = /[\p{L}\p{M}\p{N}]/u
+
+/**
+ * Whether `request` already carries the user's `words` (already `comparable`),
+ * as the phone's `VoiceRequestWords.carries` decides it: as whole words, or,
+ * for Chinese and Japanese, as their letters and numbers in it with
+ * punctuation left out, starting or ending where one of the request's runs
+ * between punctuation does, so "没问题" inside "这没问题的事" isn't the
+ * user's answer (hermes-conduit issue 3279). A short answer ("不", "好的")
+ * sits inside too many longer words, so under three letters it must stand as
+ * a run of its own.
+ */
+export function carries(request: string, words: string): boolean {
+  if (!words) return true
+  if (unspaced.test(words)) {
+    const theirs = [...words].filter(ch => letter.test(ch)).join('')
+    if ([...theirs].length >= UNSPACED_MINIMUM) {
+      let letters = ''
+      const edges = new Set<number>([0])
+      for (const ch of request.toLowerCase()) {
+        if (letter.test(ch)) letters += ch
+        else edges.add(letters.length)
+      }
+      edges.add(letters.length)
+      for (let start = letters.indexOf(theirs); start >= 0; start = letters.indexOf(theirs, start + 1)) {
+        if (edges.has(start) || edges.has(start + theirs.length)) return true
+      }
+      return false
+    }
+  }
+  return ` ${comparable(request)} `.includes(` ${words} `)
+}
+
 /**
  * `request` with what the user `said` since their last one under the marker,
  * a line for each thing they said. The request alone when they said nothing,
  * when it already carries their words, or when it is their words (a model
  * that passed them on as they were).
  */
-/** A script written without spaces has no word boundaries to pad; compare it as a phrase. */
-const containsWords = (haystack: string, words: string): boolean => {
-  if (!words) return true
-  if (!words.includes(' ') && /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(words)) return haystack.includes(words)
-  return ` ${haystack} `.includes(` ${words} `)
-}
-
 export function withUserWords(said: string[], request: string): string {
   if (request.includes(REQUEST_WORDS_MARKER)) return request
   const lines: string[] = []
@@ -56,7 +86,7 @@ export function withUserWords(said: string[], request: string): string {
   }
   if (!lines.length) return request
   const theirs = comparable(lines.join(' '))
-  if (!theirs || containsWords(comparable(request), theirs)) return request
+  if (!theirs || carries(request, theirs)) return request
   return request + REQUEST_WORDS_MARKER + lines.join('\n')
 }
 
@@ -132,6 +162,9 @@ export class RequestWords {
     // The answer boundary belongs to this request only: a later request can start with
     // the same word ("Yes") and must not have its prefix consumed again (issue 529 review).
     this.markedLine = ''
+    // The boundary was this answer's too: a take() between mark() and skip(true)
+    // must not leave it to cut the next request's lines (desktop#529).
+    this.boundary = 0
     // A consumed line is over: a later line can start with the same word without
     // inheriting its offset or being mistaken for the same growing line.
     if (!keepLine) {

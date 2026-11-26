@@ -270,6 +270,24 @@ describe('a chat too long to resume whole (Hermes 4130)', () => {
     ])
   })
 
+  it('reads the page before as the reader scrolls up, as a long chat does (desktop#520)', async () => {
+    const words500 = Array.from({ length: 500 }, (_, i) => ({ id: 2000 + i, role: i % 2 ? 'assistant' : 'user', content: `line ${2000 + i}` }))
+    // The compact resume is refused too: only the 4130 path opens this chat.
+    serve([words500, [{ id: 1, role: 'user', content: 'the first words' }]])
+    noteChatLength('long', 10)
+    const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })
+    await settle()
+    expect(resumeParams.map(p => p.omit_messages === true)).toEqual([false, true])
+    expect(hook.result().olderRows).toBe(true)
+    await act(async () => {
+      await hook.result().loadOlder()
+    })
+    const all = words(hook.result().transcript)
+    // The note stays on top; the page before goes under it.
+    expect(all.slice(0, 2)).toEqual(['This chat is too long to open whole, so Conduit shows its newest messages.', 'the first words'])
+    expect(hook.result().olderRows).toBe(false)
+  })
+
   it('reads the page before one of only tool steps, so the chat opens on words', async () => {
     serve([steps(1000, 500), [{ id: 999, role: 'user', content: 'New mail arrived' }]])
     const hook = mount(chatInApp, { storedId: 'long', connected: true, url: 'h1' })

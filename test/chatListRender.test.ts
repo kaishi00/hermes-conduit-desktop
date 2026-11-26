@@ -29,7 +29,7 @@ describe('the chat list draws', () => {
         runningStatus: 'reading files',
         onSelect: () => {},
         onNewChat: () => {},
-        onPin: () => {}
+        onPin: async () => true
       } as never)
     )
     expect(html).toContain('Alpha')
@@ -308,7 +308,7 @@ describe('a chat list with chats missing says why, where it would say the profil
       runningIds: new Set<string>(),
       onSelect: () => {},
       onNewChat: () => {},
-      onPin: () => {}
+      onPin: async () => true
     }
     const folded = renderToStaticMarkup(createElement(ChatList as never, props as never))
     expect(folded).toContain('aria-expanded="false"')

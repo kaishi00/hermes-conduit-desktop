@@ -10,10 +10,12 @@ describe('page previews across dashboards (issue 589)', () => {
     expect(pageCacheKey('/a/report.html', 'work', 'A')).not.toBe(pageCacheKey('/a/report.html', undefined, 'A'))
   })
 
-  it('retries a failed read instead of caching the failure forever', () => {
+  it('retries a failed read instead of caching the failure forever, and keeps a refusal (desktop#591)', () => {
     const cache: PageCache = new Map()
     notePage(cache, '/a/report.html', undefined, 'A', null)
     expect(rememberedPage(cache, '/a/report.html', undefined, 'A')).toBeUndefined()
+    notePage(cache, '/a/gone.html', undefined, 'A', null, true)
+    expect(rememberedPage(cache, '/a/gone.html', undefined, 'A')).toBeNull()
     notePage(cache, '/a/report.html', undefined, 'A', 'conduit-page://a')
     expect(rememberedPage(cache, '/a/report.html', undefined, 'A')).toBe('conduit-page://a')
   })

@@ -259,6 +259,33 @@ describe('a chat opened on its newest stored page (desktop#291)', () => {
     hook.unmount()
   })
 
+  it('keeps a seek pending while a failed open is read again, and answers it once that ends (desktop#520)', async () => {
+    resumeError = 'Hermes is offline'
+    const hook = mount('broken')
+    await settle()
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const answer = conduit.rpcOutcome
+    let release!: () => void
+    const held = new Promise<void>(done => (release = done))
+    conduit.rpcOutcome = async (method, params) => {
+      if (method === 'session.resume') await held
+      return answer(method, params)
+    }
+    // A send reads the failed open again (openSettled); it sets no loading state.
+    let sent: Promise<unknown> = Promise.resolve()
+    act(() => void (sent = Promise.resolve(hook.result().send('Hello')).catch(() => undefined)))
+    await settle()
+    let missed = 0
+    act(() => void hook.result().seekRow(items => items.some(i => i.key === 'row-9999'), () => missed++))
+    await settle()
+    expect(missed).toBe(0)
+    release()
+    await act(async () => void (await sent))
+    await settle()
+    expect(missed).toBe(1)
+    hook.unmount()
+  })
+
   it('stops a dropped seek after one page even when the pages repeat rows already drawn', async () => {
     morePages = true
     const duplicate = page(2001, 500)

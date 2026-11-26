@@ -36,7 +36,7 @@ import {
 } from '../shared/ipc'
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
-import { pageUrl, registerPageScheme, servePages } from './pages'
+import { pageServed, pageUrl, registerPageScheme, servePages } from './pages'
 import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile } from './viewFiles'
 import { isPagePath, pageDownloadDecision, type PageRead } from '../shared/viewFileRules'
 import { confineNavigation } from './navigation'
@@ -663,7 +663,15 @@ function registerIpc(): void {
   })
   ipcMain.on(IPC.quickAskExpanded, (_event, expanded: unknown) => quickAsk.setExpanded(typeof expanded === 'number' ? expanded : expanded === true))
   const quickAskShortcut = () => ({ accelerator: quickAsk.accelerator, registered: quickAsk.registered })
-  ipcMain.handle(IPC.quickAskShortcut, quickAskShortcut)
+  ipcMain.handle(IPC.quickAskShortcut, () => {
+    // Saved keys another app held are asked for again: it may have let go of them since (desktop#520).
+    // Never mid-pick, when they are let go on purpose.
+    if (!recordingIn && quickAsk.accelerator && !quickAsk.registered) {
+      quickAsk.resume()
+      tray.setQuickAsk(quickAsk.registered ? quickAsk.accelerator : null)
+    }
+    return quickAskShortcut()
+  })
   ipcMain.handle(IPC.setQuickAskShortcut, (_event, accelerator: unknown) => {
     const next = accelerator === null ? null : validAccelerator(accelerator) ? accelerator : undefined
     const changed = next !== undefined && quickAsk.change(next)
@@ -1029,6 +1037,7 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle(IPC.pageUrl, (_event, html: unknown) => pageUrl(html))
+  ipcMain.handle(IPC.pageServed, (_event, url: unknown) => pageServed(url))
   // From the window that asks: a call's screenshot steps the main window aside, Quick ask's steps itself aside.
   ipcMain.handle(IPC.screenshot, event => captureScreen(BrowserWindow.fromWebContents(event.sender) ?? mainWindow))
   ipcMain.handle(IPC.liveOpenMinted, async (event, path: unknown) => {

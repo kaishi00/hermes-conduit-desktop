@@ -54,4 +54,14 @@ export function pageUrl(html: unknown): string | null {
   return `${PAGE_SCHEME}://${id}/`
 }
 
+/** Whether a page address this process gave is still served: a renderer's copy can outlive the newest 40. */
+export function pageServed(url: unknown): boolean {
+  if (typeof url !== 'string' || !isPageUrl(url)) return false
+  try {
+    return pages.has(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
+
 export const isPageUrl = (url: string) => url.startsWith(`${PAGE_SCHEME}://`)

@@ -347,6 +347,8 @@ export interface ConduitApi {
   /** A live call's socket opened with a single-use token the host mints at `path` (Gemini Live); the token stays in the main process. */
   /** A page Hermes drew, served on its own scheme for a sandboxed frame; null when it's too large. */
   pageUrl(html: string): Promise<string | null>
+  /** Whether the main process still serves a page address it gave (it keeps the newest 40). */
+  pageServed(url: string): Promise<boolean>
   /** The screen Conduit's window is on, as a PNG data URL, with the window out of the way; null when it can't be captured (no permission). */
   screenshot(): Promise<string | null>
   liveOpenMinted(path: string): Promise<{ ok: true; id: string; model: string | null; voice: string | null } | { ok: false; error: string; code?: number }>
@@ -614,6 +616,7 @@ export const IPC = {
   liveOpen: 'conduit:live-open',
   liveOpenMinted: 'conduit:live-open-minted',
   pageUrl: 'conduit:page-url',
+  pageServed: 'conduit:page-served',
   screenshot: 'conduit:screenshot',
   liveSend: 'conduit:live-send',
   screenOpen: 'conduit:screen-open',
