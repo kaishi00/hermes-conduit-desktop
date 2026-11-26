@@ -619,8 +619,8 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       const text = payload.text
       if (text === null) return { ...state, items: seal(state.items) }
       if (typeof text !== 'string' || !text) return state
-      // A prompt sent while this turn was running keeps its queued mark until its own
-      // message.start: these events belong to the earlier turn (issue 550).
+      // Turn events only confirm prompts that were queued before this turn began; a
+      // prompt sent during it keeps its mark until its own message.start (issue 550).
       return { ...state, running: true, items: appendStreaming(confirmPending(state.items, state.turnFrom), 'assistant', text) }
     }
     // `thinking.delta` is the terminal UI's spinner face, not the model's reasoning.
@@ -827,14 +827,20 @@ export function inflightRemainder(state: TranscriptState, text: string): string 
   return rest.trimStart()
 }
 
-/** Confirm pending prompts, unless `keepFrom` says they arrived after the turn these events belong to. */
-/** A queued prompt's own turn starts: put its row after the earlier turn's rows and confirm it. */
+/**
+ * A queued prompt's own turn starts: its rows go after the earlier turn's rows,
+ * but only the oldest pending row is confirmed. The rest stay queued for theirs.
+ */
 function promotePending(items: TranscriptItem[]): TranscriptItem[] {
   const pending = items.filter((item): item is UserItem => item.kind === 'user' && !!item.pending)
   if (!pending.length) return items
-  return [...items.filter(item => !(item.kind === 'user' && item.pending)), ...pending.map(item => ({ ...item, pending: false as const }))]
+  return [
+    ...items.filter(item => !(item.kind === 'user' && item.pending)),
+    ...pending.map((item, i) => (i === 0 ? { ...item, pending: false as const } : item))
+  ]
 }
 
+/** Confirm pending prompts, unless `keepFrom` says they arrived after the turn these events belong to. */
 function confirmPending(items: TranscriptItem[], keepFrom?: number): TranscriptItem[] {
   if (!items.some(item => item.kind === 'user' && item.pending)) return items
   return items.map((item, i) =>

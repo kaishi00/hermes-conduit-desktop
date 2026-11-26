@@ -35,6 +35,35 @@ describe('a queued prompt between a board and its reply (issue 550)', () => {
     expect(after.placed?.get(assistant.key)?.map(b => b.id)).toEqual(['cb-000000000003'])
   })
 
+  it('keeps a prompt queued when a running turn was resumed partway', () => {
+    const board = { ...stats, cards: [stats], tabs: false, next: [], line: 'cb-000000000004' }
+    // resumedTranscript now sets turnFrom to the end of the resumed rows for a running chat.
+    let state: TranscriptState = {
+      ...emptyTranscript,
+      running: true,
+      turnFrom: 1,
+      items: [{ kind: 'tool', key: 't1', name: 'conduit_show', status: 'done', board } as unknown as TranscriptItem]
+    }
+    state = addPendingUser(state, 'and a cab', [], 'u-resume')
+    state = applyEvent(state, { type: 'message.delta', payload: { text: 'Here:\n::conduit-board{id="cb-000000000004"}' } })
+    expect(state.items.find(i => i.key === 'u-resume')).toMatchObject({ pending: true })
+    expect(placeBoards(state.items).hidden).toEqual(new Set(['t1']))
+  })
+
+  it('confirms only the oldest queued prompt when its turn starts', () => {
+    let state: TranscriptState = { ...emptyTranscript, items: [] }
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    state = addPendingUser(state, 'A', [], 'u-a')
+    state = addPendingUser(state, 'B', [], 'u-b')
+    state = applyEvent(state, { type: 'message.delta', payload: { text: 'reply A' } })
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    const keys = state.items.map(i => i.key)
+    expect(state.items.find(i => i.key === 'u-a')).toMatchObject({ pending: false })
+    expect(state.items.find(i => i.key === 'u-b')).toMatchObject({ pending: true })
+    expect(keys.indexOf('u-a')).toBeLessThan(keys.indexOf('u-b'))
+    expect(keys.indexOf('u-a')).toBeGreaterThan(keys.findIndex(i => i.startsWith('a')))
+  })
+
   it('confirms a pending row on a reply when turnFrom was lost (replay gap)', () => {
     let state: TranscriptState = { ...emptyTranscript, items: [] }
     state = addPendingUser(state, 'go', [], 'u-gap')
