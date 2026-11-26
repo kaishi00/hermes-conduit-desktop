@@ -1,7 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { plainLine, requestNotification, turnNotification, TurnReplies, untitledAsNone } from '../src/renderer/src/state/notifications'
+import { keepChatRef, type ChatRef, plainLine, requestNotification, turnNotification, TurnReplies, untitledAsNone } from '../src/renderer/src/state/notifications'
 
 describe('notifications', () => {
+  it("keeps a chat's ref under the bot it opened in, not the next pick's", () => {
+    const chats = new Map<string, ChatRef>()
+    keepChatRef(chats, 'live-furina', 'furina', 'furina', { storedId: 's-f', profile: 'furina', bot: 'Furina' })
+    // The render just after picking Zhongli: the pane still holds Furina's live session.
+    keepChatRef(chats, 'live-furina', 'furina', 'zhongli', { storedId: 's-f', profile: 'zhongli', bot: 'Zhongli' })
+    expect(chats.get('live-furina')).toMatchObject({ profile: 'furina', bot: 'Furina' })
+    expect(turnNotification('live-furina', { text: 'Done.', status: 'complete' }, chats.get('live-furina'))).toMatchObject({ title: 'Furina' })
+    // Zhongli's own session, once it opens; a profile spelled in another case is the same one.
+    keepChatRef(chats, 'live-zhongli', 'Zhongli', 'zhongli', { storedId: 's-z', profile: 'zhongli', bot: 'Zhongli' })
+    expect(chats.get('live-zhongli')).toMatchObject({ bot: 'Zhongli' })
+    keepChatRef(chats, null, 'zhongli', 'zhongli', { storedId: null, bot: 'Zhongli' })
+    expect(chats.size).toBe(2)
+    // A default chat (no profile named) keeps its own too, and is the "default" profile spelled out.
+    keepChatRef(chats, 'live-main', undefined, undefined, { storedId: 's-m', bot: 'Hermes' })
+    keepChatRef(chats, 'live-main', undefined, 'zhongli', { storedId: 's-m', profile: 'zhongli', bot: 'Zhongli' })
+    expect(chats.get('live-main')).toMatchObject({ bot: 'Hermes' })
+    keepChatRef(chats, 'live-main', undefined, 'default', { storedId: 's-m', profile: 'default', title: 'Plans', bot: 'Hermes' })
+    expect(chats.get('live-main')).toMatchObject({ title: 'Plans' })
+  })
+
   it('tells a finished turn with its reply as one plain line', () => {
     expect(turnNotification('live-1', { text: '**Done.** See the table:\n\n| a | b |\n```\ncode\n```\nMEDIA:/tmp/x.ogg', status: 'complete' }, { storedId: 's1', title: 'Trip' })).toEqual({
       title: 'Trip',
