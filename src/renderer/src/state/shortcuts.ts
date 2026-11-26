@@ -5,6 +5,7 @@
  * has no menu bar, so the window reads Ctrl and the same key.
  */
 import { t } from '../../../shared/i18n'
+import { drawChatScale } from './chatScale'
 import { DEFAULT_RAIL_SECTIONS, type MenuAction, type RailSection } from '../../../shared/ipc'
 
 export type GoTo = RailSection
@@ -140,7 +141,7 @@ export function readScale(): number {
 }
 
 export function applyScale(scale: number): void {
-  document.documentElement.style.setProperty('--chat-scale', String(scale))
+  drawChatScale(scale)
   try {
     if (scale === 1) localStorage.removeItem(SCALE_KEY)
     else localStorage.setItem(SCALE_KEY, String(scale))

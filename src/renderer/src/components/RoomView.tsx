@@ -38,6 +38,7 @@ import { isStoredRoomFile, linkedRoomFilesProblem } from "../state/roomFiles";
 import { t } from "@shared/i18n";
 import { JumpToLatest } from "./JumpToLatest"
 import { atEnd } from "../state/scrollEnd";
+import { keepPlaceOnScale } from "../state/chatScale";
 
 interface Props {
   room: Room;
@@ -274,6 +275,8 @@ export function RoomView({ room: givenRoom, storesFiles = false, readsStoredFile
   );
 
   const scroller = useRef<HTMLDivElement>(null);
+  // A text size change keeps the reader on the message they were reading (chatScale.ts).
+  useEffect(() => (scroller.current ? keepPlaceOnScale(scroller.current) : undefined), []);
   const pane = useRef<HTMLElement>(null);
   const pinned = useRef(true);
   useLayoutEffect(() => {
