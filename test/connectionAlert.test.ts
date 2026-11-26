@@ -44,6 +44,8 @@ describe('connection, only when something is wrong', () => {
     expect(quiet.tone).toBe('quiet')
     expect(quiet.text).toBe('Lost the connection. Trying again in 4s.')
     expect(quiet.here).toBe(quiet.text)
+    // Said aloud without the countdown, which would be read again every second.
+    expect(quiet.spoken).toBe('Lost the connection.')
     expect(quiet.actions!.map((a: { label: string }) => a.label)).toEqual(['Try now', 'Repair Connection'])
     expect(alert('reconnecting', 'long')!.tone).toBe('warn')
     expect(alert('connecting', 'shown')!.actions).toEqual([])
@@ -76,8 +78,8 @@ describe('connection, only when something is wrong', () => {
   it('waits before showing a reconnect, and goes back to nothing once open', () => {
     vi.useFakeTimers()
     const seen: Away[] = []
-    function Probe({ phase }: { phase: ConnectionPhase }) {
-      seen.push(useAway(phase, 2000, 20000))
+    function Probe({ phase, host = 'a' }: { phase: ConnectionPhase; host?: string }) {
+      seen.push(useAway(phase, host, 2000, 20000))
       return null
     }
     const host = document.createElement('div')
@@ -88,6 +90,9 @@ describe('connection, only when something is wrong', () => {
     expect(seen.at(-1)).toBe('shown')
     act(() => vi.advanceTimersByTime(18000))
     expect(seen.at(-1)).toBe('long')
+    // Switched to another Hermes that's also connecting: it starts its own wait.
+    act(() => root.render(createElement(Probe, { phase: 'reconnecting', host: 'b' })))
+    expect(seen.at(-1)).toBe('no')
     act(() => root.render(createElement(Probe, { phase: 'open' })))
     expect(seen.at(-1)).toBe('no')
     act(() => root.unmount())
@@ -98,5 +103,9 @@ describe('connection, only when something is wrong', () => {
     expect(rail).not.toMatch(/Connected to \{host\}/)
     const app = readFileSync(join(__dirname, '../src/renderer/src/App.tsx'), 'utf8')
     expect(app).toMatch(/status\.phase !== 'open' && updateAway \? \(\s*<div className="banner"/)
+    // Worked out once in App and carried on the brand props, so the title bar, which stands in while a banner is up, has it too.
+    expect(app).toMatch(/const brand = \{[\s\S]*?alert: inShell\s*\?\s*brandAlert\(/)
+    expect(app).toMatch(/<TitleBar \{\.\.\.brand\} bare=\{inShell\} \/>/)
+    expect(app).toMatch(/<Brand\s+\{\.\.\.brand\}\s+inRail/)
   })
 })

@@ -299,7 +299,7 @@ export function App() {
 
   // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26), worked out here so
   // the title bar's brand, which stands in for the rail's while a banner is up, shows it too (desktop#594).
-  const away = useAway(phase ?? 'signed-out')
+  const away = useAway(phase ?? 'signed-out', url ?? '')
   const keptForAlert = useKeptHosts(url ?? '')
   const updateAway = updateBanner(useHostActions(url ?? '').update)
 
