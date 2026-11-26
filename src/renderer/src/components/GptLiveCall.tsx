@@ -308,7 +308,8 @@ export function GptLiveCall({
     }, minutes * 60_000)
   }
 
-  const delegate = (id: string, text: string) => {
+  // `answers` false: work inside "Call me:", which never answers the chat's question.
+  const delegate = (id: string, text: string, answers = true) => {
     const said = [words.current.done, words.current.open].join(' ').trim()
     words.current = { done: '', open: '' }
     if (isEndCall(text) || (!text.trim() && GOODBYE.test(said))) {
@@ -343,7 +344,7 @@ export function GptLiveCall({
         // The work goes first, as this delegation; the call is asked for the request that takes it.
         const since = Date.now()
         words.current = { done: said, open: '' }
-        delegate(id, rest)
+        delegate(id, rest, false)
         void callbacks.current
           ?.request(scope.kind === 'newest' ? { kind: 'next', since } : scope)
           .then(result => !ended.current && append(`[${result.message}]`, 'commentary', id))
@@ -387,8 +388,10 @@ export function GptLiveCall({
       return
     }
     // Marked nothing answered here: while the chat waits on a question, the user's answer to it. A request
-    // held for the user's OK settles first: their yes, or "Send:", is about it, not the question.
-    const unmarked = askFirst.current.draft ? null : delegatedAnswer(text, said, live.current.requests, true)
+    // held for the user's OK settles first: their yes, or "Send:", is about it, not the question. The work in
+    // "Call me:" and work the model sends to the background stay requests.
+    const unmarked =
+      askFirst.current.draft || !answers || asksForBackground(text) ? null : delegatedAnswer(text, said, live.current.requests, true)
     if (unmarked !== null) {
       void answerQuestion(live.current.requests, unmarked).then(result => !ended.current && append(result.next_question ?? result.message ?? result.error ?? '', 'speakable', id))
       return
