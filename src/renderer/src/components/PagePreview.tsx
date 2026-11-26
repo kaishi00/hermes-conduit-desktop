@@ -4,6 +4,7 @@ import { gateway } from '../gateway'
 import { parsePreview, readTextPath } from '../state/workspace'
 import { PictureProfile } from './Picture'
 import { inSelectMenu } from './Select'
+import { OverWindow } from './OverWindow'
 import { openPageInBrowser } from '../state/saveMedia'
 import { isPagePath } from '@shared/viewFileRules'
 import { pictureHost, refused } from '../state/gatewayPictures'
@@ -182,20 +183,22 @@ function PageCard({ url, name, title, browser }: { url: string | undefined; name
       )}
       {cut ? <div className="meta page-preview-cut">{t('The page goes on. Open it full screen to see the rest.')}</div> : null}
       {full && url ? (
-        <div className="page-full" role="dialog" aria-label={name}>
-          <div className="page-full-head">
-            <span className="page-preview-name">{name}</span>
-            {browser ? (
-              <button className="secondary" onClick={browser}>
-                {t('Open in Browser')}
+        <OverWindow>
+          <div className="page-full" role="dialog" aria-label={name}>
+            <div className="page-full-head">
+              <span className="page-preview-name">{name}</span>
+              {browser ? (
+                <button className="secondary" onClick={browser}>
+                  {t('Open in Browser')}
+                </button>
+              ) : null}
+              <button className="secondary" onClick={() => setFull(false)}>
+                {t('Done')}
               </button>
-            ) : null}
-            <button className="secondary" onClick={() => setFull(false)}>
-              {t('Done')}
-            </button>
+            </div>
+            <PageFrame url={url} title={name} />
           </div>
-          <PageFrame url={url} title={name} />
-        </div>
+        </OverWindow>
       ) : null}
     </div>
   )
