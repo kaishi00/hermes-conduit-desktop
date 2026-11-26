@@ -741,7 +741,9 @@ function Shell({
   const lastBenchRoot = useRef<string | null>(null)
   const { root: benchRoot, waiting: benchWaiting } = benchPlace(chatFolder, loading, lastBenchRoot.current)
   const benchShown = section === 'chats' && !!benchRoot && benchOpen && !dockedChat
-  lastBenchRoot.current = benchShown ? benchRoot : null
+  // Held through the open, even off the Chats screen, so coming back mid-open still finds the bench's place.
+  if (benchShown) lastBenchRoot.current = benchRoot
+  else if (!loading) lastBenchRoot.current = null
   const showBench = useCallback((open: boolean) => {
     setBenchOpen(open)
     writeBenchOpen(open)

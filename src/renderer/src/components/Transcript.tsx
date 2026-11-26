@@ -1144,8 +1144,7 @@ export function Transcript({
   profile?: string
   /** Who answers in this chat, named on "Replying to" and over each reply. */
   author?: string
-  /** The answering bot's picture over each reply; its initial when left out. */
-  /** The bot's face on a reply, moving on the newest one. */
+  /** The answering bot's face over each reply, moving on the newest one; its initial when left out. */
   face?: (moving: boolean) => React.ReactNode
   /** Quote goes to the composer; without it there is only Copy. */
   onQuote?: (request: QuoteRequest) => void
@@ -1282,6 +1281,8 @@ export function Transcript({
   const repliesToTeammates = useMemo(() => teammateReplies(state.items), [state.items])
   const summaries = useStepSummaries(state, sessionId, profile)
 
+  // Any way the reader picks a place (back to the newest rows, a jump to a row): a pin still being read for doesn't take them away later.
+  const dropReveals = useRef(() => {})
   // Follow the reply while the reader is at the bottom; leave them be once they scroll up.
   // At the top of what's drawn the window takes on the rows above it, and back at the
   // bottom it gives them up again, so a long chat stays a window. Once the window holds
@@ -1299,6 +1300,8 @@ export function Transcript({
         count: thisFrame.length,
         scrolledUp
       })
+      // Scrolled back to the end by hand: a pin still being read for doesn't take the reader away later.
+      if (step.follows && !pinned.current) dropReveals.current()
       pinned.current = step.follows
       if (step.start !== undefined) setWindowed(windowAt(step.start))
       if (step.older) older.current?.()
@@ -1312,14 +1315,14 @@ export function Transcript({
 
   // A jump to a row the window left out — a pin, a quote, Show in Chat — draws that row's
   // part of the window before the jump looks for it (rowWindow.ts).
-  // Back to the newest rows (the jump-to-latest button, the timeline's Now): a pin still being read for doesn't take the reader away later.
-  const dropReveals = useRef(() => {})
   useEffect(() => {
     const el = scroller.current
     if (!el) return
     return registerRowOpener(el, key => {
       const at = rowIndex(liveRows.current.rows, key)
       if (at < 0) return false
+      // This jump (a timeline step, a quote, Show in Chat) is the one asked for now: a pin still being read for gives way.
+      dropReveals.current()
       // The jump scrolls to the row smoothly: until it lands, a reader who was at the end
       // isn't taken to be there still, which would give the window's rows back mid-jump.
       pinned.current = false
