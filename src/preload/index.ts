@@ -70,6 +70,8 @@ const api: ConduitApi = {
   setAppLock: on => ipcRenderer.invoke(IPC.setAppLock, on),
   askHostAtLaunch: () => ipcRenderer.invoke(IPC.askHost),
   setAskHostAtLaunch: on => ipcRenderer.invoke(IPC.setAskHost, on),
+  hideDock: () => ipcRenderer.invoke(IPC.hideDock),
+  setHideDock: on => ipcRenderer.invoke(IPC.setHideDock, on),
   wake: {
     models: () => ipcRenderer.invoke(IPC.wakeModels),
     download: lang => ipcRenderer.invoke(IPC.wakeDownload, lang),

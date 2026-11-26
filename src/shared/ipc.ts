@@ -226,6 +226,9 @@ export interface ConduitApi {
   setAppLock(on: boolean): Promise<boolean>
   askHostAtLaunch(): Promise<boolean>
   setAskHostAtLaunch(on: boolean): Promise<boolean>
+  /** The Mac's Hide from the Dock while every window is closed (main/dockPresence.ts); null off the Mac. */
+  hideDock(): Promise<boolean | null>
+  setHideDock(on: boolean): Promise<boolean | null>
   /** Asks for Touch ID or Windows Hello and, once given, opens the saved hosts. */
   unlock(): Promise<boolean>
   /** Crash and freeze reports kept on this computer, and those Conduit still asks about. */
@@ -579,6 +582,8 @@ export const IPC = {
   setAppLock: 'conduit:set-app-lock',
   askHost: 'conduit:ask-host',
   setAskHost: 'conduit:set-ask-host',
+  hideDock: 'conduit:hide-dock',
+  setHideDock: 'conduit:set-hide-dock',
   unlock: 'conduit:unlock',
   wakeModels: 'conduit:wake-models',
   wakeDownload: 'conduit:wake-download',
