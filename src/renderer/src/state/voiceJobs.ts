@@ -17,7 +17,7 @@
  * call in the same chat gets them back: a settled one is told at once, and
  * a running one is read from its chat until its reply is there.
  */
-import { gateway } from '../gateway'
+import { GatewayError, gateway } from '../gateway'
 import { tagVoiceSession } from './voiceList'
 import { namingFiles } from './media'
 import { correctTurn, type Correction } from './localLive'
@@ -457,6 +457,7 @@ export class VoiceJobs {
     const id = `job-${++this.count}`
     // Named by the model's request: the user's words sent with it aren't its title.
     const job: VoiceJob = { id, title: jobTitle(modelWords(task)), status: 'running' }
+    let deliveryUnknown = false
     this.jobs = [...this.jobs, job]
     this.onChange(this.jobs)
     try {
@@ -475,6 +476,8 @@ export class VoiceJobs {
         await this.rpc('prompt.submit', submit)
       } catch (e) {
         this.surface.discard(sid, text, e)
+        // No answer back (a timeout, a dropped connection): Hermes may have it.
+        if (!(e instanceof GatewayError && e.code !== undefined)) deliveryUnknown = true
         throw e
       }
       // Filed under Voice Jobs, beneath the call's chat; the plugin archives it once Hermes answers.
@@ -483,7 +486,9 @@ export class VoiceJobs {
       void this.adopt(this.profile, str(made.stored_session_id) ?? sid, job.title, task).catch(() => false)
     } catch (e) {
       this.update(id, { status: 'failed', error: message(e) })
-      return { status: 'error', error: `The job couldn't start: ${message(e)}. Tell the user in a few words.` }
+      const failed: Record<string, string> = { status: 'error', error: `The job couldn't start: ${message(e)}. Tell the user in a few words.` }
+      if (deliveryUnknown) failed.delivery = 'unknown'
+      return failed
     }
     return {
       status: 'started',

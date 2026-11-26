@@ -140,6 +140,16 @@ export class RequestWords {
     }
   }
 
+  /**
+   * Words a request carried that Hermes didn't take (a refused start): they
+   * go with the model's retry, ahead of anything said since (the phone's
+   * `requestNotTaken`, hermes-conduit #3337).
+   */
+  giveBack(said: string[]): void {
+    const back = said.map(line => line.trim()).filter(Boolean)
+    if (back.length) this.done = [...back, ...this.done]
+  }
+
   /** What the user said for the request being made, given `waitMs` to arrive and to stop growing. */
   async take(waitMs: number): Promise<string[]> {
     const deadline = this.now() + waitMs

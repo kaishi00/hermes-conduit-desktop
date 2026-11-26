@@ -88,7 +88,7 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     let t = 1_000_000
     const ask = new AskFirst(false, () => t, 0, 0)
     ask.heard('Brand only.')
-    expect(await ask.ask('ask_thread', 'Post them from the brand account.')).toEqual({ request: 'Post them from the brand account.' + MARKER + 'Brand only.' })
+    expect(await ask.ask('ask_thread', 'Post them from the brand account.')).toMatchObject({ request: 'Post them from the brand account.' + MARKER + 'Brand only.' })
     ask.modelSpoke()
     ask.heard('Hold that for a minute')
     expect(await ask.withWords('Pause the job.')).toBe('Pause the job.' + MARKER + 'Hold that for a minute')
@@ -101,14 +101,14 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     ask.modelSpoke()
     t += 3000
     ask.heard('Yes')
-    expect(await ask.release()).toEqual({
+    expect(await ask.release()).toMatchObject({
       send: true,
       tool: 'start_job',
       request: 'Clean the inbox and archive everything.' + MARKER + 'They can clean the inbox I guess'
     })
     // Their yes was that request's: the next one doesn't carry it.
     ask.set(false)
-    expect(await ask.ask('ask_thread', 'Now the drafts.')).toEqual({ request: 'Now the drafts.' })
+    expect(await ask.ask('ask_thread', 'Now the drafts.')).toMatchObject({ request: 'Now the drafts.' })
   })
 
   it("titles a job without the user's answer to send this?", () => {
@@ -141,7 +141,7 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     ask.set(false)
     ask.modelSpoke()
     ask.heard('Do the drafts')
-    expect(await ask.ask('ask_thread', 'Do the drafts.')).toEqual({ request: 'Do the drafts.' })
+    expect(await ask.ask('ask_thread', 'Do the drafts.')).toMatchObject({ request: 'Do the drafts.' })
     // Let go by the model without send_request: the bare no stays behind, a change goes along.
     ask.set(true)
     ask.modelSpoke()
@@ -175,7 +175,7 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     ask.set(false)
     ask.modelSpoke()
     ask.heard('And a cab')
-    expect(await ask.ask('ask_thread', 'Order a cab.')).toEqual({ request: 'Order a cab.' + MARKER + 'And a cab' })
+    expect(await ask.ask('ask_thread', 'Order a cab.')).toMatchObject({ request: 'Order a cab.' + MARKER + 'And a cab' })
   })
 
   it('keeps a yes when the model speaks before the rest of the answer arrives', async () => {
@@ -190,10 +190,10 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
       ask.modelSpoke()
       ask.heard('and order a cab for eight')
     }, 100)
-    expect(await ask.release()).toEqual({ send: true, tool: 'ask_thread', request: 'Book a table for two.' })
+    expect(await ask.release()).toMatchObject({ send: true, tool: 'ask_thread', request: 'Book a table for two.' })
     // Their next line is the next request's.
     ask.set(false)
-    expect(await ask.ask('ask_thread', 'Order a cab.')).toEqual({ request: 'Order a cab.' + MARKER + 'and order a cab for eight' })
+    expect(await ask.ask('ask_thread', 'Order a cab.')).toMatchObject({ request: 'Order a cab.' + MARKER + 'and order a cab for eight' })
   })
 
   it('reads the rest of a yes that arrives after the model already spoke before the answer was read', async () => {
@@ -228,5 +228,38 @@ describe("the user's own words with a live call's request (hermes-conduit issue 
     ask.heard('Yes', true)
     setTimeout(() => ask.heard('actually no', true), 100)
     expect((await ask.release()).send).toBe(false)
+  })
+})
+
+describe('a request Hermes refused (hermes-conduit #3337)', () => {
+  it("gives the user's words back for the retry, and keeps them sent when the outcome is unknown", async () => {
+    const ask = new AskFirst(false, () => 1_000_000, 0, 0)
+    ask.heard('Book a table for four')
+    const first = await ask.ask('start_job', 'Book a table.')
+    expect('said' in first && first.said).toEqual(['Book a table for four'])
+    if (!('said' in first)) return
+    // Refused (too many jobs, a busy session): the retry carries them again, ahead of later words.
+    const refused = { status: 'error', error: 'Three background jobs are already running.' }
+    expect(ask.settle(first.said, refused)).toBe(refused)
+    ask.modelSpoke()
+    ask.heard('At eight')
+    const retry = await ask.ask('start_job', 'Book a table.')
+    expect(retry).toMatchObject({ request: 'Book a table.' + MARKER + 'Book a table for four\nAt eight' })
+    if (!('said' in retry)) return
+    // No answer back: Hermes may have it, so nothing comes back.
+    ask.settle(retry.said, { status: 'error', error: 'timed out', delivery: 'unknown' })
+    expect(await ask.ask('start_job', 'Book a table.')).toMatchObject({ request: 'Book a table.' })
+    // Started: nothing comes back either.
+    ask.heard('Thanks')
+    const started = await ask.ask('start_job', 'Book it.')
+    if ('said' in started) ask.settle(started.said, { status: 'started', job_id: 'job-1' })
+    expect(await ask.ask('start_job', 'Book it.')).toMatchObject({ request: 'Book it.' })
+  })
+
+  it('puts given-back words ahead of any said since', () => {
+    const words = new RequestWords(() => 0)
+    words.heard('Newer')
+    words.giveBack(['Older', '  '])
+    expect(words.pending()).toEqual(['Older', 'Newer'])
   })
 })

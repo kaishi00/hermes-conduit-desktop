@@ -459,7 +459,7 @@ export function LocalLiveCall({
           if (ended.current) return
           if (!release.send) return answer(event.id, event.name, release.result, true)
           if (release.tool === ASK_THREAD) return answer(event.id, event.name, toChat(release.request), true)
-          void jobs.current?.start(release.request).then(result => !ended.current && answer(event.id, event.name, result, true))
+          void jobs.current?.start(release.request).then(result => !ended.current && answer(event.id, event.name, askFirst.current.settle(release.said, result), true))
         })
         return
       case SET_ASK_FIRST: {
@@ -476,7 +476,7 @@ export function LocalLiveCall({
         void askFirst.current.ask(START_JOB, (event.args.instructions ?? '').trim()).then(asked => {
           if (ended.current) return
           if ('held' in asked) return answer(event.id, event.name, asked.held, true)
-          void jobs.current?.start(asked.request).then(result => !ended.current && answer(event.id, event.name, result, true))
+          void jobs.current?.start(asked.request).then(result => !ended.current && answer(event.id, event.name, askFirst.current.settle(asked.said, result), true))
         })
         return
       }

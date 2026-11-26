@@ -2458,9 +2458,21 @@ function Shell({
   }, [presented.waiting])
 
   /** A room's private chat with one of your agents: kept, or made and told its room; Wrap Up asks it for notes once it's open. */
+  // Counts every move to another chat or section, so a room's chat that opens late can tell the user moved on.
+  const roomChatNavigation = useRef(0)
+  useEffect(() => {
+    roomChatNavigation.current += 1
+  }, [selected.id, section])
   const openRoomChatWith = useCallback(
     async (room: Room, agent: RoomChatAgent, wrapUp: boolean) => {
+      const at = roomChatNavigation.current
       const opened = await openRoomChatHere(room.roomId, room.name, agent.profile, status.sessionAuthority === true)
+      // Moved on while it opened (a gone chat's replacement takes a while): it waits in the list, and
+      // nothing is pulled over where they went (hermes-conduit #3323's viewport fence).
+      if (roomChatNavigation.current !== at) {
+        list.refresh()
+        return
+      }
       if (wrapUp) pendingAsk.current = { text: wrapUpPrompt(), storedId: opened.chatId, profile: agent.profile }
       setSelected({ id: opened.chatId, profile: agent.profile, title: opened.title })
       setSection('chats')

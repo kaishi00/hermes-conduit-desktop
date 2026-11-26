@@ -388,7 +388,7 @@ export function GrokLiveCall({
           if (ended.current) return
           if (!release.send) return answer(event.id, release.result)
           if (release.tool === ASK_THREAD) return answer(event.id, toChat(release.request))
-          void jobs.current?.start(release.request).then(result => !ended.current && answer(event.id, result))
+          void jobs.current?.start(release.request).then(result => !ended.current && answer(event.id, askFirst.current.settle(release.said, result)))
         })
         return
       case SET_ASK_FIRST: {
@@ -405,7 +405,7 @@ export function GrokLiveCall({
         void askFirst.current.ask(START_JOB, (event.args.instructions ?? '').trim()).then(asked => {
           if (ended.current) return
           if ('held' in asked) return answer(event.id, asked.held)
-          void jobs.current?.start(asked.request).then(result => !ended.current && answer(event.id, result))
+          void jobs.current?.start(asked.request).then(result => !ended.current && answer(event.id, askFirst.current.settle(asked.said, result)))
         })
         return
       }
