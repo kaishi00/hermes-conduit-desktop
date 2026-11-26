@@ -89,6 +89,9 @@ export function shortcutGroups(mac: boolean, sections: readonly GoTo[] = GO_TO, 
         { title: t('Send'), keys: [mac ? '↩' : 'Enter'] },
         { title: t('Stop'), keys: [glyphs('stop', mac), 'Esc'] },
         row(t('Show or Hide Sidebar'), 'toggle-sidebar'),
+        // The tabs over the chat column (issue 423): Ctrl on a Mac too, as its browsers take it.
+        { title: t('Next Tab'), keys: [mac ? '⌃⇥' : 'Ctrl+Tab'] },
+        { title: t('Previous Tab'), keys: [mac ? '⌃⇧⇥' : 'Ctrl+Shift+Tab'] },
         // From anywhere, with the keys Settings > Quick Ask holds; left out while it's off or another app has them.
         ...(quickAsk ? [{ title: t('Quick Ask'), keys: [quickAsk] }] : [])
       ]

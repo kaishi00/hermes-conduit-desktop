@@ -308,6 +308,12 @@ export interface OpenChat {
   storedId: string | null
   /** The live id the gateway's events carry. */
   liveId: string | null
+  /**
+   * The profile the live session was opened in. For one render after a pick
+   * the pane still holds the last chat's ids under the new pick's profile, so
+   * whatever is kept by live id goes by this, never by the pick.
+   */
+  profile?: string
   title?: string
   model?: string
   provider?: string
@@ -550,6 +556,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         setChat({
           storedId: result.stored_session_id ?? storedId,
           liveId: result.session_id,
+          profile,
           title: result.info?.title,
           ...chatSettings(result.info)
         })
@@ -666,7 +673,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     openingChat.current = null
     setLoading(false)
     const info = chatSettings(made.info)
-    setChat(c => ({ ...c, liveId: sid, storedId: storedId ?? c.storedId, ...info }))
+    setChat(c => ({ ...c, liveId: sid, profile, storedId: storedId ?? c.storedId, ...info }))
     if (!sessionAuthority && draft.yolo !== undefined && info.yolo !== draft.yolo) {
       try {
         const res = await gateway.rpc<{ info?: ChatInfo | null }>('config.set', {
@@ -716,7 +723,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       }
       const { result, rows } = open
       liveId.current = result.session_id
-      setChat(c => ({ ...c, liveId: result.session_id, title: result.info?.title ?? c.title }))
+      setChat(c => ({ ...c, liveId: result.session_id, profile, title: result.info?.title ?? c.title }))
       setError(null)
       // The details the rows on screen already had come along, so only new ones are read.
       let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), transcriptRef.current)
@@ -1013,7 +1020,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           liveId.current = result.session_id
           sid = result.session_id
           params.session_id = result.session_id
-          setChat(c => ({ ...c, liveId: result.session_id, storedId: result.stored_session_id ?? c.storedId }))
+          setChat(c => ({ ...c, liveId: result.session_id, profile, storedId: result.stored_session_id ?? c.storedId }))
           return true
         }
         try {

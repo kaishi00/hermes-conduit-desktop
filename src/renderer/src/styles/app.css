@@ -66,6 +66,14 @@ a:hover {
   flex: none;
 }
 
+/* The section glyphs (navGlyphs.tsx): solid, so no stroke from .ico. */
+.glyph {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: block;
+}
+
 .app {
   height: 100%;
   display: flex;
@@ -5237,6 +5245,50 @@ html[data-window='quick'] body {
   background: var(--accent);
 }
 
+/* The tabs over the chat column (issue 423), in the Folder's tab look: shown once two chats are open. */
+.workspace-tabs {
+  align-items: center;
+  padding: 8px 12px 0;
+}
+
+.workspace-tabs .ws-tab {
+  max-width: 220px;
+}
+
+.workspace-tabs .ws-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-tabs .ws-tab-bot {
+  flex: none;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.workspace-tabs .ws-tab-dot.waits {
+  background: var(--warning);
+}
+
+.ws-tab-new {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.ws-tab-new:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
 .ws-viewer {
   flex: 1;
   min-height: 0;
@@ -7877,6 +7929,26 @@ button.cap-row-text {
 }
 .cron-report-head .spacer {
   flex: 1;
+}
+.brief-card {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.brief-from {
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.cron-report-body.brief-folded {
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.brief-card .meta.brief-words {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .delegation-card {
   max-width: 640px;
@@ -12056,10 +12128,6 @@ button.ghost:disabled {
     border-radius: 999px;
     padding: 0 12px;
   }
-
-  .chat-head.soft {
-    padding-left: 16px;
-  }
 }
 
 /* A reply's links to its work, drawn as cards under it (the phone's BotWorkLinkCard, app #1637). */
@@ -12776,4 +12844,322 @@ main.docked-pulse.pulse-page {
 
 .file-viewer-note {
   padding: 16px 20px;
+}
+/* A toolset backend's key: its name, whether it's set, a field and its button. */
+.toolset-key {
+  gap: 8px;
+  padding: 0 0 8px;
+}
+.toolset-key input {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * Floating glass shell (Eric, 2026-11-26, concept S2): one canvas, tinted by
+ * the open bot, with everything else floating on it as glass. The rail and
+ * the list beside it read as one island, the chat runs over the canvas with
+ * no box around it, the panels beside it are cards and the composer is a
+ * capsule. Last in the sheet, so it wins over the boxed layout above.
+ *
+ * The glass is see-through colour with no backdrop-filter or clip-path:
+ * either makes the surface the box its position: fixed menus are placed in
+ * and cut to, and the canvas behind is a soft gradient that blur wouldn't
+ * change anyway.
+ */
+.titlebar {
+  background: transparent;
+  border-bottom: 0;
+}
+
+.body {
+  padding: 0 var(--shell-gap) var(--shell-gap);
+}
+
+.rail {
+  width: var(--rail-width);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-island);
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+}
+
+/*
+ * The open section's list joins the rail: one island, no seam. It's the
+ * Chats pane's (Chats, Projects, Bots beside a Bot Chat), the Bots list
+ * beside a group chat or a bot being edited, or Scheduled tasks' list.
+ */
+.body:has(> .chats-section:not(.away) > .list-keeper:not([hidden]) > .chatlist, > .list-keeper:not([hidden]) > .chatlist, > .chatlist) > .rail {
+  border-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: none;
+}
+
+.chats-section {
+  inset: 0 var(--shell-gap) var(--shell-gap) calc(var(--rail-width) + var(--shell-gap));
+}
+
+.chats-section > .list-keeper > .chatlist,
+.body > .list-keeper > .chatlist,
+.body > .chatlist {
+  border: 1px solid var(--glass-line);
+  border-left: 0;
+  border-radius: 0 var(--radius-island) var(--radius-island) 0;
+  background: var(--glass);
+  /* Down and to the right only, so none of it falls on the rail it joins. */
+  box-shadow: var(--island-shadow);
+}
+
+/* A list beside the rail in the window's own row leaves the gap to the page beside it. */
+.body > .list-keeper > .chatlist,
+.body > .chatlist {
+  margin-right: var(--shell-gap);
+}
+
+/* The divider beside the island is the gap between it and the chat: it shows its line only while dragged. */
+.chats-section > .column-divider {
+  width: var(--shell-gap);
+  margin: 0;
+}
+
+.chats-section > .column-divider::after {
+  inset: 18px calc(var(--shell-gap) / 2 - 1px);
+  border-radius: 2px;
+}
+
+.chats-section .chat {
+  background: transparent;
+}
+
+.chat-head {
+  border-bottom: 0;
+}
+
+/* Panels beside the chat are cards of their own. */
+.chats-section .ws-panel {
+  margin: 0 0 0 var(--shell-gap);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-island);
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+.composer-wrap {
+  padding-bottom: 14px;
+}
+
+.composer {
+  border-color: var(--glass-line);
+  background: var(--glass-strong);
+  box-shadow: var(--glass-shadow);
+}
+
+/* The chat's header floats as glass pills: its title on the left, its buttons together on the right. */
+.chat-head.soft {
+  padding: 0 4px 0 6px;
+}
+
+.chat-head.soft > .chat-titles {
+  flex: 0 1 auto;
+  padding: 7px 18px;
+  border: 1px solid var(--glass-line);
+  border-radius: 22px;
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+}
+
+/* A chat with nothing to name yet (just opened, its title not read) draws no empty pill. */
+.chat-head.soft > .chat-titles:not(:has(.chat-title, .status-chip, .beside-working, .chat-subtitle, .chat-window-bot)) {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.chat-head.soft > .chat-head-actions {
+  margin-left: auto;
+}
+
+.chat-head.soft > .chat-head-actions:not(:empty) {
+  padding: 4px;
+  gap: 2px;
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+}
+
+/*
+ * The open window has no title row of its own (concept S2): its brand sits at
+ * the top of the rail's island, and the island reaches up into the title
+ * bar's space, which stays behind it as the window's drag area and holds the
+ * caption buttons. A banner over the window (reconnecting, a crash report)
+ * keeps the island below it.
+ */
+.titlebar.bare {
+  position: relative;
+  z-index: 0;
+}
+
+.titlebar.bare .caption-buttons {
+  margin-left: auto;
+}
+
+/* The brand is in one place: the rail's top, or the title bar while a banner holds the island down. */
+.app:not(:has(> .banner)) > .titlebar.bare > .brand,
+.app:has(> .banner) .rail-brand {
+  display: none;
+}
+
+.app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .rail,
+.app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .chats-section > .list-keeper > .chatlist,
+.app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .list-keeper > .chatlist,
+.app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .chatlist {
+  margin-top: calc(var(--shell-gap) - 44px);
+  -webkit-app-region: no-drag;
+}
+
+.rail-brand {
+  position: relative;
+  flex: none;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.rail-brand-button {
+  width: 60px;
+  border: 0;
+  border-radius: 12px;
+  padding: 4px 2px;
+  background: none;
+  color: var(--text-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+button.rail-brand-button:hover {
+  background: var(--surface-hover);
+  color: var(--text-2);
+}
+
+.rail-brand .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.rail-brand-host {
+  max-width: 100%;
+  font-size: 10.5px;
+  line-height: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The open host menu sits over the list beside the rail, so lift the rail only then. */
+.rail:has(.rail-brand .host-menu) {
+  position: relative;
+  z-index: 5;
+}
+
+.rail-brand .host-menu {
+  top: 0;
+  left: calc(100% + 4px);
+  /* Opens over the list's text, so no see-through. */
+  background: var(--menu);
+  /* It can open over the title bar's drag strip, where nothing beside it is no-drag. */
+  -webkit-app-region: no-drag;
+}
+
+/* The traffic lights sit at the island's top corner on a Mac: the brand starts below them. */
+[data-platform='darwin'] .app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .rail {
+  padding-top: 40px;
+}
+
+/*
+ * The collapsed strip of faces: with the list hidden, the bots' faces sit
+ * under the rail's sections, past a hairline, and scroll there when they
+ * outgrow it. The open bot's face takes the accent ring.
+ */
+.rail-faces {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--glass-line);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+/* Only the strip gives way when the rail runs short; the rail's own buttons and dot keep their size. */
+.rail:has(> .rail-faces) > :not(.rail-faces, .spacer) {
+  flex-shrink: 0;
+}
+
+.rail-faces::-webkit-scrollbar {
+  display: none;
+}
+
+.rail-face {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  cursor: pointer;
+}
+
+.rail-face:hover {
+  background: var(--surface-hover);
+}
+
+.rail-face[aria-current='page'] {
+  background: var(--accent-soft);
+}
+
+.rail-face[aria-current='page'] .bot-avatar {
+  box-shadow: 0 0 0 2px var(--accent) !important;
+}
+
+.rail-face-running {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--rail);
+}
+
+/* Another dashboard's bot wears its dashboard's badge, as in the Bots list. */
+.rail-face-badge {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  display: flex;
+  transform: scale(0.8);
+  transform-origin: top right;
+}
+
+.rail-face-running.needs {
+  background: var(--warning);
 }

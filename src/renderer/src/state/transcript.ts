@@ -197,6 +197,19 @@ export interface CronReportItem {
   at?: number
 }
 
+/** A workstream's first message, the brief its coordinating bot wrote (the plugin's WORKER_PROMPT): not something the user typed. */
+export interface BriefItem {
+  kind: 'brief'
+  key: string
+  /** The coordinating bot's name. */
+  bot: string
+  /** What the bot asked for. */
+  task: string
+  /** The user's message the bot was answering, when the brief quotes it. */
+  words?: string
+  at?: number
+}
+
 /** Background agents finished: each one's goal, outcome and result, from the report Hermes wrote for the model. */
 export interface DelegationItem {
   kind: 'delegation'
@@ -224,6 +237,7 @@ export type TranscriptItem =
   | OutputItem
   | ReviewItem
   | CronReportItem
+  | BriefItem
   | DelegationItem
   | CallItem
   | ConnectionItem
@@ -240,10 +254,49 @@ export function cronReport(raw: string): { job: string; report: string } | null 
   return { job: first.slice(CRON_PREFIX.length, -CRON_SUFFIX.length), report: text.slice(first.length).trim() }
 }
 
-/** A user row: a cron report's note, or a message of yours. */
-function userRow(key: string, raw: string, at?: number): UserItem | CronReportItem | null {
+const BRIEF_OPENING = "You're working on a task for "
+const BRIEF_TASK = '\n\nTask:\n'
+/** Where the plugin's go-ahead rules begin, after the task. */
+const BRIEF_RULES = ["\nBefore a step that can't be undone", "\nHermes' approvals decide which steps"]
+const BRIEF_WORDS = "\n\nThe user's message that "
+
+/** A workstream's brief, as the phone reads it (WorkstreamBrief.parse): the bot, the task, and the user's words it quotes. */
+export function workstreamBrief(raw: string): { bot: string; task: string; words?: string } | null {
+  const text = raw.replace(/\r\n/g, '\n')
+  if (!text.startsWith(BRIEF_OPENING)) return null
+  // The user's words are quoted last, right before the task: their own "Task:" lines stay inside the quote.
+  // A quote is read only ahead of the first ordinary mark: one in the task is the task's own text.
+  const first = text.indexOf(BRIEF_TASK)
+  if (first < 0) return null
+  const quoted = text.indexOf(BRIEF_WORDS)
+  const afterQuote = quoted >= 0 && quoted < first ? text.indexOf('»' + BRIEF_TASK, quoted) : -1
+  const mark = afterQuote >= 0 ? afterQuote + 1 : first
+  const head = text.slice(BRIEF_OPENING.length, mark)
+  const comma = head.indexOf(', who coordinates')
+  if (comma < 0) return null
+  const bot = head.slice(0, comma).trim()
+  let task = text.slice(mark + BRIEF_TASK.length)
+  const rules = BRIEF_RULES.map(r => task.indexOf(r)).filter(i => i >= 0)
+  if (rules.length) task = task.slice(0, Math.min(...rules))
+  task = task.trim()
+  if (!bot || !task) return null
+  let words: string | undefined
+  const quotedInHead = head.indexOf(BRIEF_WORDS)
+  if (quotedInHead >= 0) {
+    const open = head.indexOf('«', quotedInHead + BRIEF_WORDS.length)
+    const close = head.lastIndexOf('»')
+    if (open >= 0 && close > open) words = head.slice(open + 1, close).trim() || undefined
+  }
+  return words ? { bot, task, words } : { bot, task }
+}
+
+/** A user row: a cron report's note, a workstream's brief, or a message of yours. */
+function userRow(key: string, raw: string, at?: number): UserItem | CronReportItem | BriefItem | null {
   const cron = cronReport(raw)
-  return cron ? { kind: 'cron', key, ...cron, at } : userItem(key, raw, at)
+  if (cron) return { kind: 'cron', key, ...cron, at }
+  const brief = workstreamBrief(raw)
+  if (brief) return { kind: 'brief', key, ...brief, at }
+  return userItem(key, raw, at)
 }
 
 const REVIEW_PREFIX = '💾 self-improvement review:'

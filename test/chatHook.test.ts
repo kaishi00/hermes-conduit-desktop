@@ -67,6 +67,27 @@ const mount: typeof renderHook = (hook, props) => {
 }
 const emit = (event: Event) => act(() => listeners.forEach(l => l(event)))
 
+describe("the open chat's profile", () => {
+  it('stays the one its live session opened in on the render after a pick, then becomes the new one', async () => {
+    const renders: { liveId: string | null; profile?: string }[] = []
+    const hook = mount(
+      (props: Props) => {
+        const chat = chatInApp(props)
+        renders.push({ liveId: chat.chat.liveId, profile: chat.chat.profile })
+        return chat
+      },
+      { storedId: 'a', connected: true, url: 'h1', profile: 'furina' }
+    )
+    await settle()
+    expect(hook.result().chat).toMatchObject({ liveId: 'live-a', profile: 'furina' })
+    hook.rerender({ storedId: 'b', connected: true, url: 'h1', profile: 'zhongli' })
+    await settle()
+    expect(hook.result().chat).toMatchObject({ liveId: 'live-b', profile: 'zhongli' })
+    // Every render that still held Furina's session said so.
+    expect(renders.filter(r => r.liveId === 'live-a').every(r => r.profile === 'furina')).toBe(true)
+  })
+})
+
 describe("the transcript cache's wiring (desktop#218)", () => {
   it('draws a chat left a moment ago at once while its resume runs', async () => {
     resumes.a = { messages: history('one') }

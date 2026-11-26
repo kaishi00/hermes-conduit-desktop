@@ -13,6 +13,7 @@ import type { ExpiredQuestion } from '../state/expiredQuestions'
 import { Icon, type IconName } from './icons'
 import { JumpToLatest } from './JumpToLatest'
 import { atEnd } from '../state/scrollEnd'
+import { chatPlaces, type ChatPlace } from '../state/chatPlaces'
 import { heldStart, nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowKey, rowWindow, scrollStep, startAt } from '../state/rowWindow'
 import { WorkLinkCard, WorkLinks } from './WorkLinkCard'
 import { linkNamedRefs, linkSessionRefs, splitWorkLinks } from '../state/workLinks'
@@ -716,6 +717,25 @@ function CronReportCard({ job, report, at }: { job: string; report: string; at?:
   )
 }
 
+/** A workstream's brief from the bot coordinating it, after the phone's WorkstreamBriefCard: the task folded to a few lines, Show all opens it. */
+function BriefCard({ bot, task, words, at }: { bot: string; task: string; words?: string; at?: number }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="cron-report brief-card">
+      <div className="cron-report-head">
+        <strong className="brief-from">{t('Brief from {bot}', { bot })}</strong>
+        <span className="spacer" />
+        <button className="link" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+          {open ? t('Show less') : t('Show all')}
+        </button>
+      </div>
+      <div className={open ? 'cron-report-body' : 'cron-report-body brief-folded'}>{open ? <Markdown text={task} /> : task}</div>
+      {words ? <span className={open ? 'meta' : 'meta brief-words'}>{t('For: “{words}”', { words })}</span> : null}
+      {at ? <span className="meta">{clock(at)}</span> : null}
+    </div>
+  )
+}
+
 function ReplyActions({ messageKey, text, menu, react }: { messageKey: string; text: string; menu: MessageMenuItem[]; react?: ReactControls }) {
   const reading = useReadingKey() === messageKey
   const profile = useContext(PictureProfile)
@@ -955,6 +975,8 @@ const Item = memo(function Item({
       return <CallCard startedAt={item.startedAt} endedAt={item.endedAt} onOpen={onOpenCall ? () => onOpenCall(item.callId) : undefined} />
     case 'cron':
       return <CronReportCard job={item.job} report={item.report} at={item.at} />
+    case 'brief':
+      return <BriefCard bot={item.bot} task={item.task} words={item.words} at={item.at} />
     case 'review':
       return (
         <details className="review-card" data-key={item.key}>
@@ -1121,7 +1143,8 @@ export function Transcript({
   onLoadOlder,
   loadingOlder = false,
   olderRows = false,
-  onSeekRow
+  onSeekRow,
+  keepsPlace
 }: {
   state: TranscriptState
   loading: boolean
@@ -1171,6 +1194,8 @@ export function Transcript({
    * `missed` runs when the chat has no page left and no such row. The answer drops the seek.
    */
   onSeekRow?: (found: (items: readonly TranscriptItem[]) => boolean, missed?: () => void) => (() => void) | void
+  /** Whether a chat holds a tab (issue 423): left, it keeps the reader's place, and back, opens there (chatPlaces.ts). */
+  keepsPlace?: (chat: string, leaving: boolean) => boolean
 }) {
   const [thinkingShown, setThinkingShown] = useState(false)
   const showsThinking = display.thinking === 'show' || (display.thinking === 'on_request' && thinkingShown)
@@ -1218,6 +1243,34 @@ export function Transcript({
   // pane with no id tells its chats apart by.
   const chatKey = chatId ?? ''
   const [windowed, setWindowed] = useState<{ chat?: string; start: number | null; anchor?: string }>({ start: null })
+  const scroller = useRef<HTMLDivElement>(null)
+  const pinned = useRef(true)
+  /** Until when a jump to a row the window left out is scrolling to it. */
+  const jumpUntil = useRef(0)
+  // What the scroll listener reads: the rows and the window as the last frame had them, until this one's are set below.
+  const liveRows = useRef<{ rows: Row[]; start: number; scrolledUp: boolean; chat: string }>({ rows: [], start: 0, scrolledUp: false, chat: chatKey })
+  /** A tab's chat coming back to the place it was left at, until its rows are drawn there. */
+  const restoring = useRef<(ChatPlace & { from: TranscriptState }) | null>(null)
+  // Another chat opens on its newest rows and follows them, wherever the last one was left (desktop#467);
+  // a chat that holds a tab opens where it was left (issue 423).
+  const pinnedChat = useRef(chatKey)
+  if (pinnedChat.current !== chatKey) {
+    const left = pinnedChat.current
+    const el = scroller.current
+    const was = liveRows.current
+    if (keepsPlace?.(left, true)) {
+      const first = was.chat === left ? was.rows[was.start] : undefined
+      chatPlaces.keep(left, el && first && !pinned.current ? { start: was.start, anchor: rowKey(first), top: el.scrollTop } : null)
+    }
+    pinnedChat.current = chatKey
+    const back = keepsPlace?.(chatKey, false) ? chatPlaces.take(chatKey) : undefined
+    // The rows drawn as it opens are still the last chat's until its transcript is read (useChat resets it after this
+    // render), so a place whose row they lack waits for the chat's own rather than giving up.
+    restoring.current = back ? { ...back, from: state } : null
+    pinned.current = !back
+    jumpUntil.current = 0
+    if (back) setWindowed({ chat: chatKey, start: back.start, anchor: back.anchor })
+  }
   // Another chat opened: its own newest rows, not the window the last one was left at.
   // Rows read in above the chat's (a page before the one it opened on) leave the window
   // on the rows it drew: it starts where its first row is now.
@@ -1225,7 +1278,6 @@ export function Transcript({
   const drawnWindow = rowWindow(rows.length, start)
   const drawn = drawnWindow.start > 0 ? rows.slice(drawnWindow.start, drawnWindow.end) : rows
   // What the scroll listener reads: the rows and the window as this frame has them.
-  const liveRows = useRef({ rows, start: drawnWindow.start, scrolledUp: start !== null, chat: chatKey })
   liveRows.current.rows = rows
   liveRows.current.start = drawnWindow.start
   liveRows.current.scrolledUp = start !== null
@@ -1242,17 +1294,6 @@ export function Transcript({
   const followedUpKeySet = useMemo(() => followedUpKeys(state.items, followedUp), [state.items, followedUp])
   const repliesToTeammates = useMemo(() => teammateReplies(state.items), [state.items])
   const summaries = useStepSummaries(state, sessionId, profile)
-  const scroller = useRef<HTMLDivElement>(null)
-  const pinned = useRef(true)
-  /** Until when a jump to a row the window left out is scrolling to it. */
-  const jumpUntil = useRef(0)
-  // Another chat opens on its newest rows and follows them, wherever the last one was left (desktop#467).
-  const pinnedChat = useRef(chatKey)
-  if (pinnedChat.current !== chatKey) {
-    pinnedChat.current = chatKey
-    pinned.current = true
-    jumpUntil.current = 0
-  }
 
   // Follow the reply while the reader is at the bottom; leave them be once they scroll up.
   // At the top of what's drawn the window takes on the rows above it, and back at the
@@ -1397,6 +1438,26 @@ export function Transcript({
     if (el && pinned.current) el.scrollTop = el.scrollHeight
   }, [state, requests, expired, drawnWindow.start])
 
+  // A tab's chat back at its place: once its rows are drawn from the row it was left on, the scroll it had from
+  // there. A chat whose row is gone (read again, another history) opens on its newest rows, as any other does.
+  useLayoutEffect(() => {
+    const back = restoring.current
+    const el = scroller.current
+    if (!back || !el || windowed.chat !== chatKey) return
+    if (start === null) {
+      // Not before this chat's own rows are read: the last chat's, still drawn as it opens, may just lack the row.
+      if (state === back.from || loading || !rows.length) return
+      restoring.current = null
+      pinned.current = true
+      setWindowed(windowAt(null))
+      el.scrollTop = el.scrollHeight
+      return
+    }
+    restoring.current = null
+    pinned.current = false
+    el.scrollTop = back.top
+  })
+
   // Rows drawn above the reader keep their place, whether the window took them on or a
   // stored page was read in: the chat grew above them, so the reader stays as far from its
   // end as they were. That is read before the rows are drawn and set after, so it holds
@@ -1428,7 +1489,8 @@ export function Transcript({
   // on. A reader still at the top of the rows they had takes on the first of the page now,
   // since a scroller at its top sends no scroll to ask with.
   useLayoutEffect(() => {
-    if (windowed.chat !== chatKey || windowed.start === null || start === windowed.start) return
+    // Not while a tab's chat comes back to its place: the last chat's rows, still drawn, lack its row (issue 423).
+    if (restoring.current || windowed.chat !== chatKey || windowed.start === null || start === windowed.start) return
     const el = scroller.current
     const reading = start !== null && start > windowed.start && el && !pinned.current && nearTop(el.scrollTop)
     setWindowed(windowAt(reading ? olderStart(start, rows.length) : start))

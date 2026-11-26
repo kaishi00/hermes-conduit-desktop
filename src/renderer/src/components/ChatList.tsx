@@ -1,4 +1,5 @@
 import { searchFold } from '../state/searchFold'
+import { opensInTab } from '../state/workspaceTabs'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { underSource } from '../state/voiceList'
 import { includedInAll, newChatProfiles, profileGroups, readClosedSections, readGroupByProfile, readLeftOut, shownInAll, writeClosedSections, writeGroupByProfile, writeLeftOut } from '../state/profileGroups'
@@ -163,6 +164,8 @@ interface Props {
   canOpenBeside?: (row: ChatRow) => boolean
   /** Open in New Window: the chat in a window of its own, or its window to the front when it has one. */
   onOpenInWindow?: (row: ChatRow) => void
+  /** Open in New Tab (issue 423), also a middle or ⌘/Ctrl click on a row: the chat in a tab of its own over the chat column. */
+  onOpenInTab?: (row: ChatRow) => void
   /** The chats with windows of their own. */
   windowIds?: readonly string[]
   /** Combined dashboards: the other hosts' chats, only in All, each opening through a switch. */
@@ -244,6 +247,7 @@ export function ChatList({
   onMove,
   onOpenBeside,
   onOpenInWindow,
+  onOpenInTab,
   windowIds,
   canOpenBeside,
   otherRows = NO_ROWS,
@@ -643,11 +647,15 @@ export function ChatList({
   }, [listedAs, selectedId])
 
   // What a row's handlers read, so they keep one identity and memoized rows skip a redraw (desktop#199).
-  const latest = useRef({ onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope })
-  latest.current = { onSelect, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope }
+  const latest = useRef({ onSelect, onOpenInTab, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope })
+  latest.current = { onSelect, onOpenInTab, dropAt, dragging, pinsBeside, movePinned, finishRename, dropPin: pinOrder.drop, searchScope }
   const rowHandlers = useMemo<RowHandlers>(
     () => ({
-      select: row => latest.current.onSelect(row),
+      select: (row, e) => {
+        const { onSelect, onOpenInTab } = latest.current
+        if (e && onOpenInTab && opensInTab(e)) onOpenInTab(row)
+        else onSelect(row)
+      },
       dragStart: (row, e) => {
         e.dataTransfer.effectAllowed = 'move'
         e.dataTransfer.setData('text/plain', row.title)
@@ -1003,7 +1011,13 @@ export function ChatList({
             </div>
             {contentMatches.map(match => (
               <div key={match.key} className="row-wrap">
-                <button className="row" aria-current={match.row.id === selectedId ? 'true' : undefined} onClick={() => onSelect(match.row)}>
+                <button
+                  className="row"
+                  aria-current={match.row.id === selectedId ? 'true' : undefined}
+                  onClick={e => (onOpenInTab && opensInTab(e) ? onOpenInTab(match.row) : onSelect(match.row))}
+                  onAuxClick={e => (onOpenInTab && opensInTab(e) ? onOpenInTab(match.row) : undefined)}
+                  onMouseDown={e => (onOpenInTab && e.button === 1 ? e.preventDefault() : undefined)}
+                >
                   <span className="row-top">
                     <span className="row-title">{match.row.title || t('Untitled conversation')}</span>
                     <span className="meta row-time">{timeLabel(match.row.activeAt, today)}</span>
@@ -1078,6 +1092,11 @@ export function ChatList({
               {onOpenBeside && canOpenBeside?.(menu.row) ? (
                 <button role="menuitem" onClick={() => onOpenBeside(menu.row)}>
                   {t('Open Beside')}
+                </button>
+              ) : null}
+              {onOpenInTab && !windowIds?.includes(menu.row.id) ? (
+                <button role="menuitem" onClick={() => onOpenInTab(menu.row)}>
+                  {t('Open in New Tab')}
                 </button>
               ) : null}
               {onOpenInWindow ? (
@@ -1281,7 +1300,7 @@ function ShowInAll({
 }
 
 interface RowHandlers {
-  select: (row: ChatRow) => void
+  select: (row: ChatRow, e?: React.MouseEvent) => void
   dragStart: (row: ChatRow, e: React.DragEvent<HTMLDivElement>) => void
   dragOver: (row: ChatRow, e: React.DragEvent<HTMLDivElement>) => void
   drop: (row: ChatRow, e: React.DragEvent<HTMLDivElement>) => void
@@ -1375,7 +1394,13 @@ const ChatRowItem = memo(function ChatRowItem({
           onBlur={() => on.finishRename(true)}
         />
       ) : (
-        <button className={done ? 'row done' : 'row'} aria-current={selected ? 'true' : undefined} onClick={() => on.select(row)}>
+        <button
+          className={done ? 'row done' : 'row'}
+          aria-current={selected ? 'true' : undefined}
+          onClick={e => on.select(row, e)}
+          onAuxClick={e => (e.button === 1 ? on.select(row, e) : undefined)}
+          onMouseDown={e => (e.button === 1 ? e.preventDefault() : undefined)}
+        >
           <span className="row-top">
             <span className="row-title">
               {unread ? <span className="unread-dot" role="img" aria-label={t('Unread')} /> : null}
