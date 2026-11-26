@@ -17,6 +17,8 @@ afterEach(() => {
 })
 
 const bot = (name: string, title: string) => ({ name, title, pinned: false, hidden: false, isDefault: false, hasAvatar: false, face: 0, meta: {} })
+const own = (name: string, title: string) => ({ key: name, host: 'https://here.example', bot: bot(name, title), own: true })
+const far = (name: string, title: string) => ({ key: `https://far.example ${name}`, host: 'https://far.example', bot: bot(name, title), own: false })
 
 async function mount(props: Record<string, unknown>) {
   const path = '../src/renderer/src/components/RailFaces.tsx'
@@ -30,15 +32,30 @@ async function mount(props: Record<string, unknown>) {
 
 describe('collapsed strip of faces', () => {
   it('draws each bot in order, marks the open one and the busy one, and opens on click', async () => {
-    const bots = [bot('default', 'Conduit'), bot('furina', 'Furina'), bot('yelan', 'Yelan')]
+    const tiles = [own('default', 'Conduit'), own('furina', 'Furina'), own('yelan', 'Yelan')]
     const onOpen = vi.fn()
-    const host = await mount({ bots, openProfile: 'furina', running: new Set(['yelan']), onOpen })
+    const host = await mount({ tiles, open: { profile: 'furina' }, running: new Set(['yelan']), onOpen })
     const faces = [...host.querySelectorAll<HTMLButtonElement>('.rail-faces .rail-face')]
     expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit', 'Furina', 'Yelan'])
     expect(faces.map(f => f.getAttribute('aria-current'))).toEqual([null, 'page', null])
     expect(faces.map(f => !!f.querySelector('.rail-face-running'))).toEqual([false, false, true])
     act(() => faces[2].click())
-    expect(onOpen).toHaveBeenCalledWith(bots[2])
+    expect(onOpen).toHaveBeenCalledWith(tiles[2])
+  })
+
+  it("draws other dashboards' bots with their badge, and marks a far Bot Chat on its own host only", async () => {
+    const tiles = [own('default', 'Conduit'), far('default', 'Mira')]
+    const badgeFor = (tile: { own: boolean }) => (tile.own ? null : { letter: 'T', color: '#123456', name: 'Test' })
+    const onOpen = vi.fn()
+    const host = await mount({ tiles, open: { profile: 'default', host: 'https://far.example' }, running: new Set(['default']), badgeFor, onOpen })
+    const faces = [...host.querySelectorAll<HTMLButtonElement>('.rail-face')]
+    expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit', 'Mira · Test'])
+    expect(faces.map(f => f.getAttribute('aria-current'))).toEqual([null, 'page'])
+    expect(faces.map(f => !!f.querySelector('.host-badge'))).toEqual([false, true])
+    // Running is this dashboard's: the far bot of the same name shows no dot.
+    expect(faces.map(f => !!f.querySelector('.rail-face-running'))).toEqual([true, false])
+    act(() => faces[1].click())
+    expect(onOpen).toHaveBeenCalledWith(tiles[1])
   })
 
   it('keeps right-clicks off the rail\'s section menu', async () => {
@@ -52,7 +69,7 @@ describe('collapsed strip of faces', () => {
         createElement(
           'nav',
           { onContextMenu: railMenu },
-          createElement(RailFaces as never, { bots: [bot('default', 'Conduit')], running: new Set(), onOpen: () => {} } as never)
+          createElement(RailFaces as never, { tiles: [own('default', 'Conduit')], running: new Set(), onOpen: () => {} } as never)
         )
       )
     )
@@ -63,7 +80,7 @@ describe('collapsed strip of faces', () => {
   })
 
   it('draws nothing without bots', async () => {
-    const host = await mount({ bots: [], running: new Set(), onOpen: () => {} })
+    const host = await mount({ tiles: [], running: new Set(), onOpen: () => {} })
     expect(host.querySelector('.rail-faces')).toBeNull()
   })
 })

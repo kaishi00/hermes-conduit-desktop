@@ -2600,12 +2600,23 @@ function Shell({
           onChangeLayout={changeRailLayout}
           brand={brand}
           faces={
-            (section === 'chats' || section === 'room' || section === 'bots') && listHidden && orderedRoster ? (
+            (section === 'chats' || section === 'room' || section === 'bots') && listHidden && profileTiles ? (
               <RailFaces
-                bots={orderedRoster}
-                openProfile={section === 'chats' && selected.botChat && !dockedChat ? selected.profile : undefined}
+                tiles={profileTiles}
+                open={
+                  section !== 'chats'
+                    ? undefined
+                    : dockedChat
+                      ? dockedChat.botChat
+                        ? { profile: dockedChat.profile ?? 'default', host: dockedChat.host }
+                        : undefined
+                      : selected.botChat
+                        ? { profile: selected.profile ?? 'default' }
+                        : undefined
+                }
                 running={runningProfiles}
-                onOpen={openBot}
+                badgeFor={tileBadge}
+                onOpen={tile => (tile.own ? openBot(tile.bot) : openOtherBot({ host: tile.host, bot: tile.bot }))}
               />
             ) : undefined
           }

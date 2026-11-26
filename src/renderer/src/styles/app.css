@@ -13144,3 +13144,13 @@ button.rail-brand-button:hover {
   background: var(--accent);
   border: 2px solid var(--rail);
 }
+
+/* Another dashboard's bot wears its dashboard's badge, as in the Bots list. */
+.rail-face-badge {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  display: flex;
+  transform: scale(0.8);
+  transform-origin: top right;
+}
