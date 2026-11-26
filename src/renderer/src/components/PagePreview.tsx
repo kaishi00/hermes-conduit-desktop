@@ -6,18 +6,26 @@ import { PictureProfile } from './Picture'
 import { inSelectMenu } from './Select'
 import { openPageInBrowser } from '../state/saveMedia'
 import { isPagePath } from '@shared/viewFileRules'
+import { pictureHost } from '../state/gatewayPictures'
+import { notePage, prunePages, rememberedPage, type PageCache } from '../state/pagePreviewCache'
 
 const PLACEHOLDER = 280
 const MIN_HEIGHT = 60
 const MAX_HEIGHT = 900
 
-// Pages already read, by profile and path: a chat scrolled back draws them again at once.
-const kept = new Map<string, string | null>()
+// Pages already read, per dashboard and profile: a chat scrolled back draws them again at once.
+const kept: PageCache = new Map()
 
-/** A page's address on the page scheme, read from the host once; null when it can't be shown. */
+/** Drops the other dashboards' page copies when this window switches host. */
+export function setPageHost(host: string): void {
+  prunePages(kept, host)
+}
+
+/** A page's address on the page scheme, read from this host once; null when it can't be shown. */
 export async function pageAddress(path: string, profile?: string): Promise<string | null> {
-  const key = `${profile ?? ''}|${path}`
-  if (kept.has(key)) return kept.get(key)!
+  const host = pictureHost()
+  const known = rememberedPage(kept, path, profile, host)
+  if (known !== undefined) return known
   let url: string | null = null
   try {
     const preview = parsePreview(await gateway.http('GET', readTextPath(path, profile), undefined, 30_000))
@@ -25,7 +33,7 @@ export async function pageAddress(path: string, profile?: string): Promise<strin
   } catch {
     url = null
   }
-  kept.set(key, url)
+  notePage(kept, path, profile, host, url)
   return url
 }
 
