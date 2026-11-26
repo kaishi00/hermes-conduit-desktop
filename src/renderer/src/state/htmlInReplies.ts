@@ -294,9 +294,9 @@ export function withFoldsApart(text: string): string {
   for (let index = lines.length - 1; index >= 0; index--) {
     closedAfter[index] = closes > 0
     if (inCode[index]) continue
-    const counted = lines[index]!.replace(/(`+)(?:(?!\1).)*?\1|<!--.*?-->/g, '')
-    // Only a `</details>` ending its line closes a fold, as the chat reads it; one in prose doesn't.
-    if (FOLD_CLOSING_END.test(counted)) closes += (counted.match(/<\/details\s*>/gi) ?? []).length
+    // Only a `</details>` ending its line closes a fold, as the chat reads it (one per line, nothing after it, not
+    // even a comment); one in prose or in a code span doesn't.
+    if (FOLD_CLOSING_END.test(lines[index]!.replace(/(`+)(?:(?!\1).)*?\1/g, ''))) closes++
     if (FOLD_OPENING_START.test(lines[index]!)) closes = Math.max(0, closes - 1)
   }
   for (const [index, line] of lines.entries()) {
@@ -324,7 +324,8 @@ export function withFoldsApart(text: string): string {
       const isFold = /^\s*(?:`{3}|~{3})/.test(body)
         ? false
         : FOLD_CLOSING_END.test(body) ||
-          (withSummary || (closedAfter[index] && !/<[a-zA-Z/!]/.test(body)))
+          // A close with words after it on the line stays as written: folded, they'd hide the rest of the reply.
+          (!/<\/details\s*>/i.test(body) && (withSummary || (closedAfter[index] && !/<[a-zA-Z/!]/.test(body))))
       if (!isFold) opening = null
     }
     let rest = line
