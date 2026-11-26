@@ -264,7 +264,8 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
           >
             · {subtitle}
             {/* The title bar stands in for the rail's brand while a banner is up: the same mark of what's wrong (desktop#594). */}
-            {alert ? <span className={`brand-state ${alert.tone}`} aria-hidden="true" /> : null} ▾
+            {alert ? <span className={`brand-state ${alert.tone}`} aria-hidden="true" /> : null}
+            {switchable ? ' ▾' : null}
           </button>
           {menu}
         </span>
@@ -283,7 +284,7 @@ export function TitleBar({ bare = false, ...brand }: Props) {
       <Brand {...brand} />
       {/* What's wrong is said aloud as it changes, as the old reconnect banner's status was (desktop#594). */}
       <span className="sr-only" role="status" aria-live="polite">
-        {brand.alert?.text ?? ''}
+        {brand.alert?.spoken ?? brand.alert?.text ?? ''}
       </span>
       {platform !== 'darwin' ? (
         <div className="caption-buttons">

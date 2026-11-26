@@ -44,6 +44,8 @@ describe('connection, only when something is wrong', () => {
     expect(quiet.tone).toBe('quiet')
     expect(quiet.text).toBe('Lost the connection. Trying again in 4s.')
     expect(quiet.here).toBe(quiet.text)
+    // Said aloud without the countdown, which would be read again every second.
+    expect(quiet.spoken).toBe('Lost the connection.')
     expect(quiet.actions!.map((a: { label: string }) => a.label)).toEqual(['Try now', 'Repair Connection'])
     expect(alert('reconnecting', 'long')!.tone).toBe('warn')
     expect(alert('connecting', 'shown')!.actions).toEqual([])

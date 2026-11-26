@@ -12,6 +12,8 @@ export interface BrandAlert {
   tone: 'quiet' | 'warn' | 'signIn'
   /** The explanation, in the button's tooltip. */
   text: string
+  /** What's said aloud: the explanation without the ticking retry countdown, so it isn't read again every second. */
+  spoken?: string
   /** How the Hermes you're on is doing, beside it in the list, when it isn't connected. */
   here?: string
   /** What the list offers for it, above the Hermes (Try Now, Repair Connection, Sign In to …). */
@@ -62,7 +64,8 @@ export function brandAlert(inputs: Inputs): BrandAlert | null {
     const actions: BrandAlert['actions'] = []
     if (phase === 'reconnecting') actions.push({ label: t('Try now'), run: inputs.onRetry })
     if (phase === 'reconnecting' && currentUrl && inputs.onRepair) actions.push({ label: t('Repair Connection'), run: inputs.onRepair })
-    parts.push({ tone: away === 'long' ? 'warn' : 'quiet', text: here, here, actions })
+    const spoken = phase === 'connecting' ? here : (error ?? t('Not connected.'))
+    parts.push({ tone: away === 'long' ? 'warn' : 'quiet', text: here, spoken, here, actions })
   }
   // Only the group's own: a kept host that's no longer saved has nothing to sign in to.
   const saved = new Set(hosts.map(h => h.url))
@@ -84,6 +87,7 @@ export function brandAlert(inputs: Inputs): BrandAlert | null {
   return {
     tone: parts[0].tone,
     text: parts.map(p => p.text).join('\n'),
+    spoken: parts.map(p => p.spoken ?? p.text).join('\n'),
     here: parts.find(p => p.here)?.here,
     actions: parts.flatMap(p => p.actions ?? [])
   }
