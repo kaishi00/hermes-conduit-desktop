@@ -13163,3 +13163,40 @@ button.rail-brand-button:hover {
 .rail-face-running.needs {
   background: var(--warning);
 }
+
+/*
+ * You on this Hermes at the top of the rail (Eric, 2026-11-26): your picture
+ * in place of the app's mark, round like a face, with this dashboard's badge
+ * in a combined group so the button still says which Hermes.
+ */
+.rail-brand .brand-you {
+  position: relative;
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.rail-brand .brand-you img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 0 0 1px var(--glass-line);
+}
+
+.brand-you-badge {
+  position: absolute;
+  right: -5px;
+  top: -4px;
+  display: flex;
+  transform: scale(0.8);
+  transform-origin: top right;
+}
+
+.host-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}

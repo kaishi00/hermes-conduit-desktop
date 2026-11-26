@@ -164,3 +164,36 @@ describe('the brand is in one place (app.css)', () => {
     expect(css).toMatch(/\.app:has\(> \.titlebar\.bare\):not\(:has\(> \.banner\)\) > \.body > \.rail,/)
   })
 })
+
+describe('you on this Hermes, at the top of the rail', () => {
+  const picture = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
+  it('draws your picture with the dashboard badge in place of the app mark', async () => {
+    const { Brand } = await load()
+    const host = mount(Brand, { inRail: true, hosts, currentUrl: hosts[0].url, onSwitch: () => {}, picture, badge: { letter: 'F', color: '#123456', name: 'Furina' } })
+    const you = host.querySelector('.rail-brand .brand-you')!
+    expect(you.querySelector('img')!.getAttribute('src')).toMatch(/^data:image\/png;base64,/)
+    expect(you.querySelector('.host-badge')?.textContent).toBe('F')
+  })
+
+  it('keeps the app mark without a picture, and in the title bar', async () => {
+    const { Brand, TitleBar } = await load()
+    const rail = mount(Brand, { inRail: true, hosts, currentUrl: hosts[0].url, onSwitch: () => {}, picture: null })
+    expect(rail.querySelector('.brand-you')).toBeNull()
+    expect(rail.querySelector('img.brand-mark')).not.toBeNull()
+    const bar = mount(TitleBar, { hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
+    expect(bar.querySelector('.brand-you')).toBeNull()
+  })
+
+  it('opens Your Picture from the list, with one Hermes too', async () => {
+    const { Brand } = await load()
+    const onPicture = vi.fn()
+    const host = mount(Brand, { inRail: true, hosts: hosts.slice(0, 1), currentUrl: hosts[0].url, onSwitch: () => {}, onPicture })
+    act(() => host.querySelector<HTMLButtonElement>('button.rail-brand-button')!.click())
+    const items = [...host.querySelectorAll<HTMLButtonElement>('.host-menu [role="menuitemradio"], .host-menu [role="menuitem"]')]
+    expect(items[items.length - 1].textContent?.trim()).toBe('Choose Your Picture…')
+    act(() => items[items.length - 1].click())
+    expect(onPicture).toHaveBeenCalledOnce()
+    expect(host.querySelector('.host-menu')).toBeNull()
+  })
+})

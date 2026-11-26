@@ -347,7 +347,7 @@ export function App() {
             onAddHost={() => void switchEndingCall(null).then(ok => ok && setAdding(true))}
             onEditHost={host => void switchEndingCall(null).then(ok => ok && setEditing(host))}
             onRepair={() => status.url && setRepairing(savedHost(status.hosts, status.url))}
-            brand={<Brand {...brand} inRail />}
+            brand={brand}
           />
         </SummaryHost.Provider>
       )}
@@ -406,8 +406,8 @@ function Shell({
   onAddHost: () => void
   onEditHost: (host: HostSummary) => void
   onRepair: () => void
-  /** The brand and Hermes switcher, at the top of the rail's island. */
-  brand: ReactNode
+  /** The brand and Hermes switcher, at the top of the rail's island (Brand with `inRail`). */
+  brand: ComponentProps<typeof Brand>
 }) {
   // Before any picture is read for this host: its pictures are kept under it.
   useState(() => setAvatarHost(status.url ?? ''))
@@ -532,6 +532,8 @@ function Shell({
   }, [])
   // A chat's apps card opens Settings > Capabilities > Browse Apps.
   const [appsRequest, setAppsRequest] = useState<AppsRequest | null>(null)
+  // The rail brand's Your Picture: Settings opens on Appearance, where it's chosen.
+  const [appearanceRequest, setAppearanceRequest] = useState<number | null>(null)
   useEffect(
     () =>
       onAppsDirectory(request => {
@@ -2600,7 +2602,22 @@ function Shell({
           onSelect={selectRailSection}
           onSettings={() => setSection('settings')}
           onChangeLayout={changeRailLayout}
-          brand={brand}
+          brand={
+            <Brand
+              {...brand}
+              inRail
+              picture={personPicture.served ? personPicture.picture : null}
+              badge={status.url ? badgeFor(status.url) : null}
+              onPicture={
+                personPicture.served
+                  ? () => {
+                      setSection('settings')
+                      setAppearanceRequest(Date.now())
+                    }
+                  : undefined
+              }
+            />
+          }
           faces={
             (section === 'chats' || section === 'room' || section === 'bots') && listHidden && profileTiles ? (
               <RailFaces
@@ -3208,6 +3225,8 @@ function Shell({
             linkRequest={linkRequest}
             onLinkRequestTaken={() => setLinkRequest(null)}
             personPicture={personPicture}
+            appearanceRequest={appearanceRequest}
+            onAppearanceRequestTaken={() => setAppearanceRequest(null)}
             onNewChatWith={
               connected
                 ? draft => {
@@ -3335,6 +3354,8 @@ function Settings({
   linkRequest,
   onLinkRequestTaken,
   personPicture,
+  appearanceRequest,
+  onAppearanceRequestTaken,
   onNewChatWith,
   onOpensOn,
   opensHere
@@ -3369,6 +3390,9 @@ function Settings({
   onLinkRequestTaken: () => void
   /** The picture you show in rooms over Links. */
   personPicture: PersonPicture
+  /** The rail brand's Your Picture asked for Appearance. */
+  appearanceRequest: number | null
+  onAppearanceRequestTaken: () => void
   /** A new chat with `draft` in its composer, for the user to send (Try a test call, Have Hermes watch for this). */
   onNewChatWith?: (draft: string) => void
 }) {
@@ -3408,6 +3432,11 @@ function Settings({
     setPage('capabilities')
     onAppsRequestTaken()
   }, [appsRequest, onAppsRequestTaken])
+  useEffect(() => {
+    if (appearanceRequest === null) return
+    setPage('appearance')
+    onAppearanceRequestTaken()
+  }, [appearanceRequest, onAppearanceRequestTaken])
   // A link into Models, taken once: it opens on that profile.
   const [modelsProfile, setModelsProfile] = useState<{ profile: string; n: number } | null>(null)
   useEffect(() => {
@@ -3511,7 +3540,7 @@ function Settings({
   if (page === 'appearance')
     return (
       <SettingsPane pane={pane}>
-        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} opensHere={opensHere} />
+        <AppearancePage host={status.url ?? ''} onBack={() => setPage('main')} onOpensOn={onOpensOn} opensHere={opensHere} personPicture={personPicture} />
       </SettingsPane>
     )
   if (page === 'multiplayer' && status.url)

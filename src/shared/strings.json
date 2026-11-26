@@ -46798,5 +46798,50 @@
     "tr": "Bu aracın ayarlanacak arka ucu yok.",
     "zh-Hans": "此工具没有需要设置的后端。",
     "zh-Hant": "此工具沒有需要設定的後端。"
+  },
+  "Change Your Picture…": {
+    "de": "Dein Bild ändern…",
+    "es": "Cambiar tu foto…",
+    "fr": "Changer votre photo…",
+    "id": "Ganti Foto Anda…",
+    "it": "Cambia la tua foto…",
+    "ja": "あなたの写真を変更…",
+    "ko": "내 사진 변경…",
+    "pl": "Zmień swoje zdjęcie…",
+    "pt-BR": "Alterar sua foto…",
+    "ru": "Изменить ваше фото…",
+    "tr": "Fotoğrafınızı Değiştirin…",
+    "zh-Hans": "更换你的照片…",
+    "zh-Hant": "更換你的照片…"
+  },
+  "Choose Your Picture…": {
+    "de": "Dein Bild auswählen…",
+    "es": "Elegir tu foto…",
+    "fr": "Choisir votre photo…",
+    "id": "Pilih Foto Anda…",
+    "it": "Scegli la tua foto…",
+    "ja": "あなたの写真を選択…",
+    "ko": "내 사진 선택…",
+    "pl": "Wybierz swoje zdjęcie…",
+    "pt-BR": "Escolher sua foto…",
+    "ru": "Выбрать ваше фото…",
+    "tr": "Fotoğrafınızı Seçin…",
+    "zh-Hans": "选择你的照片…",
+    "zh-Hant": "選擇你的照片…"
+  },
+  "Shown at the top of the sidebar for this Hermes, in place of the app icon, and beside your messages in group chats with other people.": {
+    "de": "Wird für diesen Hermes oben in der Seitenleiste anstelle des App-Symbols angezeigt und in Gruppenchats mit anderen Personen neben deinen Nachrichten.",
+    "es": "Se muestra en la parte superior de la barra lateral para este Hermes, en lugar del icono de la app, y junto a tus mensajes en chats de grupo con otras personas.",
+    "fr": "Affichée en haut de la barre latérale pour ce Hermes, à la place de l’icône de l’app, et à côté de vos messages dans les discussions de groupe avec d’autres personnes.",
+    "id": "Ditampilkan di bagian atas bilah samping untuk Hermes ini, menggantikan ikon aplikasi, dan di samping pesan Anda dalam obrolan grup dengan orang lain.",
+    "it": "Mostrata in cima alla barra laterale per questo Hermes, al posto dell’icona dell’app, e accanto ai tuoi messaggi nelle chat di gruppo con altre persone.",
+    "ja": "この Hermes ではサイドバーの上部にアプリアイコンの代わりに表示され、ほかの人とのグループチャットではあなたのメッセージの横に表示されます。",
+    "ko": "이 Hermes에서는 사이드바 상단에 앱 아이콘 대신 표시되며, 다른 사람과의 그룹 채팅에서는 내 메시지 옆에 표시됩니다.",
+    "pl": "Wyświetlane u góry paska bocznego dla tego Hermesa zamiast ikony aplikacji oraz obok Twoich wiadomości w czatach grupowych z innymi osobami.",
+    "pt-BR": "Aparece no topo da barra lateral para este Hermes, no lugar do ícone do app, e ao lado das suas mensagens em conversas em grupo com outras pessoas.",
+    "ru": "Показывается вверху боковой панели для этого Hermes вместо значка приложения, а также рядом с вашими сообщениями в групповых чатах с другими людьми.",
+    "tr": "Bu Hermes için kenar çubuğunun üstünde uygulama simgesinin yerine ve diğer kişilerle grup sohbetlerinde mesajlarınızın yanında gösterilir.",
+    "zh-Hans": "在此 Hermes 的边栏顶部代替应用图标显示，并在与他人的群聊中显示在你的消息旁边。",
+    "zh-Hant": "在此 Hermes 的側邊欄頂端取代 App 圖示顯示，並在與他人的群組聊天中顯示在你的訊息旁邊。"
   }
 }
