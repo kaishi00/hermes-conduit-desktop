@@ -119,6 +119,15 @@ describe('SectionRail context menu and customization', () => {
       'Artifacts (⌘4)',
       'Needs you (⌘5)'
     ])
+    // Each section and Settings draw their own sculpted glyph.
+    expect([...host.querySelectorAll('.rail .railbtn svg')].map(svg => svg.getAttribute('data-glyph'))).toEqual([
+      'bots',
+      'chats',
+      'tasks',
+      'artifacts',
+      'needs',
+      'settings'
+    ])
 
     act(() => root.unmount())
   })

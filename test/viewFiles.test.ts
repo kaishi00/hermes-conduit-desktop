@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { byteRange, isPagePath, isViewedFileUrl, pageReadResult, viewedFileUrl, viewedType, viewerFrame } from '../src/shared/viewFileRules'
+import { byteRange, isPagePath, isViewedFileUrl, pageDownloadDecision, pageReadResult, viewedFileUrl, viewedType, viewerFrame } from '../src/shared/viewFileRules'
 import { frameStays } from '../src/main/linkPolicy'
 
 beforeAll(() => {
@@ -80,6 +80,17 @@ describe('a file the chat’s file card opens (desktop#554)', () => {
     const clip = renderToStaticMarkup(createElement(Reply as never, { text: 'MEDIA:/srv/out/clip.mp4' }))
     expect(clip).toContain('>Open<')
     expect(clip).not.toContain('Open in Browser')
+  })
+})
+
+describe('saving a page through save-host-file (issue 564 review)', () => {
+  it('takes an HTML answer as the page only when read-text says it is one', () => {
+    expect(pageDownloadDecision('/a/report.html', true, '<html>mine</html>')).toBe('page')
+    expect(pageDownloadDecision('/a/report.xhtml', true, { page: true })).toBe('page')
+    // A dashboard answering an unknown route with its own page isn't the file: use the data URL.
+    expect(pageDownloadDecision('/a/report.html', true, null)).toBe('data-url')
+    expect(pageDownloadDecision('/a/notes.md', true, '<html>dashboard</html>')).toBe('data-url')
+    expect(pageDownloadDecision('/a/report.html', false, null)).toBe('stream')
   })
 })
 

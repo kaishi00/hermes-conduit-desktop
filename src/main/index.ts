@@ -38,7 +38,7 @@ import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
 import { pageUrl, registerPageScheme, servePages } from './pages'
 import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile } from './viewFiles'
-import { isPagePath } from '../shared/viewFileRules'
+import { isPagePath, pageDownloadDecision, type PageRead } from '../shared/viewFileRules'
 import { confineNavigation } from './navigation'
 import { endSocket, LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
 import { pluginRelease } from './pluginRelease'
@@ -722,14 +722,23 @@ function registerIpc(): void {
       if (!through) throw new Error(t("Couldn't open this file"))
       const response = await through.download(hostFilePath('download', path, shownProfile), stop.signal)
       const html = /text\/html/i.test(response.headers.get('content-type') ?? '')
-      // A dashboard that serves its page for a route it doesn't know has no download route,
-      // except when the file to save is itself a page (desktop#564).
-      if (html && !isPagePath(path)) throw Object.assign(new Error('no download route'), { code: 404 })
+      // A dashboard answering an unknown route with its own page is not the file, even
+      // when the path is a page: ask read-text first (issue 564 review).
+      let read: PageRead = null
       if (html && isPagePath(path)) {
-        await copyDown(picked.filePath, async () => response, async signal => {
-          const answer = await through.http<{ dataUrl?: unknown; data_url?: unknown }>('GET', hostFilePath('read-data-url', path, shownProfile), undefined, 30_000, signal)
-          return dataUrlBytes(answer?.dataUrl ?? answer?.data_url)
-        }, stop.signal, true)
+        const routes = copyRoutes(event.sender.id, path, profile)
+        try {
+          read = routes ? await routes.readText() : null
+        } catch {
+          read = null
+        }
+      }
+      const decision = pageDownloadDecision(path, html, read)
+      if (decision === 'data-url') throw Object.assign(new Error('no download route'), { code: 404 })
+      if (decision === 'page') {
+        const routes = copyRoutes(event.sender.id, path, profile)
+        // The save dialog has no viewer ticket, so there is no cancel signal to pass.
+        await copyDown(picked.filePath, async () => response, routes?.dataUrl ?? (async () => null), undefined, true)
         return 'saved'
       }
       if (!response.body) throw new Error(t("Couldn't open this file"))

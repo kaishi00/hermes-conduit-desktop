@@ -171,6 +171,12 @@ export interface HandedSocket {
   pending: { request: ServerRequest; entry: PendingRequest }[]
 }
 
+/** Keep an outside cancel and the request's own timeout: either one stops a hanging host. */
+export function requestSignal(signal: AbortSignal | undefined, timeoutMs = 30_000): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  return signal ? AbortSignal.any([signal, timeout]) : timeout
+}
+
 export class Connection {
   private saved: SavedConnection | null = null
   private client: JsonRpcGatewayClient | null = null
@@ -573,7 +579,7 @@ export class Connection {
    * password sign-in whose session ran out signs in again once.
    */
   async http<T>(method: string, path: string, body?: unknown, timeoutMs = 30_000, signal?: AbortSignal): Promise<T> {
-    const response = await this.request(method, path, body, signal ?? AbortSignal.timeout(timeoutMs))
+    const response = await this.request(method, path, body, requestSignal(signal, timeoutMs))
     const text = await response.text()
     let parsed: unknown = null
     try {

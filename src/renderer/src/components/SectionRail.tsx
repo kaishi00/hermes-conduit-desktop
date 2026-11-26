@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import type { RailSection } from '@shared/ipc'
 import {
@@ -13,19 +13,11 @@ import {
   type RailLayout
 } from '../state/railSections'
 import { glyphs, sectionTitle, shortcutForSection } from '../state/shortcuts'
-import { Icon, type IconName } from './icons'
+import { Icon } from './icons'
+import { NavGlyph } from './navGlyphs'
 
 /** A rail button's own drag type, so a dropped section never lands in a text field as its name. */
 const RAIL_MOVE = 'application/x-conduit-rail-move'
-
-const SECTION_ICONS: Record<RailSection, IconName> = {
-  bots: 'bots',
-  chats: 'chats',
-  tasks: 'tasks',
-  pulse: 'pulse',
-  artifacts: 'paperclip',
-  needs: 'bell'
-}
 
 export interface SectionRailProps {
   layout: RailLayout
@@ -41,6 +33,10 @@ export interface SectionRailProps {
   onSelect: (section: RailSection) => void
   onSettings: () => void
   onChangeLayout: (next: RailLayout) => void
+  /** The app's mark and Hermes switcher, at the top of the island (Brand with `inRail`). */
+  brand?: ReactNode
+  /** The bots' faces under the sections while the list is hidden (RailFaces). */
+  faces?: ReactNode
 }
 
 interface MenuState {
@@ -67,7 +63,9 @@ export function SectionRail({
   hostLabel,
   onSelect,
   onSettings,
-  onChangeLayout
+  onChangeLayout,
+  brand,
+  faces
 }: SectionRailProps) {
   const mac = window.conduit.platform === 'darwin'
   const pinned = pinnedSections(layout)
@@ -160,10 +158,13 @@ export function SectionRail({
         }}
         onKeyDown={e => {
           if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return
+          // A face and the brand have no section menu, by keyboard as by mouse (RailFaces, Brand).
+          if ((e.target as Element).closest('.rail-face, .rail-brand')) return
           e.preventDefault()
           openMenu(e.target as HTMLElement)
         }}
       >
+        {brand}
         {showSidebarButton ? (
           <button
             className="railbtn rail-show-list"
@@ -236,7 +237,7 @@ export function SectionRail({
                   setDropTarget(null)
                 }}
               >
-                <Icon name={SECTION_ICONS[section]} />
+                <NavGlyph name={section} />
                 {section === 'pulse' && pulseUnseen > 0 && activeSection !== 'pulse' ? (
                   <span className="badge">{pulseUnseen > 99 ? '99+' : pulseUnseen}</span>
                 ) : null}
@@ -247,6 +248,7 @@ export function SectionRail({
             )
           })}
         </div>
+        {faces}
         <span className="spacer" />
         <button
           className="railbtn"
@@ -255,7 +257,7 @@ export function SectionRail({
           aria-current={settingsSelected ? 'page' : undefined}
           onClick={onSettings}
         >
-          <Icon name="settings" />
+          <NavGlyph name="settings" />
         </button>
         <span
           className={`dot${connected ? '' : ' warn'}`}
