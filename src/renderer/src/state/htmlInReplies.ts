@@ -290,12 +290,13 @@ export function withFoldsApart(text: string): string {
     } else if (found) codeFence = found[1]!
   }
   // More `</details>` after it than folds opened after it: one is left over for this line's.
-  // The last line counts as closed later: while a reply streams, its `</details>` hasn't come yet.
   let closes = 0
   for (let index = lines.length - 1; index >= 0; index--) {
     closedAfter[index] = closes > 0
     if (inCode[index]) continue
-    closes += (lines[index]!.replace(/`[^`]*`|<!--.*?-->/g, '').match(/<\/details\s*>/gi) ?? []).length
+    const counted = lines[index]!.replace(/(`+)(?:(?!\1).)*?\1|<!--.*?-->/g, '')
+    // Only a `</details>` ending its line closes a fold, as the chat reads it; one in prose doesn't.
+    if (FOLD_CLOSING_END.test(counted)) closes += (counted.match(/<\/details\s*>/gi) ?? []).length
     if (FOLD_OPENING_START.test(lines[index]!)) closes = Math.max(0, closes - 1)
   }
   for (const [index, line] of lines.entries()) {
@@ -315,7 +316,17 @@ export function withFoldsApart(text: string): string {
     // Taken apart only when what follows is a fold's body: nothing, a body ending the fold on this line, or
     // text with no tags that a later `</details>` closes. `<details> and <summary> make a fold.` stays prose.
     // A body starting with a fence mark stays on the line, so it can't open a code block that runs on.
-    if (opening && opening[2]!.trim() && (/^\s*(?:`{3}|~{3})/.test(opening[2]!) || (!FOLD_CLOSING_END.test(opening[2]!) && (/<[a-zA-Z/!]/.test(opening[2]!) || !(closedAfter[index] || index === lines.length - 1))))) opening = null
+    // After its own `<summary>`, a body is the fold's, its `</details>` later or still streaming in; without one, only
+    // tag-free text a later `</details>` closes is. `<details> is the tag.` ending a reply stays prose.
+    if (opening && opening[2]!.trim()) {
+      const body = opening[2]!
+      const withSummary = /<\/summary>\s*$/i.test(opening[1]!)
+      const isFold = /^\s*(?:`{3}|~{3})/.test(body)
+        ? false
+        : FOLD_CLOSING_END.test(body) ||
+          (withSummary || (closedAfter[index] && !/<[a-zA-Z/!]/.test(body)))
+      if (!isFold) opening = null
+    }
     let rest = line
     if (opening) {
       own(opening[1]!)

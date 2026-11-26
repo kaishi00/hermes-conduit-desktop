@@ -174,10 +174,20 @@ describe('text tags in a reply', () => {
     expect(html).toContain('<details class="reply-fold"><summary>S</summary><p>body</p></details>')
     expect(draw('<details> makes a section.\n\n```\n</details>\n```')).not.toContain('reply-fold')
     expect(draw('<details> makes a section.\n\nWrap it with `</details>` to close.')).not.toContain('reply-fold')
+    expect(draw('<details> makes a section.\n\nWrap it in ``</details>`` to close.')).not.toContain('reply-fold')
+    expect(draw('<details> is the opener tag.\nClose it with </details> later.')).not.toContain('reply-fold')
+  })
+
+  it('folds a body with tags after its own summary when </details> comes on a later line', () => {
+    expect(draw('<details><summary>S</summary>Click <b>here</b>\nmore\n</details>')).toContain('<details class="reply-fold"><summary>S</summary>')
+    expect(draw('<details><summary>S</summary>Body\nmore')).toContain('<details class="reply-fold"><summary>S</summary>')
+    expect(draw('<details><summary>S</summary>Body so far\n')).toContain('<details class="reply-fold"><summary>S</summary>')
   })
 
   it('folds a one-line fold while its </details> is still being written', () => {
     expect(draw('<details><summary>S</summary>Body so far')).toBe('<details class="reply-fold"><summary>S</summary><p>Body so far</p></details>')
+    expect(draw('<details><summary>S</summary>Click <b>here</b>')).toContain('<details class="reply-fold"><summary>S</summary>')
+    expect(draw('After.\n\n<details> is the tag.')).not.toContain('reply-fold')
   })
 
   it('folds a compact fold whose body has an arrow in it', () => {
