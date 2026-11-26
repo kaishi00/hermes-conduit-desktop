@@ -7,6 +7,7 @@ import { draftAgents, type OwnHermesBot } from './state/roomDrafts'
 import { arrange, farBotFor, mixedTiles, orderedBots, useBotOrder, useMixedBotOrder, useSyncedOrder, type MixedTile } from './state/botOrder'
 import { STATUS_PATH as PLUGIN_STATUS_PATH, pluginStatus } from './state/plugin'
 import { hostName, rememberHostNames } from './state/hostNames'
+import { brandAlert, useAway } from './state/connectionAlert'
 import { HOST_NAME_MAX } from '@shared/hostNames'
 import type { ConnectionStatus, HostSummary, LanguageChoice, MenuAction } from '@shared/ipc'
 import { BotsHome, useReplyFace, type BotAction, type BotsDraft } from './components/BotsHome'
@@ -2387,6 +2388,23 @@ function Shell({
   // While an update started here has Hermes away, the banner follows it instead of a bare "reconnecting".
   const hostUpdate = useHostActions(status.url ?? '').update
   const updateAway = updateBanner(hostUpdate)
+  // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26).
+  const away = useAway(status.phase)
+  const connectionAlert = updateAway
+    ? null
+    : brandAlert({
+        phase: status.phase,
+        error: status.error,
+        retryInSeconds: status.retryInSeconds,
+        away,
+        currentUrl: status.url,
+        hosts: status.hosts,
+        kept: keptHosts,
+        name: hostName,
+        onRetry: () => void window.conduit.reconnect(),
+        onRepair,
+        onSignIn: url => brand.onSwitch?.(url)
+      })
   useEffect(() => {
     if (connected && status.url) hostReachable(status.url)
   }, [connected, status.url, hostUpdate.kind])
@@ -2567,14 +2585,11 @@ function Shell({
         />
       ) : null}
       {ring ? <IncomingCall key={ring.id} ring={ring} onAnswer={() => answerRing(ring)} onDecline={missed => declineRing(ring, missed)} /> : null}
-      {status.phase !== 'open' ? (
+      {/* Only an update started here has a banner while Hermes is away; otherwise the dashboard button says so. */}
+      {status.phase !== 'open' && updateAway ? (
         <div className="banner" role="status">
           <span className={updateAway === 'updating' || updateAway === 'restarting' ? 'spinner' : 'dot warn'} />
-          {updateAway
-            ? updateAwayText(updateAway)
-            : status.phase === 'connecting'
-              ? t('Connecting to Hermes…')
-              : `${status.error ?? t('Not connected.')}${status.retryInSeconds ? ` ${t('Trying again in {seconds}s.', { seconds: status.retryInSeconds })}` : ''}`}
+          {updateAwayText(updateAway)}
           {status.phase === 'reconnecting' ? <button onClick={() => void window.conduit.reconnect()}>{t('Try now')}</button> : null}
           {status.phase === 'reconnecting' && status.url ? <button onClick={onRepair}>{t('Repair Connection')}</button> : null}
         </div>
@@ -2597,8 +2612,6 @@ function Shell({
           onShowSidebar={() => hideList(false)}
           pulseUnseen={pulse.feed?.unseen ?? 0}
           needsCount={needsCount}
-          connected={connected}
-          hostLabel={status.hostLabel}
           onSelect={selectRailSection}
           onSettings={() => setSection('settings')}
           onChangeLayout={changeRailLayout}
@@ -2606,6 +2619,7 @@ function Shell({
             <Brand
               {...brand}
               inRail
+              alert={connectionAlert}
               picture={personPicture.served ? personPicture.picture : null}
               badge={status.url ? badgeFor(status.url) : null}
               onPicture={

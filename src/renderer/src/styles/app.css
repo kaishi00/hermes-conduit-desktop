@@ -13180,6 +13180,57 @@ button.rail-brand-button:hover {
  * in place of the app's mark, round like a face, with this dashboard's badge
  * in a combined group so the button still says which Hermes.
  */
+/* Connection, only when something's wrong (Eric, 2026-11-26): a quiet ring while reconnecting,
+   amber once it's been down a while, and Sign In named under the mark. */
+.rail-brand-mark {
+  position: relative;
+  display: block;
+}
+
+.rail-brand-state {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--rail);
+}
+
+.rail-brand-state.quiet {
+  background: var(--surface);
+  border: 2px solid color-mix(in srgb, var(--text) 35%, transparent);
+  border-top-color: transparent;
+  animation: rail-brand-reconnecting 1.1s linear infinite;
+}
+
+.rail-brand-state.warn,
+.rail-brand-state.signIn {
+  background: var(--warning);
+}
+
+@keyframes rail-brand-reconnecting {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-brand-state.quiet {
+    animation: none;
+  }
+}
+
+.rail-brand-host.rail-brand-sign-in {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rail-brand .brand-mark-badged {
+  position: relative;
+  display: block;
+}
+
 .rail-brand .brand-you {
   position: relative;
   display: block;

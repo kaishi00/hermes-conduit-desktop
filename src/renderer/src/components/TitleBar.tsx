@@ -7,6 +7,7 @@ import { lookPictureUrl } from '../state/roomLooks'
 import { HostBadgeMark } from './CombinedDashboards'
 import { appIconUrl, useAppIcon } from '../state/appIcon'
 import { hostName } from '../state/hostNames'
+import type { BrandAlert } from '../state/connectionAlert'
 
 interface BrandProps {
   subtitle?: string
@@ -37,13 +38,16 @@ interface RailBrandProps {
   badge?: HostBadge | null
   /** Opens where your picture is chosen (Settings > Appearance > You). */
   onPicture?: () => void
+  /** Only when something's wrong; null draws nothing. */
+  alert?: BrandAlert | null
 }
 
-export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = false, picture, badge, onPicture }: BrandProps & RailBrandProps) {
+export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = false, picture, badge, onPicture, alert }: BrandProps & RailBrandProps) {
   const [open, setOpen] = useState(false)
   const switchable = hosts.length > 1 && !!onSwitch
   // In the rail, the list also holds Your Picture, so it opens with one Hermes too.
-  const opens = switchable || (inRail && !!onPicture)
+  const actions = inRail ? (alert?.actions ?? []) : []
+  const opens = switchable || (inRail && !!onPicture) || actions.length > 0
   // Combined dashboards: how each one beside this one is doing.
   const kept = useKeptHosts()
   const icon = useAppIcon()
@@ -108,8 +112,26 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
         if (next && !e.currentTarget.contains(next) && !toggleRef.current?.contains(next)) setOpen(false)
       }}
     >
+      {actions.map(action => (
+        <button
+          key={action.label}
+          role="menuitem"
+          onClick={() => {
+            setOpen(false)
+            action.run()
+          }}
+        >
+          <span className="host-check" />
+          <span className="host-text">
+            <span className="host-label">{action.label}</span>
+          </span>
+        </button>
+      ))}
+      {actions.length && hosts.length ? <div className="host-menu-sep" role="separator" /> : null}
       {hosts.map(host => {
-        const state = host.url === currentUrl ? null : (kept.find(k => k.url === host.url)?.state ?? null)
+        // The one you're on says so only while it isn't connected; every other one says how it's doing.
+        const keptState = host.url === currentUrl ? null : kept.find(k => k.url === host.url)?.state
+        const state = host.url === currentUrl ? (inRail ? (alert?.here ?? null) : null) : keptState ? keptStateLabel(keptState) : null
         const badge = hostBadge(hosts, host.url, hostName)
         return (
           <button
@@ -125,14 +147,14 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
             {badge ? <HostBadgeMark badge={badge} /> : null}
             <span className="host-text">
               <span className="host-label">{hostName(host.url)}</span>
-              {state ? <span className="meta">{keptStateLabel(state)}</span> : null}
+              {state ? <span className="meta">{state}</span> : null}
             </span>
           </button>
         )
       })}
       {inRail && onPicture ? (
         <>
-          {switchable ? <div className="host-menu-sep" role="separator" /> : null}
+          {switchable || actions.length ? <div className="host-menu-sep" role="separator" /> : null}
           <button
             role="menuitem"
             onClick={() => {
@@ -159,6 +181,14 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
         </span>
       ) : null}
     </span>
+  ) : inRail && badge ? (
+    // In a combined group the badge says which Hermes, on the app's mark too.
+    <span className="brand-mark-badged" aria-hidden="true">
+      <img className="brand-mark" src={appIconUrl(icon)} alt="" draggable={false} />
+      <span className="brand-you-badge">
+        <HostBadgeMark badge={badge} />
+      </span>
+    </span>
   ) : (
     <img className="brand-mark" src={appIconUrl(icon)} alt="" aria-hidden="true" draggable={false} />
   )
@@ -169,6 +199,16 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
 
   if (inRail) {
     const label = subtitle ? `Conduit · ${subtitle}` : 'Conduit'
+    // The name under the mark only when it's what tells your Hermes apart: more than one and no badge (Eric, 2026-11-26).
+    // It stays in the tooltip and the list either way.
+    const host =
+      alert?.tone === 'signIn' ? (
+        <span className="rail-brand-host rail-brand-sign-in">{t('Sign In')}</span>
+      ) : subtitle && hosts.length > 1 && !badge ? (
+        <span className="rail-brand-host">{subtitle}</span>
+      ) : null
+    const state = alert ? <span className={`rail-brand-state ${alert.tone}`} aria-hidden="true" /> : null
+    const tip = alert ? `${label}\n${alert.text}` : switchable ? `${label}\n${t('Switch Hermes')}` : label
     return (
       <div
         className="rail-brand host-switch"
@@ -184,17 +224,23 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
             ref={toggleRef}
             aria-haspopup="menu"
             aria-expanded={open}
-            aria-label={switchable ? t('Switch Hermes') : label}
-            title={switchable ? `${label}\n${t('Switch Hermes')}` : label}
+            aria-label={alert ? `${switchable ? t('Switch Hermes') : label}, ${alert.text}` : switchable ? t('Switch Hermes') : label}
+            title={tip}
             onClick={toggle}
           >
-            {mark}
-            {subtitle ? <span className="rail-brand-host">{subtitle}</span> : null}
+            <span className="rail-brand-mark">
+              {mark}
+              {state}
+            </span>
+            {host}
           </button>
         ) : (
-          <div className="rail-brand-button" role="img" aria-label={label} title={label}>
-            {mark}
-            {subtitle ? <span className="rail-brand-host">{subtitle}</span> : null}
+          <div className="rail-brand-button" role="img" aria-label={alert ? `${label}, ${alert.text}` : label} title={tip}>
+            <span className="rail-brand-mark">
+              {mark}
+              {state}
+            </span>
+            {host}
           </div>
         )}
         {menu}

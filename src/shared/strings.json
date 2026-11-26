@@ -6044,21 +6044,6 @@
     "zh-Hans": "已连接到你的语音服务器。",
     "zh-Hant": "已連線到你的語音伺服器。"
   },
-  "Connected to {host}": {
-    "de": "Mit {host} verbunden",
-    "es": "Conectado a {host}",
-    "fr": "Connecté à {host}",
-    "id": "Terhubung ke {host}",
-    "it": "Connesso a {host}",
-    "ja": "{host} に接続済み",
-    "ko": "{host}에 연결됨",
-    "pl": "Połączono z {host}",
-    "pt-BR": "Conectado a {host}",
-    "ru": "Подключено к {host}",
-    "tr": "{host} ile bağlı",
-    "zh-Hans": "已连接到 {host}",
-    "zh-Hant": "已連線到 {host}"
-  },
   "Connected, but its tools didn't load": {
     "de": "Verbunden, aber die Werkzeuge wurden nicht geladen",
     "es": "Conectado, pero sus herramientas no se cargaron",
@@ -46843,5 +46828,20 @@
     "tr": "Bu Hermes için kenar çubuğunun üstünde uygulama simgesinin yerine ve diğer kişilerle grup sohbetlerinde mesajlarınızın yanında gösterilir.",
     "zh-Hans": "在此 Hermes 的边栏顶部代替应用图标显示，并在与他人的群聊中显示在你的消息旁边。",
     "zh-Hant": "在此 Hermes 的側邊欄頂端取代 App 圖示顯示，並在與他人的群組聊天中顯示在你的訊息旁邊。"
+  },
+  "Sign In to {host}…": {
+    "de": "Bei {host} anmelden…",
+    "es": "Iniciar sesión en {host}…",
+    "fr": "Se connecter à {host}…",
+    "id": "Masuk ke {host}…",
+    "it": "Accedi a {host}…",
+    "ja": "{host} にサインイン…",
+    "ko": "{host}에 로그인…",
+    "pl": "Zaloguj się do {host}…",
+    "pt-BR": "Fazer Login em {host}…",
+    "ru": "Войти в {host}…",
+    "tr": "{host} için Giriş Yap…",
+    "zh-Hans": "登录 {host}…",
+    "zh-Hant": "登入 {host}…"
   }
 }

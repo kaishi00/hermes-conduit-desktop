@@ -185,6 +185,62 @@ describe('you on this Hermes, at the top of the rail', () => {
     expect(bar.querySelector('.brand-you')).toBeNull()
   })
 
+  it('names the Hermes under the mark only when nothing else tells them apart', async () => {
+    const { Brand } = await load()
+    const badge = { letter: 'F', color: '#123456', name: 'Furina' }
+    const name = (props: Record<string, unknown>) =>
+      mount(Brand, { inRail: true, subtitle: 'Furina', currentUrl: hosts[0].url, onSwitch: () => {}, ...props }).querySelector('.rail-brand-host')?.textContent ?? null
+    // Two separate dashboards with no badges: the name is what says which one.
+    expect(name({ hosts })).toBe('Furina')
+    // A combined group's badge says it, on the app mark as on a picture.
+    expect(name({ hosts, badge })).toBeNull()
+    // One Hermes: nothing to tell apart.
+    expect(name({ hosts: hosts.slice(0, 1) })).toBeNull()
+    const badged = mount(Brand, { inRail: true, subtitle: 'Furina', hosts, currentUrl: hosts[0].url, onSwitch: () => {}, badge })
+    expect(badged.querySelector('.brand-mark-badged img.brand-mark')).not.toBeNull()
+    expect(badged.querySelector('.brand-mark-badged .host-badge')?.textContent).toBe('F')
+    // The name stays in the tooltip.
+    expect(badged.querySelector('.rail-brand-button')!.getAttribute('title')).toContain('Conduit · Furina')
+  })
+
+  it('draws a connection problem on the button, with its reason and what to do in the list', async () => {
+    const { Brand } = await load()
+    const run = vi.fn()
+    const quiet = mount(Brand, { inRail: true, subtitle: 'Here', hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
+    expect(quiet.querySelector('.rail-brand-state')).toBeNull()
+    const host = mount(Brand, {
+      inRail: true,
+      subtitle: 'Here',
+      hosts,
+      currentUrl: hosts[0].url,
+      onSwitch: () => {},
+      alert: { tone: 'warn', text: 'Lost the connection.', here: 'Lost the connection.', actions: [{ label: 'Try now', run }] }
+    })
+    expect(host.querySelector('.rail-brand-state.warn')).not.toBeNull()
+    const button = host.querySelector<HTMLButtonElement>('.rail-brand-button')!
+    expect(button.getAttribute('title')).toContain('Lost the connection.')
+    act(() => button.click())
+    const items = [...host.querySelectorAll<HTMLButtonElement>('.host-menu [role="menuitem"], .host-menu [role="menuitemradio"]')]
+    expect(items[0].textContent?.trim()).toBe('Try now')
+    // The one you're on says how it's doing.
+    expect(host.querySelector('.host-menu [aria-checked="true"] .meta')?.textContent).toBe('Lost the connection.')
+    act(() => items[0].click())
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('names Sign In under the button when a Hermes needs it, and opens with one Hermes', async () => {
+    const { Brand } = await load()
+    const host = mount(Brand, {
+      inRail: true,
+      subtitle: 'Here',
+      hosts: hosts.slice(0, 1),
+      currentUrl: hosts[0].url,
+      alert: { tone: 'signIn', text: 'Furina · Sign In required', actions: [{ label: 'Sign In to Furina…', run: () => {} }] }
+    })
+    expect(host.querySelector('.rail-brand-sign-in')?.textContent).toBe('Sign In')
+    expect(host.querySelector('button.rail-brand-button')).not.toBeNull()
+  })
+
   it('opens Your Picture from the list, with one Hermes too', async () => {
     const { Brand } = await load()
     const onPicture = vi.fn()

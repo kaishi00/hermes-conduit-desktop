@@ -29,6 +29,34 @@ describe('scrollbars only while you use them', () => {
     expect(list.classList.contains(SCROLLING_CLASS)).toBe(false)
   })
 
+  it('redraws a scroller\'s bar as the pointer enters and leaves it, which Chromium skips for :hover', async () => {
+    const stop = watchScrolling(document, 900)
+    const list = document.createElement('div')
+    list.style.overflowY = 'auto'
+    Object.defineProperty(list, 'scrollHeight', { value: 2000 })
+    Object.defineProperty(list, 'clientHeight', { value: 400 })
+    const row = document.createElement('div')
+    list.append(row)
+    document.body.append(list)
+    const seen: string[] = []
+    const observer = new MutationObserver(records => records.forEach(r => seen.push(r.oldValue ?? '')))
+    observer.observe(list, { attributes: true, attributeOldValue: true, attributeFilter: ['style'] })
+    row.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    await Promise.resolve()
+    // Taken away for one layout, then given back as it was.
+    expect(seen.map(v => v.includes('hidden'))).toEqual([false, true])
+    // Moving within it redraws nothing.
+    row.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    await Promise.resolve()
+    expect(seen).toHaveLength(2)
+    document.body.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    await Promise.resolve()
+    expect(seen).toHaveLength(4)
+    expect(list.style.overflowY).toBe('auto')
+    observer.disconnect()
+    stop()
+  })
+
   it('draws no thumb at rest, and one on hover or while scrolling (app.css)', () => {
     const css = readFileSync(join(__dirname, '../src/renderer/src/styles/app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
     expect(css).toMatch(/::-webkit-scrollbar-thumb \{[^}]*background: transparent padding-box;/)
