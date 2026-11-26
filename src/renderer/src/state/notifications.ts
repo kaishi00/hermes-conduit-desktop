@@ -7,7 +7,7 @@ import type { PendingRequest } from '../../../shared/ipc'
 import { inputPromptView } from './inputPrompts'
 import { approvalView, clarifyQuestions } from './needsYou'
 import { silenceShown } from './silence'
-import { plainLine } from './text'
+import { cleanTitle, plainLine } from './text'
 import { t } from '../../../shared/i18n'
 
 export { plainLine }
@@ -27,6 +27,25 @@ export interface ChatRef {
  * in Furina's chat, left for Zhongli's, isn't notified as Zhongli's (Eric,
  * 2026-11-26). `liveProfile` is the profile the live session opened in.
  */
+/** A pick is the pane's chat only when a real selection matches the stored chat (issue 577). */
+export function isPanePick(chatStoredId: string | null | undefined, selectedId: string | null | undefined): boolean {
+  return selectedId ? chatStoredId === selectedId : !chatStoredId
+}
+
+/** The title written to a chat's ref: a pick's bot name only while the pane really holds that pick. */
+export function notificationTitleFor(opts: {
+  pick: boolean
+  workItem?: unknown
+  botChat?: boolean
+  title?: string | null
+  chatTitle?: string | null
+  selectedTitle?: string | null
+}): string {
+  if (!opts.pick) return cleanTitle(opts.chatTitle || '')
+  if (opts.workItem || opts.botChat) return opts.title || ''
+  return cleanTitle(opts.chatTitle || opts.selectedTitle || '')
+}
+
 export function keepChatRef(
   chats: Map<string, ChatRef>,
   liveId: string | null,

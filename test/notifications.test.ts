@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { keepChatRef, type ChatRef, plainLine, requestNotification, turnNotification, TurnReplies, untitledAsNone } from '../src/renderer/src/state/notifications'
+import { isPanePick, keepChatRef, notificationTitleFor, type ChatRef, plainLine, requestNotification, turnNotification, TurnReplies, untitledAsNone } from '../src/renderer/src/state/notifications'
 
 describe('notifications', () => {
   it("keeps a chat's ref under the bot it opened in, not the next pick's", () => {
@@ -20,6 +20,21 @@ describe('notifications', () => {
     expect(chats.get('live-main')).toMatchObject({ bot: 'Hermes' })
     keepChatRef(chats, 'live-main', undefined, 'default', { storedId: 's-m', profile: 'default', title: 'Plans', bot: 'Hermes' })
     expect(chats.get('live-main')).toMatchObject({ title: 'Plans' })
+  })
+
+  it('takes the pane chat’s title while a pick is only a stale render (issue 577)', () => {
+    // The pane still holds a titled chat while the user picked that bot's Bot Chat.
+    expect(isPanePick('s-old', 'bot-chat-id')).toBe(false)
+    expect(notificationTitleFor({ pick: false, workItem: true, title: 'Furina', chatTitle: 'Trip' })).toBe('Trip')
+    expect(notificationTitleFor({ pick: false, botChat: true, title: 'Furina', chatTitle: 'Trip' })).toBe('Trip')
+    // Once the pane really holds the pick, its bot's name is the title.
+    expect(notificationTitleFor({ pick: true, botChat: true, title: 'Furina', chatTitle: '' })).toBe('Furina')
+    // A created chat without a stored id is not the pick just because one is selected.
+    expect(isPanePick(null, 'selected-1')).toBe(false)
+    // A null selection is only the pane's pick when the pane itself is a draft.
+    expect(isPanePick('s-old', null)).toBe(false)
+    expect(isPanePick(null, null)).toBe(true)
+    expect(notificationTitleFor({ pick: false, chatTitle: 'Trip', selectedTitle: 'Furina' })).toBe('Trip')
   })
 
   it('tells a finished turn with its reply as one plain line', () => {
