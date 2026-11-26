@@ -63,7 +63,7 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
 import { authorityModelPick } from './chatActions'
-import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, mergedOlderAt, newestPageItems, newestPages, olderRows, rowsSince, settleRunning } from './longChat'
+import { isResumeTooLong, LONG_CHAT_PAGE, LONG_CHAT_PAGES, mergedOlderAt, newestPageItems, newestPages, olderRows, rowsSince, rowsStandIn, settleRunning } from './longChat'
 import { knownChatLength, noteChatLength } from './chatLength'
 import { CATCH_UP_FOCUS_MS, CATCH_UP_RELOAD_MS, CATCH_UP_SETTLE_MS, catchUpStep, newestRowId, readOver, tipOf } from './chatCatchUp'
 
@@ -155,11 +155,16 @@ interface OpenTranscript {
  * compact resume under a note, which still takes messages, and brings its
  * newest stored rows; without them the refusal stands, since it says what to do.
  */
-async function resumeChat(params: Record<string, unknown>, storedId: string, profile: string | undefined): Promise<OpenTranscript> {
+async function resumeChat(
+  params: Record<string, unknown>,
+  storedId: string,
+  profile: string | undefined,
+  onShortPage?: (rows: HistoryRow[]) => void
+): Promise<OpenTranscript> {
   const http = (method: 'GET', path: string) => gateway.http(method, path)
   // A chat the list says fits one page resumes whole, without that page read first (chatLength.ts).
   const fits = (knownChatLength(storedId) ?? LONG_CHAT_PAGE) < LONG_CHAT_PAGE
-  const bounded = fits ? null : await boundedOpen(http, params, storedId, profile).catch(() => null)
+  const bounded = fits ? null : await boundedOpen(http, params, storedId, profile, onShortPage).catch(() => null)
   if (bounded) return bounded
   try {
     const result = await resumeSettled(params)
@@ -192,16 +197,21 @@ async function resumeChat(params: Record<string, unknown>, storedId: string, pro
  * newest (desktop#291). A shorter chat — or one with nothing stored yet, or a
  * gateway that won't resume compact — answers null, and the whole resume runs
  * as it did. Only a chat whose length the list didn't give, or gave as a page
- * or more, comes here.
+ * or more, comes here. The short page it read is the whole chat, so
+ * `onShortPage` draws it while that resume runs (desktop#612).
  */
 async function boundedOpen(
   http: (method: 'GET', path: string) => Promise<unknown>,
   params: Record<string, unknown>,
   storedId: string,
-  profile: string | undefined
+  profile: string | undefined,
+  onShortPage?: (rows: HistoryRow[]) => void
 ): Promise<OpenTranscript | null> {
   const { rows, more } = await newestPages(http, storedId, profile)
-  if (rows.length < LONG_CHAT_PAGE) return null
+  if (rows.length < LONG_CHAT_PAGE) {
+    if (rows.length) onShortPage?.(rows)
+    return null
+  }
   const compact = { ...params, omit_messages: true }
   const result = await resumeSettled(compact)
   const stored = result.stored_session_id ?? storedId
@@ -549,7 +559,18 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (profile) params.profile = profile
     // The transcript without every stored picture's bytes; the session authority refuses the flag.
     if (!sessionAuthority) params.inline_images = false
-    openingChat.current = resumeChat(params, storedId, profile)
+    // With nothing drawn, a short chat's first read (one the list gives no length for, like a bot's workstream)
+    // shows while its whole resume runs, which replaces it (desktop#612).
+    // Its tool details stand in for the resume's, as a kept copy's do, so they aren't read a second time.
+    let pageCopy: TranscriptState | null = null
+    const showPage = cached
+      ? undefined
+      : (rows: HistoryRow[]) => {
+          if (ticket !== request.current) return
+          pageCopy = rowsStandIn(rows)
+          dispatch({ type: 'reset', state: pageCopy })
+        }
+    openingChat.current = resumeChat(params, storedId, profile, showPage)
       .then(open => {
         if (ticket !== request.current) return
         const { result, rows } = open
@@ -567,7 +588,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           ...chatSettings(result.info)
         })
         // The tool answers the kept copy had come along, so only new ones are read (desktop#293).
-        let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), cached)
+        let state = withKeptDetails(resumedTranscript(result, rows, open.tooLong), cached ?? pageCopy)
         // The rows the pages before this one still hold are read as the reader scrolls up. Pages read
         // before the chat was left stay, as a catch-up keeps them; rows were only added since, so the
         // next page asked for can serve rows already drawn, never skip one.

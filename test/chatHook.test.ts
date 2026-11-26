@@ -541,9 +541,10 @@ describe('a chat picked while offline (desktop#283)', () => {
 
 describe('tool answers on opening a chat again (desktop#293)', () => {
   it.each([
-    ['fills them from the kept copy instead of reading the REST page again', true, 1, 'a'],
-    ['reads the REST page again for a call the kept copy has no arguments for', false, 2, 'c']
-  ])('%s', async (_label, withArgs, reads, id) => {
+    // The page the open read to size the chat up (desktop#291) already answers a call with its arguments (desktop#612).
+    ['fills them from the kept copy instead of reading the REST page again', true, 0, 0, 'a'],
+    ['reads the REST page again for a call the kept copy has no arguments for', false, 1, 2, 'c']
+  ])('%s', async (_label, withArgs, first, reads, id) => {
     const paths: string[] = []
     const conduit = (window as unknown as { conduit: { httpOutcome: unknown } }).conduit
     conduit.httpOutcome = async (_method: string, path: string) => {
@@ -557,7 +558,7 @@ describe('tool answers on opening a chat again (desktop#293)', () => {
     const tool = () => hook.result().transcript.items.find(i => i.kind === 'tool') as { result?: string } | undefined
     expect(tool()?.result).toBe('a.txt')
     // The page read to size the chat up (desktop#291) isn't a tool-answers read.
-    expect(boardReads()).toHaveLength(1)
+    expect(boardReads()).toHaveLength(first)
     hook.rerender({ storedId: 'b', connected: true, url: 'h1' })
     await settle()
     hook.rerender({ storedId: id, connected: true, url: 'h1' })
