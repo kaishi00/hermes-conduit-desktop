@@ -12128,10 +12128,6 @@ button.ghost:disabled {
     border-radius: 999px;
     padding: 0 12px;
   }
-
-  .chat-head.soft {
-    padding-left: 16px;
-  }
 }
 
 /* A reply's links to its work, drawn as cards under it (the phone's BotWorkLinkCard, app #1637). */
@@ -12967,12 +12963,19 @@ main.docked-pulse.pulse-page {
 
 .chat-head.soft > .chat-titles {
   flex: 0 1 auto;
-  min-width: 0;
   padding: 7px 18px;
   border: 1px solid var(--glass-line);
   border-radius: 22px;
   background: var(--glass);
   box-shadow: var(--glass-shadow);
+}
+
+/* A chat with nothing to name yet (just opened, its title not read) draws no empty pill. */
+.chat-head.soft > .chat-titles:not(:has(.chat-title, .status-chip, .beside-working, .chat-subtitle, .chat-window-bot)) {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
 }
 
 .chat-head.soft > .chat-head-actions {
