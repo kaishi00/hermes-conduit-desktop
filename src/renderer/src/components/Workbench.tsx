@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
+import { hostPageParts, hostPageUrl, localLink, shownAddress } from '@shared/browserAddress'
 import { gateway } from '../gateway'
 import { STATUS_PATH, askAgainMs, askPluginStatus, serves } from '../state/plugin'
 import { GIT_CAPABILITY, lists, type GitStatus } from '../state/sourceControl'
 import { TERMINALS_CAPABILITY } from '../state/terminals'
-import { BENCH_VIEWS, readDrawer, writeDrawer, type BenchView, type DrawerState } from '../state/workbench'
+
+/** The plugin's /workspace/preview route: a Browser tab's pages from the host. */
+const PREVIEW_CAPABILITY = 'workspace-preview'
+import { BENCH_VIEWS, MAX_PAGES, pageKey, readDrawer, readPages, writeDrawer, writePages, type BenchPage, type BenchView, type DrawerState } from '../state/workbench'
 import { baseName } from '../state/workspace'
+import { BrowserView } from './BrowserView'
 import { ChangesView } from './ChangesView'
 import { FilesPanel } from './FilesPanel'
 import { TabStrip } from './TabStrip'
@@ -15,9 +20,10 @@ import { Icon } from './icons'
 /**
  * The workbench beside a chat with a folder (Eric, 2026-11-26, "B · Project
  * mode"; desktop issues 450 to 453): the chat's folder as a project, its
- * views on the same tab strip the chat tabs use (Changes, Files), and its
- * terminals in a drawer below. Everything here is on the Hermes host: Git
- * and the shells run there, in the chat's folder.
+ * views on the same tab strip the chat tabs use (Changes, Files, then its
+ * Browser tabs), and its terminals in a drawer below. Everything here is on
+ * the Hermes host: Git and the shells run there, in the chat's folder, and a
+ * Browser tab's localhost is the host's.
  */
 export function Workbench({
   root,
@@ -35,9 +41,12 @@ export function Workbench({
   onInsertPath: (path: string) => void
   onClose: () => void
 }) {
-  const [view, setView] = useState<BenchView>('changes')
+  // 'changes', 'files', or a Browser tab's key (pageKey).
+  const [view, setView] = useState<string>('changes')
   const [git, setGit] = useState<GitStatus | null>(null)
-  const [plugin, setPlugin] = useState<{ git: boolean; terminals: boolean } | null>(null)
+  const [plugin, setPlugin] = useState<{ git: boolean; terminals: boolean; preview: boolean } | null>(null)
+  const [pages, setPages] = useState<BenchPage[]>(() => readPages(root))
+  const [hostKey, setHostKey] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<DrawerState>(readDrawer)
   const [opened, setOpened] = useState<{ path: string; id: number } | null>(null)
   const bench = useRef<HTMLElement>(null)
@@ -55,7 +64,7 @@ export function Workbench({
           timer = window.setTimeout(() => ask(attempt + 1), askAgainMs(attempt))
           return
         }
-        setPlugin({ git: serves(status, [GIT_CAPABILITY]), terminals: serves(status, [TERMINALS_CAPABILITY]) })
+        setPlugin({ git: serves(status, [GIT_CAPABILITY]), terminals: serves(status, [TERMINALS_CAPABILITY]), preview: serves(status, [PREVIEW_CAPABILITY]) })
       })
     setPlugin(null)
     ask(0)
@@ -65,6 +74,64 @@ export function Workbench({
     }
   }, [root, profile])
   useEffect(() => setGit(null), [root, profile])
+  // Another folder's Browser tabs (the first render read this one's).
+  const pagesRoot = useRef(root)
+  useEffect(() => {
+    if (pagesRoot.current === root) return
+    pagesRoot.current = root
+    setPages(readPages(root))
+    setView(current => (current.startsWith('page:') ? 'changes' : current))
+  }, [root])
+  useEffect(() => {
+    if (pagesRoot.current === root) writePages(root, pages)
+  }, [root, pages])
+  // The key host pages name the dashboard on screen by.
+  useEffect(() => {
+    let live = true
+    void window.conduit
+      .hostPageKey()
+      .then(key => live && setHostKey(key))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [root, profile])
+  const newPage = (url: string | null = null) => {
+    const page: BenchPage = { id: crypto.randomUUID(), url, nav: url ? 1 : 0 }
+    setPages(current => [...current, page].slice(-MAX_PAGES))
+    setView(pageKey(page))
+  }
+  const changePage = useCallback((next: BenchPage) => setPages(current => current.map(p => (p.id === next.id ? next : p))), [])
+  const closePage = (page: BenchPage) => {
+    const at = pages.findIndex(p => p.id === page.id)
+    const left = pages.filter(p => p.id !== page.id)
+    setPages(left)
+    if (view === pageKey(page)) setView(left.length ? pageKey(left[Math.min(at, left.length - 1)]!) : 'changes')
+  }
+  // A localhost link in the chat (the bot's "running on http://localhost:5173") is the host's: it opens here.
+  const pagesNow = useRef(pages)
+  pagesNow.current = pages
+  const opensHere = useRef({ preview: false, hostKey: null as string | null })
+  opensHere.current = { preview: plugin?.preview === true, hostKey }
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0) return
+      const anchor = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      const local = anchor ? localLink(anchor.href) : null
+      const { preview, hostKey: key } = opensHere.current
+      if (!local || !preview || !key) return
+      e.preventDefault()
+      e.stopPropagation()
+      const url = hostPageUrl(key, local.port, local.path)
+      const same = pagesNow.current.find(p => p.url && hostPageParts(p.url)?.port === local.port)
+      if (same) {
+        setPages(current => current.map(p => (p.id === same.id ? { ...p, url, nav: p.nav + 1 } : p)))
+        setView(pageKey(same))
+      } else newPage(url)
+    }
+    document.addEventListener('click', onClick, true)
+    return () => document.removeEventListener('click', onClick, true)
+  }, [])
   // A file a reply named goes to Files (one named before the bench opened stays with the Folder).
   const seenReveal = useRef(reveal?.id)
   useEffect(() => {
@@ -150,16 +217,27 @@ export function Workbench({
           <Icon name="close" />
         </button>
       </div>
-      <TabStrip
-        tabs={BENCH_VIEWS}
-        keyOf={v => v}
+      <TabStrip<BenchView | BenchPage>
+        tabs={[...BENCH_VIEWS, ...pages]}
+        keyOf={tab => (typeof tab === 'string' ? tab : pageKey(tab))}
         active={view}
-        label={v =>
-          v === 'changes'
+        label={tab =>
+          tab === 'changes'
             ? { title: t('Changes'), icon: <Icon name="branch" />, count: changed || undefined, fixed: true }
-            : { title: t('Files'), icon: <Icon name="folder" />, fixed: true }
+            : tab === 'files'
+              ? { title: t('Files'), icon: <Icon name="folder" />, fixed: true }
+              : {
+                  title: tab.title || (tab.url ? shownAddress(tab.url) : t('New Tab')),
+                  icon: <Icon name={tab.url && hostPageParts(tab.url) ? 'server' : 'globe'} />,
+                  hint: tab.url ? shownAddress(tab.url) : undefined
+                }
         }
-        onPick={setView}
+        onPick={tab => setView(typeof tab === 'string' ? tab : pageKey(tab))}
+        onClose={tab => {
+          if (typeof tab !== 'string') closePage(tab)
+        }}
+        onNewTab={() => newPage()}
+        newTabLabel={t('New Browser Tab')}
         ariaLabel={t('Workbench')}
         className="bench-tabs"
       />
@@ -176,6 +254,11 @@ export function Workbench({
         <div className="bench-view" hidden={view !== 'files'}>
           <FilesPanel root={root} profile={profile} refreshKey={refreshKey} reveal={opened} onInsertPath={onInsertPath} onClose={onClose} embedded />
         </div>
+        {pages.map(page => (
+          <div key={page.id} className="bench-view" hidden={view !== pageKey(page)}>
+            <BrowserView page={page} hostKey={hostKey} hostPages={plugin?.preview === true} shown={view === pageKey(page)} onChange={changePage} />
+          </div>
+        ))}
       </div>
       {plugin?.terminals ? (
         <>

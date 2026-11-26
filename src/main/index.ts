@@ -37,6 +37,7 @@ import {
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
 import { pageServed, pageUrl, registerPageScheme, servePages } from './pages'
+import { HOST_PAGE_PRIVILEGES, attachedBrowserKind, browserFrameKind, confineBrowserPage, hostPageKey, serveHostPages } from './hostPages'
 import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile, viewStagedFile } from './viewFiles'
 import { isPagePath, pageDownloadDecision, type PageRead } from '../shared/viewFileRules'
 import { confineNavigation } from './navigation'
@@ -207,6 +208,22 @@ function dockedPages(): Electron.WebContents[] {
  */
 function watchDockedChats(window: BrowserWindow): void {
   window.webContents.on('will-attach-webview', (event, preferences, params) => {
+    // A workbench Browser tab (hostPages.ts): its own session, no preload, nothing of the app's.
+    if (browserFrameKind(params.src, params.partition)) {
+      delete (preferences as { preloadURL?: string }).preloadURL
+      delete preferences.preload
+      preferences.contextIsolation = true
+      preferences.sandbox = true
+      preferences.nodeIntegration = false
+      preferences.nodeIntegrationInSubFrames = false
+      preferences.webSecurity = true
+      preferences.allowRunningInsecureContent = false
+      return
+    }
+    if (params.partition) {
+      event.preventDefault()
+      return
+    }
     const host = dockedFrameHost(params.src, window.webContents.getURL())
     if (!host || host === shownHost || !chatWindowDashboards().includes(host)) {
       event.preventDefault()
@@ -221,6 +238,11 @@ function watchDockedChats(window: BrowserWindow): void {
     preferences.webSecurity = true
   })
   window.webContents.on('did-attach-webview', (_event, page) => {
+    const browser = attachedBrowserKind(page)
+    if (browser) {
+      confineBrowserPage(page, browser)
+      return
+    }
     const id = page.id
     dockedChats.add(id)
     confineNavigation(page)
@@ -1047,6 +1069,7 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle(IPC.pageUrl, (_event, html: unknown) => pageUrl(html))
+  ipcMain.handle(IPC.hostPageKey, () => (shownHost ? hostPageKey(shownHost) : null))
   ipcMain.handle(IPC.pageServed, (_event, url: unknown) => pageServed(url))
   // From the window that asks: a call's screenshot steps the main window aside, Quick ask's steps itself aside.
   ipcMain.handle(IPC.screenshot, event => captureScreen(BrowserWindow.fromWebContents(event.sender) ?? mainWindow))
@@ -1135,12 +1158,14 @@ if (!app.requestSingleInstanceLock()) {
   })
   app.on('will-quit', () => globalShortcut.unregisterAll())
   app.setAppUserModelId('dev.conduit.desktop')
-  registerPageScheme(FILE_SCHEME_PRIVILEGES)
+  registerPageScheme(FILE_SCHEME_PRIVILEGES, HOST_PAGE_PRIVILEGES)
   // A root installed on this computer covers the dashboard's calls and sockets, as on the phone.
   trustSystemRoots()
   void app.whenReady().then(() => {
     servePages()
     serveViewedFiles()
+    // The workbench's host pages go to the dashboard on screen, the one its chat is on.
+    serveHostPages(() => (shownHost ? { url: shownHost, pageRequest: (path, method, headers, body) => connection.pageRequest(path, method, headers, body) } : null))
     setLanguage(resolvedLanguage())
     chooseTheme(themeChoice(), false)
     watchNewWindows()

@@ -51,6 +51,12 @@ function invalidateOidc(store: ConnectionStore, url: string): void {
 
 /** What we keep between launches. Secrets are encrypted by the store. */
 /** How a launch opens the saved hosts. */
+/** A request whose headers and body aren't Conduit's JSON: a host page's (pageRequest). */
+interface RawRequest {
+  headers: Record<string, string>
+  body?: Uint8Array<ArrayBuffer>
+}
+
 export interface RestoreOptions {
   /** Ask Which Dashboard at Launch: list two or more hosts instead of opening the last one. */
   askWhich?: boolean
@@ -615,15 +621,27 @@ export class Connection {
     return response
   }
 
+  /**
+   * A page's request to a dev server on the host (the workbench's Browser
+   * tabs, issue 451), wrapped for the plugin's /workspace/preview route: the
+   * page's own headers ride in one header of their own, so they never mix
+   * with this sign-in's, and the answer comes back wrapped the same way.
+   */
+  async pageRequest(path: string, method: string, headers: Record<string, string>, body: Uint8Array<ArrayBuffer> | undefined, signal?: AbortSignal): Promise<Response> {
+    if (!path.startsWith(`/api/plugins/conduit_push/workspace/preview/`)) throw new Error('Only host page paths can be asked for.')
+    return this.request(method, path, undefined, signal, '*/*', { headers, body })
+  }
+
   /** One dashboard request with this sign-in's credential; a password sign-in whose session ran out signs in again once. */
-  private async request(method: string, path: string, body: unknown, signal: AbortSignal | undefined, accept = 'application/json'): Promise<Response> {
+  private async request(method: string, path: string, body: unknown, signal: AbortSignal | undefined, accept = 'application/json', raw?: RawRequest): Promise<Response> {
     const saved = this.saved
     if (!saved) throw new Error(t('Not signed in.'))
     if (!path.startsWith('/api/')) throw new Error('Only dashboard API paths can be called.')
-    if (saved.method === 'browser') return this.browserRequest(saved, method, path, body, signal, accept)
+    if (saved.method === 'browser') return this.browserRequest(saved, method, path, body, signal, accept, raw)
     const send = async (): Promise<Response> => {
-      const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit' }
+      const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit', ...raw?.headers }
       if (body !== undefined) headers['Content-Type'] = 'application/json'
+      if (raw?.body) headers['Content-Type'] = 'application/octet-stream'
       if (saved.method === 'password' && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
       if (saved.method === 'oidc') headers.Authorization = `Bearer ${await this.oidcAccess(saved)}`
       if (saved.method === 'token' && saved.token) headers[SESSION_TOKEN_HEADER] = saved.token
@@ -635,7 +653,7 @@ export class Connection {
         method,
         headers,
         redirect: saved.method === 'oidc' ? 'manual' : 'follow',
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: raw?.body ?? (body === undefined ? undefined : JSON.stringify(body)),
         signal
       })
     }
@@ -659,15 +677,16 @@ export class Connection {
    * 401, is checked against the dashboard's status once: cookies that no longer pass end the connection asking to
    * sign in again, as they can't be renewed from here; an ungated Hermes' new session token sends the request again.
    */
-  private async browserRequest(saved: SavedConnection, method: string, path: string, body: unknown, signal: AbortSignal | undefined, accept: string): Promise<Response> {
+  private async browserRequest(saved: SavedConnection, method: string, path: string, body: unknown, signal: AbortSignal | undefined, accept: string, raw?: RawRequest): Promise<Response> {
     const send = async (): Promise<Response> => {
-      const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit' }
+      const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit', ...raw?.headers }
       if (body !== undefined) headers['Content-Type'] = 'application/json'
+      if (raw?.body) headers['Content-Type'] = 'application/octet-stream'
       if (this.saved === saved && this.openToken) headers[SESSION_TOKEN_HEADER] = this.openToken
       const { response, jar } = await fetchKeepingCookies(
         this.fetchFor(saved),
         endpoint(saved.url, path),
-        { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal },
+        { method, headers, body: raw?.body ?? (body === undefined ? undefined : JSON.stringify(body)), signal },
         saved.cookies ?? {},
         { stopAtSignIn: true, send: (fetchImpl, url, init) => fetchImpl(url, init) }
       )
