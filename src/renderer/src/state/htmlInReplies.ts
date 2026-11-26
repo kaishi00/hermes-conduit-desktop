@@ -360,7 +360,7 @@ function text(node: Node): string {
 }
 
 // The tags the chat draws; any other stays text there, so it stays in a plain line too.
-const DRAWN_TAG = /<\/?(?:b|strong|i|em|u|ins|s|del|strike|mark|kbd|sub|sup|span|font|details|summary)(?:\s(?:[^<>"']|"[^"]*"|'[^']*')*)?\/?>/gi
+const DRAWN_TAG = /<\/?(?:b|strong|i|em|u|ins|s|del|strike|mark|kbd|sub|sup|span|font|details|summary)(?:\s+[\w-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<>]+)|\s+open)*\s*\/?>/gi
 
 /** The tags the chat draws taken out, for a line of plain text (a notification, the chat list); `<br>` a space. */
 export function withoutTags(text: string): string {

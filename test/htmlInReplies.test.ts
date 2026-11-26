@@ -141,6 +141,7 @@ describe('text tags in a reply', () => {
     expect(withoutTags('a <b>b</b><br/>c')).toBe('a b c')
     expect(withoutTags('mail <me@example.com>')).toBe('mail <me@example.com>')
     expect(withoutTags('a <video> tag and Vec<String>')).toBe('a <video> tag and Vec<String>')
+    expect(withoutTags('if a <b and y > z')).toBe('if a <b and y > z')
   })
 
   it('takes only colors a reply may use', () => {
