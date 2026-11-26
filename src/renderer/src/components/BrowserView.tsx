@@ -179,7 +179,11 @@ export function BrowserView({
             setEditing(true)
             e.currentTarget.select()
           }}
-          onBlur={() => setEditing(false)}
+          onBlur={() => {
+            // An address typed and left unsent goes back to where the page is.
+            setEditing(false)
+            setTyped(latest.current.url ? shownAddress(latest.current.url) : '')
+          }}
           onKeyDown={e => {
             if (e.key !== 'Escape') return
             setTyped(page.url ? shownAddress(page.url) : '')

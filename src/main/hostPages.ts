@@ -18,7 +18,7 @@ import { session, shell, type WebContents } from 'electron'
 import { createHash } from 'node:crypto'
 import { t } from '../shared/i18n'
 import { HOST_PAGE_SCHEME, HOST_PAGES_PARTITION, WEB_PAGES_PARTITION, hostPageParts } from '../shared/browserAddress'
-import { PAGE_HEADERS, PAGE_STATUS, PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, pageHeaderPairs, pageStatus, type BrowserKind } from './hostPageRules'
+import { PAGE_HEADERS, PAGE_STATUS, PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, namesThisComputer, pageHeaderPairs, pageStatus, type BrowserKind } from './hostPageRules'
 
 const PREVIEW_PATH = '/api/plugins/conduit_push/workspace/preview'
 
@@ -32,7 +32,7 @@ export const hostPageKey = (dashboardUrl: string): string => createHash('sha256'
 
 export interface ShownDashboard {
   url: string
-  pageRequest(path: string, method: string, headers: Record<string, string>, body: Uint8Array<ArrayBuffer> | undefined): Promise<Response>
+  pageRequest(path: string, method: string, headers: Record<string, string>, body: Uint8Array<ArrayBuffer> | undefined, signal?: AbortSignal): Promise<Response>
 }
 
 const isMac = process.platform === 'darwin'
@@ -61,6 +61,8 @@ export function serveHostPages(shown: () => ShownDashboard | null): void {
     pages.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
     pages.setPermissionCheckHandler(() => false)
   }
+  // A web page never reaches this computer by an address: no request of its, a fetch, an image or a socket, names one.
+  session.fromPartition(WEB_PAGES_PARTITION).webRequest.onBeforeRequest((details, callback) => callback({ cancel: namesThisComputer(details.url) }))
   hostPages.protocol.handle(HOST_PAGE_SCHEME, async request => {
     const parts = hostPageParts(request.url)
     if (!parts) return page(404, t('This page address isn’t one Conduit knows.'))
@@ -78,7 +80,7 @@ export function serveHostPages(shown: () => ShownDashboard | null): void {
     let answer: Response
     try {
       const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : new Uint8Array(await request.arrayBuffer())
-      answer = await dashboard.pageRequest(`${PREVIEW_PATH}/${parts.port}${path}`, request.method, { [PAGE_HEADERS]: JSON.stringify(pairs) }, body)
+      answer = await dashboard.pageRequest(`${PREVIEW_PATH}/${parts.port}${path}`, request.method, { [PAGE_HEADERS]: JSON.stringify(pairs) }, body, request.signal)
     } catch (error) {
       return page(502, error instanceof Error ? error.message : String(error))
     }
@@ -110,19 +112,21 @@ export function attachedBrowserKind(contents: WebContents): BrowserKind | null {
 
 /** Where a Browser tab's page may go, and what it may open. */
 export function confineBrowserPage(contents: WebContents, kind: BrowserKind): void {
+  // A load another one cut short, or a page that couldn't be reached, shows in the tab, not as an unhandled rejection.
+  const load = (url: string) => void contents.loadURL(url).catch(() => undefined)
   const go = (url: string, event?: { preventDefault(): void }): void => {
     const where = browserGoes(kind, url, contents.getURL(), isMac)
     if (where === 'stay') return
     event?.preventDefault()
     if (where === 'external') void shell.openExternal(url)
-    else if (where !== 'refuse') void contents.loadURL(where.load)
+    else if (where !== 'refuse') load(where.load)
   }
   contents.setWindowOpenHandler(({ url }) => {
     // A new window opens in the tab itself: a Browser tab is one page.
     const where = browserGoes(kind, url, contents.getURL(), isMac)
-    if (where === 'stay') void contents.loadURL(url)
+    if (where === 'stay') load(url)
     else if (where === 'external') void shell.openExternal(url)
-    else if (where !== 'refuse') void contents.loadURL(where.load)
+    else if (where !== 'refuse') load(where.load)
     return { action: 'deny' }
   })
   contents.on('will-navigate', (event, url) => go(url, event))

@@ -1165,7 +1165,7 @@ if (!app.requestSingleInstanceLock()) {
     servePages()
     serveViewedFiles()
     // The workbench's host pages go to the dashboard on screen, the one its chat is on.
-    serveHostPages(() => (shownHost ? { url: shownHost, pageRequest: (path, method, headers, body) => connection.pageRequest(path, method, headers, body) } : null))
+    serveHostPages(() => (shownHost ? { url: shownHost, pageRequest: (path, method, headers, body, signal) => connection.pageRequest(path, method, headers, body, signal) } : null))
     setLanguage(resolvedLanguage())
     chooseTheme(themeChoice(), false)
     watchNewWindows()

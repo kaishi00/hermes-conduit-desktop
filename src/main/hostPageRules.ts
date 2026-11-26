@@ -120,6 +120,31 @@ export function answerHeaders(raw: string | null, origin: string, local: string,
   return headers
 }
 
+/**
+ * Whether a URL names this computer by an address literal or a loopback name:
+ * 127.0.0.0/8, ::1 and its IPv4-mapped forms, 0.0.0.0, localhost and
+ * *.localhost, a trailing dot included. A web page never reaches these.
+ */
+export function namesThisComputer(url: string): boolean {
+  let host: string
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return false
+  }
+  host = host.replace(/\.$/, '').replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (/^127(\.\d{1,3}){3}$/.test(host) || host === '0.0.0.0') return true
+  if (host === '::1' || host === '::' || /^0*:(0*:)*0*:?1$/.test(host)) return true
+  // IPv4-mapped (::ffff:127.0.0.1, which URL writes as ::ffff:7f00:1) and IPv4-compatible forms.
+  const mapped = /^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host)
+  if (mapped) {
+    const high = parseInt(mapped[1]!, 16)
+    return high >> 8 === 127 || (high === 0 && parseInt(mapped[2]!, 16) === 0)
+  }
+  return /^::(?:ffff:)?127(\.\d{1,3}){3}$/.test(host)
+}
+
 export type BrowserKind = 'host' | 'web'
 
 /**
@@ -136,6 +161,7 @@ export function browserGoes(kind: BrowserKind, url: string, from: string, mac: b
     return kind === 'host' && page && here && page.key === here.key ? 'stay' : 'refuse'
   }
   const local = localLink(url)
+  if (kind === 'web' && namesThisComputer(url)) return 'refuse'
   if (local) {
     const here = hostPageParts(from)
     return kind === 'host' && here ? { load: hostPageUrl(here.key, local.port, local.path) } : 'refuse'
@@ -148,7 +174,7 @@ export function browserGoes(kind: BrowserKind, url: string, from: string, mac: b
 export function browserFrameStays(kind: BrowserKind, url: string): boolean {
   if (/^(about:|data:|blob:)/i.test(url)) return true
   if (url.startsWith(`${HOST_PAGE_SCHEME}:`)) return kind === 'host'
-  if (localLink(url)) return false
+  if (localLink(url) || namesThisComputer(url)) return false
   return /^https?:\/\//i.test(url)
 }
 

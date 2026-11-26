@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { hostPageParts, hostPageUrl, localLink, readAddress, shownAddress } from '../src/shared/browserAddress'
-import { PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, pageHeaderPairs, pageStatus } from '../src/main/hostPageRules'
+import { PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, namesThisComputer, pageHeaderPairs, pageStatus } from '../src/main/hostPageRules'
 import { MAX_PAGES, readPages, writePages, type BenchPage } from '../src/renderer/src/state/workbench'
 import { addressFor, addressHere } from '../src/renderer/src/state/browserTabs'
 
@@ -18,6 +18,9 @@ describe('Browser tab addresses (desktop issue 451)', () => {
     expect(readAddress('[::1]:9000')).toEqual({ kind: 'host', port: 9000, path: '/' })
     expect(readAddress('example.com/docs')).toEqual({ kind: 'web', url: 'https://example.com/docs' })
     expect(readAddress('http://example.com')).toEqual({ kind: 'web', url: 'http://example.com/' })
+    expect(readAddress('192.168.1.5:8080/x')).toEqual({ kind: 'web', url: 'http://192.168.1.5:8080/x' })
+    expect(readAddress('10.0.0.2')).toEqual({ kind: 'web', url: 'http://10.0.0.2/' })
+    expect(readAddress('nas:5000')).toEqual({ kind: 'web', url: 'http://nas:5000/' })
     expect(readAddress('70000')).toBeNull()
     expect(readAddress('just words')).toBeNull()
     expect(readAddress('  ')).toBeNull()
@@ -127,6 +130,14 @@ describe('where a Browser tab goes', () => {
     expect(browserGoes('web', 'https://example.com/next', 'https://example.com/', false)).toBe('stay')
     expect(browserGoes('web', `${ORIGIN}/`, 'https://example.com/', false)).toBe('refuse')
     expect(browserGoes('web', 'http://localhost:3000/', 'https://example.com/', false)).toBe('refuse')
+    for (const alias of ['http://127.0.0.2:3000/', 'http://[::ffff:127.0.0.1]/', 'http://localhost.:3000/', 'http://app.localhost/', 'http://0.0.0.0:80/', 'http://[::1]:9/']) {
+      expect(namesThisComputer(alias)).toBe(true)
+      expect(browserGoes('web', alias, 'https://example.com/', false)).toBe('refuse')
+      expect(browserFrameStays('web', alias)).toBe(false)
+    }
+    for (const elsewhere of ['https://example.com/', 'http://192.168.1.5/', 'http://[fe80::1]/', 'http://128.0.0.1/', 'http://localhostess.com/']) {
+      expect(namesThisComputer(elsewhere)).toBe(false)
+    }
     expect(browserFrameStays('web', `${ORIGIN}/`)).toBe(false)
     expect(browserFrameStays('web', 'https://youtube.com/embed/x')).toBe(true)
     expect(browserFrameStays('host', `${ORIGIN}/frame`)).toBe(true)

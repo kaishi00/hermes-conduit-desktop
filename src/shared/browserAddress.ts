@@ -54,6 +54,8 @@ export function readAddress(input: string): BrowserAddress | null {
   const page = hostPageParts(text)
   if (page) return hostAt(page.port, page.path)
   if (/^https?:\/\/\S+$/i.test(text)) return web(text)
+  // An address on a network (192.168.1.5:8080, [fe80::1], nas:5000): over http, as a device there usually serves.
+  if (/^(\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:.]+\])(:\d{1,5})?([/?#]\S*)?$/i.test(text) || /^[a-z0-9-]+:\d{1,5}([/?#]\S*)?$/i.test(text)) return web(`http://${text}`)
   if (/^[^\s/:?#]+\.[a-z]{2,}(?::\d{1,5})?([/?#]\S*)?$/i.test(text)) return web(`https://${text}`)
   return null
 }
