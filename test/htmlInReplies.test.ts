@@ -157,6 +157,15 @@ describe('text tags in a reply', () => {
     expect(draw('<details class="x" open>\n<summary>Why</summary>\nBecause.\n</details>')).toBe('<details class="reply-fold" open=""><summary>Why</summary><p>Because.</p></details>')
   })
 
+  it('folds a <details> written on one line', () => {
+    expect(draw('<details><summary>S</summary>The body.</details>\n\nAfter.')).toBe('<details class="reply-fold"><summary>S</summary><p>The body.</p></details>\n<p>After.</p>')
+  })
+
+  it('takes off only the tags that pair up, as the chat draws only those', () => {
+    expect(withoutTags('An <b>unclosed tag')).toBe('An <b>unclosed tag')
+    expect(withoutTags('click <span hidden>secret</span> now')).toBe('click secret now')
+  })
+
   it('ends a page at prose after its closing tag, even prose with a tag in it', () => {
     expect(splitPages('<div>x</div> as <code>y</code> shows\nAfter')[0]).toEqual({ kind: 'page', html: '<div>x</div> as <code>y</code> shows', complete: true })
     expect(splitPages('<div>x</div> as <code>y</code>\n<p>z</p>\nAfter')).toHaveLength(2)

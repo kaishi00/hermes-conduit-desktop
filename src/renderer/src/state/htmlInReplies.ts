@@ -259,6 +259,8 @@ type Node = { type: string; value?: string; children?: Node[]; data?: Record<str
 const DETAILS_OPEN = /^<details((?:\s+[\w-]+(?:=(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*>\s*(?:<summary>([\s\S]*?)<\/summary>)?\s*$/i
 const FOLD_LINE = /^ {0,3}(?:<details\b[^>]*>(?:\s*<summary>.*?<\/summary>)?|<summary>.*<\/summary>|<\/details\s*>)\s*$/i
 const FOLD_FENCE = /^ {0,3}(`{3,}|~{3,})/
+const FOLD_OPENING_START = /^ {0,3}(<details\b[^>]*>(?:\s*<summary>.*?<\/summary>)?)(.*)$/i
+const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
 
 /**
  * A fold's own lines (`<details>`, its `<summary>`, `</details>`) set apart by blank lines, so Markdown reads
@@ -268,6 +270,11 @@ export function withFoldsApart(text: string): string {
   if (!/<\/?details\b/i.test(text)) return text
   const out: string[] = []
   let fence: string | null = null
+  let depth = 0
+  const own = (line: string) => {
+    if (out.length && out[out.length - 1]!.trim()) out.push('')
+    out.push(line.trim(), '')
+  }
   for (const line of text.split('\n')) {
     const found = FOLD_FENCE.exec(line)
     if (fence) {
@@ -275,13 +282,33 @@ export function withFoldsApart(text: string): string {
       out.push(line)
       continue
     }
-    if (found) fence = found[1]!
-    if (!fence && FOLD_LINE.test(line)) {
-      if (out.length && out[out.length - 1]!.trim()) out.push('')
-      out.push(line.trim(), '')
+    if (found) {
+      fence = found[1]!
+      out.push(line)
       continue
     }
-    out.push(line)
+    // A fold written on one line, `<details><summary>S</summary>body</details>`, taken apart.
+    const opening = FOLD_OPENING_START.exec(line)
+    let rest = line
+    if (opening) {
+      own(opening[1]!)
+      depth++
+      rest = opening[2]!
+      if (!rest.trim()) continue
+    }
+    const closing = depth > 0 ? FOLD_CLOSING_END.exec(rest) : null
+    if (closing) {
+      if (closing[1]!.trim()) out.push(closing[1]!)
+      own('</details>')
+      depth--
+      continue
+    }
+    if (!opening && FOLD_LINE.test(rest)) {
+      if (/^ {0,3}<\/details/i.test(rest)) depth = Math.max(0, depth - 1)
+      own(rest)
+      continue
+    }
+    out.push(rest)
   }
   return out.join('\n')
 }
@@ -413,9 +440,34 @@ function text(node: Node): string {
 }
 
 // The tags the chat draws; any other stays text there, so it stays in a plain line too.
-const DRAWN_TAG = /<\/?(?:b|strong|i|em|u|ins|s|del|strike|mark|kbd|sub|sup|span|font|details|summary)(?:\s+[\w-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<>]+)|\s+open)*\s*\/?>/gi
+const DRAWN_TAG = /<\/?(b|strong|i|em|u|ins|s|del|strike|mark|kbd|sub|sup|span|font|details|summary)(?:\s+[\w-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<>]+))?)*\s*\/?>/gi
 
 /** The tags the chat draws taken out, for a line of plain text (a notification, the chat list); `<br>` a space. */
 export function withoutTags(text: string): string {
-  return text.replace(/<br\s*\/?>/gi, ' ').replace(DRAWN_TAG, '')
+  const spaced = text.replace(/<br\s*\/?>/gi, ' ')
+  // Only the tags that pair up go, as the chat draws only those; a fold's <details> and <summary> always go.
+  const found = [...spaced.matchAll(DRAWN_TAG)]
+  const dropped = new Set<number>()
+  const opened: { name: string; index: number }[] = []
+  found.forEach((match, index) => {
+    const name = match[1]!.toLowerCase()
+    if (name === 'details' || name === 'summary') dropped.add(index)
+    else if (!match[0].startsWith('</')) opened.push({ name, index })
+    else {
+      let at = opened.length - 1
+      while (at >= 0 && opened[at]!.name !== name) at--
+      if (at >= 0) {
+        dropped.add(opened[at]!.index).add(index)
+        opened.length = at
+      }
+    }
+  })
+  let out = ''
+  let at = 0
+  found.forEach((match, index) => {
+    if (!dropped.has(index)) return
+    out += spaced.slice(at, match.index)
+    at = match.index! + match[0].length
+  })
+  return out + spaced.slice(at)
 }
