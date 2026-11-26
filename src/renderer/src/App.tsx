@@ -2390,9 +2390,7 @@ function Shell({
   const updateAway = updateBanner(hostUpdate)
   // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26).
   const away = useAway(status.phase)
-  const connectionAlert = updateAway
-    ? null
-    : brandAlert({
+  const connectionAlert = brandAlert({
         phase: status.phase,
         error: status.error,
         retryInSeconds: status.retryInSeconds,
@@ -2403,7 +2401,8 @@ function Shell({
         name: hostName,
         onRetry: () => void window.conduit.reconnect(),
         onRepair,
-        onSignIn: url => brand.onSwitch?.(url)
+        onSignIn: url => brand.onSwitch?.(url),
+        updating: !!updateAway
       })
   useEffect(() => {
     if (connected && status.url) hostReachable(status.url)

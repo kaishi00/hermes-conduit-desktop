@@ -185,21 +185,17 @@ describe('you on this Hermes, at the top of the rail', () => {
     expect(bar.querySelector('.brand-you')).toBeNull()
   })
 
-  it('names the Hermes under the mark only when nothing else tells them apart', async () => {
+  it('writes no name under the mark, which stays in the tooltip, and badges the app mark in a group', async () => {
     const { Brand } = await load()
     const badge = { letter: 'F', color: '#123456', name: 'Furina' }
     const name = (props: Record<string, unknown>) =>
-      mount(Brand, { inRail: true, subtitle: 'Furina', currentUrl: hosts[0].url, onSwitch: () => {}, ...props }).querySelector('.rail-brand-host')?.textContent ?? null
-    // Two separate dashboards with no badges: the name is what says which one.
-    expect(name({ hosts })).toBe('Furina')
-    // A combined group's badge says it, on the app mark as on a picture.
+      mount(Brand, { inRail: true, subtitle: 'Furina', currentUrl: hosts[0].url, onSwitch: () => {}, ...props }).querySelector('.rail-brand-host')
+    expect(name({ hosts })).toBeNull()
     expect(name({ hosts, badge })).toBeNull()
-    // One Hermes: nothing to tell apart.
     expect(name({ hosts: hosts.slice(0, 1) })).toBeNull()
     const badged = mount(Brand, { inRail: true, subtitle: 'Furina', hosts, currentUrl: hosts[0].url, onSwitch: () => {}, badge })
     expect(badged.querySelector('.brand-mark-badged img.brand-mark')).not.toBeNull()
     expect(badged.querySelector('.brand-mark-badged .host-badge')?.textContent).toBe('F')
-    // The name stays in the tooltip.
     expect(badged.querySelector('.rail-brand-button')!.getAttribute('title')).toContain('Conduit · Furina')
   })
 

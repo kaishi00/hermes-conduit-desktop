@@ -40,6 +40,8 @@ interface Inputs {
   onRetry: () => void
   onRepair?: () => void
   onSignIn: (url: string) => void
+  /** An update started here has the Hermes you're on away: its banner says so, so only the others show here. */
+  updating?: boolean
 }
 
 const RANK: Record<BrandAlert['tone'], number> = { quiet: 0, warn: 1, signIn: 2 }
@@ -52,7 +54,7 @@ const RANK: Record<BrandAlert['tone'], number> = { quiet: 0, warn: 1, signIn: 2 
 export function brandAlert(inputs: Inputs): BrandAlert | null {
   const { phase, error, retryInSeconds, away, currentUrl, hosts = [], kept, name } = inputs
   const parts: BrandAlert[] = []
-  if ((phase === 'connecting' || phase === 'reconnecting') && away !== 'no') {
+  if ((phase === 'connecting' || phase === 'reconnecting') && away !== 'no' && !inputs.updating) {
     const here =
       phase === 'connecting'
         ? t('Connecting to Hermes…')

@@ -44,8 +44,6 @@ describe('SectionRail context menu and customization', () => {
             onShowSidebar: () => {},
             pulseUnseen: 3,
             needsCount: 1,
-            connected: true,
-            hostLabel: 'Home',
             onSelect,
             onSettings: () => {},
             onChangeLayout

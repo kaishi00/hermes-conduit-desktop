@@ -68,6 +68,11 @@ describe('connection, only when something is wrong', () => {
     expect(alert('open', 'no', [{ url: 'https://gone.example', state: 'signIn' }])).toBeNull()
   })
 
+  it('leaves the Hermes you\'re on to the update banner, but still shows the others', () => {
+    expect(alert('reconnecting', 'long', [], { updating: true })).toBeNull()
+    expect(alert('reconnecting', 'long', [{ url: hosts[1].url, state: 'signIn' }], { updating: true })!.actions!.map((a: { label: string }) => a.label)).toEqual(['Sign In to Furina…'])
+  })
+
   it('waits before showing a reconnect, and goes back to nothing once open', () => {
     vi.useFakeTimers()
     const seen: Away[] = []

@@ -199,13 +199,10 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
 
   if (inRail) {
     const label = subtitle ? `Conduit · ${subtitle}` : 'Conduit'
-    // The name under the mark only when it's what tells your Hermes apart: more than one and no badge (Eric, 2026-11-26).
-    // It stays in the tooltip and the list either way.
+    // No name under the mark (Eric, 2026-11-26): it's in the tooltip and the list; only Sign In is written there.
     const host =
       alert?.tone === 'signIn' ? (
         <span className="rail-brand-host rail-brand-sign-in">{t('Sign In')}</span>
-      ) : subtitle && hosts.length > 1 && !badge ? (
-        <span className="rail-brand-host">{subtitle}</span>
       ) : null
     const state = alert ? <span className={`rail-brand-state ${alert.tone}`} aria-hidden="true" /> : null
     // The tooltip says what a press does: switch Hermes, or choose your picture with one Hermes.
@@ -226,7 +223,7 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
             ref={toggleRef}
             aria-haspopup="menu"
             aria-expanded={open}
-            aria-label={alert ? `${switchable ? t('Switch Hermes') : label}, ${alert.text}` : switchable ? t('Switch Hermes') : label}
+            aria-label={[label, alert?.text, does].filter(Boolean).join(', ')}
             title={tip}
             onClick={toggle}
           >
@@ -237,7 +234,7 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
             {host}
           </button>
         ) : (
-          <div className="rail-brand-button" role="img" aria-label={alert ? `${label}, ${alert.text}` : label} title={tip}>
+          <div className="rail-brand-button" role="img" aria-label={[label, alert?.text].filter(Boolean).join(', ')} title={tip}>
             <span className="rail-brand-mark">
               {mark}
               {state}
