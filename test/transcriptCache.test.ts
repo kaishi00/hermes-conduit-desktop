@@ -52,12 +52,12 @@ describe('the transcripts kept for coming back', () => {
     expect(keptTranscript('s1', 'work')).toBeNull()
   })
 
-  it('keeps only settled transcripts, and a later unsettled one drops the old', () => {
+  it('keeps a chat left mid-turn as its rows, not running, and nothing with no rows to draw (desktop#612)', () => {
     keepTranscript('s1', undefined, state('a', { running: true }))
-    expect(keptTranscript('s1', undefined)).toBeNull()
+    expect(keptTranscript('s1', undefined)?.running).toBe(false)
     keepTranscript('s2', undefined, state('b'))
-    keepTranscript('s2', undefined, state('b', { running: true }))
-    expect(keptTranscript('s2', undefined)).toBeNull()
+    keepTranscript('s2', undefined, state('c', { running: true }))
+    expect(keptTranscript('s2', undefined)?.items.map(i => i.key)).toEqual(['c'])
     keepTranscript('s3', undefined, { items: [{ kind: 'user', key: 'u', text: 'hi', pending: true } as TranscriptState['items'][number]], running: false })
     expect(keptTranscript('s3', undefined)).toBeNull()
     keepTranscript('s4', undefined, { items: [], running: false })

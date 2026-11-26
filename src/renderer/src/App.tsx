@@ -57,6 +57,7 @@ import { Workbench } from './components/Workbench'
 import { BENCH_COLUMN, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
 import { FileLinks } from './components/Markdown'
 import { WorkLinks, type WorkLinkActions } from './components/WorkLinkCard'
+import { readChatAhead } from './state/readAhead'
 import { usePulse } from './state/usePulse'
 import { Icon } from './components/icons'
 import { useMouseBack } from './state/mouseBack'
@@ -971,6 +972,7 @@ function Shell({
   useEffect(() => {
     if (inBotChat) readResolvedWork()
   }, [inBotChat, readResolvedWork])
+  const statusHost = status.url ?? ''
   const workLinkActions = useMemo<WorkLinkActions>(() => {
     // The open list first, then the Resolved page, as the phone's cards read them.
     const known = [...(workSnapshot?.items ?? []), ...(workResolved ?? [])]
@@ -998,9 +1000,10 @@ function Shell({
       titleOf: sessionId => {
         const item = ofSession(sessionId)
         return item ? shownTitle(item) : listRows?.find(r => r.id === sessionId)?.title || undefined
-      }
+      },
+      readAhead: (sessionId, profile) => readChatAhead(sessionId, profile ?? selected.profile, statusHost)
     }
-  }, [workSnapshot, workResolved, readResolvedWork, listRows, inBotChat, selected.profile, workSessions])
+  }, [workSnapshot, workResolved, readResolvedWork, listRows, inBotChat, selected.profile, workSessions, statusHost])
   // The bot's screen (Hermes' Bot Screen), offered only where the host can have one, as the phone checks.
   const screenProfile = selected.profile ?? 'default'
   // It opens in a window of its own, so the chat's text and tool output stay in view (Eric, 2026-11-21).
@@ -3083,6 +3086,7 @@ function Shell({
                 onReload={() => void work.reload()}
                 onAnswered={() => void waiting.refresh()}
                 openChat={{ storedId: selected.id, liveId: chat.liveId, botChat: selected.botChat === true || !!openBotChat }}
+                onReadAhead={item => readChatAhead(item.sessionId, selected.profile, statusHost)}
                 onOpenChat={item => {
                   // The panel is the bot tab's list of its work: its rows keep the bots beside the chat they open.
                   setBotsSide(true)

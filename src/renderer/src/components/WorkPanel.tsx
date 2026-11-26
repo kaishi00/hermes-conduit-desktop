@@ -45,6 +45,8 @@ interface Props {
   /** A question answered here: Needs you reads its list again, so its row goes now. */
   onAnswered?: () => void
   onOpenChat: (item: WorkItem) => void
+  /** Reads a row's chat ahead as the pointer or focus reaches it, so opening it draws it at once (desktop#612). */
+  onReadAhead?: (item: WorkItem) => void
   onClose: () => void
   /** The side panel's tabs, atop it. */
   tabs?: ReactNode
@@ -77,6 +79,7 @@ function WorkCard({
   onAct,
   onCopyBranch,
   onOpenChat,
+  onReadAhead,
   onOpenMenu
 }: {
   item: WorkItem
@@ -87,6 +90,7 @@ function WorkCard({
   onAct: (ref: string, action: WorkCardAction, body?: Record<string, unknown>) => Promise<boolean>
   onCopyBranch: (item: WorkItem) => Promise<void>
   onOpenChat: (item: WorkItem) => void
+  onReadAhead?: (item: WorkItem) => void
   onOpenMenu: (item: WorkItem, x: number, y: number, opener: HTMLElement | null) => void
 }) {
   const [expanded, setExpanded] = useState(needsYou(item))
@@ -154,6 +158,8 @@ function WorkCard({
           data-work-ref={item.ref}
           aria-expanded={opensChat ? undefined : expanded}
           title={opensChat ? t('Open {ref}’s chat', { ref: item.ref }) : undefined}
+          onPointerEnter={opensChat ? () => onReadAhead?.(item) : undefined}
+          onFocus={opensChat ? () => onReadAhead?.(item) : undefined}
           onClick={() => (opensChat ? onOpenChat(item) : setExpanded(!expanded))}
         >
           <span className="work-card-line">
@@ -419,7 +425,7 @@ export function AskedQuestionBar({
  * Resolved list. Each card shows where its workstream is, and takes the
  * user's own actions, which skip the Bot Chat's model.
  */
-export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswered, onOpenChat, onClose, tabs, openChat }: Props) {
+export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswered, onOpenChat, onReadAhead, onClose, tabs, openChat }: Props) {
   const [allRecent, setAllRecent] = useState(false)
   const [resolved, setResolved] = useState<WorkItem[] | null>(null)
   const [resolvedError, setResolvedError] = useState<string | null>(null)
@@ -593,6 +599,7 @@ export function WorkPanel({ profile, botName, snapshot, error, onReload, onAnswe
       onAct={act}
       onCopyBranch={copyBranch}
       onOpenChat={onOpenChat}
+      onReadAhead={onReadAhead}
       onOpenMenu={openMenu}
     />
   )
