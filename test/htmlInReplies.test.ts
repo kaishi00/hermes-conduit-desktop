@@ -182,6 +182,9 @@ describe('text tags in a reply', () => {
     expect(draw('<details><summary>S</summary>Click <b>here</b>\nmore\n</details>')).toContain('<details class="reply-fold"><summary>S</summary>')
     expect(draw('<details><summary>S</summary>Body\nmore')).toContain('<details class="reply-fold"><summary>S</summary>')
     expect(draw('<details><summary>S</summary>Body so far\n')).toContain('<details class="reply-fold"><summary>S</summary>')
+    expect(draw('<details><summary>Results</summary>42 passed</details> Ask me anything!\n\nNext.')).not.toContain('reply-fold')
+    expect(draw('<details> Tap for details.\nThe details.\n</details> <!-- keep -->\n\nMore prose.')).not.toContain('reply-fold')
+    expect(draw('<details title="</summary>"> Click <b>here</b>\n</details>')).not.toContain('reply-fold')
   })
 
   it('folds a one-line fold while its </details> is still being written', () => {
