@@ -1,5 +1,6 @@
 import { ROOM_RULES_CAPABILITY } from './state/roomChoices'
 import { ROOM_LEAVE_CAPABILITY } from './state/roomCopies'
+import { isPanePick, notificationTitleFor } from './state/notifications'
 import { ROOM_FILES_CAPABILITY, ROOM_FILES_LINKED_CAPABILITY, ROOM_FILE_PICTURES_CAPABILITY } from './state/roomFiles'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type ComponentProps, type RefObject } from 'react'
 import { gateway } from './gateway'
@@ -1961,8 +1962,8 @@ function Shell({
   // A notification takes the chat's own title, never "New chat" for one Hermes hasn't titled yet, and else its bot.
   // The pick's row title only while the pane holds the picked chat: for a render after a pick it still holds the
   // last one, whose untitled ref mustn't take the new row's title.
-  const paneIsPick = !chat.storedId || !selected.id || chat.storedId === selected.id
-  const notifyTitle = workItem || selected.botChat ? title : cleanTitle(chat.title || (paneIsPick ? selected.title : '') || '')
+  const paneIsPick = isPanePick(chat.storedId, selected.id)
+  const notifyTitle = notificationTitleFor({ pick: paneIsPick, workItem, botChat: selected.botChat, title, chatTitle: chat.title, selectedTitle: selected.title })
   // Kept only while the live session is the pick's profile's (keepChatRef).
   keepChatRef(chats.current, chat.liveId, chat.profile, selected.profile, {
     storedId: chat.storedId,
