@@ -15,7 +15,7 @@ import { Icon, type IconName } from './icons'
 import { JumpToLatest } from './JumpToLatest'
 import { atEnd } from '../state/scrollEnd'
 import { chatPlaces, type ChatPlace } from '../state/chatPlaces'
-import { heldStart, nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowKey, rowWindow, scrollStep, startAt } from '../state/rowWindow'
+import { heldStart, nearTop, olderStart, registerRowOpener, rowElement, rowIndex, rowKey, rowWindow, scrollStep, showLatest, startAt } from '../state/rowWindow'
 import { WorkLinkCard, WorkLinks } from './WorkLinkCard'
 import { linkNamedRefs, linkSessionRefs, splitWorkLinks } from '../state/workLinks'
 import { Markdown, StreamingMarkdown } from './Markdown'
@@ -239,6 +239,11 @@ export function QuotedCard({ name, quote, onJump }: { name: string; quote: strin
       <span className="quoted-card-text">{excerpt(quote)}</span>
     </button>
   )
+}
+
+/** Takes the chat in `container` back to its newest rows, following it again. */
+export function revealLatest(container: HTMLElement | null) {
+  showLatest(container)
 }
 
 /** Scrolls to the message a card quoted and flashes it, drawing it first when a window left it out (rowWindow.ts). */
@@ -1319,6 +1324,12 @@ export function Transcript({
       jumpUntil.current = performance.now() + JUMP_MS
       flushSync(() => setWindowed(windowAt(startAt(at, liveRows.current.rows.length))))
       return true
+    }, () => {
+      // Back to the newest rows, as the jump-to-latest button: a jump's hold is over, and replies are followed again.
+      jumpUntil.current = 0
+      pinned.current = true
+      flushSync(() => setWindowed(windowAt(null)))
+      el.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
     })
   }, [])
 

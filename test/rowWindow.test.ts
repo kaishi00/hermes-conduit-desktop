@@ -10,6 +10,7 @@ import {
   rowIndex,
   rowWindow,
   scrollStep,
+  showLatest,
   startAt,
   WINDOW_PAGE,
   WINDOW_ROWS
@@ -108,6 +109,23 @@ describe('a jump to a row a window left out (desktop#291)', () => {
     expect(rowElement(container, 'b')).toBeNull()
     expect(asked).toEqual(['b'])
     off()
+  })
+})
+
+describe('back to the newest rows (desktop issue 453, the timeline\'s Now)', () => {
+  it('asks the transcript registered for the scroller, and nothing without one', () => {
+    const container = document.createElement('div')
+    const scroller = document.createElement('div')
+    container.append(scroller)
+    let latest = 0
+    const off = registerRowOpener(scroller, () => false, () => (latest += 1))
+    showLatest(container)
+    showLatest(scroller)
+    expect(latest).toBe(2)
+    off()
+    showLatest(container)
+    showLatest(null)
+    expect(latest).toBe(2)
   })
 })
 
