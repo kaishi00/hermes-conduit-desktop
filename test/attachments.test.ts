@@ -93,13 +93,18 @@ describe('the prompt', () => {
     expect(saved.get(ATTACHMENT_LIMIT_KEY)).toBe('64')
     expect(attachmentLimitMB(storage)).toBe(64)
     expect(attachmentLimitBytes(64)).toBe(64 * 1024 * 1024)
-    saved.set(ATTACHMENT_LIMIT_KEY, '9999')
-    expect(attachmentLimitMB(storage)).toBe(256)
-    saved.set(ATTACHMENT_LIMIT_KEY, 'junk')
-    expect(attachmentLimitMB(storage)).toBe(16)
-    const broken = { getItem: () => { throw new Error('private') }, setItem: () => { throw new Error('private') } }
-    expect(attachmentLimitMB(broken)).toBe(16)
-    expect(setAttachmentLimitMB(32, broken)).toBe(32)
+    // A hand-edited value that isn't a choice is the default, so Settings can show it.
+    for (const junk of ['9999', 'junk', '0.5', '20', '-8']) {
+      saved.set(ATTACHMENT_LIMIT_KEY, junk)
+      expect(attachmentLimitMB(storage)).toBe(16)
+    }
+    // Storage that won't keep a pick: it holds for this window.
+    const readOnly = { getItem: () => '16', setItem: () => { throw new Error('quota') } }
+    expect(setAttachmentLimitMB(32, readOnly)).toBe(32)
+    expect(attachmentLimitMB(readOnly)).toBe(32)
+    // Once storage keeps one again, it reads from storage.
+    expect(setAttachmentLimitMB(64, storage)).toBe(64)
+    expect(attachmentLimitMB(storage)).toBe(64)
     expect(isRiskyAttachmentLimit(16)).toBe(false)
     expect(isRiskyAttachmentLimit(32)).toBe(true)
   })
