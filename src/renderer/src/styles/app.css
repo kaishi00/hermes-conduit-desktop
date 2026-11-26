@@ -14103,3 +14103,56 @@ button.rail-brand-button:hover {
 .bench-drawer-body[hidden] {
   display: none;
 }
+
+/* The workbench's Browser tabs (issue 451). */
+.bench-browser {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bench-browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bench-browser-bar .staged-remove:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.bench-browser-where {
+  display: inline-flex;
+  margin: 0 2px 0 6px;
+  color: var(--text-3);
+}
+
+.bench-browser-address {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.bench-browser-address:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.bench-browser-page {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
