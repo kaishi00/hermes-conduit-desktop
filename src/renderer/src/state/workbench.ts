@@ -122,3 +122,15 @@ export function writeDrawer(state: DrawerState): void {
     // Kept for this window only.
   }
 }
+
+/**
+ * The folder the workbench shows: the chat's, or while another chat opens and
+ * its folder isn't known yet, the one it showed, waiting (Eric, 2026-11-26:
+ * switching bots with the bench open flashed the whole window as it closed
+ * and opened again). A chat that has no folder once read closes it.
+ */
+export function benchPlace(folder: string | undefined, loading: boolean, shown: string | null): { root: string | null; waiting: boolean } {
+  if (folder) return { root: folder, waiting: false }
+  if (loading && shown) return { root: shown, waiting: true }
+  return { root: null, waiting: false }
+}

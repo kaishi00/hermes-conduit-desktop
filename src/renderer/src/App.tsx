@@ -55,7 +55,7 @@ import {
 import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
 import { absolutePath, pathForDraft } from './state/workspace'
 import { Workbench } from './components/Workbench'
-import { BENCH_COLUMN, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
+import { BENCH_COLUMN, benchPlace, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
 import { FileLinks } from './components/Markdown'
 import { WorkLinks, type WorkLinkActions } from './components/WorkLinkCard'
 import { readChatAhead } from './state/readAhead'
@@ -614,7 +614,7 @@ function Shell({
         hideList(false)
       }
     } else if (action === 'toggle-workbench') {
-      if (section === 'chats' && chat.cwd && !dockedRef.current) showBench(!benchShown)
+      if (section === 'chats' && (chatFolder || benchShown) && !dockedRef.current) showBench(!benchShown)
     } else if (action === 'search') {
       setArchivedOpen(false)
       setSection('chats')
@@ -731,7 +731,17 @@ function Shell({
   // Open, it takes the side panel's place and tucks the chat list to its faces, until the list is shown again.
   const [benchOpen, setBenchOpen] = useState(readBenchOpen)
   const [benchKeepsList, setBenchKeepsList] = useState(false)
-  const benchShown = section === 'chats' && !!chat.cwd && benchOpen && !dockedChat
+  // A chat's folder as last read, so a chat opened again has its workbench at once, before its resume says.
+  const knownFolders = useRef(new Map<string, string>())
+  const folderKey = chat.storedId ? `${status.url ?? ''}\n${chat.storedId}` : null
+  if (folderKey && chat.cwd) knownFolders.current.set(folderKey, chat.cwd)
+  const chatFolder = chat.cwd ?? (folderKey ? knownFolders.current.get(folderKey) : undefined)
+  // While another chat or bot opens, its folder isn't known until its resume answers: the workbench keeps its place
+  // meanwhile, its contents faded, rather than closing and bringing the chat list back for a moment (Eric, 2026-11-26).
+  const lastBenchRoot = useRef<string | null>(null)
+  const { root: benchRoot, waiting: benchWaiting } = benchPlace(chatFolder, loading, lastBenchRoot.current)
+  const benchShown = section === 'chats' && !!benchRoot && benchOpen && !dockedChat
+  lastBenchRoot.current = benchShown ? benchRoot : null
   const showBench = useCallback((open: boolean) => {
     setBenchOpen(open)
     writeBenchOpen(open)
@@ -2867,7 +2877,7 @@ function Shell({
                     : undefined
                 }
                 bench={
-                  chat.cwd && section === 'chats'
+                  (chatFolder || benchShown) && section === 'chats'
                     ? {
                         label: benchShown ? t('Hide Workbench') : t('Show Workbench'),
                         title: `${benchShown ? t('Hide Workbench') : t('Show Workbench')} (${navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl+'}B)`,
@@ -3051,11 +3061,12 @@ function Shell({
                 mentionBots={mentionBots}
               />
             </main>
-            {benchShown && chat.cwd ? (
+            {benchShown && benchRoot ? (
               <>
                 <ColumnDivider label={t('Workbench width')} bounds={BENCH_COLUMN} sign={-1} width={benchWidth} onLive={setBenchLive} onCommit={commitBench} />
                 <Workbench
-                  root={chat.cwd}
+                  root={benchRoot}
+                  waiting={benchWaiting}
                   profile={selected.profile}
                   refreshKey={turnsDone}
                   reveal={reveal}

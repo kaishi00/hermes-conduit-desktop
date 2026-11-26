@@ -1312,6 +1312,8 @@ export function Transcript({
 
   // A jump to a row the window left out — a pin, a quote, Show in Chat — draws that row's
   // part of the window before the jump looks for it (rowWindow.ts).
+  // Back to the newest rows (the jump-to-latest button, the timeline's Now): a pin still being read for doesn't take the reader away later.
+  const dropReveals = useRef(() => {})
   useEffect(() => {
     const el = scroller.current
     if (!el) return
@@ -1326,6 +1328,7 @@ export function Transcript({
       return true
     }, () => {
       // Back to the newest rows, as the jump-to-latest button: a jump's hold is over, and replies are followed again.
+      dropReveals.current()
       jumpUntil.current = 0
       pinned.current = true
       flushSync(() => setWindowed(windowAt(null)))
@@ -1556,6 +1559,10 @@ export function Transcript({
     if (listReveal) onRevealed?.()
     else setBarReveal(null)
   }, [reveal, listReveal, pinKeys, pinList, loading, onRevealed, onSeekRow])
+  dropReveals.current = () => {
+    setBarReveal(null)
+    if (listReveal) onRevealed?.()
+  }
   // Another chat: a bar pin still being read for isn't this chat's.
   useEffect(() => setBarReveal(null), [chatKey])
   // A pin opened from the pins list is the jump asked for now: one from the bar still being read for gives way.
@@ -1688,7 +1695,8 @@ export function Transcript({
           ) : null}
         </div>
         <JumpToLatest scroller={scroller} onJump={() => {
-            // Back to the latest: a jump's hold is over, and replies are followed again.
+            // Back to the latest: a jump's hold is over, a pin still being read for gives way, and replies are followed again.
+            dropReveals.current()
             jumpUntil.current = 0
             pinned.current = true
           }}
