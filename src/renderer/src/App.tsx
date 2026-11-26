@@ -66,7 +66,7 @@ import { RailFaces } from './components/RailFaces'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
-import { liveDoing } from './state/liveDoing'
+import { liveDoing, stepTitle } from './state/liveDoing'
 import { lastReplyOf } from './state/transcriptReads'
 import { useRevealRow } from './state/revealRow'
 import { forgetSummaries } from './state/stepSummaries'
@@ -216,7 +216,7 @@ import { openRoomChatHere } from './state/roomChatOpen'
 import { DockedRoomFrame } from './components/DockedRoom'
 import type { DockedRoomRequest } from '@shared/chatWindows'
 import { parseProjects, type Project, type ProjectChat } from './state/projects'
-import { useAnsweringProfiles, useLiveStatus } from './state/liveStatus'
+import { useAnsweringBots, useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, saveMarksSoon, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
@@ -1754,9 +1754,10 @@ function Shell({
   )
   // Every bot answering in some chat, the open one's at once (Eric, 2026-11-26: not only the chat open).
   const answeringNames = useMemo(() => botNames.slice(0, 24), [botNames])
-  const answering = useAnsweringProfiles(connected, answeringNames, turnsDone)
+  // ...with the step each is on there, from the plugin (the open chat's own comes live below).
+  const answering = useAnsweringBots(connected, answeringNames, turnsDone, stepTitle)
   const runningProfiles = useMemo(() => {
-    const names = new Set<string>(answering)
+    const names = new Set<string>(answering.keys())
     if (running && selected.profile) names.add(selected.profile)
     return names
   }, [answering, running, selected.profile])
@@ -2528,7 +2529,8 @@ function Shell({
     bots: orderedRoster,
     error: roster.error,
     runningProfiles: runningProfiles,
-    liveDoing: liveDoingNow,
+    liveDoing: liveDoingNow ? { bot: selected.profile ?? 'default', text: liveDoingNow } : null,
+    otherChatsDoing: answering,
     rooms: orderedRooms,
     canStartRooms: groupRooms.capabilities?.supported === true && connected,
     onOpen: openBot,

@@ -83,28 +83,68 @@ export function useLiveStatus(active: boolean, profiles: readonly string[], nudg
   return states
 }
 
-/** Whether an `session.active_list` answer has a chat answering now (working, or streaming its reply). */
-export function anyAnswering(response: unknown): boolean {
+/** The ids (runtime id and session key) of the chats an `session.active_list` answer has answering now (working, or streaming its reply). */
+export function answeringIds(response: unknown): string[] {
   const rows = ((response ?? {}) as Raw).sessions
-  return Array.isArray(rows) && rows.some(raw => ['working', 'streaming'].includes(str(((raw ?? {}) as Raw).status)))
+  if (!Array.isArray(rows)) return []
+  return rows.flatMap(raw => {
+    const row = (raw ?? {}) as Raw
+    return ['working', 'streaming'].includes(str(row.status)) ? [str(row.id), str(row.session_key)].filter(Boolean) : []
+  })
 }
 
-const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every(name => b.has(name))
+export const LIVE_STEPS_PATH = '/api/plugins/conduit_push/live-steps'
+export const liveStepsPath = (profile: string) => (profile && profile !== 'default' ? `${LIVE_STEPS_PATH}?profile=${encodeURIComponent(profile)}` : LIVE_STEPS_PATH)
+
+/** One running chat's step, as the plugin's GET /live-steps gives it (plugin 0.199+). */
+export interface LiveStep {
+  phase: string
+  tool?: string | null
+  since?: number | null
+}
+
+/** The newest step among `ids`' chats in a GET /live-steps answer, or null. */
+export function stepOf(answer: unknown, ids: readonly string[]): LiveStep | null {
+  const steps = ((answer ?? {}) as Raw).steps
+  if (!steps || typeof steps !== 'object') return null
+  let best: LiveStep | null = null
+  for (const id of ids) {
+    const raw = (steps as Raw)[id]
+    if (!raw || typeof raw !== 'object') continue
+    const entry = raw as Raw
+    if (typeof entry.phase !== 'string') continue
+    const step: LiveStep = { phase: entry.phase, tool: typeof entry.tool === 'string' ? entry.tool : null, since: typeof entry.since === 'number' ? entry.since : null }
+    if (!best || (step.since ?? 0) > (best.since ?? 0)) best = step
+  }
+  return best
+}
+
+const sameSteps = (a: ReadonlyMap<string, string | null>, b: ReadonlyMap<string, string | null>) =>
+  a.size === b.size && [...a].every(([name, step]) => b.has(name) && b.get(name) === step)
 
 /**
- * The bots with a chat answering now, any chat, not only the one open (Eric, 2026-11-26): the registry
- * read for each of `profiles` at the list's pace, 4 s while one answers and slower as nothing does.
+ * The bots with a chat answering now, any chat, not only the one open (Eric, 2026-11-26), each with the
+ * step it's on there as the plugin notes it ("Running a command"; null on a plugin without live steps):
+ * the registry read for each of `profiles` at the list's pace, 4 s while one answers and slower as
+ * nothing does, and the steps read for the bots answering.
  */
-export function useAnsweringProfiles(active: boolean, profiles: readonly string[], nudge: unknown): ReadonlySet<string> {
-  const [names, setNames] = useState<ReadonlySet<string>>(() => new Set())
+export function useAnsweringBots(
+  active: boolean,
+  profiles: readonly string[],
+  nudge: unknown,
+  title: (step: LiveStep) => string | null
+): ReadonlyMap<string, string | null> {
+  const [bots, setBots] = useState<ReadonlyMap<string, string | null>>(() => new Map())
   const profileKey = profiles.join('\n')
   const step = useRef(0)
+  const titleRef = useRef(title)
+  titleRef.current = title
   useEffect(() => {
     step.current = 0
   }, [nudge])
   useEffect(() => {
     if (!active || !profileKey) {
-      setNames(current => (current.size ? new Set() : current))
+      setBots(current => (current.size ? new Map() : current))
       return
     }
     let live = true
@@ -115,9 +155,18 @@ export function useAnsweringProfiles(active: boolean, profiles: readonly string[
         const answers = await Promise.all(
           all.map(name => gateway.rpc('session.active_list', name !== 'default' ? { profile: name } : {}).then(r => r, () => null))
         )
+        const busy = all.flatMap((name, i) => {
+          const ids = answeringIds(answers[i])
+          return ids.length ? [{ name, ids }] : []
+        })
+        const steps = await Promise.all(busy.map(({ name }) => gateway.http('GET', liveStepsPath(name)).then(r => r, () => null)))
         if (!live) return
-        const next = new Set(all.filter((_, i) => anyAnswering(answers[i])))
-        setNames(current => (sameSet(current, next) ? current : next))
+        const next = new Map<string, string | null>()
+        busy.forEach(({ name, ids }, i) => {
+          const found = stepOf(steps[i], ids)
+          next.set(name, found ? titleRef.current(found) : null)
+        })
+        setBots(current => (sameSteps(current, next) ? current : next))
         step.current = nextStep(step.current, next.size > 0)
       }
       timer = window.setTimeout(() => void read(), POLL_STEPS_MS[step.current])
@@ -128,5 +177,5 @@ export function useAnsweringProfiles(active: boolean, profiles: readonly string[
       window.clearTimeout(timer)
     }
   }, [active, profileKey, nudge])
-  return names
+  return bots
 }

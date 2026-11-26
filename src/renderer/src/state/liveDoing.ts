@@ -38,3 +38,24 @@ export function liveDoing(items: readonly TranscriptItem[]): string | null {
   }
   return null
 }
+
+/** A background chat's step, as the plugin notes it (GET /live-steps: a phase, and a tool's category). */
+export function stepTitle(step: { phase: string; tool?: string | null }): string | null {
+  if (step.phase === 'thinking') return t('Thinking…')
+  if (step.phase === 'approval') return t('Needs approval')
+  if (step.phase === 'input') return t('Waiting for your answer')
+  if (step.phase !== 'tool') return null
+  const byCategory: Record<string, string> = {
+    terminal: t('Running a command'),
+    code: t('Running code'),
+    files: t('Working with files'),
+    web: t('Searching the web'),
+    agents: t('Handing off a task'),
+    memory: t('Updating memory'),
+    images: t('Working with images'),
+    planning: t('Updating the plan'),
+    messages: t('Sending a message'),
+    browser: t('Using the browser')
+  }
+  return byCategory[step.tool ?? ''] ?? t('Using a tool')
+}

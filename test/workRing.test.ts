@@ -31,11 +31,12 @@ describe('a bot at work, on its face', () => {
 
   it('shows what a working bot is doing now, else Working (never its last message), shimmering, and the words for needs you (BotsHome.tsx)', () => {
     const src = readFileSync(join(__dirname, '../src/renderer/src/components/BotsHome.tsx'), 'utf8')
-    expect(src).toMatch(/const doingNow = \(tile\.own && runningProfiles\.has\(bot\.name\) \? liveDoing : null\) \|\| botWork\?\.doing \|\| null;/)
+    expect(src).toMatch(/\(tile\.own && liveDoing\?\.bot === bot\.name \? liveDoing\.text : null\) \|\| \(tile\.own \? otherChatsDoing\?\.get\(bot\.name\) : null\) \|\| botWork\?\.doing \|\| null;/)
     expect(src).toMatch(/<span className="meta bot-side-working">\{doingNow \|\| t\("Working"\)\}<\/span>/)
     const app = readFileSync(join(__dirname, '../src/renderer/src/App.tsx'), 'utf8')
     expect(app).toMatch(/useTranscriptValue\(transcriptStore, state => \(state\.running \? liveDoing\(state\.items\) : null\)\)/)
-    expect(app).toMatch(/liveDoing: liveDoingNow,/)
+    expect(app).toMatch(/liveDoing: liveDoingNow \? \{ bot: selected\.profile \?\? 'default', text: liveDoingNow \} : null,/)
+    expect(app).toMatch(/otherChatsDoing: answering,/)
     expect(src).toMatch(/\{needs \? \(\s*<span className="meta bot-side-pill needs">/)
     expect(src).toMatch(/\{needs \|\| busy \? <WorkRing needs=\{needs\} \/> : null\}/)
   })

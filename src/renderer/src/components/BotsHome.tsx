@@ -151,8 +151,10 @@ interface Props {
   bots: Bot[] | null;
   error: string | null;
   runningProfiles: ReadonlySet<string>;
-  /** What the open chat's reply is doing now ("Running a command"), for its bot while it answers. */
-  liveDoing?: string | null;
+  /** What the open chat's reply is doing now ("Running a command"), and its bot, while it answers. */
+  liveDoing?: { bot: string; text: string } | null;
+  /** What each bot answering in any chat is doing there, as the plugin notes it (null when it doesn't). */
+  otherChatsDoing?: ReadonlyMap<string, string | null>;
   rooms: Room[] | null;
   canStartRooms: boolean;
   onOpen: (bot: Bot) => void;
@@ -270,6 +272,7 @@ export function BotsHome({
   error,
   runningProfiles,
   liveDoing,
+  otherChatsDoing,
   rooms,
   canStartRooms,
   onOpen,
@@ -831,8 +834,9 @@ export function BotsHome({
           const needs = pill?.needs ? botWork!.needsYou : 0;
           const busy = !needs && (!!pill || (tile.own && runningProfiles.has(bot.name)));
           const status = pill?.text ?? (busy ? t("Working") : null);
-          // The step it's on: the open chat's live step, else its workstream's; never the chat's last message (Eric, 2026-11-26).
-          const doingNow = (tile.own && runningProfiles.has(bot.name) ? liveDoing : null) || botWork?.doing || null;
+          // The step it's on: the open chat's live step, else another chat's (the plugin's live steps), else its workstream's; never the chat's last message (Eric, 2026-11-26).
+          const doingNow =
+            (tile.own && liveDoing?.bot === bot.name ? liveDoing.text : null) || (tile.own ? otherChatsDoing?.get(bot.name) : null) || botWork?.doing || null;
           return (
             <button
               key={tile.key}
