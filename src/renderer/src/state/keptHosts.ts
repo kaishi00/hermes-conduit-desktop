@@ -20,7 +20,7 @@ import { PREFS_PATH } from './pinnedOrder'
 import { COPIES_PATH, parseCopies, type RoomCopy } from './roomCopies'
 import { keptCopies } from './useRoomCopies'
 import { keptOwnRooms } from './useGroups'
-import { WORK, parseWork } from './work'
+import { WORK, botDoing, parseWork } from './work'
 import { STATUS_PATH, pluginStatus } from './plugin'
 import { DASHBOARD_PROFILES_CAPABILITY } from './dashboardProfile'
 import type { BotWork } from './useWork'
@@ -675,7 +675,7 @@ export function useKeptWork(others: readonly OtherBot[], on: boolean): ReadonlyM
                 const outcome = await window.conduit.keptHttp(host, keptWorkPath(b.name, dashboardProfiles))
                 if (stopped || !outcome.ok) return
                 const answer = parseWork(outcome.result)
-                byBot.current.set(b.key, { working: answer.working, needsYou: answer.needsYou })
+                byBot.current.set(b.key, { working: answer.working, needsYou: answer.needsYou, doing: botDoing(answer) })
               })
           )
         })
@@ -704,7 +704,8 @@ export function sameBotWork(a: ReadonlyMap<string, BotWork>, b: ReadonlyMap<stri
   if (a.size !== b.size) return false
   for (const [key, work] of a) {
     const other = b.get(key)
-    if (!other || other.working !== work.working || other.needsYou !== work.needsYou) return false
+    // The step under its name too, or a far bot's line keeps its first step for the whole run.
+    if (!other || other.working !== work.working || other.needsYou !== work.needsYou || (other.doing ?? null) !== (work.doing ?? null)) return false
   }
   return true
 }

@@ -38,7 +38,7 @@ describe('collapsed strip of faces', () => {
     const faces = [...host.querySelectorAll<HTMLButtonElement>('.rail-faces .rail-face')]
     expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit', 'Furina', 'Yelan · Working'])
     expect(faces.map(f => f.getAttribute('aria-current'))).toEqual([null, 'page', null])
-    expect(faces.map(f => !!f.querySelector('.rail-face-running'))).toEqual([false, false, true])
+    expect(faces.map(f => !!f.querySelector('.work-ring.working'))).toEqual([false, false, true])
     act(() => faces[2].click())
     expect(onOpen).toHaveBeenCalledWith(tiles[2])
   })
@@ -53,12 +53,12 @@ describe('collapsed strip of faces', () => {
     expect(faces.map(f => f.getAttribute('aria-current'))).toEqual([null, 'page'])
     expect(faces.map(f => !!f.querySelector('.host-badge'))).toEqual([false, true])
     // Running is this dashboard's: the far bot of the same name shows no dot.
-    expect(faces.map(f => !!f.querySelector('.rail-face-running'))).toEqual([true, false])
+    expect(faces.map(f => !!f.querySelector('.work-ring'))).toEqual([true, false])
     act(() => faces[1].click())
     expect(onOpen).toHaveBeenCalledWith(tiles[1])
   })
 
-  it("shows the Bots list's work: a dot for a bot at work, a needs-you dot that wins over it", async () => {
+  it("shows the Bots list's work: a ring for a bot at work, a needs-you ring with its count that wins over it", async () => {
     const tiles = [own('default', 'Conduit'), own('furina', 'Furina'), far('mira', 'Mira')]
     const work: Record<string, { working: number; needsYou: number }> = {
       furina: { working: 1, needsYou: 2 },
@@ -66,7 +66,9 @@ describe('collapsed strip of faces', () => {
     }
     const host = await mount({ tiles, running: new Set(), workOf: (tile: { bot: { name: string } }) => work[tile.bot.name], onOpen: () => {} })
     const faces = [...host.querySelectorAll<HTMLButtonElement>('.rail-face')]
-    expect(faces.map(f => f.querySelector('.rail-face-running')?.className ?? null)).toEqual([null, 'rail-face-running needs', 'rail-face-running'])
+    expect(faces.map(f => f.querySelector('.work-ring')?.className ?? null)).toEqual([null, 'work-ring needs', 'work-ring working'])
+    // The count of what needs you rides on the ring.
+    expect(faces[1].querySelector('.work-ring-count')?.textContent).toBe('2')
     expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit', 'Furina · 2 needs you', 'Mira · Working'])
   })
 

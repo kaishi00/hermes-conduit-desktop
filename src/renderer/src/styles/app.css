@@ -11650,6 +11650,97 @@ button.secondary.danger {
   color: var(--warning);
 }
 
+/*
+ * A bot at work (Eric, 2026-11-26): a thin arc circling its face while it works, a steady amber ring
+ * with the count when something needs you (one pulse as it appears), and its last line shimmering
+ * under its name. Only transform, opacity and a background position move, so many busy bots stay smooth.
+ */
+.work-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.work-ring.working {
+  border: 2px solid transparent;
+  border-top-color: var(--working);
+  border-right-color: color-mix(in srgb, var(--working) 45%, transparent);
+  animation: work-ring-spin 1.4s linear infinite;
+}
+.work-ring.needs {
+  border: 2px solid var(--warning);
+}
+.work-ring.needs::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--warning);
+  opacity: 0;
+  animation: work-ring-ping 1.1s ease-out 1;
+}
+.work-ring-count {
+  position: absolute;
+  right: -6px;
+  bottom: -5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: var(--warning);
+  color: #fff;
+  font: 700 9.5px/15px var(--font);
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--menu);
+}
+/* The dashboard badge sits bottom right in the Bots list (top right on the rail), so there the count goes on top. */
+.bot-side-face .work-ring-count {
+  top: -5px;
+  bottom: auto;
+}
+.bot-side-working {
+  background: linear-gradient(90deg, var(--text-3) 0%, var(--text-3) 40%, var(--working) 50%, var(--text-3) 60%, var(--text-3) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: work-line-sweep 2.6s linear infinite;
+}
+@keyframes work-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes work-ring-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+@keyframes work-line-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .work-ring.working,
+  .work-ring.needs::after,
+  .bot-side-working {
+    animation: none;
+  }
+  .bot-side-working {
+    background: none;
+    color: var(--working);
+  }
+}
+
 /* Conduit's own confirm, notice and name dialogs, in place of the system boxes (state/dialogs.ts). */
 .dialog-backdrop {
   z-index: 1100;
@@ -13150,15 +13241,9 @@ button.rail-brand-button:hover {
   box-shadow: 0 0 0 2px var(--accent) !important;
 }
 
-.rail-face-running {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--rail);
+.rail-face-avatar {
+  position: relative;
+  display: flex;
 }
 
 /* Another dashboard's bot wears its dashboard's badge, as in the Bots list. */
@@ -13171,9 +13256,6 @@ button.rail-brand-button:hover {
   transform-origin: top right;
 }
 
-.rail-face-running.needs {
-  background: var(--warning);
-}
 
 /*
  * You on this Hermes at the top of the rail (Eric, 2026-11-26): your picture

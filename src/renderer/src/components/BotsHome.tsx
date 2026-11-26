@@ -1,3 +1,4 @@
+import { WorkRing } from "./WorkRing";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction } from "react";
 import type { BotWork } from "../state/useWork";
 import { timeLabel } from "../state/chats";
@@ -150,6 +151,10 @@ interface Props {
   bots: Bot[] | null;
   error: string | null;
   runningProfiles: ReadonlySet<string>;
+  /** What the open chat's reply is doing now ("Running a command"), and its bot, while it answers. */
+  liveDoing?: { bot: string; text: string } | null;
+  /** What each bot answering in any chat is doing there, as the plugin notes it (null when it doesn't). */
+  otherChatsDoing?: ReadonlyMap<string, string | null>;
   rooms: Room[] | null;
   canStartRooms: boolean;
   onOpen: (bot: Bot) => void;
@@ -266,6 +271,8 @@ export function BotsHome({
   bots,
   error,
   runningProfiles,
+  liveDoing,
+  otherChatsDoing,
   rooms,
   canStartRooms,
   onOpen,
@@ -822,12 +829,21 @@ export function BotsHome({
           const picked = tile.own ? (draft?.members.includes(bot.name) ?? false) : draftFar.some((m) => m.key === tile.key);
           const pill = workPill(tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name)));
           const badge = tile.own ? ownBadge : (badgeFor?.(tile.host) ?? null);
+          // At work: a ring on the face, and its last line shimmering under the name (Eric, 2026-11-26). Needs you keeps its words.
+          const botWork = tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name));
+          const needs = pill?.needs ? botWork!.needsYou : 0;
+          const busy = !needs && (!!pill || (tile.own && runningProfiles.has(bot.name)));
+          const status = pill?.text ?? (busy ? t("Working") : null);
+          // The step it's on: the open chat's live step, else another chat's (the plugin's live steps), else its workstream's; never the chat's last message (Eric, 2026-11-26).
+          const doingNow =
+            (tile.own && liveDoing?.bot.toLowerCase() === bot.name.toLowerCase() ? liveDoing.text : null) || (tile.own ? otherChatsDoing?.get(bot.name) : null) || botWork?.doing || null;
           return (
             <button
               key={tile.key}
               className={`row bot-side-bot${open ? " open" : ""}${picked ? " picked" : ""}${dropTarget === tile.key ? " drop-target" : ""}${moveTarget === tile.key ? " move-target" : ""}`}
               aria-current={open ? "true" : undefined}
               aria-pressed={picked || undefined}
+              title={status ? `${bot.title} · ${status}` : undefined}
               onClick={() => {
                 if (tile.own) return openOrPick(bot);
                 const far = draft ? farOf(tile) : null;
@@ -840,6 +856,7 @@ export function BotsHome({
             >
               <span className="bot-side-face bot-tile-face">
                 <BotAvatar bot={bot} size={30} moving host={tile.own ? undefined : tile.host} />
+                {needs || busy ? <WorkRing needs={needs} /> : null}
                 {dropTarget === tile.key ? (
                   <span className="drop-plus" aria-hidden="true">
                     <Icon name="plus" />
@@ -856,10 +873,14 @@ export function BotsHome({
                   ) : null}
                   {bot.title}
                 </span>
-                {pill ? (
-                  <span className={`meta bot-side-pill${pill.needs ? " needs" : ""}`}>{pill.text}</span>
-                ) : tile.own && runningProfiles.has(bot.name) ? (
-                  <span className="meta bot-side-pill">{t("Working")}</span>
+                {needs ? (
+                  <span className="meta bot-side-pill needs">{pill!.text}</span>
+                ) : busy ? (
+                  <>
+                    {/* What it's doing now, else Working, shimmering while it works. */}
+                    <span className="meta bot-side-working">{doingNow || t("Working")}</span>
+                    {doingNow ? <span className="sr-only">{status}</span> : null}
+                  </>
                 ) : bot.lastLine ? (
                   <span className="meta">{bot.lastLine}</span>
                 ) : null}

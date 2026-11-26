@@ -66,6 +66,7 @@ import { RailFaces } from './components/RailFaces'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
+import { liveDoing, stepTitle } from './state/liveDoing'
 import { lastReplyOf } from './state/transcriptReads'
 import { useRevealRow } from './state/revealRow'
 import { forgetSummaries } from './state/stepSummaries'
@@ -215,7 +216,7 @@ import { openRoomChatHere } from './state/roomChatOpen'
 import { DockedRoomFrame } from './components/DockedRoom'
 import type { DockedRoomRequest } from '@shared/chatWindows'
 import { parseProjects, type Project, type ProjectChat } from './state/projects'
-import { useLiveStatus } from './state/liveStatus'
+import { useAnsweringBots, useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, saveMarksSoon, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
@@ -528,6 +529,8 @@ function Shell({
   // reply runs that, not App, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
   const runningStatus = useTranscriptValue(transcriptStore, state => state.status)
+  // The open reply's current step, for its bot's line in the Bots list.
+  const liveDoingNow = useTranscriptValue(transcriptStore, state => (state.running ? liveDoing(state.items) : null))
   const transcriptPlan = useTranscriptValue(transcriptStore, state => state.plan)
 
   // The chat list's profile: a new chat starts in it.
@@ -1749,11 +1752,15 @@ function Shell({
     },
     [showRoom]
   )
+  // Every bot answering in some chat, the open one's at once (Eric, 2026-11-26: not only the chat open).
+  const answeringNames = useMemo(() => botNames.slice(0, 24), [botNames])
+  // ...with the step each is on there, from the plugin (the open chat's own comes live below).
+  const answering = useAnsweringBots(connected, answeringNames, turnsDone, stepTitle)
   const runningProfiles = useMemo(() => {
-    const names = new Set<string>()
+    const names = new Set<string>(answering.keys())
     if (running && selected.profile) names.add(selected.profile)
     return names
-  }, [running, selected.profile])
+  }, [answering, running, selected.profile])
 
   // Needs you: the requests this window holds, and every profile's waiting list.
   const requests = useRequests()
@@ -2522,6 +2529,8 @@ function Shell({
     bots: orderedRoster,
     error: roster.error,
     runningProfiles: runningProfiles,
+    liveDoing: liveDoingNow ? { bot: selected.profile ?? 'default', text: liveDoingNow } : null,
+    otherChatsDoing: answering,
     rooms: orderedRooms,
     canStartRooms: groupRooms.capabilities?.supported === true && connected,
     onOpen: openBot,

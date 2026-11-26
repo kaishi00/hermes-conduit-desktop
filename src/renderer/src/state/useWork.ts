@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { gateway } from '../gateway'
-import { WORK, parseWork, sameWork, workPath, type WorkItem, type WorkSnapshot } from './work'
+import { WORK, botDoing, parseWork, sameWork, workPath, type WorkItem, type WorkSnapshot } from './work'
 import { everyWhileVisible } from './visibility'
 
 /**
@@ -109,7 +109,12 @@ export function useWork(profile: string | undefined, connected: boolean, live: b
 export interface BotWork {
   working: number
   needsYou: number
+  /** What it's doing now (botDoing), shown under its name while it works. */
+  doing?: string | null
 }
+
+/** How often the Bots list reads work again while a bot works, for the step it's on. */
+export const DOING_POLL_MS = 5000
 
 export function useWorkSessions(profiles: string[], connected: boolean): { sessions: ReadonlySet<string>; byBot: ReadonlyMap<string, BotWork> } {
   const [state, setState] = useState<{ sessions: ReadonlySet<string>; byBot: ReadonlyMap<string, BotWork> }>({ sessions: new Set(), byBot: new Map() })
@@ -129,12 +134,20 @@ export function useWorkSessions(profiles: string[], connected: boolean): { sessi
       if (!live) return
       const byBot = new Map<string, BotWork>()
       answers.forEach((answer, index) => {
-        if (answer) byBot.set(profiles[index]!, { working: answer.working, needsYou: answer.needsYou })
+        if (answer) byBot.set(profiles[index]!, { working: answer.working, needsYou: answer.needsYou, doing: botDoing(answer) })
       })
       const sessions = new Set(answers.flatMap(answer => answer?.sessionIds ?? []))
       // The same answer keeps the same state, so the Chats list and Bots home don't redraw for nothing (desktop#199).
       setState(current => (sameWork(current, sessions, byBot) ? current : { sessions, byBot }))
+      // While any bot works, read again every few seconds, so its row follows the step it's on.
+      const busy = [...byBot.values()].some(work => work.working > 0)
+      if (busy && !poll) poll = everyWhileVisible(() => void read(), DOING_POLL_MS)
+      else if (!busy && poll) {
+        poll()
+        poll = null
+      }
     }
+    let poll: (() => void) | null = null
     void read()
     let timer: ReturnType<typeof setTimeout> | null = null
     const off = window.conduit.onEvent(event => {
@@ -145,6 +158,7 @@ export function useWorkSessions(profiles: string[], connected: boolean): { sessi
     return () => {
       live = false
       off()
+      poll?.()
       if (timer) clearTimeout(timer)
     }
   }, [key, connected])
