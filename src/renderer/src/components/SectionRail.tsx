@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import type { RailSection } from '@shared/ipc'
 import {
@@ -33,6 +33,8 @@ export interface SectionRailProps {
   onSelect: (section: RailSection) => void
   onSettings: () => void
   onChangeLayout: (next: RailLayout) => void
+  /** The app's mark and Hermes switcher, at the top of the island (Brand with `inRail`). */
+  brand?: ReactNode
 }
 
 interface MenuState {
@@ -59,7 +61,8 @@ export function SectionRail({
   hostLabel,
   onSelect,
   onSettings,
-  onChangeLayout
+  onChangeLayout,
+  brand
 }: SectionRailProps) {
   const mac = window.conduit.platform === 'darwin'
   const pinned = pinnedSections(layout)
@@ -156,6 +159,7 @@ export function SectionRail({
           openMenu(e.target as HTMLElement)
         }}
       >
+        {brand}
         {showSidebarButton ? (
           <button
             className="railbtn rail-show-list"

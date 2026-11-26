@@ -59,7 +59,7 @@ import { Icon } from './components/icons'
 import { useMouseBack } from './state/mouseBack'
 import { NeedsYou } from './components/NeedsYou'
 import { SignIn } from './components/SignIn'
-import { TitleBar } from './components/TitleBar'
+import { Brand, TitleBar } from './components/TitleBar'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
@@ -295,18 +295,27 @@ export function App() {
 
   if (!status) return <div className="app" />
   const signedOut = status.phase === 'signed-out' || (status.phase === 'failed' && !status.url)
+  // The open window: everything but the lock, sign-in and dashboard pick, which keep the brand in the title bar.
+  const inShell =
+    status.phase !== 'locked' &&
+    !editing &&
+    !adding &&
+    !(repairing && status.phase !== 'open') &&
+    !(status.phase === 'signed-out' && status.choosing && status.hosts?.length) &&
+    !(signedOut || status.phase === 'failed')
+  const brand = {
+    subtitle: signedOut ? undefined : status.hostLabel,
+    hosts: status.hosts,
+    currentUrl: status.url,
+    onSwitch: async (url: string) => {
+      if (!(await switchEndingCall(hostName(url)))) return
+      setRepairing(null)
+      void window.conduit.switchHost(url)
+    }
+  }
   return (
     <div className="app">
-      <TitleBar
-        subtitle={signedOut ? undefined : status.hostLabel}
-        hosts={status.hosts}
-        currentUrl={status.url}
-        onSwitch={async url => {
-          if (!(await switchEndingCall(hostName(url)))) return
-          setRepairing(null)
-          void window.conduit.switchHost(url)
-        }}
-      />
+      <TitleBar {...brand} bare={inShell} />
       {status.phase === 'locked' ? (
         <LockedScreen />
       ) : editing ? (
@@ -335,6 +344,7 @@ export function App() {
             onAddHost={() => void switchEndingCall(null).then(ok => ok && setAdding(true))}
             onEditHost={host => void switchEndingCall(null).then(ok => ok && setEditing(host))}
             onRepair={() => status.url && setRepairing(savedHost(status.hosts, status.url))}
+            brand={<Brand {...brand} inRail />}
           />
         </SummaryHost.Provider>
       )}
@@ -386,12 +396,15 @@ function Shell({
   status,
   onAddHost,
   onEditHost,
-  onRepair
+  onRepair,
+  brand
 }: {
   status: ConnectionStatus
   onAddHost: () => void
   onEditHost: (host: HostSummary) => void
   onRepair: () => void
+  /** The brand and Hermes switcher, at the top of the rail's island. */
+  brand: ReactNode
 }) {
   // Before any picture is read for this host: its pictures are kept under it.
   useState(() => setAvatarHost(status.url ?? ''))
@@ -2584,6 +2597,7 @@ function Shell({
           onSelect={selectRailSection}
           onSettings={() => setSection('settings')}
           onChangeLayout={changeRailLayout}
+          brand={brand}
         />
         {/* Chats stays mounted once shown, hidden while another section is open, so coming back doesn't rebuild every row and the open transcript. */}
         {chatsShown ? (
