@@ -115,6 +115,8 @@ export interface BotWork {
 
 /** How often the Bots list reads work again while a bot works, for the step it's on. */
 export const DOING_POLL_MS = 5000
+/** Failed reads in a row a bot's last answer stands in for before the bot is dropped. */
+export const STAND_IN_READS = 3
 
 export function useWorkSessions(profiles: string[], connected: boolean): { sessions: ReadonlySet<string>; byBot: ReadonlyMap<string, BotWork> } {
   const [state, setState] = useState<{ sessions: ReadonlySet<string>; byBot: ReadonlyMap<string, BotWork> }>({ sessions: new Set(), byBot: new Map() })
@@ -123,6 +125,7 @@ export function useWorkSessions(profiles: string[], connected: boolean): { sessi
     if (!connected || !profiles.length) return
     let live = true
     const last = new Map<string, WorkSnapshot>()
+    const failures = new Map<string, number>()
     const read = async () => {
       const answers = await Promise.all(
         profiles.map(profile =>
@@ -133,10 +136,19 @@ export function useWorkSessions(profiles: string[], connected: boolean): { sessi
         )
       )
       if (!live) return
-      // A failed read keeps what that bot last said, so one plugin hiccup neither drops its row's step nor stops the poll.
+      // A failed read keeps what that bot last said, so one plugin hiccup neither drops its row's step nor stops the poll;
+      // after a few failures in a row the bot is dropped, as a plugin that's gone for good says nothing.
       answers.forEach((answer, index) => {
-        if (answer) last.set(profiles[index]!, answer)
-        else answers[index] = last.get(profiles[index]!) ?? null
+        const profile = profiles[index]!
+        if (answer) {
+          last.set(profile, answer)
+          failures.delete(profile)
+          return
+        }
+        const failed = (failures.get(profile) ?? 0) + 1
+        failures.set(profile, failed)
+        if (failed >= STAND_IN_READS) last.delete(profile)
+        answers[index] = last.get(profile) ?? null
       })
       const byBot = new Map<string, BotWork>()
       answers.forEach((answer, index) => {
