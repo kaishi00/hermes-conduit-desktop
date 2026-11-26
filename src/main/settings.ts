@@ -13,9 +13,19 @@ import { DEFAULT_QUICK_ASK_ACCELERATOR, validAccelerator } from '../shared/accel
 
 const path = () => join(app.getPath('userData'), 'settings.json')
 
-function read(): { language?: unknown; theme?: unknown; lock?: unknown; askHost?: unknown; appIcon?: unknown; quickAsk?: unknown; hideDock?: unknown } {
+interface StoredSettings {
+  language?: unknown
+  theme?: unknown
+  lock?: unknown
+  askHost?: unknown
+  appIcon?: unknown
+  quickAsk?: unknown
+  hideDock?: unknown
+}
+
+function read(): StoredSettings {
   try {
-    return JSON.parse(readFileSync(path(), 'utf8')) as { language?: unknown; theme?: unknown; lock?: unknown; askHost?: unknown }
+    return JSON.parse(readFileSync(path(), 'utf8')) as StoredSettings
   } catch {
     return {}
   }

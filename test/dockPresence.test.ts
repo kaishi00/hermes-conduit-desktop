@@ -93,3 +93,43 @@ describe('DockPresence (desktop#586)', () => {
     expect(dock.hide).not.toHaveBeenCalled()
   })
 })
+
+describe('DockPresence leftovers (desktop#598 reviews)', () => {
+  it('hides again when the window closes while the icon is still coming back', async () => {
+    const { state, dock, presence, fire } = setup(false)
+    presence.setEnabled(true)
+    fire()
+    state.open = true
+    presence.update()
+    state.open = false
+    presence.update()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(state.visible).toBe(true)
+    fire()
+    expect(dock.hide).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the icon while a window steps aside, however long it takes', () => {
+    const { state, dock, presence, fire, pending } = setup(true)
+    presence.setEnabled(true)
+    presence.hold()
+    state.open = false
+    presence.update()
+    expect(pending()).toBe(false)
+    state.open = true
+    presence.release()
+    fire()
+    expect(dock.hide).not.toHaveBeenCalled()
+  })
+
+  it('starts one show at a time', () => {
+    const { state, dock, presence, fire } = setup(false)
+    presence.setEnabled(true)
+    fire()
+    state.open = true
+    presence.update()
+    presence.update()
+    expect(dock.show).toHaveBeenCalledTimes(1)
+  })
+})

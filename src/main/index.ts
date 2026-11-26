@@ -581,6 +581,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.setHideDock, (_event, on: unknown) => {
     if (!dockPresence) return null
     if (typeof on !== 'boolean') return hideDockWhenClosed()
+    // As the other settings do, an unsaved choice still applies until Conduit quits.
     chooseHideDock(on)
     dockPresence.setEnabled(on)
     return on
@@ -1250,6 +1251,7 @@ async function captureScreen(win: BrowserWindow | null): Promise<string | null> 
   const shown = !!win && win.isVisible() && !win.isMinimized()
   try {
     if (shown) {
+      dockPresence?.hold()
       win!.hide()
       await new Promise(resolve => setTimeout(resolve, 300))
     }
@@ -1263,6 +1265,7 @@ async function captureScreen(win: BrowserWindow | null): Promise<string | null> 
     if (shown) {
       win!.show()
       win!.focus()
+      dockPresence?.release()
     }
   }
 }
