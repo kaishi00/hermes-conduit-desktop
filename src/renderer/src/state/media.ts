@@ -146,6 +146,39 @@ export function mediaKind(path: string): MediaKind {
   return 'file'
 }
 
+/** A Markdown table's rule line, the phone's `TranscriptDirectives.isTableHeader` test. */
+const TABLE_RULE = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/
+
+/**
+ * The indexes of `lines` that are a Markdown table's (header, rule and rows), as the phone's
+ * `TranscriptDirectives.readLines` finds them (desktop#526): a line with a `|` whose next line is a rule heads
+ * a table, and its rows go on while each holds a `|`. A `|` in prose is not a table. Lines in a fenced block
+ * are code, never a table.
+ */
+export function tableLines(lines: readonly string[]): Set<number> {
+  const table = new Set<number>()
+  let fence: string | null = null
+  let end = -1
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!
+    const fenceMatch = /^\s*(```+|~~~+)/.exec(line)
+    if (fence) {
+      if (fenceMatch && fenceMatch[1]!.startsWith(fence)) fence = null
+      continue
+    }
+    if (fenceMatch) {
+      fence = fenceMatch[1]!
+      continue
+    }
+    if (index > end && line.includes('|') && index + 1 < lines.length && TABLE_RULE.test(lines[index + 1]!.trim())) {
+      end = index + 1
+      while (end + 1 < lines.length && lines[end + 1]!.includes('|') && lines[end + 1]!.trim()) end++
+    }
+    if (index <= end) table.add(index)
+  }
+  return table
+}
+
 /**
  * Splits a reply into Markdown runs and the files it delivers. With `boards`, the ids of the boards the reply
  * places, it is also cut at the first line naming each (phone issue 3215): the words on that line stay before
@@ -162,7 +195,9 @@ export function splitReply(text: string, boards?: ReadonlySet<string>): ReplyBlo
     run = []
   }
   let fence: string | null = null
-  for (const rawLine of text.split('\n')) {
+  const lines = text.split('\n')
+  const table = left ? tableLines(lines) : null
+  for (const [index, rawLine] of lines.entries()) {
     const fenceMatch = /^\s*(```+|~~~+)/.exec(rawLine)
     if (fence) {
       run.push(rawLine)
@@ -179,7 +214,7 @@ export function splitReply(text: string, boards?: ReadonlySet<string>): ReplyBlo
     for (const directive of DIRECTIVES) line = line.split(directive).join('')
     const trimmed = line.trim()
     if (hadDirective && !trimmed) continue
-    const placed = left?.size && !trimmed.startsWith('>') && !trimmed.includes('|') ? boardLines(trimmed, left) : []
+    const placed = left?.size && !trimmed.startsWith('>') && !table!.has(index) ? boardLines(trimmed, left) : []
     if (placed.length) {
       // Each board once: a second line naming it stays text, which the Markdown hides.
       const first = placed.filter(board => left!.delete(board.id))
@@ -268,14 +303,15 @@ export function withoutBoardLines(text: string): string {
   if (!text.includes('::conduit-board{')) return text
   const kept: string[] = []
   let fence: string | null = null
-  for (const line of text.split('\n')) {
+  const lines = text.split('\n')
+  const table = tableLines(lines)
+  for (const [index, line] of lines.entries()) {
     const fenceMatch = /^\s*(```+|~~~+)/.exec(line)
     if (fence) {
       if (fenceMatch && fenceMatch[1]!.startsWith(fence)) fence = null
     } else if (fenceMatch) fence = fenceMatch[1]!
-    else if (line.includes('::conduit-board{') && !line.trim().startsWith('>') &&
-      // A `|` in prose is not a table row; only a real row keeps its directive.
-      !(/^\s*\|.*\|\s*$/.test(line) || (line.match(/\|/g)?.length ?? 0) >= 2)) {
+    // A `|` in prose is not a table: only a real table's lines keep their directive, as the phone reads them.
+    else if (line.includes('::conduit-board{') && !line.trim().startsWith('>') && !table.has(index)) {
       let words = line
       const found = [...line.matchAll(BOARD_LINE)].filter(match => {
         const index = match.index ?? 0

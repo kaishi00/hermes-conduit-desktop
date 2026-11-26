@@ -179,7 +179,7 @@ describe('boards', () => {
   it('leaves a board at its row without the line, for a later turn’s line, or for an example', () => {
     expect(placeBoards([user, row, reply('a1', 'Here it is.')]).hidden.size).toBe(0)
     expect(placeBoards([user, row, reply('a1', 'Here.'), { kind: 'user', key: 'u2', text: 'And?' }, reply('a2', line)]).hidden.size).toBe(0)
-    for (const example of ['```\n' + line + '\n```', `> ${line}`, `\`${line}\``, `| ${line} | x |`])
+    for (const example of ['```\n' + line + '\n```', `> ${line}`, `\`${line}\``, `| a | b |\n| --- | --- |\n| ${line} | x |`, `a | b\n--- | ---\n${line} | x`])
       expect(placeBoards([user, row, reply('a1', example)]).hidden.size).toBe(0)
   })
 
@@ -219,10 +219,26 @@ describe('boards', () => {
     expect(sameQuotedText(raw, withoutBoardLines(raw))).toBe(false)
     // A line in a quote or a table stays, as the reply draws it.
     expect(withoutBoardLines(`> ${line}`)).toBe(`> ${line}`)
+    // A table is a header with a rule under it, outer pipes or not, as the phone reads it (desktop#526).
+    const table = `a | b\n--- | ---\n${line} | x\nmore | rows`
+    expect(withoutBoardLines(table)).toBe(table)
+    expect(withoutBoardLines(`Before.\n\n${table}\n\nAfter ${line}`)).toBe(`Before.\n\n${table}\n\nAfter`)
+    // Prose with pipes is not a table: its line goes.
+    expect(withoutBoardLines(`Pick A | B | C ${line}`)).toBe('Pick A | B | C')
+    // A fenced rule under a pipe line doesn't make a table.
+    expect(withoutBoardLines('Pick A | B\n```\n--- | ---\n```')).toBe('Pick A | B\n```\n--- | ---\n```')
     // The first call of a turn to name an id keeps it.
     const again = { ...row, key: 't2' }
     expect([...placeBoards([user, row, again, reply('a1', line)]).hidden]).toEqual(['t1'])
     expect(splitReply(`Before\n${line}`)).toEqual([{ kind: 'markdown', text: `Before\n${line}` }])
+  })
+
+  it('places a board on a prose line with a pipe, never in a table (desktop#526)', () => {
+    const boards = new Set([id])
+    expect(splitReply(`Pick A | B ${line}`, boards)).toEqual([{ kind: 'markdown', text: 'Pick A | B' }, { kind: 'board', id }])
+    expect(placeBoards([user, row, reply('a1', `Pick A | B ${line}`)]).hidden.size).toBe(1)
+    const table = `| a | b |\n| --- | --- |\n| ${line} | x |`
+    expect(splitReply(table, boards)).toEqual([{ kind: 'markdown', text: table }])
   })
 
   it('tells two lists of the same placed boards as one', () => {
