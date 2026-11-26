@@ -31,13 +31,17 @@ function defaultStorage(): LimitStorage | null {
   }
 }
 
+/** One of the choices: anything else (a hand-edited value) is the default, so Settings can always show it. */
 export function clampAttachmentLimit(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return DEFAULT_ATTACHMENT_LIMIT_MB
-  return Math.min(Math.floor(value), HOST_MAX_ATTACHMENT_MB)
+  return (ATTACHMENT_LIMIT_CHOICES as readonly number[]).includes(value) ? value : DEFAULT_ATTACHMENT_LIMIT_MB
 }
+
+/** The pick made while storage couldn't keep it, for the rest of this window. */
+let unsaved: number | null = null
 
 /** The limit set on this computer, in MB. */
 export function attachmentLimitMB(storage: LimitStorage | null = defaultStorage()): number {
+  if (unsaved !== null) return unsaved
   let saved: string | null = null
   try {
     saved = storage?.getItem(ATTACHMENT_LIMIT_KEY) ?? null
@@ -50,9 +54,12 @@ export function attachmentLimitMB(storage: LimitStorage | null = defaultStorage(
 export function setAttachmentLimitMB(megabytes: number, storage: LimitStorage | null = defaultStorage()): number {
   const next = clampAttachmentLimit(megabytes)
   try {
-    storage?.setItem(ATTACHMENT_LIMIT_KEY, String(next))
+    if (!storage) throw new Error('no storage')
+    storage.setItem(ATTACHMENT_LIMIT_KEY, String(next))
+    unsaved = null
   } catch {
     // Private storage: it lasts until the window closes.
+    unsaved = next
   }
   return next
 }
