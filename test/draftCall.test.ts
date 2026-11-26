@@ -26,6 +26,7 @@ import { emptyTranscript } from '../src/renderer/src/state/transcript'
 // The node test tsconfig has no JSX: the hook is loaded the way the other render tests load components.
 interface ChatCallState {
   calling: boolean
+  header: { onMode: (mode: string) => void }
   start: () => void
   end: () => void
   view: (late: { requests: unknown[]; onSend: (text: string) => Promise<boolean | string> }) => unknown
@@ -117,6 +118,23 @@ describe('a Classic call started in the new-chat draft (desktop#538)', () => {
     expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
     expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
     expect(archived).not.toHaveBeenCalledWith('work', 'chat-x')
+    view.unmount()
+  })
+
+  it('keeps its chat until the call ends when it switches to another mode mid-call (#617 review)', async () => {
+    const view = mount(async () => 'made-by-call')
+    act(() => view.call().start())
+    await act(async () => say!('Book a table for six tonight'))
+    view.draw('made-by-call')
+    await act(async () => undefined)
+    expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
+    act(() => view.call().header.onMode('gemini'))
+    await act(async () => undefined)
+    expect(view.call().calling).toBe(true)
+    expect(archived).not.toHaveBeenCalled()
+    act(() => view.call().end())
+    await act(async () => undefined)
+    expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
     view.unmount()
   })
 })
