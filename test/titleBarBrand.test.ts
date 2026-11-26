@@ -237,6 +237,28 @@ describe('you on this Hermes, at the top of the rail', () => {
     expect(host.querySelector('button.rail-brand-button')).not.toBeNull()
   })
 
+  it('shows a problem in the title bar too, which stands in while a banner is up, and says it aloud', async () => {
+    const { TitleBar } = await load()
+    const run = vi.fn()
+    const twin = { label: 'Sign In to Furina…', run: vi.fn() }
+    const bar = mount(TitleBar, {
+      subtitle: 'Here',
+      hosts: hosts.slice(0, 1),
+      currentUrl: hosts[0].url,
+      onSwitch: () => {},
+      alert: { tone: 'signIn', text: 'Furina · Sign In required', actions: [{ label: 'Sign In to Furina…', run }, twin] }
+    })
+    expect(bar.querySelector('.brand .brand-state.signIn')).not.toBeNull()
+    expect(bar.querySelector('[role="status"]')?.textContent).toBe('Furina · Sign In required')
+    // One Hermes, but the list opens for what to do; two actions with the same words each run their own.
+    act(() => bar.querySelector<HTMLButtonElement>('.brand .host-button')!.click())
+    const items = [...bar.querySelectorAll<HTMLButtonElement>('.host-menu [role="menuitem"]')]
+    expect(items.map(i => i.textContent?.trim())).toEqual(['Sign In to Furina…', 'Sign In to Furina…'])
+    act(() => items[1].click())
+    expect(twin.run).toHaveBeenCalledOnce()
+    expect(run).not.toHaveBeenCalled()
+  })
+
   it('opens Your Picture from the list, with one Hermes too', async () => {
     const { Brand } = await load()
     const onPicture = vi.fn()

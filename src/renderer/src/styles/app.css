@@ -13221,6 +13221,30 @@ button.rail-brand-button:hover {
   }
 }
 
+/* The same mark in the title bar, which stands in for the rail's brand while a banner is up. */
+.brand-state {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--warning);
+}
+
+.brand-state.quiet {
+  background: none;
+  border: 1.5px solid color-mix(in srgb, var(--text) 35%, transparent);
+  border-top-color: transparent;
+  animation: rail-brand-reconnecting 1.1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-state.quiet {
+    animation: none;
+  }
+}
+
 .rail-brand-host.rail-brand-sign-in {
   color: var(--accent);
   font-weight: 600;
