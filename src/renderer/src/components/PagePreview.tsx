@@ -95,9 +95,6 @@ export function PageFrame({ url, title, height, onHeight }: { url: string; title
 export function PagePreview({ path, name, fallback }: { path: string; name: string; fallback: ReactNode }) {
   const profile = useContext(PictureProfile)
   const [url, setUrl] = useState<string | null | undefined>(undefined)
-  const [height, setHeight] = useState(PLACEHOLDER)
-  const [cut, setCut] = useState(false)
-  const [full, setFull] = useState(false)
   useEffect(() => {
     let live = true
     setUrl(undefined)
@@ -106,6 +103,50 @@ export function PagePreview({ path, name, fallback }: { path: string; name: stri
       live = false
     }
   }, [path, profile])
+  if (url === null) return <>{fallback}</>
+  return (
+    <PageCard
+      url={url}
+      name={name}
+      title={path}
+      browser={isPagePath(path) ? () => void openPageInBrowser(path, profile) : undefined}
+    />
+  )
+}
+
+/**
+ * HTML written in the reply itself, after the phone's HTMLPreviewBlock: drawn as a `::preview` page is, once
+ * nothing more will join it; while the reply is still writing it, its room waits with a line saying so.
+ */
+export function ReplyPage({ html, ready }: { html: string; ready: boolean }) {
+  const [url, setUrl] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (!ready) return
+    let live = true
+    void window.conduit.pageUrl(html).then(address => live && setUrl(address))
+    return () => {
+      live = false
+    }
+  }, [html, ready])
+  if (!ready) {
+    return (
+      <div className="page-preview">
+        <div className="page-frame page-frame-loading page-frame-writing" style={{ height: PLACEHOLDER }}>
+          <span className="meta">{t('Drawing the page when it’s finished…')}</span>
+        </div>
+      </div>
+    )
+  }
+  // A page too large to keep stays as the HTML it is.
+  if (url === null) return <pre className="page-source">{html}</pre>
+  return <PageCard url={url} name={t('Page')} title={t('Page')} />
+}
+
+/** A page's card in a message: its name, Open full screen, and the page up to 900 px, the rest full screen. */
+function PageCard({ url, name, title, browser }: { url: string | undefined; name: string; title: string; browser?: () => void }) {
+  const [height, setHeight] = useState(PLACEHOLDER)
+  const [cut, setCut] = useState(false)
+  const [full, setFull] = useState(false)
   useEffect(() => {
     if (!full) return
     const onKey = (event: KeyboardEvent) => {
@@ -118,9 +159,8 @@ export function PagePreview({ path, name, fallback }: { path: string; name: stri
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [full])
-  if (url === null) return <>{fallback}</>
   return (
-    <div className="page-preview" title={path}>
+    <div className="page-preview" title={title}>
       <div className="page-preview-head">
         <span className="page-preview-name">{name}</span>
         <button className="link" disabled={!url} onClick={() => setFull(true)}>
@@ -145,8 +185,8 @@ export function PagePreview({ path, name, fallback }: { path: string; name: stri
         <div className="page-full" role="dialog" aria-label={name}>
           <div className="page-full-head">
             <span className="page-preview-name">{name}</span>
-            {isPagePath(path) ? (
-              <button className="secondary" onClick={() => void openPageInBrowser(path, profile)}>
+            {browser ? (
+              <button className="secondary" onClick={browser}>
                 {t('Open in Browser')}
               </button>
             ) : null}

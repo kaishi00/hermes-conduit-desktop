@@ -6,10 +6,14 @@
  * Tags inside code or a blockquote are examples, not files.
  */
 
+import { pageAt, startsPageAt } from './htmlInReplies'
+
 export type ReplyBlock =
   | { kind: 'markdown'; text: string }
   | { kind: 'media'; path: string; alt?: string }
   | { kind: 'preview'; path: string }
+  /** HTML written in the reply itself, drawn as a page (htmlInReplies); `complete` once nothing more will join it. */
+  | { kind: 'page'; html: string; complete: boolean }
   /** A conduit_show board, where the reply's `::conduit-board{id="cb-…"}` line places it (boards.ts placeBoards). */
   | { kind: 'board'; id: string }
 
@@ -186,7 +190,8 @@ export function tableLines(lines: readonly string[]): Set<number> {
  */
 export function splitReply(text: string, boards?: ReadonlySet<string>): ReplyBlock[] {
   const left = boards?.size && text.includes('::conduit-board{') ? new Set(boards) : null
-  if (!left && !/MEDIA:/i.test(text) && !text.includes('::preview') && !DIRECTIVES.some(d => text.includes(d))) return [{ kind: 'markdown', text }]
+  if (!left && !/MEDIA:/i.test(text) && !text.includes('::preview') && !DIRECTIVES.some(d => text.includes(d)) && !/^ {0,3}</m.test(text))
+    return [{ kind: 'markdown', text }]
   const blocks: ReplyBlock[] = []
   let run: string[] = []
   const flush = () => {
@@ -197,7 +202,8 @@ export function splitReply(text: string, boards?: ReadonlySet<string>): ReplyBlo
   let fence: string | null = null
   const lines = text.split('\n')
   const table = left ? tableLines(lines) : null
-  for (const [index, rawLine] of lines.entries()) {
+  for (let index = 0; index < lines.length; index++) {
+    const rawLine = lines[index]!
     const fenceMatch = /^\s*(```+|~~~+)/.exec(rawLine)
     if (fence) {
       run.push(rawLine)
@@ -207,6 +213,14 @@ export function splitReply(text: string, boards?: ReadonlySet<string>): ReplyBlo
     if (fenceMatch) {
       fence = fenceMatch[1]!
       run.push(rawLine)
+      continue
+    }
+    // HTML written in the reply: a page, drawn as `::preview`'s are.
+    if (startsPageAt(lines, index)) {
+      const page = pageAt(lines, index)
+      flush()
+      blocks.push({ kind: 'page', html: lines.slice(page.start, page.end).join('\n').trim(), complete: page.complete })
+      index = page.end - 1
       continue
     }
     let line = rawLine
@@ -332,7 +346,7 @@ export function withoutBoardLines(text: string): string {
 /**
  * A reply as a voice model gets it, after the phone's GatewayMediaTags.namingFiles:
  * each delivered file or preview named, never given by its path (live models
- * are told of a file by name, #1449).
+ * are told of a file by name, #1449), and a page written in the reply said to be one.
  */
 export function namingFiles(given: string): string {
   const text = withoutBoardLines(given)
@@ -344,7 +358,9 @@ export function namingFiles(given: string): string {
         ? block.text
         : block.kind === 'board'
           ? ''
-          : `${block.kind === 'media' && block.alt ? `${block.alt} ` : ''}(a file in the chat: ${fileName(block.path)})`
+          : block.kind === 'page'
+            ? '(a page in the chat)'
+            : `${block.kind === 'media' && block.alt ? `${block.alt} ` : ''}(a file in the chat: ${fileName(block.path)})`
     )
     .join('\n')
 }

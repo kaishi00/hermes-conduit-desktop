@@ -457,6 +457,7 @@ export type MenuAction =
   | 'text-normal'
   | 'shortcuts'
   | 'toggle-sidebar'
+  | 'toggle-workbench'
   | 'go-1'
   | 'go-2'
   | 'go-3'
