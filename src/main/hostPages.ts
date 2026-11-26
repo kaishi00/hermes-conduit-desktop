@@ -18,7 +18,7 @@ import { session, shell, type WebContents } from 'electron'
 import { createHash } from 'node:crypto'
 import { t } from '../shared/i18n'
 import { HOST_PAGE_SCHEME, HOST_PAGES_PARTITION, WEB_PAGES_PARTITION, hostPageParts } from '../shared/browserAddress'
-import { PAGE_HEADERS, PAGE_STATUS, PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, namesThisComputer, pageHeaderPairs, pageStatus, type BrowserKind } from './hostPageRules'
+import { PAGE_HEADERS, PAGE_STATUS, PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, hostPageRequest, namesThisComputer, pageHeaderPairs, pageStatus, type BrowserKind } from './hostPageRules'
 
 const PREVIEW_PATH = '/api/plugins/conduit_push/workspace/preview'
 
@@ -63,6 +63,16 @@ export function serveHostPages(shown: () => ShownDashboard | null): void {
   }
   // A web page never reaches this computer by an address: no request of its, a fetch, an image or a socket, names one.
   session.fromPartition(WEB_PAGES_PARTITION).webRequest.onBeforeRequest((details, callback) => callback({ cancel: namesThisComputer(details.url) }))
+  // A host page's request to localhost is the host's: it goes to that port's host page, never to this computer.
+  hostPages.webRequest.onBeforeRequest((details, callback) => {
+    let from: string | undefined
+    try {
+      from = details.frame?.url || details.webContents?.getURL()
+    } catch {
+      // The frame is gone.
+    }
+    callback(hostPageRequest(details.url, from) ?? {})
+  })
   hostPages.protocol.handle(HOST_PAGE_SCHEME, async request => {
     const parts = hostPageParts(request.url)
     if (!parts) return page(404, t('This page address isn’t one Conduit knows.'))

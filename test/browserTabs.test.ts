@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { hostPageParts, hostPageUrl, localLink, readAddress, shownAddress } from '../src/shared/browserAddress'
-import { PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, namesThisComputer, pageHeaderPairs, pageStatus } from '../src/main/hostPageRules'
+import { PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, hostPageRequest, namesThisComputer, pageHeaderPairs, pageStatus } from '../src/main/hostPageRules'
 import { MAX_PAGES, readPages, writePages, type BenchPage } from '../src/renderer/src/state/workbench'
 import { addressFor, addressHere } from '../src/renderer/src/state/browserTabs'
 
@@ -16,6 +16,8 @@ describe('Browser tab addresses (desktop issue 451)', () => {
     expect(readAddress('http://127.0.0.1:4321')).toEqual({ kind: 'host', port: 4321, path: '/' })
     expect(readAddress('http://localhost')).toEqual({ kind: 'host', port: 80, path: '/' })
     expect(readAddress('[::1]:9000')).toEqual({ kind: 'host', port: 9000, path: '/' })
+    expect(readAddress('127.0.0.2:3000')).toEqual({ kind: 'host', port: 3000, path: '/' })
+    expect(readAddress('http://[::]:5173/x')).toEqual({ kind: 'host', port: 5173, path: '/x' })
     expect(readAddress('example.com/docs')).toEqual({ kind: 'web', url: 'https://example.com/docs' })
     expect(readAddress('http://example.com')).toEqual({ kind: 'web', url: 'http://example.com/' })
     expect(readAddress('192.168.1.5:8080/x')).toEqual({ kind: 'web', url: 'http://192.168.1.5:8080/x' })
@@ -41,6 +43,7 @@ describe('Browser tab addresses (desktop issue 451)', () => {
     expect(localLink('http://localhost:5173/')).toEqual({ port: 5173, path: '/' })
     expect(localLink('https://example.com/')).toBeNull()
     expect(localLink('5173')).toBeNull()
+    expect(localLink('http://127.0.0.2:5173/a')).toEqual({ port: 5173, path: '/a' })
   })
 
   it('opens an address on the dashboard on screen, or says why not', () => {
@@ -124,6 +127,16 @@ describe('where a Browser tab goes', () => {
     expect(browserGoes('host', 'https://example.com/', from, false)).toBe('external')
     expect(browserGoes('host', 'mailto:a@b.c', from, false)).toBe('external')
     expect(browserGoes('host', 'file:///etc/passwd', from, false)).toBe('refuse')
+  })
+
+  it('sends a host page’s own requests to localhost to the host, never to this computer', () => {
+    expect(hostPageRequest('http://localhost:8000/api?x=1', from)).toEqual({ redirectURL: `conduit-host-page://8000.${KEY}/api?x=1` })
+    expect(hostPageRequest('http://127.0.0.2/x.png', from)).toEqual({ redirectURL: `conduit-host-page://80.${KEY}/x.png` })
+    expect(hostPageRequest('ws://localhost:5173/', from)).toEqual({ cancel: true })
+    expect(hostPageRequest('http://localhost:8000/', undefined)).toEqual({ cancel: true })
+    expect(hostPageRequest('http://localhost:8000/', 'https://example.com/')).toEqual({ cancel: true })
+    expect(hostPageRequest('https://example.com/', from)).toBeNull()
+    expect(hostPageRequest(`${ORIGIN}/x`, from)).toBeNull()
   })
 
   it('never takes a web page to a host page or this computer’s localhost', () => {

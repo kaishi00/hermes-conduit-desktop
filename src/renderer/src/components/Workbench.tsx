@@ -99,7 +99,10 @@ export function Workbench({
     }
   }, [root, profile])
   const newPage = (url: string | null = null) => {
+    if (pagesNow.current.length >= MAX_PAGES) return
     const page: BenchPage = { id: crypto.randomUUID(), url, nav: url ? 1 : 0 }
+    // Counted at once, so two opened before a render can't pass eight.
+    pagesNow.current = [...pagesNow.current, page]
     setPages(current => (current.length >= MAX_PAGES ? current : [...current, page]))
     setView(pageKey(page))
   }

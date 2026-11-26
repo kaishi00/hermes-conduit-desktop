@@ -13,7 +13,7 @@ export const WEB_PAGES_PARTITION = 'persist:conduit-web-pages'
 
 export type BrowserAddress = { kind: 'host'; port: number; path: string } | { kind: 'web'; url: string }
 
-const LOCAL = /^(?:(https?):\/\/)?(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::(\d{1,5}))?([/?#]\S*)?$/i
+const LOCAL = /^(?:(https?):\/\/)?(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1?\])(?::(\d{1,5}))?([/?#]\S*)?$/i
 const HOST_NAME = /^(\d{1,5})\.([a-z0-9]{4,32})$/
 
 function hostAt(port: number, path: string | undefined): BrowserAddress | null {

@@ -148,6 +148,27 @@ export function namesThisComputer(url: string): boolean {
 export type BrowserKind = 'host' | 'web'
 
 /**
+ * A host page's own request that names this computer (a fetch to
+ * http://localhost:8000/api, an image from 127.0.0.1): it means the Hermes
+ * host's, so an http one goes to that port's host page, through the
+ * dashboard, and any other (a socket) is cancelled. Never this computer's.
+ * Null for a request that names somewhere else.
+ */
+export function hostPageRequest(url: string, from: string | undefined): { redirectURL: string } | { cancel: true } | null {
+  if (!namesThisComputer(url)) return null
+  const here = from ? hostPageParts(from) : null
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return { cancel: true }
+  }
+  if (!here || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return { cancel: true }
+  const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80
+  return { redirectURL: hostPageUrl(here.key, port, `${parsed.pathname}${parsed.search}`) }
+}
+
+/**
  * Where a Browser tab's page may go: `stay` lets it, `load` takes it to a
  * host page in place (a localhost link on a host page is the host's),
  * `external` opens it in the browser, `refuse` goes nowhere. A host page
