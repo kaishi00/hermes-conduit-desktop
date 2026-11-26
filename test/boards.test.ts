@@ -25,6 +25,21 @@ describe('a queued prompt between a board and its reply (issue 550)', () => {
     const placed = placeBoards(state.items)
     expect(placed.hidden).toEqual(new Set(['t1']))
     expect(placed.placed?.get(assistant.key)?.map(b => b.id)).toEqual(['cb-000000000003'])
+
+    // The queued prompt's own turn starts: its row is confirmed and moved after the
+    // earlier turn's rows, so the board stays where the earlier reply wrote its line.
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    const after = placeBoards(state.items)
+    expect(state.items.find(i => i.key === 'u-real')).toMatchObject({ pending: false, kind: 'user' })
+    expect(state.items.findIndex(i => i.key === 'u-real')).toBeGreaterThan(state.items.findIndex(i => i.kind === 'assistant'))
+    expect(after.placed?.get(assistant.key)?.map(b => b.id)).toEqual(['cb-000000000003'])
+  })
+
+  it('confirms a pending row on a reply when turnFrom was lost (replay gap)', () => {
+    let state: TranscriptState = { ...emptyTranscript, items: [] }
+    state = addPendingUser(state, 'go', [], 'u-gap')
+    state = applyEvent(state, { type: 'message.delta', payload: { text: 'on it' } })
+    expect(state.items.find(i => i.key === 'u-gap')).toMatchObject({ pending: false })
   })
 
   it('does not end the turn for a prompt still waiting on the gateway', () => {

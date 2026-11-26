@@ -554,7 +554,11 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       return card ? showConnection(state, card) : state
     }
     case 'message.start': {
-      const started = { ...state, running: true, status: undefined, items: confirmPending(state.items), turnFrom: state.items.length }
+      // A prompt sent while the earlier turn was running joins the end of that turn's
+      // rows before it is confirmed, so its own row never sits between a board and the
+      // reply that named it (issue 550).
+      const items = promotePending(state.items)
+      const started = { ...state, running: true, status: undefined, items, turnFrom: items.length }
       const admission = event.admission_id ?? str(payload.admission_id)
       return admission ? releaseHeld(started, admission) : started
     }
@@ -564,7 +568,7 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       if (typeof text !== 'string' || !text) return state
       // A prompt sent while this turn was running keeps its queued mark until its own
       // message.start: these events belong to the earlier turn (issue 550).
-      return { ...state, running: true, items: appendStreaming(confirmPending(state.items, state.turnFrom ?? 0), 'assistant', text) }
+      return { ...state, running: true, items: appendStreaming(confirmPending(state.items, state.turnFrom), 'assistant', text) }
     }
     // `thinking.delta` is the terminal UI's spinner face, not the model's reasoning.
     case 'reasoning.delta': {
@@ -617,7 +621,7 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       return text ? { ...state, status: text } : state
     }
     case 'message.complete': {
-      let items = seal(confirmPending(state.items, state.turnFrom ?? 0))
+      let items = seal(confirmPending(state.items, state.turnFrom))
       const finalText = silenceShown(str(payload.text) ?? str(payload.rendered) ?? '')
       const lastUser = items.map(i => i.kind).lastIndexOf('user')
       // A hidden turn has no row of the user's: its replies are the ones since its start, not since
@@ -771,6 +775,13 @@ export function inflightRemainder(state: TranscriptState, text: string): string 
 }
 
 /** Confirm pending prompts, unless `keepFrom` says they arrived after the turn these events belong to. */
+/** A queued prompt's own turn starts: put its row after the earlier turn's rows and confirm it. */
+function promotePending(items: TranscriptItem[]): TranscriptItem[] {
+  const pending = items.filter((item): item is UserItem => item.kind === 'user' && !!item.pending)
+  if (!pending.length) return items
+  return [...items.filter(item => !(item.kind === 'user' && item.pending)), ...pending.map(item => ({ ...item, pending: false as const }))]
+}
+
 function confirmPending(items: TranscriptItem[], keepFrom?: number): TranscriptItem[] {
   if (!items.some(item => item.kind === 'user' && item.pending)) return items
   return items.map((item, i) =>
