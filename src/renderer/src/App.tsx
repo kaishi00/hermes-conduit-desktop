@@ -3055,6 +3055,8 @@ function Shell({
                   profile={selected.profile}
                   refreshKey={turnsDone}
                   reveal={reveal}
+                  transcript={transcriptStore}
+                  onShowStep={key => revealMessage(chatPane.current, key)}
                   onInsertPath={path => setQuote(quoteRequest({ insert: pathForDraft(path) }))}
                   onClose={() => showBench(false)}
                 />

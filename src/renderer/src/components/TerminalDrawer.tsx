@@ -21,8 +21,13 @@ import {
   socketQuery,
   type TerminalRow
 } from '../state/terminals'
+import type { TimelineStep } from '../state/benchTimeline'
+import { BotCommands } from './BenchTimeline'
 import { TabStrip } from './TabStrip'
 import { Icon } from './icons'
+
+/** The bot's command terminal's tab, first in the drawer and never closed. */
+const BOT_TAB = 'bot'
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -32,21 +37,33 @@ type Listed = { available: boolean; reason: string | null; terminals: TerminalRo
  * The workbench's terminals (issue 450), in a drawer under its views: shells
  * on the Hermes host in the chat's folder, a tab each. They keep running when
  * the drawer folds or Conduit closes, and come back with what they wrote
- * meanwhile. Closing a tab ends its shell.
+ * meanwhile. Closing a tab ends its shell. The first tab is the bot's
+ * commands in this chat, read-only (issue 453).
  */
 export function TerminalDrawer({
   root,
   profile,
   onFold,
-  folded
+  folded,
+  shells,
+  steps,
+  at,
+  botTurn
 }: {
   root: string
   profile?: string
   /** Folds the drawer to its tab row (its terminals keep running). */
   onFold: () => void
   folded: boolean
+  /** Whether the plugin serves terminals; without it the drawer has the bot's commands alone. */
+  shells: boolean
+  /** The chat's steps, and the timeline's (null while it follows the chat). */
+  steps: TimelineStep[]
+  at: string | null
+  /** Changes when the timeline lands on a command: the bot's tab comes forward. */
+  botTurn: number
 }) {
-  const [listed, setListed] = useState<Listed>('loading')
+  const [listed, setListed] = useState<Listed>(shells ? 'loading' : { available: false, reason: null, terminals: [] })
   const [active, setActive] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
@@ -55,16 +72,20 @@ export function TerminalDrawer({
     try {
       const list = parseList(await gateway.http('GET', listPath(root, profile)))
       setListed(list)
-      setActive(current => (current && list.terminals.some(row => row.id === current) ? current : (list.terminals.at(-1)?.id ?? null)))
+      setActive(current => (current === BOT_TAB || (current && list.terminals.some(row => row.id === current)) ? current : (list.terminals.at(-1)?.id ?? null)))
     } catch (e) {
       // An older plugin has no terminals route.
       setListed({ error: (e as { code?: unknown }).code === 404 ? t('Update the Conduit plugin on this host to open terminals here.') : message(e) })
     }
   }, [root, profile])
   useEffect(() => {
+    if (!shells) return
     setListed('loading')
     void read()
-  }, [read])
+  }, [read, shells])
+  useEffect(() => {
+    if (botTurn) setActive(BOT_TAB)
+  }, [botTurn])
 
   const start = async () => {
     setStarting(true)
@@ -100,21 +121,28 @@ export function TerminalDrawer({
     setListed(current => (current !== 'loading' && !('error' in current) ? { ...current, terminals: current.terminals.filter(r => r.id !== id) } : current))
 
   const terminals = listed !== 'loading' && !('error' in listed) ? listed.terminals : []
-  const shownId = terminals.some(r => r.id === active) ? active : (terminals.at(-1)?.id ?? null)
+  const shownId = active === BOT_TAB || terminals.some(r => r.id === active) ? active : (terminals.at(-1)?.id ?? BOT_TAB)
   const available = listed !== 'loading' && !('error' in listed) && listed.available
+  const onBot = shownId === BOT_TAB
 
   return (
     <section className={`bench-drawer${folded ? ' folded' : ''}`} aria-label={t('Terminals')}>
-      <TabStrip
-        tabs={terminals}
-        keyOf={row => row.id}
+      <TabStrip<typeof BOT_TAB | TerminalRow>
+        tabs={[BOT_TAB, ...terminals]}
+        keyOf={row => (row === BOT_TAB ? BOT_TAB : row.id)}
         active={shownId}
-        label={row => ({ title: row.title, icon: <Icon name="terminal" />, ended: row.exited, hint: row.exited ? t('Ended') : undefined })}
+        label={row =>
+          row === BOT_TAB
+            ? { title: t('Bot’s Commands'), icon: <Icon name="bots" />, fixed: true, hint: t('What the bot ran in this chat, read-only') }
+            : { title: row.title, icon: <Icon name="terminal" />, ended: row.exited, hint: row.exited ? t('Ended') : undefined }
+        }
         onPick={row => {
-          setActive(row.id)
+          setActive(row === BOT_TAB ? BOT_TAB : row.id)
           if (folded) onFold()
         }}
-        onClose={row => void close(row)}
+        onClose={row => {
+          if (row !== BOT_TAB) void close(row)
+        }}
         onNewTab={available ? () => void start() : undefined}
         newTabLabel={t('New Terminal')}
         ariaLabel={t('Terminals')}
@@ -127,7 +155,8 @@ export function TerminalDrawer({
       />
       {/* Folded, the views stay mounted, so their shells keep their sockets and screens. */}
       <div className="bench-drawer-body" hidden={folded}>
-        {listed === 'loading' ? (
+        <BotCommands steps={steps} at={at} shown={onBot && !folded} />
+        {onBot ? null : listed === 'loading' ? (
           <div className="bench-note">{t('Loading…')}</div>
         ) : 'error' in listed ? (
           <div className="bench-note">{listed.error}</div>
@@ -141,7 +170,7 @@ export function TerminalDrawer({
             </button>
           </div>
         ) : null}
-        {failed ? <div className="bench-note error-text">{failed}</div> : null}
+        {failed && !onBot ? <div className="bench-note error-text">{failed}</div> : null}
         {terminals.map(row => (
           <TerminalView key={row.id} row={row} profile={profile} shown={row.id === shownId && !folded} onEnded={code => ended(row.id, code)} onGone={() => gone(row.id)} />
         ))}
