@@ -630,6 +630,8 @@ describe("other hosts' bots' work (desktop#231)", () => {
     const a = new Map([[keptWorkKey('https://mac.example', 'Nahida'), { working: 1, needsYou: 0 }]])
     expect(sameBotWork(a, new Map([[keptWorkKey('https://mac.example', 'nahida'), { working: 1, needsYou: 0 }]]))).toBe(true)
     expect(sameBotWork(a, new Map([[keptWorkKey('https://mac.example', 'nahida'), { working: 1, needsYou: 1 }]]))).toBe(false)
+    // A new step under its name is a change too.
+    expect(sameBotWork(new Map([[keptWorkKey('https://mac.example', 'nahida'), { working: 1, needsYou: 0, doing: 'Add tests' }]]), new Map([[keptWorkKey('https://mac.example', 'nahida'), { working: 1, needsYou: 0, doing: 'Run the full suite' }]]))).toBe(false)
     expect(sameBotWork(a, new Map())).toBe(false)
   })
 })

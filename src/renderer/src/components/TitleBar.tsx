@@ -15,6 +15,8 @@ interface BrandProps {
   hosts?: HostSummary[]
   currentUrl?: string
   onSwitch?: (url: string) => void
+  /** Connection, only when something's wrong; null draws nothing. */
+  alert?: BrandAlert | null
 }
 
 interface Props extends BrandProps {
@@ -38,15 +40,13 @@ interface RailBrandProps {
   badge?: HostBadge | null
   /** Opens where your picture is chosen (Settings > Appearance > You). */
   onPicture?: () => void
-  /** Only when something's wrong; null draws nothing. */
-  alert?: BrandAlert | null
 }
 
 export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = false, picture, badge, onPicture, alert }: BrandProps & RailBrandProps) {
   const [open, setOpen] = useState(false)
   const switchable = hosts.length > 1 && !!onSwitch
   // In the rail, the list also holds Your Picture, so it opens with one Hermes too.
-  const actions = inRail ? (alert?.actions ?? []) : []
+  const actions = alert?.actions ?? []
   const opens = switchable || (inRail && !!onPicture) || actions.length > 0
   // Combined dashboards: how each one beside this one is doing.
   const kept = useKeptHosts()
@@ -112,9 +112,9 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
         if (next && !e.currentTarget.contains(next) && !toggleRef.current?.contains(next)) setOpen(false)
       }}
     >
-      {actions.map(action => (
+      {actions.map((action, index) => (
         <button
-          key={action.label}
+          key={`${index}:${action.label}`}
           role="menuitem"
           onClick={() => {
             setOpen(false)
@@ -131,7 +131,7 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
       {hosts.map(host => {
         // The one you're on says so only while it isn't connected; every other one says how it's doing.
         const keptState = host.url === currentUrl ? null : kept.find(k => k.url === host.url)?.state
-        const state = host.url === currentUrl ? (inRail ? (alert?.here ?? null) : null) : keptState ? keptStateLabel(keptState) : null
+        const state = host.url === currentUrl ? (alert?.here ?? null) : keptState ? keptStateLabel(keptState) : null
         const badge = hostBadge(hosts, host.url, hostName)
         return (
           <button
@@ -251,10 +251,21 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
     <div className="brand">
       {mark}
       <span className="brand-name">Conduit</span>
-      {subtitle && switchable ? (
+      {subtitle && (switchable || actions.length) ? (
         <span className="host-switch">
-          <button className="brand-sub host-button" ref={toggleRef} aria-haspopup="menu" aria-expanded={open} title={t('Switch Hermes')} onClick={toggle}>
-            · {subtitle} ▾
+          <button
+            className="brand-sub host-button"
+            ref={toggleRef}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-label={[subtitle, alert?.text, switchable ? t('Switch Hermes') : null].filter(Boolean).join(', ')}
+            title={[alert?.text, switchable ? t('Switch Hermes') : null].filter(Boolean).join('\n')}
+            onClick={toggle}
+          >
+            · {subtitle}
+            {/* The title bar stands in for the rail's brand while a banner is up: the same mark of what's wrong (desktop#594). */}
+            {alert ? <span className={`brand-state ${alert.tone}`} aria-hidden="true" /> : null}
+            {switchable ? ' ▾' : null}
           </button>
           {menu}
         </span>
@@ -271,6 +282,10 @@ export function TitleBar({ bare = false, ...brand }: Props) {
     <header className={bare ? 'titlebar bare' : 'titlebar'} onDoubleClick={event => event.target === event.currentTarget && win.toggleMaximize()}>
       {/* Bare, it's drawn only while a banner keeps the island from rising (the CSS); the rail draws it otherwise. */}
       <Brand {...brand} />
+      {/* What's wrong is said aloud as it changes, as the old reconnect banner's status was (desktop#594). */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {brand.alert?.spoken ?? brand.alert?.text ?? ''}
+      </span>
       {platform !== 'darwin' ? (
         <div className="caption-buttons">
           <button className="cap" aria-label={t('Minimize')} onClick={() => win.minimize()}>

@@ -70,6 +70,21 @@ export function openQuestion(request: PendingRequest): ClarifyQuestion | null {
   return clarifyQuestions(request.params).find(q => !(q.qid in locked) && !done?.has(q.qid)) ?? null
 }
 
+/** Whether the chat has a question still open to answer by voice. */
+export const questionOpen = (requests: PendingRequest[]) => requests.some(r => r.method === 'clarify' && openQuestion(r) !== null)
+
+/**
+ * What a GPT-Live delegation answers the chat's open question with, or null when it answers none: the words
+ * after "Answer:", else the user's own words since the last delegation. GPT-Live often leaves a delegation's
+ * text, and so its "Answer:", empty, so while a question waits a delegation that marks nothing else
+ * (`unmarked`) is the user's answer, as on the phone, never a new message that would withdraw the question.
+ */
+export function delegatedAnswer(text: string, said: string, requests: PendingRequest[], unmarked: boolean): string | null {
+  const reply = answerWords(text)
+  if (reply !== null) return reply || said.trim()
+  return unmarked && said.trim() && questionOpen(requests) ? said.trim() : null
+}
+
 function questionText(question: ClarifyQuestion): string {
   const choices = question.choices.map((choice, i) => `${i + 1}. ${choice}`).join('; ')
   return `Hermes asks the user: ${clip(question.question)}${choices ? ` Choices: ${choices}.` : ''}${question.multiSelect ? ' They may pick several.' : ''} Ask them, then answer with what they say.`

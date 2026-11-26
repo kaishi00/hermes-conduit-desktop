@@ -71,21 +71,24 @@ export const CHECK_FAILURES_AT_PACE = 3
 export const CHECK_WAIT_MAX_MS = 30_000
 
 /**
+ * A page load that arrives while a check is in flight must not be lost: the next
+ * `look` runs it even when no new navigation event follows (issue 520). The
+ * load the check started on (its `did-finish-load` after the `did-navigate`
+ * that began it) is that check's own, so it isn't kept to be checked twice
+ * (`sameLoad`, desktop#520).
+ */
+export function lookRequest(checking: boolean, navigated: boolean, pending: boolean, sameLoad = false): { run: boolean; pending: boolean } {
+  if (checking) return { run: false, pending: pending || (navigated && !sameLoad) }
+  return { run: navigated || pending, pending: false }
+}
+
+/**
  * How long the sign-in window waits before it asks a dashboard again after
  * `failures` checks in a row couldn't be made (a 502 behind the proxy, a
  * ticket route that answers without a ticket): nothing for the first few,
  * then twice as long each time, up to half a minute (desktop#511). A page
  * that loads is asked about at once whatever this says.
  */
-/**
- * A page load that arrives while a check is in flight must not be lost: the next
- * `look` runs it even when no new navigation event follows (issue 520).
- */
-export function lookRequest(checking: boolean, navigated: boolean, pending: boolean): { run: boolean; pending: boolean } {
-  if (checking) return { run: false, pending: pending || navigated }
-  return { run: navigated || pending, pending: false }
-}
-
 export function checkWait(failures: number, paceMs: number): number {
   if (failures < CHECK_FAILURES_AT_PACE) return 0
   return Math.min(CHECK_WAIT_MAX_MS, paceMs * 2 ** (failures - CHECK_FAILURES_AT_PACE + 1))

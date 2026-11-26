@@ -39,8 +39,41 @@ describe('leftovers of #525 and #528 (issue 529)', () => {
   })
 
   it('compares unspaced scripts without adding the marker for words the request already carries', () => {
-    expect(withUserWords(['好的'], '好的帮我订车')).toBe('好的帮我订车')
+    expect(withUserWords(['好的帮我'], '好的帮我订车')).toBe('好的帮我订车')
     expect(withUserWords(['是的'], '好的，帮我订车')).toBe('好的，帮我订车' + MARKER + '是的')
+  })
+
+  it('reads Chinese and Japanese past punctuation, at the edge of a run (desktop#529, hermes-conduit issue 3279)', () => {
+    // Punctuation on either side doesn't hide words the request carries.
+    expect(withUserWords(['好的，帮我'], '好的，帮我订车')).toBe('好的，帮我订车')
+    expect(withUserWords(['お願い、タクシー'], 'お願いタクシーを呼んで')).toBe('お願いタクシーを呼んで')
+    // A short answer turns up inside longer words: it has to stand on its own.
+    expect(withUserWords(['不'], '帮我订车，不要订贵的')).toBe('帮我订车，不要订贵的' + MARKER + '不')
+    expect(withUserWords(['好的'], '好的，帮我订车')).toBe('好的，帮我订车')
+    // Three letters or more inside a run, touching neither edge, aren't the user's answer.
+    expect(withUserWords(['没问题'], '这没问题的事不要做')).toBe('这没问题的事不要做' + MARKER + '没问题')
+    expect(withUserWords(['没问题'], '没问题，帮我订车')).toBe('没问题，帮我订车')
+    // Korean is written with spaces: whole words.
+    expect(withUserWords(['네'], '네 택시 불러줘')).toBe('네 택시 불러줘')
+    expect(withUserWords(['네'], '네비 켜줘')).toBe('네비 켜줘' + MARKER + '네')
+  })
+
+  it("keeps the next request's lines when a take lands between mark and skip(true) (desktop#529)", () => {
+    const words = new RequestWords(() => 0)
+    words.heard('one')
+    words.modelSpoke()
+    words.heard('Yes')
+    words.mark()
+    // A tool call's own take() clears what was pending, boundary included.
+    words.skip()
+    words.modelSpoke()
+    words.heard('order a cab')
+    words.modelSpoke()
+    words.heard('for eight')
+    words.modelSpoke()
+    words.heard('please')
+    words.skip(true)
+    expect(words.pending()).toEqual(['order a cab', 'for eight', 'please'])
   })
 })
 

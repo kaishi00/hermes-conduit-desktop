@@ -13,9 +13,19 @@ import { DEFAULT_QUICK_ASK_ACCELERATOR, validAccelerator } from '../shared/accel
 
 const path = () => join(app.getPath('userData'), 'settings.json')
 
-function read(): { language?: unknown; theme?: unknown; lock?: unknown; askHost?: unknown; appIcon?: unknown; quickAsk?: unknown } {
+interface StoredSettings {
+  language?: unknown
+  theme?: unknown
+  lock?: unknown
+  askHost?: unknown
+  appIcon?: unknown
+  quickAsk?: unknown
+  hideDock?: unknown
+}
+
+function read(): StoredSettings {
   try {
-    return JSON.parse(readFileSync(path(), 'utf8')) as { language?: unknown; theme?: unknown; lock?: unknown; askHost?: unknown }
+    return JSON.parse(readFileSync(path(), 'utf8')) as StoredSettings
   } catch {
     return {}
   }
@@ -98,6 +108,18 @@ export const askHostAtLaunch = (): boolean => read().askHost === true
 export function chooseAskHost(on: boolean): boolean {
   try {
     writeFileAtomic(path(), JSON.stringify({ ...read(), askHost: on }, null, 2))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** The Mac's Hide from the Dock (desktop#586): with every window closed, Conduit stays in the menu bar alone. */
+export const hideDockWhenClosed = (): boolean => read().hideDock === true
+
+export function chooseHideDock(on: boolean): boolean {
+  try {
+    writeFileAtomic(path(), JSON.stringify({ ...read(), hideDock: on }, null, 2))
     return true
   } catch {
     return false

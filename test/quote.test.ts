@@ -70,7 +70,8 @@ describe('copying a reply', () => {
 
     // A `|` in ordinary prose is not a table row: its directive is still removed for Copy.
     expect(copyableReply('Pick A | B ::conduit-board{id="cb-000000000001"}')).toBe('Pick A | B')
-    // A real table row keeps its directive (the drawn reply keeps the row).
-    expect(copyableReply('| A | B ::conduit-board{id="cb-000000000001"} |')).toContain('::conduit-board{')
+    // A real table's row keeps its directive (the drawn reply keeps the row); a lone pipe line is prose.
+    expect(copyableReply('| A | B |\n|---|---|\n| C | D ::conduit-board{id="cb-000000000001"} |')).toContain('::conduit-board{')
+    expect(copyableReply('| A | B ::conduit-board{id="cb-000000000001"} |')).toBe('| A | B |')
   })
 })

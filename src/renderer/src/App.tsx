@@ -35,7 +35,6 @@ import { setTurnSurfaceHost } from './state/turnSurface'
 import { useDashboardProfiles } from './state/useDashboardProfiles'
 import { setDesktopCardsHost } from './state/desktopCards'
 import { setKanbanHost } from './state/useKanban'
-import { setPageHost } from './components/PagePreview'
 import { setPictureHost } from './state/gatewayPictures'
 import { LIST_COLUMN, PANEL_COLUMN, besideChatFits, readListHidden, readWidth, shownListWidth, shownPanelWidth, writeListHidden, writeWidth } from './state/columnWidths'
 import { BesideChatPane, type BesideChat } from './components/BesideChat'
@@ -66,6 +65,7 @@ import { RailFaces } from './components/RailFaces'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
+import { liveDoing, stepTitle } from './state/liveDoing'
 import { lastReplyOf } from './state/transcriptReads'
 import { useRevealRow } from './state/revealRow'
 import { forgetSummaries } from './state/stepSummaries'
@@ -215,7 +215,7 @@ import { openRoomChatHere } from './state/roomChatOpen'
 import { DockedRoomFrame } from './components/DockedRoom'
 import type { DockedRoomRequest } from '@shared/chatWindows'
 import { parseProjects, type Project, type ProjectChat } from './state/projects'
-import { useLiveStatus } from './state/liveStatus'
+import { useAnsweringBots, useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, saveMarksSoon, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
@@ -226,6 +226,7 @@ import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { LoginItemSetting } from './components/LoginItemSetting'
+import { HideDockSetting } from './components/HideDockSetting'
 import { SectionRail } from './components/SectionRail'
 import { fallbackAfterUnpin, launchInstead, pinnedSections, readRailLayout, resolveInitialSection, setSectionPinned, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
@@ -278,7 +279,6 @@ export function App() {
   setDesktopCardsHost(url ?? '')
   setKanbanHost(url ?? '')
   setPictureHost(url ?? '')
-  setPageHost(url ?? '')
   const phase = status?.phase
   // A host Hermes signed out opens on Repair; one that opens needs none.
   useEffect(() => {
@@ -297,6 +297,12 @@ export function App() {
     forgetHostCaches(hostList ? hostList.split('\n') : [])
   }, [hostList])
 
+  // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26), worked out here so
+  // the title bar's brand, which stands in for the rail's while a banner is up, shows it too (desktop#594).
+  const away = useAway(phase ?? 'signed-out', url ?? '')
+  const keptForAlert = useKeptHosts(url ?? '')
+  const updateAway = updateBanner(useHostActions(url ?? '').update)
+
   if (!status) return <div className="app" />
   const signedOut = status.phase === 'signed-out' || (status.phase === 'failed' && !status.url)
   // The open window: everything but the lock, sign-in and dashboard pick, which keep the brand in the title bar.
@@ -307,15 +313,33 @@ export function App() {
     !(repairing && status.phase !== 'open') &&
     !(status.phase === 'signed-out' && status.choosing && status.hosts?.length) &&
     !(signedOut || status.phase === 'failed')
+  const switchTo = async (url: string) => {
+    if (!(await switchEndingCall(hostName(url)))) return
+    setRepairing(null)
+    void window.conduit.switchHost(url)
+  }
+  const onRepair = () => status.url && setRepairing(savedHost(status.hosts, status.url))
   const brand = {
     subtitle: signedOut ? undefined : status.hostLabel,
     hosts: status.hosts,
     currentUrl: status.url,
-    onSwitch: async (url: string) => {
-      if (!(await switchEndingCall(hostName(url)))) return
-      setRepairing(null)
-      void window.conduit.switchHost(url)
-    }
+    onSwitch: switchTo,
+    alert: inShell
+      ? brandAlert({
+          phase: status.phase,
+          error: status.error,
+          retryInSeconds: status.retryInSeconds,
+          away,
+          currentUrl: status.url,
+          hosts: status.hosts,
+          kept: keptForAlert,
+          name: hostName,
+          onRetry: () => void window.conduit.reconnect(),
+          onRepair,
+          onSignIn: url => void switchTo(url),
+          updating: !!updateAway
+        })
+      : null
   }
   return (
     <div className="app">
@@ -347,7 +371,7 @@ export function App() {
             status={status}
             onAddHost={() => void switchEndingCall(null).then(ok => ok && setAdding(true))}
             onEditHost={host => void switchEndingCall(null).then(ok => ok && setEditing(host))}
-            onRepair={() => status.url && setRepairing(savedHost(status.hosts, status.url))}
+            onRepair={onRepair}
             brand={brand}
           />
         </SummaryHost.Provider>
@@ -503,6 +527,8 @@ function Shell({
   // reply runs that, not App, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
   const runningStatus = useTranscriptValue(transcriptStore, state => state.status)
+  // The open reply's current step, for its bot's line in the Bots list.
+  const liveDoingNow = useTranscriptValue(transcriptStore, state => (state.running ? liveDoing(state.items) : null))
   const transcriptPlan = useTranscriptValue(transcriptStore, state => state.plan)
 
   // The chat list's profile: a new chat starts in it.
@@ -1724,11 +1750,15 @@ function Shell({
     },
     [showRoom]
   )
+  // Every bot answering in some chat, the open one's at once (Eric, 2026-11-26: not only the chat open).
+  const answeringNames = useMemo(() => botNames.slice(0, 24), [botNames])
+  // ...with the step each is on there, from the plugin (the open chat's own comes live below).
+  const answering = useAnsweringBots(connected, answeringNames, turnsDone, stepTitle)
   const runningProfiles = useMemo(() => {
-    const names = new Set<string>()
+    const names = new Set<string>(answering.keys())
     if (running && selected.profile) names.add(selected.profile)
     return names
-  }, [running, selected.profile])
+  }, [answering, running, selected.profile])
 
   // Needs you: the requests this window holds, and every profile's waiting list.
   const requests = useRequests()
@@ -2388,22 +2418,6 @@ function Shell({
   // While an update started here has Hermes away, the banner follows it instead of a bare "reconnecting".
   const hostUpdate = useHostActions(status.url ?? '').update
   const updateAway = updateBanner(hostUpdate)
-  // Connection shows only when something's wrong, on the dashboard button (Eric, 2026-11-26).
-  const away = useAway(status.phase)
-  const connectionAlert = brandAlert({
-        phase: status.phase,
-        error: status.error,
-        retryInSeconds: status.retryInSeconds,
-        away,
-        currentUrl: status.url,
-        hosts: status.hosts,
-        kept: keptHosts,
-        name: hostName,
-        onRetry: () => void window.conduit.reconnect(),
-        onRepair,
-        onSignIn: url => brand.onSwitch?.(url),
-        updating: !!updateAway
-      })
   useEffect(() => {
     if (connected && status.url) hostReachable(status.url)
   }, [connected, status.url, hostUpdate.kind])
@@ -2513,6 +2527,8 @@ function Shell({
     bots: orderedRoster,
     error: roster.error,
     runningProfiles: runningProfiles,
+    liveDoing: liveDoingNow ? { bot: selected.profile ?? 'default', text: liveDoingNow } : null,
+    otherChatsDoing: answering,
     rooms: orderedRooms,
     canStartRooms: groupRooms.capabilities?.supported === true && connected,
     onOpen: openBot,
@@ -2618,7 +2634,6 @@ function Shell({
             <Brand
               {...brand}
               inRail
-              alert={connectionAlert}
               picture={personPicture.served ? personPicture.picture : null}
               badge={status.url ? badgeFor(status.url) : null}
               onPicture={
@@ -3827,6 +3842,7 @@ function Settings({
           <AskDashboardSetting hosts={status.hosts?.length ?? 0} />
           <CombineDashboardsSetting hosts={status.hosts ?? []} />
           <LoginItemSetting />
+          <HideDockSetting />
           <UpdatesSetting />
         </dl>
       </section>

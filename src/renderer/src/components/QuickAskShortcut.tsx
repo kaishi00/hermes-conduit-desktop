@@ -16,9 +16,18 @@ export function QuickAskShortcutSetting() {
   const platform = window.conduit.platform
   useEffect(() => {
     let live = true
-    void window.conduit.quickAskShortcut().then(next => live && setShortcut(next))
+    const read = () => void window.conduit.quickAskShortcut().then(next => live && setShortcut(next))
+    read()
+    // Back from another app, which may have let go of the keys it held: the line about them is
+    // read again rather than kept until the next Change (desktop#520).
+    const onFocus = () => {
+      setRefused(null)
+      read()
+    }
+    window.addEventListener('focus', onFocus)
     return () => {
       live = false
+      window.removeEventListener('focus', onFocus)
     }
   }, [])
   const choose = async (accelerator: string | null) => {

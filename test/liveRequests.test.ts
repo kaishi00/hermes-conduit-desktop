@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PendingRequest } from '../src/shared/ipc'
-import { answerApproval, answerQuestion, answerWords, isApprove, isDeny, pickedChoices, requestUpdate } from '../src/renderer/src/state/liveRequests'
+import { answerApproval, answerQuestion, answerWords, delegatedAnswer, isApprove, isDeny, pickedChoices, questionOpen, requestUpdate } from '../src/renderer/src/state/liveRequests'
 
 const approval = (id = 'a1'): PendingRequest => ({
   id,
@@ -52,6 +52,18 @@ describe('answering the chat by voice', () => {
     expect(pickedChoices('1 and 3', toppings)).toEqual(['Ham', 'Basil'])
     expect(pickedChoices('4', city)).toBeNull()
     expect(pickedChoices('Berlin', city)).toBeNull()
+  })
+
+  it("takes an unmarked GPT-Live delegation as the answer while a question waits", () => {
+    expect(questionOpen([clarify()])).toBe(true)
+    expect(questionOpen([approval()])).toBe(false)
+    expect(delegatedAnswer('Answer: 2', 'the second', [clarify()], false)).toBe('2')
+    expect(delegatedAnswer('Answer:', ' Rome please ', [clarify()], false)).toBe('Rome please')
+    expect(delegatedAnswer('', 'Rome please', [clarify()], true)).toBe('Rome please')
+    expect(delegatedAnswer('The user picks Rome', 'Rome', [clarify()], true)).toBe('Rome')
+    expect(delegatedAnswer('', 'yes', [approval()], true)).toBeNull()
+    expect(delegatedAnswer('', '', [clarify()], true)).toBeNull()
+    expect(delegatedAnswer('check the weather', 'check the weather', [], true)).toBeNull()
   })
 
   it("reads GPT-Live's markers", () => {

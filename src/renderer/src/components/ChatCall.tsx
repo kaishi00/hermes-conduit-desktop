@@ -171,7 +171,7 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     setPictureNote({ id: ++pictureIds.current, kind: picture.kind, change: 'removed', frame: null })
   }
   /** A call's request to Hermes: the waiting picture goes with it, once. */
-  const sayToChat = async (words: string, fromCall: { count: number }): Promise<boolean> => {
+  const sayToChat = async (words: string, fromCall: object): Promise<boolean> => {
     const picture = waitingPicture.current
     if (picture) {
       waitingPicture.current = null
@@ -183,23 +183,22 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     // A new chat the call made names itself in the answer: remember that id, not whatever
     // chat the user opened next (issue 550).
     // The send can resolve after this call ended: only its own generation may write the id.
-    if (typeof sent === 'string' && callSent.current === fromCall) sentCreated.current = sent
+    if (typeof sent === 'string' && callSent.current === fromCall) {
+      sentCreated.current = sent
+      setCreatedByCall(sent)
+    }
     // The chat didn't open, or was left while it opened: the call says the words didn't go.
     if (sent === false) tell(t('That didn’t reach the chat. Try again.'))
     return sent !== false
   }
-  // Whether this call sent the chat a request: a new chat gets its id from the first one.
-  // A send the chat refused doesn't count; each call has its own count, so a late answer can't touch the next call's.
-  const callSent = useRef({ count: 0 })
+  // This call's own token: a send that resolves after the call ended can't write the next call's id.
+  const callSent = useRef({})
   /** The id this call's own send created, when it created one. */
   const sentCreated = useRef<string | null>(null)
-  const callSay = (words: string) => {
-    const sent = callSent.current
-    sent.count += 1
-    void sayToChat(words, sent).then(reached => {
-      if (!reached) sent.count -= 1
-    })
-  }
+  // The same id as state: a Classic call files its chat once the send that made it has resolved, and
+  // the chat can open before it does (desktop#529: a send still in flight never claims another chat).
+  const [createdByCall, setCreatedByCall] = useState<string | null>(null)
+  const callSay = (words: string) => void sayToChat(words, callSent.current)
   const pictureControls = (
     <CallPictureControls
       waiting={callPicture}
@@ -218,7 +217,7 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     const kept = classicFresh.current
     if (calling && callMode === 'classic') {
       if (!kept.fresh && !kept.chat && !chatId) kept.fresh = true
-      if (kept.fresh && !kept.chat && chatId && callSent.current.count > 0) {
+      if (kept.fresh && !kept.chat && chatId && chatId === createdByCall) {
         kept.chat = { id: chatId, profile }
         void tagVoiceSession(profile, chatId, 'classic').catch(() => undefined)
       }
@@ -226,7 +225,7 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     }
     if (kept.chat) void archiveClassicChat(kept.chat.profile, kept.chat.id).catch(() => undefined)
     classicFresh.current = { fresh: false, chat: null }
-  }, [calling, callMode, chatId, profile])
+  }, [calling, callMode, chatId, profile, createdByCall])
 
   // While a call runs here, its dashboard holds the user's call presence, so a call from Hermes doesn't ring over it.
   useCallPresence(connected && calling, profile)
@@ -242,8 +241,9 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
   // ended the call.
   const callChat = useRef({ chatId, calling: false })
   if (calling && !callChat.current.calling) {
-    callSent.current = { count: 0 }
+    callSent.current = {}
     sentCreated.current = null
+    if (createdByCall !== null) setCreatedByCall(null)
   }
   callChat.current = { chatId: callChatId(callChat.current.chatId, callChat.current.calling, calling, chatId, sentCreated.current), calling }
   const callLeft = (requests: string[]) => setLeft(kept => leftByCall(kept, callChat.current.chatId, requests))
