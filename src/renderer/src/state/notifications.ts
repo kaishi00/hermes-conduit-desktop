@@ -35,7 +35,8 @@ export function keepChatRef(
   ref: ChatRef
 ): void {
   if (!liveId) return
-  const same = (liveProfile ?? pickedProfile ?? 'default').toLowerCase() === (pickedProfile ?? 'default').toLowerCase()
+  // No profile is the default one, on either side: a default chat's session never takes the next pick's.
+  const same = (liveProfile ?? 'default').toLowerCase() === (pickedProfile ?? 'default').toLowerCase()
   if (same) chats.set(liveId, ref)
 }
 

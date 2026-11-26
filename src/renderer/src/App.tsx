@@ -1945,7 +1945,10 @@ function Shell({
   /** The chats this window opened, by live id: a request's card outside its chat, and a notification's click. */
   const chats = useRef(new Map<string, ChatRef>())
   // A notification takes the chat's own title, never "New chat" for one Hermes hasn't titled yet, and else its bot.
-  const notifyTitle = workItem || selected.botChat ? title : cleanTitle(chat.title || selected.title || '')
+  // The pick's row title only while the pane holds the picked chat: for a render after a pick it still holds the
+  // last one, whose untitled ref mustn't take the new row's title.
+  const paneIsPick = !chat.storedId || !selected.id || chat.storedId === selected.id
+  const notifyTitle = workItem || selected.botChat ? title : cleanTitle(chat.title || (paneIsPick ? selected.title : '') || '')
   // Kept only while the live session is the pick's profile's (keepChatRef).
   keepChatRef(chats.current, chat.liveId, chat.profile, selected.profile, {
     storedId: chat.storedId,
