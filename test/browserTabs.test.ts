@@ -16,6 +16,13 @@ describe('Browser tab addresses (desktop issue 451)', () => {
     expect(readAddress('http://127.0.0.1:4321')).toEqual({ kind: 'host', port: 4321, path: '/' })
     expect(readAddress('http://localhost')).toEqual({ kind: 'host', port: 80, path: '/' })
     expect(readAddress('[::1]:9000')).toEqual({ kind: 'host', port: 9000, path: '/' })
+    // Every spelling of this machine's loopback the desktop refuses for a web page is the host's here (one check for both).
+    for (const alias of ['http://[0:0:0:0:0:0:0:1]:5173', 'http://[::7f00:1]:5173', 'http://2130706433:5173', 'app.localhost:5173', 'http://localhost.:5173', '127.0.0.2:5173', 'http://[::ffff:127.0.0.1]:5173']) {
+      expect(readAddress(alias)).toEqual({ kind: 'host', port: 5173, path: '/' })
+      expect(localLink(`http://${alias.replace(/^http:\/\//, '')}/`)).toEqual({ port: 5173, path: '/' })
+    }
+    expect(readAddress('app.localhost')).toEqual({ kind: 'host', port: 80, path: '/' })
+    expect(readAddress('ftp://localhost/x')).toBeNull()
     expect(readAddress('127.0.0.2:3000')).toEqual({ kind: 'host', port: 3000, path: '/' })
     expect(readAddress('app.localhost:5173/a')).toEqual({ kind: 'host', port: 5173, path: '/a' })
     expect(readAddress('http://localhost.:5173')).toEqual({ kind: 'host', port: 5173, path: '/' })
@@ -130,6 +137,8 @@ describe('where a Browser tab goes', () => {
     expect(browserGoes('host', `${ORIGIN}/about`, from, false)).toBe('stay')
     expect(browserGoes('host', 'conduit-host-page://3000.ffffffffffff/', from, false)).toBe('refuse')
     expect(browserGoes('host', 'http://localhost:3000/x', from, false)).toEqual({ load: `conduit-host-page://3000.${KEY}/x` })
+    expect(browserGoes('host', 'http://localhost.:3000/x', from, false)).toEqual({ load: `conduit-host-page://3000.${KEY}/x` })
+    expect(browserGoes('host', 'http://[::7f00:1]:3000/', from, false)).toEqual({ load: `conduit-host-page://3000.${KEY}/` })
     expect(browserGoes('host', 'https://example.com/', from, false)).toBe('external')
     expect(browserGoes('host', 'mailto:a@b.c', from, false)).toBe('external')
     expect(browserGoes('host', 'file:///etc/passwd', from, false)).toBe('refuse')

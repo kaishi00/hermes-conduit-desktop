@@ -10,7 +10,7 @@ import { TERMINALS_CAPABILITY } from '../state/terminals'
 const PREVIEW_CAPABILITY = 'workspace-preview'
 import { commandAt, stepPath } from '../state/benchTimeline'
 import type { TranscriptStore } from '../state/transcriptStore'
-import { BENCH_VIEWS, MAX_PAGES, pageKey, readDrawer, readPages, writeDrawer, writePages, type BenchPage, type BenchView, type DrawerState } from '../state/workbench'
+import { BENCH_VIEWS, MAX_PAGES, pageKey, shownView, readDrawer, readPages, writeDrawer, writePages, type BenchPage, type BenchView, type DrawerState } from '../state/workbench'
 import { baseName } from '../state/workspace'
 import { BenchTimeline, useBenchSteps } from './BenchTimeline'
 import { BrowserView } from './BrowserView'
@@ -133,8 +133,7 @@ export function Workbench({
     setPages(current => (current.length >= MAX_PAGES ? current : [...current, page]))
     setView(pageKey(page))
   }
-  // A tab the view names but the strip didn't take (a ninth, or a folder's tabs just swapped in): the Changes view shows.
-  const shown = view.startsWith('page:') && !pages.some(p => pageKey(p) === view) ? 'changes' : view
+  const shown = shownView(view, pages)
   const changePage = useCallback((next: BenchPage) => setPages(current => current.map(p => (p.id === next.id ? next : p))), [])
   const closePage = (page: BenchPage) => {
     const at = pages.findIndex(p => p.id === page.id)

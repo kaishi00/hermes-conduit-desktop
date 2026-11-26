@@ -13,7 +13,6 @@ export const WEB_PAGES_PARTITION = 'persist:conduit-web-pages'
 
 export type BrowserAddress = { kind: 'host'; port: number; path: string } | { kind: 'web'; url: string }
 
-const LOCAL = /^(?:(https?):\/\/)?(?:(?:[a-z0-9-]+\.)*localhost\.?|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1?\]|\[::ffff:(?:127(?:\.\d{1,3}){3}|7f[0-9a-f]{2}:[0-9a-f]{1,4})\])(?::(\d{1,5}))?([/?#]\S*)?$/i
 const HOST_NAME = /^(\d{1,5})\.([a-z0-9]{4,32})$/
 
 function hostAt(port: number, path: string | undefined): BrowserAddress | null {
@@ -43,14 +42,51 @@ export function hostPageParts(url: string): { port: number; key: string; path: s
   return { port, key: name[2]!, path: `${parsed.pathname || '/'}${parsed.search}${parsed.hash}` }
 }
 
+/**
+ * Whether a host name (as URL gives it) is this machine's own: 127.0.0.0/8,
+ * ::1 and its IPv4-mapped forms, 0.0.0.0 and ::, localhost and *.localhost,
+ * a trailing dot included. On the desktop it names the computer; typed into
+ * a Browser tab or linked from the chat, it names the Hermes host. One check
+ * for both, so the two never disagree on a spelling.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (/^127(\.\d{1,3}){3}$/.test(host) || host === '0.0.0.0') return true
+  if (host === '::1' || host === '::' || /^0*:(0*:)*0*:?1$/.test(host)) return true
+  // IPv4-mapped (::ffff:127.0.0.1, which URL writes as ::ffff:7f00:1) and IPv4-compatible forms.
+  const mapped = /^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host)
+  if (mapped) {
+    const high = parseInt(mapped[1]!, 16)
+    return high >> 8 === 127 || (high === 0 && parseInt(mapped[2]!, 16) === 0)
+  }
+  return /^::(?:ffff:)?127(\.\d{1,3}){3}$/.test(host)
+}
+
+/** An address on this machine's loopback, by any spelling URL reads (2130706433 and [::7f00:1] too): its port and path. */
+function loopbackAt(text: string): BrowserAddress | null {
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(text)?.[1]?.toLowerCase()
+  if (scheme && scheme !== 'http' && scheme !== 'https') return null
+  let parsed: URL
+  try {
+    parsed = new URL(scheme ? text : `http://${text}`)
+  } catch {
+    return null
+  }
+  if (!isLoopbackHost(parsed.hostname) || parsed.username || parsed.password) return null
+  const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80
+  return hostAt(port, `${parsed.pathname || '/'}${parsed.search}${parsed.hash}`)
+}
+
 /** What an address typed into a Browser tab opens, or null when it isn't one. */
 export function readAddress(input: string): BrowserAddress | null {
   const text = input.trim()
   if (!text) return null
   const bare = /^:?(\d{1,5})([/?#]\S*)?$/.exec(text)
   if (bare) return hostAt(Number(bare[1]), bare[2])
-  const local = LOCAL.exec(text)
-  if (local) return hostAt(local[2] ? Number(local[2]) : local[1]?.toLowerCase() === 'https' ? 443 : 80, local[3])
+  if (/\s/.test(text)) return null
+  const local = loopbackAt(text)
+  if (local) return local
   const page = hostPageParts(text)
   if (page) return hostAt(page.port, page.path)
   if (/^https?:\/\/\S+$/i.test(text)) return web(text)
