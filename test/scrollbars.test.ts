@@ -35,3 +35,11 @@ describe('scrollbars only while you use them', () => {
     expect(css).toMatch(/:hover::-webkit-scrollbar-thumb,\s*\.scrolling::-webkit-scrollbar-thumb \{/)
   })
 })
+
+describe('scrollbars inside the islands', () => {
+  it('keep the track off the rounded corners and the thumb off the edge (app.css)', () => {
+    const css = readFileSync(join(__dirname, '../src/renderer/src/styles/app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(css).toMatch(/\.chatlist ::-webkit-scrollbar-track,[^{]*\{\s*margin-block: calc\(var\(--radius-island\) - 4px\);/)
+    expect(css).toMatch(/\.chatlist ::-webkit-scrollbar-thumb,[^{]*\{\s*border-width: 3px 5px 3px 3px;/)
+  })
+})

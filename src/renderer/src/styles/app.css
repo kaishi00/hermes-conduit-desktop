@@ -13211,3 +13211,29 @@ button.rail-brand-button:hover {
   margin: 4px 6px;
   background: var(--line);
 }
+
+/*
+ * Inside the glass islands the scrollbar sits inside the card (Eric,
+ * 2026-11-26): its track stops short of the rounded corners and the thumb
+ * keeps clear of the island's edge.
+ */
+.chatlist ::-webkit-scrollbar,
+.chatlist::-webkit-scrollbar,
+.ws-panel ::-webkit-scrollbar,
+.ws-panel::-webkit-scrollbar {
+  width: 12px;
+}
+
+.chatlist ::-webkit-scrollbar-track,
+.chatlist::-webkit-scrollbar-track,
+.ws-panel ::-webkit-scrollbar-track,
+.ws-panel::-webkit-scrollbar-track {
+  margin-block: calc(var(--radius-island) - 4px);
+}
+
+.chatlist ::-webkit-scrollbar-thumb,
+.chatlist::-webkit-scrollbar-thumb,
+.ws-panel ::-webkit-scrollbar-thumb,
+.ws-panel::-webkit-scrollbar-thumb {
+  border-width: 3px 5px 3px 3px;
+}
