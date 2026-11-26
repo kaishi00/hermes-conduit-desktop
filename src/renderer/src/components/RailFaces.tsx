@@ -33,8 +33,6 @@ export function RailFaces({
       className="rail-faces"
       role="group"
       aria-label={t('Bots')}
-      // The rail's own menu is for its sections, not the faces.
-      onContextMenu={(e: MouseEvent) => e.stopPropagation()}
     >
       {tiles.map(tile => {
         const { bot } = tile
@@ -42,15 +40,22 @@ export function RailFaces({
         const isOpen =
           !!open && open.profile.toLowerCase() === bot.name.toLowerCase() && (open.host ? !tile.own && tile.host === open.host : tile.own)
         const badge = tile.own ? null : (badgeFor?.(tile) ?? null)
+        const busy = tile.own && running.has(bot.name)
+        const name = badge ? `${label} · ${badge.name}` : label
         return (
           <button
             key={tile.key}
             className="rail-face"
             data-profile={bot.name}
-            aria-label={badge ? `${label} · ${badge.name}` : label}
-            title={badge ? `${label} · ${badge.name}` : label}
+            aria-label={busy ? `${name} · ${t('Working')}` : name}
+            title={name}
             aria-current={isOpen ? 'page' : undefined}
             onClick={() => onOpen(tile)}
+            // A face has no menu: not the rail's section menu, nor the system's.
+            onContextMenu={(e: MouseEvent) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
           >
             <BotAvatar bot={bot} size={34} host={tile.own ? undefined : tile.host} />
             {badge ? (
@@ -58,7 +63,7 @@ export function RailFaces({
                 <HostBadgeMark badge={badge} />
               </span>
             ) : null}
-            {tile.own && running.has(bot.name) ? <span className="rail-face-running" aria-hidden="true" /> : null}
+            {busy ? <span className="rail-face-running" aria-hidden="true" /> : null}
           </button>
         )
       })}

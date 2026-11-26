@@ -48,11 +48,21 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
       close()
       toggleRef.current?.focus()
     }
+    // As the rail's menus, a press outside it or the window losing focus closes it too.
+    const onPress = (e: Event) => {
+      const target = e.target as Node | null
+      if (target && (menuRef.current?.contains(target) || toggleRef.current?.contains(target))) return
+      close()
+    }
     window.addEventListener('click', close)
     window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onPress)
+    window.addEventListener('blur', close)
     return () => {
       window.removeEventListener('click', close)
       window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onPress)
+      window.removeEventListener('blur', close)
     }
   }, [open])
 

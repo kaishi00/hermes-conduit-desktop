@@ -36,7 +36,7 @@ describe('collapsed strip of faces', () => {
     const onOpen = vi.fn()
     const host = await mount({ tiles, open: { profile: 'furina' }, running: new Set(['yelan']), onOpen })
     const faces = [...host.querySelectorAll<HTMLButtonElement>('.rail-faces .rail-face')]
-    expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit', 'Furina', 'Yelan'])
+    expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit', 'Furina', 'Yelan · Working'])
     expect(faces.map(f => f.getAttribute('aria-current'))).toEqual([null, 'page', null])
     expect(faces.map(f => !!f.querySelector('.rail-face-running'))).toEqual([false, false, true])
     act(() => faces[2].click())
@@ -49,7 +49,7 @@ describe('collapsed strip of faces', () => {
     const onOpen = vi.fn()
     const host = await mount({ tiles, open: { profile: 'default', host: 'https://far.example' }, running: new Set(['default']), badgeFor, onOpen })
     const faces = [...host.querySelectorAll<HTMLButtonElement>('.rail-face')]
-    expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit', 'Mira · Test'])
+    expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit · Working', 'Mira · Test'])
     expect(faces.map(f => f.getAttribute('aria-current'))).toEqual([null, 'page'])
     expect(faces.map(f => !!f.querySelector('.host-badge'))).toEqual([false, true])
     // Running is this dashboard's: the far bot of the same name shows no dot.
@@ -73,10 +73,18 @@ describe('collapsed strip of faces', () => {
         )
       )
     )
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
     act(() => {
-      host.querySelector('.rail-face')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }))
+      host.querySelector('.rail-face')!.dispatchEvent(event)
     })
     expect(railMenu).not.toHaveBeenCalled()
+    // Nor Electron's edit menu, which shows when the page leaves the event alone.
+    expect(event.defaultPrevented).toBe(true)
+    // The strip's blank space still belongs to the rail.
+    act(() => {
+      host.querySelector('.rail-faces')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    })
+    expect(railMenu).toHaveBeenCalledTimes(1)
   })
 
   it('draws nothing without bots', async () => {
