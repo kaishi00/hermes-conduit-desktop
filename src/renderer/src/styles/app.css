@@ -13007,6 +13007,12 @@ main.docked-pulse.pulse-page {
   margin-left: auto;
 }
 
+/* The brand is in one place: the rail's top, or the title bar while a banner holds the island down. */
+.app:not(:has(> .banner)) > .titlebar.bare > .brand,
+.app:has(> .banner) .rail-brand {
+  display: none;
+}
+
 .app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .rail,
 .app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .chats-section > .list-keeper > .chatlist,
 .app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .list-keeper > .chatlist,

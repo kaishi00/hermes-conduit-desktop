@@ -81,7 +81,14 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
   if (inRail) {
     const label = subtitle ? `Conduit · ${subtitle}` : 'Conduit'
     return (
-      <div className="rail-brand host-switch" onContextMenu={e => e.stopPropagation()}>
+      <div
+        className="rail-brand host-switch"
+        onContextMenu={e => {
+          // Not the rail's section menu, nor the system's.
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+      >
         {switchable ? (
           <button className="rail-brand-button" aria-haspopup="menu" aria-expanded={open} aria-label={t('Switch Hermes')} title={`${label}\n${t('Switch Hermes')}`} onClick={toggle}>
             {mark}
@@ -120,7 +127,8 @@ export function TitleBar({ bare = false, ...brand }: Props) {
   const { platform, window: win } = window.conduit
   return (
     <header className={bare ? 'titlebar bare' : 'titlebar'} onDoubleClick={event => event.target === event.currentTarget && win.toggleMaximize()}>
-      {bare ? null : <Brand {...brand} />}
+      {/* Bare, it's drawn only while a banner keeps the island from rising (the CSS); the rail draws it otherwise. */}
+      <Brand {...brand} />
       {platform !== 'darwin' ? (
         <div className="caption-buttons">
           <button className="cap" aria-label={t('Minimize')} onClick={() => win.minimize()}>

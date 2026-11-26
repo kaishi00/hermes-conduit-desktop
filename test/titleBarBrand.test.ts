@@ -35,12 +35,23 @@ function mount(el: unknown, props: Record<string, unknown>) {
 }
 
 describe('brand in the rail (floating glass shell)', () => {
-  it('a bare title bar keeps the drag strip but drops the brand', async () => {
+  it('a bare title bar keeps the drag strip, and its brand only for when a banner holds the island down', async () => {
     const { TitleBar } = await load()
     const host = mount(TitleBar, { bare: true, hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
     const bar = host.querySelector('header.titlebar')!
     expect(bar.classList.contains('bare')).toBe(true)
-    expect(bar.querySelector('.brand, .brand-mark')).toBeNull()
+    // app.css hides it unless the window shows a banner.
+    expect(bar.querySelector(':scope > .brand')).not.toBeNull()
+  })
+
+  it('right-clicking the rail brand opens no menu', async () => {
+    const { Brand } = await load()
+    const host = mount(Brand, { inRail: true, hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+    act(() => {
+      host.querySelector('.rail-brand-button')!.dispatchEvent(event)
+    })
+    expect(event.defaultPrevented).toBe(true)
   })
 
   it('the title bar on the sign-in screens still carries the brand', async () => {
