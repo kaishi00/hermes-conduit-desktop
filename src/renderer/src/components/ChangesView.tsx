@@ -66,13 +66,14 @@ export function ChangesView({
   const reading = useRef(0)
   // An answer that lands after the bench moved to another folder (it remounts per folder) is dropped.
   const alive = useRef(true)
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Set again on every mount: StrictMode mounts twice with the same ref.
+    alive.current = true
+    return () => {
       alive.current = false
       reading.current += 1
-    },
-    []
-  )
+    }
+  }, [])
 
   const read = useCallback(async () => {
     const asked = ++reading.current
@@ -141,6 +142,8 @@ export function ChangesView({
   }, [pickedKey, statusStamp, root, profile])
 
   const act = async (action: GitAction, body: Record<string, unknown> = {}): Promise<boolean> => {
+    // The branch list may change under it.
+    if (action === 'fetch' || action === 'pull' || action === 'push') setBranches(null)
     setBusy(action)
     setFailed(null)
     try {
