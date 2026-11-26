@@ -226,6 +226,7 @@ import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { LoginItemSetting } from './components/LoginItemSetting'
+import { HideDockSetting } from './components/HideDockSetting'
 import { SectionRail } from './components/SectionRail'
 import { fallbackAfterUnpin, launchInstead, pinnedSections, readRailLayout, resolveInitialSection, setSectionPinned, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
 import { CallTranscriptSheet } from './components/CallTranscriptSheet'
@@ -3827,6 +3828,7 @@ function Settings({
           <AskDashboardSetting hosts={status.hosts?.length ?? 0} />
           <CombineDashboardsSetting hosts={status.hosts ?? []} />
           <LoginItemSetting />
+          <HideDockSetting />
           <UpdatesSetting />
         </dl>
       </section>

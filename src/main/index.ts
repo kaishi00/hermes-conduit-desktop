@@ -59,6 +59,7 @@ import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
 import { parseScreenKey, releaseScreen } from '../shared/screenWindows'
 import { ConduitTray } from './tray'
+import { DockPresence } from './dockPresence'
 import { applyAppIcon, watchNewWindows } from './appIcon'
 import { watchEditMenu } from './editMenu'
 import { launchedAtLogin, loginItemState, openStartupSettings, setLoginItem } from './loginItem'
@@ -67,6 +68,8 @@ import {
   askHostAtLaunch,
   chooseAppIcon,
   chooseAskHost,
+  chooseHideDock,
+  hideDockWhenClosed,
   chooseQuickAskAccelerator,
   quickAskAccelerator,
   chooseLanguage,
@@ -128,6 +131,14 @@ function sendCommand(action: MenuAction): void {
 }
 
 const quickAsk = new QuickAsk()
+
+/** The Mac's Hide from the Dock (desktop#586): the Dock icon only while a window of Conduit's own is open. */
+const dockPresence = isMac && app.dock
+  ? new DockPresence(
+      { hide: () => app.dock!.hide(), show: () => app.dock!.show(), isVisible: () => app.dock!.isVisible() },
+      () => BrowserWindow.getAllWindows().some(window => !window.isDestroyed() && !quickAsk.owns(window) && (window.isVisible() || window.isMinimized()))
+    )
+  : null
 
 const tray = new ConduitTray({
   quickAsk: () => quickAsk.toggle(),
@@ -262,6 +273,19 @@ app.on('browser-window-created', (_event, window) => {
     eventRouter.forget(id)
     windowHosts.delete(id)
   })
+  if (dockPresence) {
+    // A window shown while the Dock icon was hidden can open behind the app in front: it comes forward once the icon is back.
+    window.on('show', () =>
+      dockPresence.update(() => {
+        if (!window.isDestroyed() && window.isVisible()) window.focus()
+      })
+    )
+    const update = () => dockPresence.update()
+    window.on('hide', update)
+    window.on('minimize', update)
+    window.on('restore', update)
+    window.on('closed', update)
+  }
 })
 
 /** The chat windows' own BrowserWindows, so a notification can find the one that has its chat. */
@@ -455,6 +479,8 @@ function createWindow(): void {
   window.on('ready-to-show', () => {
     if (!startInTray) window.show()
     startInTray = false
+    // Hide from the Dock takes over once the window has shown, or stayed in the tray, so a launch doesn't flicker the icon.
+    dockPresence?.setEnabled(hideDockWhenClosed())
   })
   window.on('close', event => {
     if (quitting) return
@@ -551,6 +577,14 @@ function registerIpc(): void {
   ipcMain.handle(IPC.unlock, () => unlock())
   ipcMain.handle(IPC.askHost, () => askHostAtLaunch())
   ipcMain.handle(IPC.setAskHost, (_event, on: unknown) => typeof on === 'boolean' && chooseAskHost(on))
+  ipcMain.handle(IPC.hideDock, () => (dockPresence ? hideDockWhenClosed() : null))
+  ipcMain.handle(IPC.setHideDock, (_event, on: unknown) => {
+    if (!dockPresence) return null
+    if (typeof on !== 'boolean') return hideDockWhenClosed()
+    chooseHideDock(on)
+    dockPresence.setEnabled(on)
+    return on
+  })
   ipcMain.on(IPC.openChat, (_event, chat: OpenChatRequest) => {
     quickAsk.hide()
     showWindow()
