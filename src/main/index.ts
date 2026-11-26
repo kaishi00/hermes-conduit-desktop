@@ -38,6 +38,7 @@ import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
 import { pageUrl, registerPageScheme, servePages } from './pages'
 import { FILE_SCHEME_PRIVILEGES, openPageInBrowser, serveViewedFiles, viewHostFile } from './viewFiles'
+import { isPagePath, pageDownloadDecision, type PageRead } from '../shared/viewFileRules'
 import { confineNavigation } from './navigation'
 import { endSocket, LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
 import { pluginRelease } from './pluginRelease'
@@ -45,7 +46,7 @@ import { cleanHeaders } from './proxyHeaders'
 import { KeptHosts } from './keptHosts'
 import { readServerCertificate } from './serverCertificate'
 import { writeFile } from 'node:fs/promises'
-import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath } from './hostFiles'
+import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath, copyDown } from './hostFiles'
 import { Connection, DISPLAY_SOCKET_PATH } from './connection'
 import { Pairing } from './pairing'
 import { createFileStore } from './store'
@@ -720,8 +721,26 @@ function registerIpc(): void {
       const through = connectionOf(event.sender.id)
       if (!through) throw new Error(t("Couldn't open this file"))
       const response = await through.download(hostFilePath('download', path, shownProfile), stop.signal)
-      // A dashboard that serves its page for a route it doesn't know has no download route.
-      if (/text\/html/i.test(response.headers.get('content-type') ?? '')) throw Object.assign(new Error('no download route'), { code: 404 })
+      const html = /text\/html/i.test(response.headers.get('content-type') ?? '')
+      // A dashboard answering an unknown route with its own page is not the file, even
+      // when the path is a page: ask read-text first (issue 564 review).
+      let read: PageRead = null
+      if (html && isPagePath(path)) {
+        const routes = copyRoutes(event.sender.id, path, profile)
+        try {
+          read = routes ? await routes.readText() : null
+        } catch {
+          read = null
+        }
+      }
+      const decision = pageDownloadDecision(path, html, read)
+      if (decision === 'data-url') throw Object.assign(new Error('no download route'), { code: 404 })
+      if (decision === 'page') {
+        const routes = copyRoutes(event.sender.id, path, profile)
+        // The save dialog has no viewer ticket, so there is no cancel signal to pass.
+        await copyDown(picked.filePath, async () => response, routes?.dataUrl ?? (async () => null), undefined, true)
+        return 'saved'
+      }
       if (!response.body) throw new Error(t("Couldn't open this file"))
       await streamToFile(response.body as import('node:stream/web').ReadableStream, picked.filePath, () => stop.abort())
       return 'saved'
@@ -748,13 +767,17 @@ function registerIpc(): void {
     const shownProfile = typeof profile === 'string' ? profile : undefined
     return {
       download: (signal: AbortSignal) => through.download(hostFilePath('download', path, shownProfile), signal),
-      dataUrl: async () => {
-        const answer = await through.http<{ dataUrl?: unknown; data_url?: unknown }>('GET', hostFilePath('read-data-url', path, shownProfile))
+      dataUrl: async (signal?: AbortSignal) => {
+        const answer = await through.http<{ dataUrl?: unknown; data_url?: unknown }>('GET', hostFilePath('read-data-url', path, shownProfile), undefined, 30_000, signal)
         return dataUrlBytes(answer?.dataUrl ?? answer?.data_url)
       },
       readText: async () => {
-        const answer = await through.http<{ text?: unknown; binary?: unknown; truncated?: unknown }>('GET', hostFilePath('read-text', path, shownProfile))
-        return typeof answer?.text === 'string' && answer.binary !== true && answer.truncated !== true ? answer.text : null
+        const answer: unknown = await through.http('GET', hostFilePath('read-text', path, shownProfile))
+        // A dashboard answering an unknown route with its own HTML page is not a file read as text.
+        if (typeof answer === 'string') throw Object.assign(new Error('no readable page'), { code: 415 })
+        const row = answer && typeof answer === 'object' ? answer as { text?: unknown; binary?: unknown; truncated?: unknown } : null
+        if (row?.truncated === true || row?.binary === true) return { page: true as const }
+        return typeof row?.text === 'string' ? row.text : null
       }
     }
   }

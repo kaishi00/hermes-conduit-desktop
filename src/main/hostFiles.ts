@@ -133,9 +133,11 @@ export async function sweepStaleParts(destination: string, now = Date.now()): Pr
 }
 
 export type Download = (signal: AbortSignal) => Promise<Response>
-export type DataUrl = () => Promise<Buffer | null>
-/** Hermes' read of a file as text (/api/fs/read-text): null when it isn't text or was cut short. */
-export type ReadText = () => Promise<string | null>
+export type DataUrl = (signal?: AbortSignal) => Promise<Buffer | null>
+import type { PageRead } from '../shared/viewFileRules'
+
+/** Hermes' read of a file as text (/api/fs/read-text): text, a page copy for a read cut short or binary, or nothing usable. */
+export type ReadText = () => Promise<PageRead>
 
 /**
  * Copies a host file to `file` (desktop#554's viewer and Open in Browser):
@@ -162,7 +164,7 @@ export async function copyDown(file: string, download: Download, dataUrl: DataUr
   } catch (error) {
     const code = (error as { code?: unknown }).code
     if ((code !== 404 && code !== 405) || stop.signal.aborted) throw error
-    const bytes = await dataUrl()
+    const bytes = await dataUrl(stop.signal)
     if (cancel?.aborted) throw cancelled()
     if (!bytes) throw Object.assign(new Error('unreadable'), { code: 415 })
     await writeFile(file, bytes)
