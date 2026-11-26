@@ -1590,7 +1590,12 @@ body.resizing-columns {
   }
 }
 
-/* Thin scrollbars, like the platform's overlay ones */
+/*
+ * Scrollbars like the platform's overlay ones (Eric, 2026-11-26: they stood
+ * out on the glass): thin, and only there while you use them. A scroller's
+ * thumb shows while the pointer is over it or it's scrolling (`.scrolling`,
+ * state/scrollbars.ts) and is gone at rest; its room stays, so nothing moves.
+ */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -1599,11 +1604,17 @@ body.resizing-columns {
 ::-webkit-scrollbar-thumb {
   border-radius: 5px;
   border: 3px solid transparent;
-  background: var(--line-strong) padding-box;
+  background: transparent padding-box;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-4) padding-box;
+:hover::-webkit-scrollbar-thumb,
+.scrolling::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text) 16%, transparent) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: color-mix(in srgb, var(--text) 32%, transparent) padding-box;
 }
 
 ::-webkit-scrollbar-track,

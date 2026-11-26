@@ -17,11 +17,14 @@ import './styles/app.css'
 import { setLanguage } from '@shared/i18n'
 import { applyStoredAppearance } from './state/appearance'
 import { installMouseBack } from './state/mouseBack'
+import { watchScrolling } from './state/scrollbars'
 
 setLanguage(window.conduit.language.resolved)
 document.documentElement.lang = window.conduit.language.resolved
 document.documentElement.dataset.platform = window.conduit.platform
 applyStoredAppearance()
+// Scrollbars show while a pane scrolls (app.css).
+watchScrolling()
 // The mouse's back button goes back from any page or sheet with a Back.
 installMouseBack()
 // The quick ask window follows an accent or text style picked in the main one.
