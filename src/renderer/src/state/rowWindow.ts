@@ -116,19 +116,31 @@ export function startAt(index: number, count: number): number {
 /** A windowed transcript's way to draw a row it left out, answering whether the chat has that row at all. */
 export type RowOpener = (key: string) => boolean
 
-const openers: { scroller: HTMLElement; open: RowOpener }[] = []
+const openers: { scroller: HTMLElement; open: RowOpener; latest?: () => void }[] = []
 
 /**
  * Registers a windowed transcript's scroller, so a jump to a row it left out
- * can widen its window first. Call the answer when it goes away.
+ * can widen its window first, and a way back to its newest rows that follows
+ * the chat again. Call the answer when it goes away.
  */
-export function registerRowOpener(scroller: HTMLElement, open: RowOpener): () => void {
-  const entry = { scroller, open }
+export function registerRowOpener(scroller: HTMLElement, open: RowOpener, latest?: () => void): () => void {
+  const entry = { scroller, open, latest }
   openers.push(entry)
   return () => {
     const at = openers.indexOf(entry)
     if (at >= 0) openers.splice(at, 1)
   }
+}
+
+/**
+ * Takes the transcript in `container` back to its newest rows, following the
+ * chat as it goes, as its jump-to-latest button does: the timeline's Now
+ * (desktop issue 453) after a jump left it on an older row.
+ */
+export function showLatest(container: HTMLElement | null): void {
+  if (!container) return
+  const opener = openers.find(o => o.scroller === container) ?? openers.find(o => container.contains(o.scroller))
+  opener?.latest?.()
 }
 
 /** No escaping means no safe selector: answer nothing rather than match the wrong row. */

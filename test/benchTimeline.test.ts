@@ -9,6 +9,7 @@ const items: TranscriptItem[] = [
   { kind: 'tool', key: 't2', toolId: 'b', name: 'patch', status: 'done', at: 3, args: '{"path": "src/a.ts", "old_string": "x", "new_string": "y"}' },
   { kind: 'tool', key: 't3', toolId: 'c', name: 'todo', status: 'done', at: 4 },
   { kind: 'tool', key: 't3b', toolId: 'c2', name: 'todo_list', status: 'done', at: 4 },
+  { kind: 'tool', key: 't3c', toolId: 'c3', name: 'conduit_show', status: 'done', at: 4 },
   { kind: 'tool', key: 't4', toolId: 'd', name: 'read_file', status: 'done', at: 5, args: '{"path": "/srv/app/README.md", "offset": 1, "content": "cut here…' },
   { kind: 'assistant', key: 'a1', text: 'Fixed.', at: 6, streaming: false },
   { kind: 'tool', key: 't5', toolId: 'e', name: 'browser_navigate', status: 'running', at: 7, context: 'http://localhost:5173' },

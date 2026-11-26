@@ -67,7 +67,7 @@ import { SignIn } from './components/SignIn'
 import { Brand, TitleBar } from './components/TitleBar'
 import { RailFaces } from './components/RailFaces'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
-import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
+import { LiveTranscript, prefillRequest, quoteRequest, revealLatest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
 import { liveDoing, stepTitle } from './state/liveDoing'
 import { lastReplyOf } from './state/transcriptReads'
@@ -3060,7 +3060,7 @@ function Shell({
                   refreshKey={turnsDone}
                   reveal={reveal}
                   transcript={transcriptStore}
-                  onShowStep={key => revealMessage(chatPane.current, key)}
+                  onShowStep={key => (key === null ? revealLatest(chatPane.current) : revealMessage(chatPane.current, key))}
                   onInsertPath={path => setQuote(quoteRequest({ insert: pathForDraft(path) }))}
                   onClose={() => showBench(false)}
                 />

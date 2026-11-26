@@ -46,7 +46,8 @@ export function Workbench({
   /** The chat's transcript, which the timeline reads its steps from. */
   transcript: TranscriptStore
   /** The timeline landed on a step: the chat shows it. */
-  onShowStep: (key: string) => void
+  /** The chat moves to a step's row, or (null) back to its newest rows. */
+  onShowStep: (key: string | null) => void
   onInsertPath: (path: string) => void
   onClose: () => void
 }) {
@@ -76,7 +77,12 @@ export function Workbench({
     // Whatever was waiting to show goes: Now, another step or another chat wins.
     window.clearTimeout(showTimer.current)
     setAt(key)
-    const step = key === null ? null : steps.find(s => s.key === key)
+    // Now: the chat goes back to its newest rows and follows them again (the bot's commands follow on their own).
+    if (key === null) {
+      onShowStep(null)
+      return
+    }
+    const step = steps.find(s => s.key === key)
     if (!step) return
     // Every view moves to the step: the chat, the bot's commands, and Files to the step's file.
     // A drag passes many steps: the views move to the one it stops on, so no file opens for a step passed over.
