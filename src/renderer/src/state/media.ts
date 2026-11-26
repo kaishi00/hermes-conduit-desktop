@@ -6,7 +6,7 @@
  * Tags inside code or a blockquote are examples, not files.
  */
 
-import { pageAt, startsPage } from './htmlInReplies'
+import { pageAt, startsPageAt } from './htmlInReplies'
 
 export type ReplyBlock =
   | { kind: 'markdown'; text: string }
@@ -182,7 +182,7 @@ export function splitReply(text: string, boards?: ReadonlySet<string>): ReplyBlo
       continue
     }
     // HTML written in the reply: a page, drawn as `::preview`'s are.
-    if (startsPage(rawLine)) {
+    if (startsPageAt(lines, index)) {
       const page = pageAt(lines, index)
       flush()
       blocks.push({ kind: 'page', html: lines.slice(page.start, page.end).join('\n').trim(), complete: page.complete })

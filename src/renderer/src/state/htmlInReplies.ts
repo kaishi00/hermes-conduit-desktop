@@ -48,11 +48,17 @@ const TOKEN = /<!--[\s\S]*?(?:-->|$)|<![^>]*>?|<\/([a-zA-Z][a-zA-Z0-9-]*)\s*>|<(
  */
 function closesAt(text: string, from: number): number {
   const open: string[] = []
-  const lower = text.toLowerCase()
+  let lower = ''
   let at = from
+  // Where the last element closed: tags after it on its line are read too, so one opened there keeps the page going.
+  let emptied = -1
   for (;;) {
     TOKEN.lastIndex = at
     const match = TOKEN.exec(text)
+    if (emptied >= 0) {
+      const lineEnd = text.indexOf('\n', emptied)
+      if (!match || (lineEnd >= 0 && match.index > lineEnd)) return emptied
+    }
     // A `<` still being written (a tag cut mid-way) leaves the page open.
     if (!match) return -1
     const token = match[0]
@@ -68,6 +74,7 @@ function closesAt(text: string, from: number): number {
       if (!VOID.has(name) && !match[4]) {
         if (RAW_TEXT.has(name)) {
           // Its text runs to its own closing tag: a script's `<` or `"</div>"` is not a tag.
+          lower ||= text.toLowerCase()
           const end = lower.indexOf(`</${name}`, at)
           const close = end < 0 ? -1 : text.indexOf('>', end)
           if (close < 0) return -1
@@ -75,8 +82,15 @@ function closesAt(text: string, from: number): number {
         } else open.push(name)
       }
     }
-    if (!open.length && !token.startsWith('<!')) return at
+    if (token.startsWith('<!')) continue
+    emptied = open.length ? -1 : at
   }
+}
+
+/** Whether line `i` starts a page: a table row that starts with a tag is the table's. */
+export function startsPageAt(lines: readonly string[], i: number): boolean {
+  const line = lines[i]!
+  return startsPage(line) && !(i > 0 && line.includes('|') && lines[i - 1]!.includes('|'))
 }
 
 export type PageSpan = {
@@ -89,19 +103,20 @@ export type PageSpan = {
 
 /** The page starting at line `start` (which `startsPage`). */
 export function pageAt(lines: readonly string[], start: number): PageSpan {
+  // Joined once; `from` is where the part being read starts in it.
+  const text = lines.slice(start).join('\n')
   let line = start
+  let from = 0
   for (;;) {
-    // Lines from `line` on, and where each starts in the joined text.
-    const text = lines.slice(line).join('\n')
-    const at = closesAt(text, 0)
+    const at = closesAt(text, from)
     if (at < 0) return { start, end: lines.length, complete: false }
-    // The line holding the closing tag ends the part; text after it on that line stays in the page.
-    let end = line + text.slice(0, at).split('\n').length
+    // The line holding the closing tag ends the part.
+    const end = line + text.slice(from, at).split('\n').length
     // Another page tag after blank lines continues the same page.
     let next = end
     while (next < lines.length && !lines[next]!.trim()) next++
     if (next < lines.length && startsPage(lines[next]!)) {
-      line = next
+      for (; line < next; line++) from += lines[line]!.length + 1
       continue
     }
     if (next >= lines.length) return { start, end: trimBlankEnd(lines, start, end), complete: false }
@@ -142,7 +157,7 @@ export function splitPages(text: string): HtmlPart[] {
       run.push(line)
       continue
     }
-    if (startsPage(line)) {
+    if (startsPageAt(lines, i)) {
       const page = pageAt(lines, i)
       flush()
       parts.push({ kind: 'page', html: lines.slice(page.start, page.end).join('\n').trim(), complete: page.complete })

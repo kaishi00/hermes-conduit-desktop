@@ -58,6 +58,19 @@ describe('pages written in a reply', () => {
     expect(splitPages('<div><p>One<p>Two</div>\nAfter')[0]).toEqual({ kind: 'page', html: '<div><p>One<p>Two</div>', complete: true })
   })
 
+  it('keeps going when the line that closes one element opens another', () => {
+    expect(splitPages('<div>A</div><div>\nB\n</div>\nAfter')).toEqual([
+      { kind: 'page', html: '<div>A</div><div>\nB\n</div>', complete: true },
+      { kind: 'text', text: 'After' }
+    ])
+  })
+
+  it('leaves a table row that starts with a tag to the table', () => {
+    const table = 'Tag | Meaning\n--- | ---\n<div> | container\n\nNext steps'
+    expect(splitPages(table)).toEqual([{ kind: 'text', text: table }])
+    expect(splitReply(table)).toEqual([{ kind: 'markdown', text: table }])
+  })
+
   it('is one line for a void element', () => {
     expect(splitPages('<img src="https://example.com/a.png">\nA picture.')[0]).toEqual({
       kind: 'page',
