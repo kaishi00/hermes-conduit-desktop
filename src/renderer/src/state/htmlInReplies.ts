@@ -8,9 +8,8 @@
  *   `<style>`, then a `<div>`, then a `<script>`). It draws in the page card
  *   `::preview` uses, sandboxed.
  * - A few tags that read as text draw as text: bold, italics, underline,
- *   strikethrough, `<mark>`, `<kbd>`, `<sub>`, `<sup>`, `<small>`, a colored
- *   `<span>` or `<font>`, `<br>`, and `<details>` with its `<summary>` as a
- *   fold. Any other tag, or one that isn't closed, stays text as it always did.
+ *   strikethrough, `<mark>`, `<kbd>`, `<sub>`, `<sup>`, a colored `<span>` or
+ *   `<font>`, `<br>`, and `<details>` with its `<summary>` as a fold. Any other tag, or one that isn't closed, stays text as it always did.
  *
  * A fenced ```html block is code and stays code.
  */
@@ -163,21 +162,15 @@ export function withPagesSaid(text: string, said: string): string {
   return parts.map(part => (part.kind === 'text' ? part.text : said)).join('\n\n')
 }
 
-const NAMED_COLORS = new Set(
-  (
-    'red green blue orange yellow purple pink gray grey black white teal brown cyan magenta indigo violet gold ' +
-    'silver navy maroon olive lime aqua crimson coral salmon tomato orangered darkred darkgreen darkblue darkorange ' +
-    'lightgreen lightblue royalblue steelblue seagreen forestgreen firebrick goldenrod slategray dimgray'
-  ).split(' ')
-)
+const NAMED_COLORS = new Set('red green blue orange yellow purple pink gray grey black white teal brown cyan magenta indigo'.split(' '))
 
-/** A CSS color a reply may use, or null: a name, a hex color, or rgb()/hsl() with plain numbers. */
+/** A CSS color a reply may use, or null: a name, a hex color, or rgb()/rgba() with plain numbers (the phone's ReplyHTML.safeColor). */
 export function safeColor(value: string | undefined): string | null {
   const color = value?.trim().toLowerCase()
   if (!color) return null
   if (NAMED_COLORS.has(color)) return color
   if (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(color)) return color
-  if (/^(?:rgb|rgba|hsl|hsla)\(\s*[\d.%\s,/]+\)$/.test(color)) return color
+  if (/^rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*[\d.]+\s*)?\)$/.test(color)) return color
   return null
 }
 
@@ -223,7 +216,6 @@ export const TEXT_TAGS: Record<string, string> = {
   kbd: 'kbd',
   sub: 'sub',
   sup: 'sup',
-  small: 'small',
   span: 'span',
   font: 'span'
 }
@@ -367,7 +359,10 @@ function text(node: Node): string {
   return node.value !== undefined && node.type !== 'html' ? node.value : (node.children ?? []).map(text).join('')
 }
 
-/** Tags taken out, for a line of plain text (a notification, the chat list); `<br>` a space. */
+// The tags the chat draws; any other stays text there, so it stays in a plain line too.
+const DRAWN_TAG = /<\/?(?:b|strong|i|em|u|ins|s|del|strike|mark|kbd|sub|sup|span|font|details|summary)(?:\s(?:[^<>"']|"[^"]*"|'[^']*')*)?\/?>/gi
+
+/** The tags the chat draws taken out, for a line of plain text (a notification, the chat list); `<br>` a space. */
 export function withoutTags(text: string): string {
-  return text.replace(/<br\s*\/?>/gi, ' ').replace(/<\/?(?:[a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?\/?>/g, '')
+  return text.replace(/<br\s*\/?>/gi, ' ').replace(DRAWN_TAG, '')
 }

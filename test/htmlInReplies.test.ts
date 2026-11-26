@@ -140,6 +140,7 @@ describe('text tags in a reply', () => {
   it('takes tags off a plain line', () => {
     expect(withoutTags('a <b>b</b><br/>c')).toBe('a b c')
     expect(withoutTags('mail <me@example.com>')).toBe('mail <me@example.com>')
+    expect(withoutTags('a <video> tag and Vec<String>')).toBe('a <video> tag and Vec<String>')
   })
 
   it('takes only colors a reply may use', () => {
@@ -148,5 +149,6 @@ describe('text tags in a reply', () => {
     expect(safeColor('rgb(10, 20, 30)')).toBe('rgb(10, 20, 30)')
     expect(safeColor('expression(alert(1))')).toBeNull()
     expect(safeColor('var(--x)')).toBeNull()
+    expect(safeColor('hsl(10, 20%, 30%)')).toBeNull()
   })
 })
