@@ -39,6 +39,9 @@ describe('a bot at work, on its face', () => {
   it('spins and sweeps only with motion allowed, and pulses a needs-you ring once (app.css)', () => {
     const css = readFileSync(join(__dirname, '../src/renderer/src/styles/app.css'), 'utf8')
     expect(css).toMatch(/\.work-ring\.needs::after \{[^}]*animation: work-ring-ping 1\.1s ease-out 1;/)
+    // A far bot's dashboard badge sits bottom right; the count keeps to the top so neither covers the other.
+    expect(css).toMatch(/\.work-ring-count \{[^}]*top: -5px;/)
+    expect(css).toMatch(/\.bot-side-face \.bot-tile-badge \{[^}]*bottom: -4px;/)
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.work-ring\.working,\s*\.work-ring\.needs::after,\s*\.bot-side-working \{\s*animation: none;/)
   })
 })
