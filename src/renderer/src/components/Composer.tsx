@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalSt
 import type { ContextWindow } from '../state/context'
 import { Icon } from './icons'
 import { t } from '@shared/i18n'
-import { ATTACHMENT_LIMIT_BYTES, LONG_PASTE_CHARACTERS, displayName, stagePaste, tooLargeMessage, type StagedAttachment } from '../state/attachments'
+import { LONG_PASTE_CHARACTERS, attachmentLimitBytes, displayName, stagePaste, tooLargeMessage, voiceTooLargeMessage, type StagedAttachment } from '../state/attachments'
 import { stageFile } from '../state/picture'
 import { useRecorder } from '../state/useRecorder'
 import { blobToBase64, durationLabel, transcribe, voiceFileName, voicePromptText } from '../state/voice'
@@ -217,8 +217,9 @@ export function Composer({
 
   async function stage(files: File[]) {
     if (!files.length) return
-    const tooLarge = files.filter(f => f.size > ATTACHMENT_LIMIT_BYTES)
-    const fitting = files.filter(f => f.size <= ATTACHMENT_LIMIT_BYTES)
+    const limit = attachmentLimitBytes()
+    const tooLarge = files.filter(f => f.size > limit)
+    const fitting = files.filter(f => f.size <= limit)
     const unread: string[] = []
     setNotice(tooLarge.length ? tooLargeMessage(tooLarge.map(f => f.name)) : null)
     setStaging(n => n + 1)
@@ -296,7 +297,7 @@ export function Composer({
     if (pasted.length > LONG_PASTE_CHARACTERS) {
       event.preventDefault()
       const paste = stagePaste(pasted, crypto.randomUUID())
-      if (paste.size > ATTACHMENT_LIMIT_BYTES) {
+      if (paste.size > attachmentLimitBytes()) {
         // Too big to go as a file: it goes in the field after all.
         const el = event.currentTarget
         const start = el.selectionStart
@@ -582,8 +583,8 @@ export function Composer({
         size: recording.blob.size,
         base64
       }
-      if (file.size > ATTACHMENT_LIMIT_BYTES) {
-        setNotice(t('This voice message is larger than your attachment size limit.'))
+      if (file.size > attachmentLimitBytes()) {
+        setNotice(voiceTooLargeMessage())
         return
       }
       // Words help every model; without them the file still goes, as the phone sends it.

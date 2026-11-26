@@ -8,9 +8,59 @@
  */
 import { t } from '../../../shared/i18n'
 
-/** The phone's default attachment limit. */
-export const ATTACHMENT_LIMIT_MB = 16
-export const ATTACHMENT_LIMIT_BYTES = ATTACHMENT_LIMIT_MB * 1024 * 1024
+/**
+ * The largest file the composer stages, after the phone's Settings › Chat ›
+ * Attachments: 16 MB by default, up to the 256 MB the Hermes host accepts.
+ * Kept on this computer, as the phone keeps it on the phone. Every file is
+ * held in memory and base64-encoded before it's sent, so Settings warns
+ * above the default. A group room's own limits still apply under it.
+ */
+export const ATTACHMENT_LIMIT_KEY = 'conduit.attachmentSizeLimitMB'
+export const DEFAULT_ATTACHMENT_LIMIT_MB = 16
+/** What the Hermes host accepts per upload. */
+export const HOST_MAX_ATTACHMENT_MB = 256
+export const ATTACHMENT_LIMIT_CHOICES = [8, 16, 32, 64, 128, 256] as const
+
+type LimitStorage = Pick<globalThis.Storage, 'getItem' | 'setItem'>
+
+function defaultStorage(): LimitStorage | null {
+  try {
+    return globalThis.localStorage ?? null
+  } catch {
+    return null
+  }
+}
+
+export function clampAttachmentLimit(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_ATTACHMENT_LIMIT_MB
+  return Math.min(Math.floor(value), HOST_MAX_ATTACHMENT_MB)
+}
+
+/** The limit set on this computer, in MB. */
+export function attachmentLimitMB(storage: LimitStorage | null = defaultStorage()): number {
+  let saved: string | null = null
+  try {
+    saved = storage?.getItem(ATTACHMENT_LIMIT_KEY) ?? null
+  } catch {
+    // Private storage: the default stands.
+  }
+  return saved === null ? DEFAULT_ATTACHMENT_LIMIT_MB : clampAttachmentLimit(Number(saved))
+}
+
+export function setAttachmentLimitMB(megabytes: number, storage: LimitStorage | null = defaultStorage()): number {
+  const next = clampAttachmentLimit(megabytes)
+  try {
+    storage?.setItem(ATTACHMENT_LIMIT_KEY, String(next))
+  } catch {
+    // Private storage: it lasts until the window closes.
+  }
+  return next
+}
+
+export const attachmentLimitBytes = (megabytes = attachmentLimitMB()) => clampAttachmentLimit(megabytes) * 1024 * 1024
+
+/** Above the default, Settings warns about memory. */
+export const isRiskyAttachmentLimit = (megabytes: number) => clampAttachmentLimit(megabytes) > DEFAULT_ATTACHMENT_LIMIT_MB
 /** Hermes Desktop's threshold for a paste that goes as a file. */
 export const LONG_PASTE_CHARACTERS = 3000
 /** The pictures every model provider reads; others go as files. */
@@ -71,10 +121,25 @@ export function titlePreview(attachments: StagedAttachment[], limit = 1000): str
   return preview || undefined
 }
 
+/** Where the limit can be raised, while it can be. */
+function raiseHint(megabytes: number): string {
+  return clampAttachmentLimit(megabytes) < HOST_MAX_ATTACHMENT_MB ? ` ${t('You can raise the limit in Settings › Attachments.')}` : ''
+}
+
 /** The refusal for files over the limit, naming them. */
-export function tooLargeMessage(names: string[]): string {
-  if (names.length === 1) return t('{name} is larger than the {limit} MB attachment limit.', { name: names[0], limit: ATTACHMENT_LIMIT_MB })
-  return t('These files are larger than the {limit} MB attachment limit: {names}.', { limit: ATTACHMENT_LIMIT_MB, names: names.join(', ') })
+export function tooLargeMessage(names: string[], megabytes = attachmentLimitMB()): string {
+  const limit = clampAttachmentLimit(megabytes)
+  const refusal =
+    names.length === 1
+      ? t('{name} is larger than the {limit} MB attachment limit.', { name: names[0], limit })
+      : t('These files are larger than the {limit} MB attachment limit: {names}.', { limit, names: names.join(', ') })
+  return refusal + raiseHint(limit)
+}
+
+/** The refusal for a recorded voice message over the limit. */
+export function voiceTooLargeMessage(megabytes = attachmentLimitMB()): string {
+  const limit = clampAttachmentLimit(megabytes)
+  return t('This voice message is larger than the {limit} MB attachment limit.', { limit }) + raiseHint(limit)
 }
 
 /** Quotes a reference value holding whitespace, brackets or quotes, as Hermes' `format_reference_value` does. */

@@ -231,6 +231,7 @@ import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
 import { LoginItemSetting } from './components/LoginItemSetting'
 import { HideDockSetting } from './components/HideDockSetting'
+import { AttachmentLimitSetting } from './components/AttachmentLimitSetting'
 import { TerminalSettings } from './components/TerminalSettings'
 import { SectionRail } from './components/SectionRail'
 import { fallbackAfterUnpin, launchInstead, pinnedSections, readRailLayout, resolveInitialSection, setSectionPinned, writeRailLayout, type RailLayout, type RailSection } from './state/railSections'
@@ -3889,6 +3890,7 @@ function Settings({
             />
             <span className="meta">{Math.round(chatScale * 100)}%</span>
           </dd>
+          <AttachmentLimitSetting />
           <dt>{t('Notifications')}</dt>
           <dd>
             <label className="toggle">
