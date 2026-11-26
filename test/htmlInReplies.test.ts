@@ -152,6 +152,16 @@ describe('text tags in a reply', () => {
     expect(draw('<details>\n<summary>Log</summary>\n\nline 1')).toBe('<details class="reply-fold"><summary>Log</summary><p>line 1</p></details>')
   })
 
+  it('folds a <details> written without blank lines, attributes and all', () => {
+    expect(draw('<details>\n<summary>Log</summary>\nline 1\n</details>\nAfter.')).toBe('<details class="reply-fold"><summary>Log</summary><p>line 1</p></details>\n<p>After.</p>')
+    expect(draw('<details class="x" open>\n<summary>Why</summary>\nBecause.\n</details>')).toBe('<details class="reply-fold" open=""><summary>Why</summary><p>Because.</p></details>')
+  })
+
+  it('ends a page at prose after its closing tag, even prose with a tag in it', () => {
+    expect(splitPages('<div>x</div> as <code>y</code> shows\nAfter')[0]).toEqual({ kind: 'page', html: '<div>x</div> as <code>y</code> shows', complete: true })
+    expect(splitPages('<div>x</div> as <code>y</code>\n<p>z</p>\nAfter')).toHaveLength(2)
+  })
+
   it('takes tags off a plain line', () => {
     expect(withoutTags('a <b>b</b><br/>c')).toBe('a b c')
     expect(withoutTags('mail <me@example.com>')).toBe('mail <me@example.com>')

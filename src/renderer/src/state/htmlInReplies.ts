@@ -58,6 +58,8 @@ function closesAt(text: string, from: number): number {
     if (emptied >= 0) {
       const lineEnd = text.indexOf('\n', emptied)
       if (!match || (lineEnd >= 0 && match.index > lineEnd)) return emptied
+      // Only another page element carries the page on; prose with a tag in it stays prose.
+      if (!match[2] || !PAGE_TAGS.has(match[2].toLowerCase())) return emptied
     }
     // A `<` still being written (a tag cut mid-way) leaves the page open.
     if (!match) return -1
@@ -254,7 +256,38 @@ export function tagOf(text: string): Tag | null {
 
 type Node = { type: string; value?: string; children?: Node[]; data?: Record<string, unknown> }
 
-const DETAILS_OPEN = /^<details(\s+open(?:=(?:"[^"]*"|'[^']*'|\S+))?)?\s*>\s*(?:<summary>([\s\S]*?)<\/summary>)?\s*$/i
+const DETAILS_OPEN = /^<details((?:\s+[\w-]+(?:=(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*>\s*(?:<summary>([\s\S]*?)<\/summary>)?\s*$/i
+const FOLD_LINE = /^ {0,3}(?:<details\b[^>]*>(?:\s*<summary>.*?<\/summary>)?|<summary>.*<\/summary>|<\/details\s*>)\s*$/i
+const FOLD_FENCE = /^ {0,3}(`{3,}|~{3,})/
+
+/**
+ * A fold's own lines (`<details>`, its `<summary>`, `</details>`) set apart by blank lines, so Markdown reads
+ * each as a tag of its own and what's between as Markdown, however compactly the reply wrote it.
+ */
+export function withFoldsApart(text: string): string {
+  if (!/<\/?details\b/i.test(text)) return text
+  const out: string[] = []
+  let fence: string | null = null
+  for (const line of text.split('\n')) {
+    const found = FOLD_FENCE.exec(line)
+    if (fence) {
+      if (found && found[1]![0] === fence[0] && found[1]!.length >= fence.length) fence = null
+      out.push(line)
+      continue
+    }
+    if (found) fence = found[1]!
+    if (!fence && FOLD_LINE.test(line)) {
+      if (out.length && out[out.length - 1]!.trim()) out.push('')
+      out.push(line.trim(), '')
+      continue
+    }
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
+/** Whether a `<details>` tag's attributes say it starts open. */
+const startsOpen = (attributes: string | undefined) => /(?:^|\s)open(?=[\s=]|$)/i.test(attributes ?? '')
 const SUMMARY = /^<summary>([\s\S]*?)<\/summary>$/i
 const DETAILS_CLOSE = /^<\/details\s*>$/i
 
@@ -298,7 +331,7 @@ function visit(parent: Node): void {
       }
       const fold: Node = {
         type: 'htmlDetails',
-        data: { hName: 'details', hProperties: details[1] ? { className: ['reply-fold'], open: true } : { className: ['reply-fold'] } },
+        data: { hName: 'details', hProperties: startsOpen(details[1]) ? { className: ['reply-fold'], open: true } : { className: ['reply-fold'] } },
         children: [
           { type: 'htmlSummary', data: { hName: 'summary' }, children: [{ type: 'text', value: summary || 'Details' }] },
           ...inside

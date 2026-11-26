@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { looksLikePath } from '../state/workspace'
 import { faviconFailed, faviconUrl, fileType } from '../state/linkMarks'
 import { remarkDesktopCards } from '../state/desktopCards'
-import { remarkHtmlTags } from '../state/htmlInReplies'
+import { remarkHtmlTags, withFoldsApart } from '../state/htmlInReplies'
 import { markdownBlocks } from '../state/markdownBlocks'
 import { DesktopCard } from './DesktopCard'
 import { Icon } from './icons'
@@ -205,7 +205,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
       urlTransform={urlTransform}
       components={components}
     >
-      {text}
+      {withFoldsApart(text)}
     </ReactMarkdown>
   )
 })
