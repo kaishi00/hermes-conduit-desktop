@@ -70,6 +70,22 @@ export function processName(type: string, name?: string): string {
   return fieldText(name || type)
 }
 
+/**
+ * Whether a process that ended is a crash worth asking about. Not when it
+ * exited cleanly or Conduit was quitting (the quit ends every process); not
+ * a GPU process that couldn't start, after which Chromium draws without the
+ * GPU and the window works; and not a process stopped with SIGTERM (exit 15),
+ * which the system or the user sends to end Conduit. Those made most of
+ * the desktop reports on the relay (Linux, 1.0.0 to 1.0.2), five or more to
+ * a launch, none of them a crash the user saw.
+ */
+export function countsAsCrash(end: { type: string; reason: string; exitCode: number }, quitting: boolean): boolean {
+  if (end.reason === 'clean-exit' || quitting) return false
+  if (end.type === 'GPU' && end.reason === 'launch-failed') return false
+  if (end.reason === 'killed' && end.exitCode === 15) return false
+  return true
+}
+
 /** How it ended, in a few words: Electron's reason and the exit code. */
 export function endLine(report: DeviceReport): string {
   if (report.kind === 'hang')
