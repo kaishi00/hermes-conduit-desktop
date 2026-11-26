@@ -7,6 +7,7 @@ import { Markdown } from './Markdown'
 import { PageFrame, pageAddress } from './PagePreview'
 import { inSelectMenu } from './Select'
 import { openPageInBrowser } from '../state/saveMedia'
+import { OverWindow } from './OverWindow'
 
 /** How the viewer shows a file, by its name: a page, a copy (picture, sound, video, PDF) or its text. */
 export type ViewerKind = 'page' | 'image' | 'audio' | 'video' | 'pdf' | 'markdown' | 'text'
@@ -128,24 +129,26 @@ export function FileViewer({
     }
   }
   return (
-    <div className="page-full file-viewer" role="dialog" aria-label={name}>
-      <div className="page-full-head">
-        <span className="page-preview-name" title={path}>
-          {name}
-        </span>
-        {kind === 'page' ? (
-          <button className="secondary" onClick={() => void openPageInBrowser(path, profile)}>
-            {t('Open in Browser')}
+    <OverWindow>
+      <div className="page-full file-viewer" role="dialog" aria-label={name}>
+        <div className="page-full-head">
+          <span className="page-preview-name" title={path}>
+            {name}
+          </span>
+          {kind === 'page' ? (
+            <button className="secondary" onClick={() => void openPageInBrowser(path, profile)}>
+              {t('Open in Browser')}
+            </button>
+          ) : null}
+          <button className="secondary" disabled={saving} onClick={onDownload}>
+            {t('Download')}
           </button>
-        ) : null}
-        <button className="secondary" disabled={saving} onClick={onDownload}>
-          {t('Download')}
-        </button>
-        <button className="secondary" onClick={onClose}>
-          {t('Done')}
-        </button>
+          <button className="secondary" onClick={onClose}>
+            {t('Done')}
+          </button>
+        </div>
+        {body()}
       </div>
-      {body()}
-    </div>
+    </OverWindow>
   )
 }
