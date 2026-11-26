@@ -179,7 +179,8 @@ export function splitPages(text: string): HtmlPart[] {
 
 /** A reply with each page as `said` (speech, a notification, the chat list); the rest as written. */
 export function withPagesSaid(text: string, said: string): string {
-  const parts = splitPages(text)
+  // Folds apart first, so a page inside a fold written on one line is said as a page too.
+  const parts = splitPages(withFoldsApart(text))
   if (parts.length === 1 && parts[0]!.kind === 'text') return text
   return parts.map(part => (part.kind === 'text' ? part.text : said)).join('\n\n')
 }
@@ -299,7 +300,8 @@ export function withFoldsApart(text: string): string {
     let opening = FOLD_OPENING_START.exec(line)
     // Taken apart only when what follows is a fold's body: nothing, a body ending the fold on this line, or
     // text with no tags that a later `</details>` closes. `<details> and <summary> make a fold.` stays prose.
-    if (opening && opening[2]!.trim() && !FOLD_CLOSING_END.test(opening[2]!) && (/[<>]/.test(opening[2]!) || !closedAfter[index])) opening = null
+    // A body starting with a fence mark stays on the line, so it can't open a code block that runs on.
+    if (opening && opening[2]!.trim() && (/^\s*(?:`{3}|~{3})/.test(opening[2]!) || (!FOLD_CLOSING_END.test(opening[2]!) && (/[<>]/.test(opening[2]!) || !closedAfter[index])))) opening = null
     let rest = line
     if (opening) {
       own(opening[1]!)

@@ -173,6 +173,14 @@ describe('text tags in a reply', () => {
     expect(draw('<details data-x="a>b"><summary>S</summary>Body</details>')).toBe('<details class="reply-fold"><summary>S</summary><p>Body</p></details>')
   })
 
+  it('leaves a one-line fold whose body starts with a fence as written', () => {
+    expect(draw('<details><summary>S</summary>```code```</details>\n\nAfter.')).not.toContain('reply-fold')
+  })
+
+  it('says a page inside a one-line fold as a page', () => {
+    expect(withPagesSaid('<details><summary>S</summary><div>A</div></details>', 'Page')).not.toContain('<div>')
+  })
+
   it('carries a page on only at a page element right after it', () => {
     expect(splitPages('<div>x</div> Use <div> to wrap.\nMore prose')[0]).toEqual({ kind: 'page', html: '<div>x</div> Use <div> to wrap.', complete: true })
     expect(pageAt(['<div>a</div> <div>b', '</div>', 'After'], 0).end).toBe(2)
