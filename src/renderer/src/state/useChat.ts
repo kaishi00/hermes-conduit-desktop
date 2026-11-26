@@ -214,9 +214,12 @@ async function boundedOpen(
 
 /** The transcript a resume draws: its rows, or a chat opened on its newest stored rows with their tool details. */
 function resumedTranscript(result: ResumeResult, rows: HistoryRow[] | null, tooLong = false): TranscriptState {
+  const items = rows ? newestPageItems(rows, tooLong) : fromHistory(result.messages ?? [])
   const state: TranscriptState = {
-    items: rows ? newestPageItems(rows, tooLong) : fromHistory(result.messages ?? []),
+    items,
     running: result.running === true,
+    // A running chat joined partway still has a turn boundary: its resumed rows.
+    turnFrom: result.running === true ? items.length : undefined,
     plan: parsePlan(result.todo_state)
   }
   return rows ? attachBoards(state, toolAnswers({ messages: rows }), toolArgs({ messages: rows }), toolNames({ messages: rows })) : state
