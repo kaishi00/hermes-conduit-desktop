@@ -58,7 +58,12 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
     window.addEventListener('keydown', onKey)
     window.addEventListener('mousedown', onPress)
     window.addEventListener('blur', close)
+    // Hidden while open (a banner moves the brand between the rail and the title bar), it closes, so it never comes back open unasked.
+    const menu = menuRef.current
+    const hidden = typeof ResizeObserver === 'undefined' || !menu ? null : new ResizeObserver(() => !menu.getClientRects().length && close())
+    if (menu) hidden?.observe(menu)
     return () => {
+      hidden?.disconnect()
       window.removeEventListener('click', close)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('mousedown', onPress)
@@ -78,7 +83,17 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
   }
 
   const menu = open ? (
-    <div className="host-menu" role="menu" ref={menuRef} onKeyDown={moveFocus}>
+    <div
+      className="host-menu"
+      role="menu"
+      ref={menuRef}
+      onKeyDown={moveFocus}
+      // Tabbing out of it closes it, as the rail's menus do.
+      onBlur={e => {
+        const next = e.relatedTarget as Node | null
+        if (next && !e.currentTarget.contains(next) && !toggleRef.current?.contains(next)) setOpen(false)
+      }}
+    >
       {hosts.map(host => {
         const state = host.url === currentUrl ? null : (kept.find(k => k.url === host.url)?.state ?? null)
         const badge = hostBadge(hosts, host.url, hostName)
