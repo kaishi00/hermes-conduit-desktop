@@ -2,8 +2,9 @@ import { useId, type ReactNode } from 'react'
 
 /**
  * The section glyphs ("1b, sculpted, simplified"; Eric 2026-11-26): solid
- * shapes on a 24-unit grid, a front plane in the text colour and a back plane
- * at half strength, with a cut between them. Everything is currentColor, so a
+ * shapes on a 24-unit grid, a front plane in the text colour and, for most, a
+ * back plane at half strength with a cut between them (Bots and Needs you are
+ * one plane each). Everything is currentColor, so a
  * glyph takes the theme's neutral text colour at rest and the user's accent
  * when its section is open; no colour is baked in.
  *
@@ -144,7 +145,6 @@ export function NavGlyph({ name, className }: { name: NavGlyphName; className?: 
         </defs>
         <rect
           {...box}
-          className={secondary ? 'glyph-back' : undefined}
           fill="currentColor"
           fillOpacity={secondary ? 0.5 : undefined}
           mask={`url(#${id})`}
