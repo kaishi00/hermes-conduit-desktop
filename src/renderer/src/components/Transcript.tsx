@@ -1,7 +1,7 @@
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { flushSync } from 'react-dom'
 import { mediaKind, splitReply, withoutBoardLines } from '../state/media'
-import { PagePreview } from './PagePreview'
+import { PagePreview, ReplyPage } from './PagePreview'
 import { baseName, type Attachment } from '../state/text'
 import { displayName } from '../state/attachments'
 import type { PendingRequest } from '@shared/ipc'
@@ -516,6 +516,8 @@ export const Reply = memo(function Reply({
           <PlacedBoardView key={block.id} board={boards?.find(board => board.id === block.id)} />
         ) : block.kind === 'preview' ? (
           <PagePreview key={i} path={block.path} name={baseName(block.path)} fallback={<FileCard path={block.path} />} />
+        ) : block.kind === 'page' ? (
+          <ReplyPage key={i} html={block.html} ready={block.complete || !streaming} />
         ) : mediaKind(block.path) === 'image' ? (
           <GatewayPicture
             key={i}

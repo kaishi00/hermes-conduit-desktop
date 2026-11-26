@@ -1,0 +1,152 @@
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { pageAt, safeColor, splitPages, startsPage, withPagesSaid, withoutTags } from '../src/renderer/src/state/htmlInReplies'
+import { copyableReply } from '../src/renderer/src/state/quote'
+import { namingFiles, splitReply } from '../src/renderer/src/state/media'
+import { spokenText } from '../src/renderer/src/state/voice'
+import { plainLine, previewText } from '../src/renderer/src/state/text'
+
+// The component through a path tsc doesn't follow, as botsHomeRender's: the tests' tsconfig has no JSX.
+let Markdown: (props: { text: string }) => unknown
+beforeAll(async () => {
+  const path = '../src/renderer/src/components/Markdown'
+  Markdown = ((await import(/* @vite-ignore */ path)) as { Markdown: typeof Markdown }).Markdown
+})
+
+const draw = (text: string) => renderToStaticMarkup(createElement(Markdown as never, { text }))
+
+describe('pages written in a reply', () => {
+  it('starts at a page tag at a line’s start, never at a text tag or prose', () => {
+    expect(startsPage('<div class="chart">')).toBe(true)
+    expect(startsPage('   <table>')).toBe(true)
+    expect(startsPage('<!DOCTYPE html>')).toBe(true)
+    expect(startsPage('<svg viewBox="0 0 10 10">')).toBe(true)
+    expect(startsPage('<details>')).toBe(false)
+    expect(startsPage('<span style="color:red">x</span>')).toBe(false)
+    expect(startsPage('<Conversation>')).toBe(false)
+    expect(startsPage('Use a <div> here')).toBe(false)
+    expect(startsPage('    <div>')).toBe(false)
+    expect(startsPage('<divider>')).toBe(false)
+  })
+
+  it('runs to where its elements close, blank lines and all', () => {
+    const lines = ['Before', '<div>', '  <p>One</p>', '', '  <p>Two</p>', '</div>', 'After'].slice(1)
+    expect(pageAt(lines, 0)).toEqual({ start: 0, end: 5, complete: true })
+  })
+
+  it('takes in the page tags that follow it, as one page', () => {
+    const text = '<style>.a{color:red}</style>\n\n<div class="a">Hi</div>\n<script>if (1 < 2) document.title = "</div>"</script>\nDone.'
+    expect(splitPages(text)).toEqual([
+      { kind: 'page', html: '<style>.a{color:red}</style>\n\n<div class="a">Hi</div>\n<script>if (1 < 2) document.title = "</div>"</script>', complete: true },
+      { kind: 'text', text: 'Done.' }
+    ])
+  })
+
+  it('is incomplete while an element is open, a tag is cut or nothing follows it yet', () => {
+    expect(splitPages('Here:\n<div>\n<p>One')).toEqual([
+      { kind: 'text', text: 'Here:' },
+      { kind: 'page', html: '<div>\n<p>One', complete: false }
+    ])
+    expect(splitPages('<div>Hi</div>\n<scr')[0]).toEqual({ kind: 'page', html: '<div>Hi</div>', complete: false })
+    expect(splitPages('<div>Hi</div>\n')[0]).toEqual({ kind: 'page', html: '<div>Hi</div>', complete: false })
+    expect(splitPages('<div><!-- note')[0]).toMatchObject({ complete: false })
+    expect(splitPages('<script>let a = 1')[0]).toMatchObject({ complete: false })
+  })
+
+  it('closes an element left open inside one that closes, as a browser does', () => {
+    expect(splitPages('<div><p>One<p>Two</div>\nAfter')[0]).toEqual({ kind: 'page', html: '<div><p>One<p>Two</div>', complete: true })
+  })
+
+  it('is one line for a void element', () => {
+    expect(splitPages('<img src="https://example.com/a.png">\nA picture.')[0]).toEqual({
+      kind: 'page',
+      html: '<img src="https://example.com/a.png">',
+      complete: true
+    })
+  })
+
+  it('keeps a fenced html block as code', () => {
+    const text = '```html\n<div>Hi</div>\n```'
+    expect(splitPages(text)).toEqual([{ kind: 'text', text }])
+    expect(splitReply(text)).toEqual([{ kind: 'markdown', text }])
+  })
+
+  it('is a page block in the reply, between its Markdown', () => {
+    expect(splitReply('Failures jumped:\n<table><tr><td>Thu</td><td>9</td></tr></table>\nThat’s #3326.')).toEqual([
+      { kind: 'markdown', text: 'Failures jumped:' },
+      { kind: 'page', html: '<table><tr><td>Thu</td><td>9</td></tr></table>', complete: true },
+      { kind: 'markdown', text: 'That’s #3326.' }
+    ])
+  })
+
+  it('is said to be a page by speech, live models, notifications and the chat list; Copy keeps it', () => {
+    const reply = 'Here:\n<div><script>chart()</script>Sales</div>\nDone.'
+    expect(spokenText(reply)).not.toContain('chart')
+    expect(spokenText(reply)).toContain('page')
+    expect(namingFiles(reply)).toBe('Here:\n(a page in the chat)\nDone.')
+    expect(plainLine(reply)).toBe('Here: 🗂 Page Done.')
+    expect(previewText(reply)).toBe('Here: 🗂 Page Done.')
+    expect(copyableReply(reply)).toBe('Here:\n\n<div><script>chart()</script>Sales</div>\n\nDone.')
+    expect(withPagesSaid('No page here', 'x')).toBe('No page here')
+  })
+})
+
+describe('text tags in a reply', () => {
+  it('draws bold, italics, marks, keys, sub and superscript', () => {
+    const html = draw('A <b>bold</b> <i>idea</i>, <mark>marked</mark>, <kbd>Ctrl</kbd>, H<sub>2</sub>O and x<sup>2</sup>.')
+    expect(html).toContain('<strong>bold</strong>')
+    expect(html).toContain('<em>idea</em>')
+    expect(html).toContain('<mark class="reply-highlight">marked</mark>')
+    expect(html).toContain('<kbd class="reply-key">Ctrl</kbd>')
+    expect(html).toContain('H<sub>2</sub>O')
+    expect(html).toContain('x<sup>2</sup>')
+  })
+
+  it('colors a span by its style, only with a safe color, and nothing else of the style', () => {
+    expect(draw('Build is <span style="color:#e5484d; font-size: 90px">failing</span>.')).toContain('<span style="color:#e5484d">failing</span>')
+    expect(draw('<font color="green">ok</font>')).toContain('<span style="color:green">ok</span>')
+    expect(draw('<span style="color:url(javascript:x)">x</span>')).toContain('<span>x</span>')
+    expect(draw('<span style="background-color: yellow">hi</span>')).toContain('<span style="background-color:yellow">hi</span>')
+  })
+
+  it('breaks a line at <br>', () => {
+    expect(draw('One<br>Two')).toBe('<p>One<br/>\nTwo</p>')
+  })
+
+  it('keeps any other tag, or one that isn’t closed, as text', () => {
+    expect(draw('Use a <video> tag')).toContain('&lt;video&gt;')
+    expect(draw('An <b>unclosed tag')).toContain('&lt;b&gt;')
+    expect(draw('<span onclick="x()">hi</span>')).not.toContain('onclick=')
+  })
+
+  it('never draws a tag inside code', () => {
+    expect(draw('`<b>x</b>`')).toContain('&lt;b&gt;x&lt;/b&gt;')
+  })
+
+  it('folds a <details> with its summary, the Markdown inside drawn', () => {
+    const html = draw('<details>\n<summary>Full log</summary>\n\n```\nFAIL test_upload\n```\n</details>\n\nAfter.')
+    expect(html).toMatch(/^<details class="reply-fold"><summary>Full log<\/summary><div class="code-block">[\s\S]*FAIL test_upload[\s\S]*<\/details>\n<p>After.<\/p>$/)
+  })
+
+  it('folds a summary written as its own paragraph, and opens one marked open', () => {
+    expect(draw('<details open>\n\n<summary>Why</summary>\n\nBecause.\n\n</details>')).toBe('<details class="reply-fold" open=""><summary>Why</summary><p>Because.</p></details>')
+  })
+
+  it('folds what’s written so far while the </details> hasn’t come', () => {
+    expect(draw('<details>\n<summary>Log</summary>\n\nline 1')).toBe('<details class="reply-fold"><summary>Log</summary><p>line 1</p></details>')
+  })
+
+  it('takes tags off a plain line', () => {
+    expect(withoutTags('a <b>b</b><br/>c')).toBe('a b c')
+    expect(withoutTags('mail <me@example.com>')).toBe('mail <me@example.com>')
+  })
+
+  it('takes only colors a reply may use', () => {
+    expect(safeColor(' Red ')).toBe('red')
+    expect(safeColor('#E5484D')).toBe('#e5484d')
+    expect(safeColor('rgb(10, 20, 30)')).toBe('rgb(10, 20, 30)')
+    expect(safeColor('expression(alert(1))')).toBeNull()
+    expect(safeColor('var(--x)')).toBeNull()
+  })
+})
