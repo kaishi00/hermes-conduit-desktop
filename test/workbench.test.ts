@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { BENCH_COLUMN, CHAT_BESIDE_BENCH, DRAWER_DEFAULT, readBenchOpen, readDrawer, shownBenchWidth, shownView, writeBenchOpen, writeDrawer } from '../src/renderer/src/state/workbench'
+import { BENCH_COLUMN, CHAT_BESIDE_BENCH, benchPlace, DRAWER_DEFAULT, readBenchOpen, readDrawer, shownBenchWidth, shownView, writeBenchOpen, writeDrawer } from '../src/renderer/src/state/workbench'
 import { RAIL_WIDTH } from '../src/renderer/src/state/columnWidths'
 
 const store = new Map<string, string>()
@@ -43,5 +43,14 @@ describe('the view the bench shows', () => {
     expect(shownView('page:a', pages)).toBe('page:a')
     expect(shownView('page:b', pages)).toBe('changes')
     expect(shownView('files', [])).toBe('files')
+  })
+})
+
+describe('the folder the workbench shows while another chat opens', () => {
+  it("keeps the bench's place while the chat's folder is read, and closes for a chat with none", () => {
+    expect(benchPlace('/srv/b', true, '/srv/a')).toEqual({ root: '/srv/b', waiting: false })
+    expect(benchPlace(undefined, true, '/srv/a')).toEqual({ root: '/srv/a', waiting: true })
+    expect(benchPlace(undefined, false, '/srv/a')).toEqual({ root: null, waiting: false })
+    expect(benchPlace(undefined, true, null)).toEqual({ root: null, waiting: false })
   })
 })

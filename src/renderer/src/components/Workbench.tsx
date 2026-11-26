@@ -36,17 +36,19 @@ export function Workbench({
   transcript,
   onShowStep,
   onInsertPath,
-  onClose
+  onClose,
+  waiting = false
 }: {
   root: string
+  /** Another chat is opening and its folder isn't known yet: the bench keeps its place, its contents faded. */
+  waiting?: boolean
   profile?: string
   refreshKey: number
   /** A file a reply named: the bench shows it in Files. */
   reveal?: { path: string; id: number } | null
   /** The chat's transcript, which the timeline reads its steps from. */
   transcript: TranscriptStore
-  /** The timeline landed on a step: the chat shows it. */
-  /** The chat moves to a step's row, or (null) back to its newest rows. */
+  /** The timeline landed on a step: the chat moves to its row, or (null, Now) back to its newest rows. */
   onShowStep: (key: string | null) => void
   onInsertPath: (path: string) => void
   onClose: () => void
@@ -256,7 +258,7 @@ export function Workbench({
   const changed = repo ? new Set([...lists(repo.files).staged, ...lists(repo.files).unstaged].map(f => f.path)).size : 0
 
   return (
-    <aside className="bench" aria-label={t('Workbench')} ref={bench}>
+    <aside className={`bench${waiting ? ' waiting' : ''}`} aria-label={t('Workbench')} aria-busy={waiting || undefined} inert={waiting || undefined} ref={bench}>
       <div className="bench-head">
         <Icon name="folder" />
         <span className="bench-title" title={root}>

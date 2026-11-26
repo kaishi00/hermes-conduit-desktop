@@ -13482,8 +13482,32 @@ button.rail-brand-button:hover {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border-left: 1px solid var(--line);
-  background: var(--list);
+  /* A card of its own on the canvas, as the panels beside a chat are (the glass layout above). */
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-island);
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+/* The bench's small buttons (Pull, Publish Branch, Open File) keep to one line. */
+.bench .secondary.small {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  align-self: center;
+}
+
+/* Another chat opening: the bench keeps its place while that chat's folder is read, its contents faded. */
+.bench > * {
+  transition: opacity 120ms ease;
+}
+
+.bench.waiting > * {
+  opacity: 0;
 }
 
 .bench-head {
@@ -13839,7 +13863,8 @@ button.rail-brand-button:hover {
   align-items: center;
   gap: 6px;
   padding: 6px 6px 4px 12px;
-  background: var(--list);
+  /* Opaque: the rows scroll under it, and the bench's glass would show them through. */
+  background: var(--menu);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;

@@ -84,7 +84,7 @@ describe('a jump to a row a window left out (desktop#291)', () => {
       scroller.append(row)
       row.setAttribute('data-key', key)
       return true
-    })
+    }, () => {})
     expect(rowElement(container, 'kept')).toBe(row)
     expect(asked).toEqual(['kept'])
     off()
@@ -104,7 +104,7 @@ describe('a jump to a row a window left out (desktop#291)', () => {
     const off = registerRowOpener(container, key => {
       asked.push(key)
       return false
-    })
+    }, () => {})
     expect(rowElement(container, 'a')).toBe(drawn)
     expect(rowElement(container, 'b')).toBeNull()
     expect(asked).toEqual(['b'])
