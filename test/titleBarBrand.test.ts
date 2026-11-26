@@ -263,6 +263,19 @@ describe('you on this Hermes, at the top of the rail', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  it('says a drop aloud without the ticking countdown the tooltip keeps', async () => {
+    const { TitleBar } = await load()
+    const bar = mount(TitleBar, {
+      subtitle: 'Here',
+      hosts,
+      currentUrl: hosts[0].url,
+      onSwitch: () => {},
+      alert: { tone: 'quiet', text: 'Lost the connection. Trying again in 4s.', spoken: 'Lost the connection.' }
+    })
+    expect(bar.querySelector('[role="status"]')?.textContent).toBe('Lost the connection.')
+    expect(bar.querySelector('.brand .host-button')?.getAttribute('title')).toContain('Trying again in 4s.')
+  })
+
   it('opens Your Picture from the list, with one Hermes too', async () => {
     const { Brand } = await load()
     const onPicture = vi.fn()
