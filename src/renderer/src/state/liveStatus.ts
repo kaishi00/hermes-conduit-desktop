@@ -83,10 +83,17 @@ export function useLiveStatus(active: boolean, profiles: readonly string[], nudg
   return states
 }
 
-/** The ids (runtime id and session key) of the chats an `session.active_list` answer has answering now (working, or streaming its reply). */
+/**
+ * The ids (runtime id and session key) of the chats an `session.active_list` answer has answering now
+ * (working, or streaming its reply), as one bot's. Only an answer from Hermes' session authority counts:
+ * it lists the profile it's asked for, and its rows carry `source`. The legacy sidecar lists every
+ * profile's live chats whichever is named, so one bot's turn lit every bot on its dashboard (Eric,
+ * 2026-11-26); its rows are left out, as the phone's Bots Home leaves them out
+ * (SessionLiveStatusIndex.isProfileScoped).
+ */
 export function answeringIds(response: unknown): string[] {
   const rows = ((response ?? {}) as Raw).sessions
-  if (!Array.isArray(rows)) return []
+  if (!Array.isArray(rows) || !rows.every(raw => raw && typeof raw === 'object' && 'source' in raw)) return []
   return rows.flatMap(raw => {
     const row = (raw ?? {}) as Raw
     return ['working', 'streaming'].includes(str(row.status)) ? [str(row.id), str(row.session_key)].filter(Boolean) : []
@@ -123,7 +130,8 @@ const sameSteps = (a: ReadonlyMap<string, string | null>, b: ReadonlyMap<string,
   a.size === b.size && [...a].every(([name, step]) => b.has(name) && b.get(name) === step)
 
 /**
- * The bots with a chat answering now, any chat, not only the one open (Eric, 2026-11-26), each with the
+ * The bots with a chat answering now, any chat, not only the one open (Eric, 2026-11-26; on a legacy
+ * registry only the open chat's, from the caller), each with the
  * step it's on there as the plugin notes it ("Running a command"; null on a plugin without live steps):
  * the registry read for each of `profiles` at the list's pace, 4 s while one answers and slower as
  * nothing does, and the steps read for the bots answering.
