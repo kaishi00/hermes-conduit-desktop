@@ -50,7 +50,7 @@ import {
 } from '../state/gptLive'
 import { newCallId, saveCall, type CallResume, type CallTurn } from '../state/voiceSave'
 import type { PendingRequest } from '@shared/ipc'
-import { answerApproval, answerQuestion, answerWords, isApprove, isDeny, requestUpdate } from '../state/liveRequests'
+import { answerApproval, answerQuestion, answerWords, delegatedAnswer, isApprove, isDeny, requestUpdate } from '../state/liveRequests'
 import { chatFinder, delegatedRead, delegatedSearch, findChatMarker, readChatMarker } from '../state/chatFinder'
 import { JOB_STARTED, VoiceJobs, asksForBackground, jobFollowUpMarker, type VoiceJob } from '../state/voiceJobs'
 import { CallCards } from './CallCards'
@@ -319,8 +319,9 @@ export function GptLiveCall({
       return
     }
     // The user's spoken answer to what Hermes waits on in the chat.
-    const reply = answerWords(text)
-    if (isApprove(text) || isDeny(text) || reply !== null) {
+    // A bare "Answer:" takes the user's own words.
+    const reply = delegatedAnswer(text, said, live.current.requests, false)
+    if (isApprove(text) || isDeny(text) || answerWords(text) !== null) {
       const answering = reply !== null ? answerQuestion(live.current.requests, reply) : answerApproval(live.current.requests, isApprove(text) ? 'once' : 'deny')
       void answering.then(result => append(result.next_question ?? result.message ?? result.error ?? '', 'speakable', id))
       return
@@ -383,6 +384,12 @@ export function GptLiveCall({
         append(read.quiet, 'commentary', id)
         append(read.cue, 'speakable', id)
       }
+      return
+    }
+    // Marked nothing answered here: while the chat waits on a question, the user's answer to it.
+    const unmarked = delegatedAnswer(text, said, live.current.requests, true)
+    if (unmarked !== null) {
+      void answerQuestion(live.current.requests, unmarked).then(result => !ended.current && append(result.next_question ?? result.message ?? result.error ?? '', 'speakable', id))
       return
     }
     const request = requestWords(text, said)
