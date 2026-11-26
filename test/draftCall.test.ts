@@ -28,7 +28,7 @@ interface ChatCallState {
   calling: boolean
   start: () => void
   end: () => void
-  view: (late: { requests: unknown[]; onSend: (text: string) => Promise<boolean> }) => unknown
+  view: (late: { requests: unknown[]; onSend: (text: string) => Promise<boolean | string> }) => unknown
 }
 let useChatCall: (options: Record<string, unknown>) => ChatCallState
 beforeAll(async () => {
@@ -36,7 +36,7 @@ beforeAll(async () => {
   ;({ useChatCall } = (await import(/* @vite-ignore */ component)) as { useChatCall: typeof useChatCall })
 })
 
-function mount(send: (text: string) => Promise<boolean>) {
+function mount(send: (text: string) => Promise<boolean | string>) {
   const store = new TranscriptStore(emptyTranscript)
   let call: ChatCallState
   const root = createRoot(document.createElement('div'))
@@ -74,16 +74,33 @@ describe('a Classic call started in the new-chat draft (desktop#538)', () => {
   })
 
   it('files and archives the chat its own first request made', async () => {
-    const view = mount(async () => true)
+    const view = mount(async () => 'made-by-call')
     act(() => view.call().start())
     expect(say).not.toBeNull()
-    await act(async () => say!('Book a table for six tonight'))
+    // The new chat opens before the send that made it resolves.
     view.draw('made-by-call')
+    await act(async () => say!('Book a table for six tonight'))
     await act(async () => undefined)
     expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
     act(() => view.call().end())
     await act(async () => undefined)
     expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
+    view.unmount()
+  })
+
+  it('never files a chat opened while its first send was still in flight (desktop#529)', async () => {
+    let resolve: (sent: boolean | string) => void = () => undefined
+    const view = mount(() => new Promise(done => (resolve = done)))
+    act(() => view.call().start())
+    act(() => say!('Book a table for six tonight'))
+    view.draw('chat-x')
+    await act(async () => undefined)
+    expect(tagged).not.toHaveBeenCalled()
+    await act(async () => resolve(false))
+    expect(tagged).not.toHaveBeenCalled()
+    act(() => view.call().end())
+    await act(async () => undefined)
+    expect(archived).not.toHaveBeenCalled()
     view.unmount()
   })
 })
