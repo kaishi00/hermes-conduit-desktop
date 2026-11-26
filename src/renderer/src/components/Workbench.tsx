@@ -168,7 +168,7 @@ export function Workbench({
           {plugin === null ? (
             <div className="bench-note">{t('Loading…')}</div>
           ) : plugin.git ? (
-            <ChangesView root={root} profile={profile} refreshKey={refreshKey} shown={view === 'changes'} onStatus={onStatus} onOpenFile={openFile} />
+            <ChangesView key={`${profile ?? ''}\t${root}`} root={root} profile={profile} refreshKey={refreshKey} shown={view === 'changes'} onStatus={onStatus} onOpenFile={openFile} />
           ) : (
             <div className="bench-note">{t('Update the Conduit plugin on this host to see what changed here.')}</div>
           )}
@@ -181,7 +181,7 @@ export function Workbench({
         <>
           {drawer.folded ? null : <div className="bench-drawer-line" role="separator" aria-orientation="horizontal" aria-label={t('Terminal height')} onPointerDown={startDrag} />}
           <div className="bench-drawer-frame" style={drawer.folded ? undefined : { height: drawer.height }}>
-            <TerminalDrawer root={root} profile={profile} folded={drawer.folded} onFold={() => changeDrawer({ ...drawer, folded: !drawer.folded })} />
+            <TerminalDrawer key={`${profile ?? ''}\t${root}`} root={root} profile={profile} folded={drawer.folded} onFold={() => changeDrawer({ ...drawer, folded: !drawer.folded })} />
           </div>
         </>
       ) : null}

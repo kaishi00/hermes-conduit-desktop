@@ -64,6 +64,15 @@ export function ChangesView({
   const [failed, setFailed] = useState<string | null>(null)
   const [branches, setBranches] = useState<{ local: BranchRow[]; remote: BranchRow[] } | 'loading' | null>(null)
   const reading = useRef(0)
+  // An answer that lands after the bench moved to another folder (it remounts per folder) is dropped.
+  const alive = useRef(true)
+  useEffect(
+    () => () => {
+      alive.current = false
+      reading.current += 1
+    },
+    []
+  )
 
   const read = useCallback(async () => {
     const asked = ++reading.current
@@ -136,6 +145,7 @@ export function ChangesView({
     setFailed(null)
     try {
       const answer = (await gateway.http('POST', actionPath(action, profile), { root, ...body })) as { status?: unknown }
+      if (!alive.current) return true
       if (answer?.status) {
         const next = parseStatus(answer.status)
         setStatus(next)
@@ -143,11 +153,12 @@ export function ChangesView({
       } else void read()
       return true
     } catch (e) {
+      if (!alive.current) return false
       setFailed(gitError(e))
       void read()
       return false
     } finally {
-      setBusy(null)
+      if (alive.current) setBusy(null)
     }
   }
 
@@ -168,6 +179,23 @@ export function ChangesView({
     if (!repo || !message.trim()) return
     if (await act('commit', { message: message.trim(), all: commitsAll(repo) })) setMessage('')
   }
+  // The branch menu closes on a click outside its row, or Escape.
+  const menuOpen = branches !== null
+  useEffect(() => {
+    if (!menuOpen) return
+    const outside = (e: PointerEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest('.git-branch')) setBranches(null)
+    }
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBranches(null)
+    }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [menuOpen])
   const openBranches = () => {
     if (branches) return setBranches(null)
     setBranches('loading')
@@ -278,33 +306,33 @@ export function ChangesView({
           <button className="secondary small" disabled={busy !== null || (!!branch.upstream && !branch.ahead)} onClick={() => void act('push')}>
             {busy === 'push' ? t('Pushing…') : branch.upstream ? t('Push') : t('Publish Branch')}
           </button>
-        </div>
-        {branches ? (
-          <div className="git-branches" role="menu">
-            {branches === 'loading' ? (
-              <div className="bench-note">{t('Loading…')}</div>
-            ) : (
-              <>
-                <button role="menuitem" className="git-branch-row new" onClick={() => void newBranch()}>
-                  + {t('New Branch…')}
-                </button>
-                {branches.local.map(b => (
-                  <button key={b.name} role="menuitem" className={`git-branch-row${b.current ? ' on' : ''}`} disabled={b.current} onClick={() => void switchTo(b.name)}>
-                    {b.name}
-                    {b.upstream ? <span className="meta">{b.upstream}</span> : null}
+          {branches ? (
+            <div className="git-branches" role="menu">
+              {branches === 'loading' ? (
+                <div className="bench-note">{t('Loading…')}</div>
+              ) : (
+                <>
+                  <button role="menuitem" className="git-branch-row new" onClick={() => void newBranch()}>
+                    + {t('New Branch…')}
                   </button>
-                ))}
-                {branches.remote
-                  .filter(r => !branches.local.some(l => r.name.endsWith(`/${l.name}`)))
-                  .map(r => (
-                    <button key={r.name} role="menuitem" className="git-branch-row" onClick={() => void switchTo(r.name.slice(r.name.indexOf('/') + 1))}>
-                      {r.name}
+                  {branches.local.map(b => (
+                    <button key={b.name} role="menuitem" className={`git-branch-row${b.current ? ' on' : ''}`} disabled={b.current} onClick={() => void switchTo(b.name)}>
+                      {b.name}
+                      {b.upstream ? <span className="meta">{b.upstream}</span> : null}
                     </button>
                   ))}
-              </>
-            )}
-          </div>
-        ) : null}
+                  {branches.remote
+                    .filter(r => !branches.local.some(l => r.name.endsWith(`/${l.name}`)))
+                    .map(r => (
+                      <button key={r.name} role="menuitem" className="git-branch-row" onClick={() => void switchTo(r.name.slice(r.name.indexOf('/') + 1))}>
+                        {r.name}
+                      </button>
+                    ))}
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
         <div className="git-commit">
           <textarea
             id="git-commit-message"
