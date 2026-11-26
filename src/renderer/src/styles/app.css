@@ -12865,6 +12865,11 @@ main.docked-pulse.pulse-page {
  * the list beside it read as one island, the chat runs over the canvas with
  * no box around it, the panels beside it are cards and the composer is a
  * capsule. Last in the sheet, so it wins over the boxed layout above.
+ *
+ * The glass is see-through colour with no backdrop-filter or clip-path:
+ * either makes the surface the box its position: fixed menus are placed in
+ * and cut to, and the canvas behind is a soft gradient that blur wouldn't
+ * change anyway.
  */
 .titlebar {
   background: transparent;
@@ -12880,7 +12885,6 @@ main.docked-pulse.pulse-page {
   border: 1px solid var(--glass-line);
   border-radius: var(--radius-island);
   background: var(--glass);
-  backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-shadow);
 }
 
@@ -12907,9 +12911,8 @@ main.docked-pulse.pulse-page {
   border-left: 0;
   border-radius: 0 var(--radius-island) var(--radius-island) 0;
   background: var(--glass);
-  backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
-  clip-path: inset(-40px -40px -40px 0);
+  /* Down and to the right only, so none of it falls on the rail it joins. */
+  box-shadow: var(--island-shadow);
 }
 
 /* A list beside the rail in the window's own row leaves the gap to the page beside it. */
@@ -12943,7 +12946,6 @@ main.docked-pulse.pulse-page {
   border: 1px solid var(--glass-line);
   border-radius: var(--radius-island);
   background: var(--glass);
-  backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
@@ -12955,6 +12957,5 @@ main.docked-pulse.pulse-page {
 .composer {
   border-color: var(--glass-line);
   background: var(--glass-strong);
-  backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-shadow);
 }
