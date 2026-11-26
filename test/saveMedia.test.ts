@@ -12,6 +12,8 @@ describe('saving pictures, files and audio to this computer', () => {
     expect(kanbanAttachmentPath('a/b', 'my board')).toBe('/api/plugins/kanban/attachments/a%2Fb?board=my%20board')
     expect(isDashboardPage('text/html; charset=utf-8', 'ROOT-HANDOFF.md')).toBe(true)
     expect(isDashboardPage('text/html', 'report.html')).toBe(false)
+
+    expect(isDashboardPage('text/html', 'report.xhtml')).toBe(false)
     expect(isDashboardPage('text/html', 'REPORT.HTM')).toBe(false)
     expect(isDashboardPage('text/html', 'page.html5')).toBe(true)
     expect(isDashboardPage('text/html', 'report.html ')).toBe(false)

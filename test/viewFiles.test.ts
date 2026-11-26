@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { byteRange, isPagePath, isViewedFileUrl, viewedFileUrl, viewedType, viewerFrame } from '../src/shared/viewFileRules'
+import { byteRange, isPagePath, isViewedFileUrl, pageDownloadDecision, pageReadResult, viewedFileUrl, viewedType, viewerFrame } from '../src/shared/viewFileRules'
 import { frameStays } from '../src/main/linkPolicy'
 
 beforeAll(() => {
@@ -83,6 +83,26 @@ describe('a file the chat’s file card opens (desktop#554)', () => {
   })
 })
 
+describe('saving a page through save-host-file (issue 564 review)', () => {
+  it('takes an HTML answer as the page only when read-text says it is one', () => {
+    expect(pageDownloadDecision('/a/report.html', true, '<html>mine</html>')).toBe('page')
+    expect(pageDownloadDecision('/a/report.xhtml', true, { page: true })).toBe('page')
+    // A dashboard answering an unknown route with its own page isn't the file: use the data URL.
+    expect(pageDownloadDecision('/a/report.html', true, null)).toBe('data-url')
+    expect(pageDownloadDecision('/a/notes.md', true, '<html>dashboard</html>')).toBe('data-url')
+    expect(pageDownloadDecision('/a/report.html', false, null)).toBe('stream')
+  })
+})
+
+describe('what Open in Browser got from read-text (issue 564)', () => {
+  it('writes text only when text came back, downloads as a page only when the answer said so', () => {
+    expect(pageReadResult('<html>mine</html>')).toEqual({ text: '<html>mine</html>', asPage: false })
+    expect(pageReadResult({ page: true })).toEqual({ asPage: true })
+    // A dashboard's HTML answer or an unreadable file is not a page to open.
+    expect(pageReadResult(null)).toBeNull()
+  })
+})
+
 describe('a copy the viewer or Open in Browser makes (copyDown)', () => {
   const setup = async () => {
     const { mkdtemp } = await import('node:fs/promises')
@@ -90,6 +110,19 @@ describe('a copy the viewer or Open in Browser makes (copyDown)', () => {
     const { join } = await import('node:path')
     return join(await mkdtemp(join(tmpdir(), 'conduit-copy-')), 'copy')
   }
+
+  it('passes its cancel signal to the data-url fallback', async () => {
+    const { copyDown } = await import('../src/main/hostFiles')
+    const file = await setup()
+    let seen: AbortSignal | undefined
+    await copyDown(
+      file,
+      async () => { throw Object.assign(new Error('404'), { code: 404 }) },
+      async signal => { seen = signal; return Buffer.from('PNG') }
+    )
+    expect(seen).toBeInstanceOf(AbortSignal)
+    expect(seen?.aborted).toBe(false)
+  })
 
   it('takes a dashboard page answering the download route as no route, and reads the data URL', async () => {
     const { copyDown } = await import('../src/main/hostFiles')

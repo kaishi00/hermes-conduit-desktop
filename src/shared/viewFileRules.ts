@@ -1,3 +1,19 @@
+/** What a page's read-text route answered: its text, a flag to download it as a page, or nothing usable. */
+export type PageRead = string | { page: true } | null
+
+/** How save-host-file answers an HTML download: stream it, take it as the page, or use the data URL. */
+export function pageDownloadDecision(path: string, html: boolean, read: PageRead): 'stream' | 'page' | 'data-url' {
+  if (!html) return 'stream'
+  if (!isPagePath(path)) return 'data-url'
+  return read ? 'page' : 'data-url'
+}
+
+export function pageReadResult(read: PageRead): { text?: string; asPage: boolean } | null {
+  if (typeof read === 'string') return { text: read, asPage: false }
+  if (read && read.page) return { asPage: true }
+  return null
+}
+
 /**
  * The rules for a host file a chat's file card opens in Conduit's viewer
  * (desktop#554): which files are copied down to be shown, the type each is
