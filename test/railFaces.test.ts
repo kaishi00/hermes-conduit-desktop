@@ -105,4 +105,20 @@ describe('collapsed strip of faces', () => {
     const host = await mount({ tiles: [], running: new Set(), onOpen: () => {} })
     expect(host.querySelector('.rail-faces')).toBeNull()
   })
+
+  it('marks the edited bot, wears its badge and names its state in the tooltip', async () => {
+    const host = await mount({
+      tiles: [own('kaleb', 'Kaleb')],
+      open: { profile: 'kaleb' },
+      running: new Set<string>(),
+      workOf: () => ({ needsYou: 2, working: 0 }),
+      badgeFor: () => ({ letter: 'A', color: '#fff', name: 'Alpha' }),
+      onOpen: () => {}
+    })
+    const face = host.querySelector<HTMLButtonElement>('.rail-face')!
+    expect(face.getAttribute('aria-current')).toBe('page')
+    expect(face.querySelector('.host-badge')).not.toBeNull()
+    expect(face.getAttribute('title')).toBe('Kaleb · Alpha · 2 needs you')
+  })
+
 })

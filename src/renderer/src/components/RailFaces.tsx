@@ -58,7 +58,7 @@ export function RailFaces({
             className="rail-face"
             data-profile={bot.name}
             aria-label={state ? `${name} · ${state}` : name}
-            title={name}
+            title={state ? `${name} · ${state}` : name}
             aria-current={isOpen ? 'page' : undefined}
             onClick={() => onOpen(tile)}
             // A face has no menu: not the rail's section menu, nor the system's.

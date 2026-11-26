@@ -77,6 +77,30 @@ describe('brand in the rail (floating glass shell)', () => {
     expect(host.querySelector('.host-menu')).toBeNull()
   })
 
+  it('closes the Hermes list when a banner hides it', async () => {
+    const { Brand } = await load()
+    let observe: ResizeObserverCallback | null = null
+    const original = globalThis.ResizeObserver
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) { observe = callback }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    } as unknown as typeof ResizeObserver
+    try {
+      const host = mount(Brand, { inRail: true, hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
+      act(() => host.querySelector<HTMLButtonElement>('.rail-brand-button')!.click())
+      const menu = host.querySelector('.host-menu')!
+      expect(menu).not.toBeNull()
+      // A hidden menu has no client rects: the observer closes it.
+      Object.defineProperty(menu, 'getClientRects', { value: () => [] })
+      act(() => observe!([], {} as ResizeObserver))
+      expect(host.querySelector('.host-menu')).toBeNull()
+    } finally {
+      globalThis.ResizeObserver = original
+    }
+  })
+
   it('with one Hermes the rail brand is a mark, not a button', async () => {
     const { Brand } = await load()
     const host = mount(Brand, { inRail: true, hosts: hosts.slice(0, 1), currentUrl: hosts[0].url, onSwitch: () => {} })
