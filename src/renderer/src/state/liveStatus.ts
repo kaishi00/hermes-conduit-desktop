@@ -96,7 +96,7 @@ export function answeringIds(response: unknown): string[] {
 export const LIVE_STEPS_PATH = '/api/plugins/conduit_push/live-steps'
 export const liveStepsPath = (profile: string) => (profile && profile !== 'default' ? `${LIVE_STEPS_PATH}?profile=${encodeURIComponent(profile)}` : LIVE_STEPS_PATH)
 
-/** One running chat's step, as the plugin's GET /live-steps gives it (plugin 0.199+). */
+/** One running chat's step, as the plugin's GET /live-steps gives it (plugin 0.200+). */
 export interface LiveStep {
   phase: string
   tool?: string | null
