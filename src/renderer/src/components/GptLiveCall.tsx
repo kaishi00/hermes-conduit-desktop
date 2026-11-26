@@ -323,7 +323,7 @@ export function GptLiveCall({
     const reply = delegatedAnswer(text, said, live.current.requests, false)
     if (isApprove(text) || isDeny(text) || answerWords(text) !== null) {
       const answering = reply !== null ? answerQuestion(live.current.requests, reply) : answerApproval(live.current.requests, isApprove(text) ? 'once' : 'deny')
-      void answering.then(result => append(result.next_question ?? result.message ?? result.error ?? '', 'speakable', id))
+      void answering.then(result => !ended.current && append(result.next_question ?? result.message ?? result.error ?? '', 'speakable', id))
       return
     }
     // "Mode: ask first" / "Mode: send directly": asking first for this call.
@@ -386,8 +386,9 @@ export function GptLiveCall({
       }
       return
     }
-    // Marked nothing answered here: while the chat waits on a question, the user's answer to it.
-    const unmarked = delegatedAnswer(text, said, live.current.requests, true)
+    // Marked nothing answered here: while the chat waits on a question, the user's answer to it. A request
+    // held for the user's OK settles first: their yes, or "Send:", is about it, not the question.
+    const unmarked = askFirst.current.draft ? null : delegatedAnswer(text, said, live.current.requests, true)
     if (unmarked !== null) {
       void answerQuestion(live.current.requests, unmarked).then(result => !ended.current && append(result.next_question ?? result.message ?? result.error ?? '', 'speakable', id))
       return
