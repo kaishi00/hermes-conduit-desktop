@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 beforeEach(() => {
@@ -107,5 +109,58 @@ describe('the Hermes list by keyboard', () => {
     key('Escape')
     expect(host.querySelector('.host-menu')).toBeNull()
     expect(document.activeElement).toBe(button)
+  })
+})
+
+describe('the Hermes list closes', () => {
+  async function opened() {
+    const { Brand } = await load()
+    const host = mount(Brand, { inRail: true, hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
+    const button = host.querySelector<HTMLButtonElement>('.rail-brand-button')!
+    act(() => button.click())
+    expect(host.querySelector('.host-menu')).not.toBeNull()
+    return { host, button }
+  }
+
+  it('on a press outside it, but not on one inside', async () => {
+    const { host } = await opened()
+    act(() => {
+      host.querySelector('.host-menu [role="menuitemradio"]')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    })
+    expect(host.querySelector('.host-menu')).not.toBeNull()
+    act(() => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    })
+    expect(host.querySelector('.host-menu')).toBeNull()
+  })
+
+  it('when the window loses focus', async () => {
+    const { host } = await opened()
+    act(() => {
+      window.dispatchEvent(new Event('blur'))
+    })
+    expect(host.querySelector('.host-menu')).toBeNull()
+  })
+
+  it('when focus tabs out of it, but not when it moves inside it', async () => {
+    const { host } = await opened()
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    const items = [...host.querySelectorAll<HTMLButtonElement>('.host-menu [role="menuitemradio"]')]
+    act(() => items[1].focus())
+    expect(host.querySelector('.host-menu')).not.toBeNull()
+    act(() => outside.focus())
+    expect(host.querySelector('.host-menu')).toBeNull()
+  })
+})
+
+describe('the brand is in one place (app.css)', () => {
+  const css = readFileSync(join(__dirname, '../src/renderer/src/styles/app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  it("hides the bare title bar's brand without a banner, and the rail's with one", () => {
+    const rule = /\.app:not\(:has\(> \.banner\)\) > \.titlebar\.bare > \.brand,\s*\.app:has\(> \.banner\) \.rail-brand \{\s*display: none;/
+    expect(css).toMatch(rule)
+  })
+  it('lifts the island only without a banner', () => {
+    expect(css).toMatch(/\.app:has\(> \.titlebar\.bare\):not\(:has\(> \.banner\)\) > \.body > \.rail,/)
   })
 })

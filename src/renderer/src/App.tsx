@@ -2603,18 +2603,16 @@ function Shell({
             (section === 'chats' || section === 'room' || section === 'bots') && listHidden && profileTiles ? (
               <RailFaces
                 tiles={profileTiles}
+                // Whatever chat is on screen marks its bot, as the Bots list's side does.
                 open={
                   section !== 'chats'
                     ? undefined
                     : dockedChat
-                      ? dockedChat.botChat
-                        ? { profile: dockedChat.profile ?? 'default', host: dockedChat.host }
-                        : undefined
-                      : selected.botChat
-                        ? { profile: selected.profile ?? 'default' }
-                        : undefined
+                      ? { profile: dockedChat.profile ?? 'default', host: dockedChat.host }
+                      : { profile: selected.profile ?? 'default' }
                 }
                 running={runningProfiles}
+                workOf={tile => (tile.own ? workByBot.get(tile.bot.name) : otherWork.get(keptWorkKey(tile.host, tile.bot.name)))}
                 badgeFor={tileBadge}
                 onOpen={tile => (tile.own ? openBot(tile.bot) : openOtherBot({ host: tile.host, bot: tile.bot }))}
               />

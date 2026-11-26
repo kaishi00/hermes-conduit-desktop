@@ -158,8 +158,8 @@ export function SectionRail({
         }}
         onKeyDown={e => {
           if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return
-          // A face has no menu, by keyboard as by mouse (RailFaces).
-          if ((e.target as Element).closest('.rail-face')) return
+          // A face and the brand have no section menu, by keyboard as by mouse (RailFaces, Brand).
+          if ((e.target as Element).closest('.rail-face, .rail-brand')) return
           e.preventDefault()
           openMenu(e.target as HTMLElement)
         }}

@@ -58,6 +58,18 @@ describe('collapsed strip of faces', () => {
     expect(onOpen).toHaveBeenCalledWith(tiles[1])
   })
 
+  it("shows the Bots list's work: a dot for a bot at work, a needs-you dot that wins over it", async () => {
+    const tiles = [own('default', 'Conduit'), own('furina', 'Furina'), far('mira', 'Mira')]
+    const work: Record<string, { working: number; needsYou: number }> = {
+      furina: { working: 1, needsYou: 2 },
+      mira: { working: 3, needsYou: 0 }
+    }
+    const host = await mount({ tiles, running: new Set(), workOf: (tile: { bot: { name: string } }) => work[tile.bot.name], onOpen: () => {} })
+    const faces = [...host.querySelectorAll<HTMLButtonElement>('.rail-face')]
+    expect(faces.map(f => f.querySelector('.rail-face-running')?.className ?? null)).toEqual([null, 'rail-face-running needs', 'rail-face-running'])
+    expect(faces.map(f => f.getAttribute('aria-label'))).toEqual(['Conduit', 'Furina · 2 needs you', 'Mira · Working'])
+  })
+
   it('keeps right-clicks off the rail\'s section menu', async () => {
     const path = '../src/renderer/src/components/RailFaces.tsx'
     const { RailFaces } = (await import(/* @vite-ignore */ path)) as { RailFaces: unknown }
