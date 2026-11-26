@@ -35,12 +35,23 @@ function mount(el: unknown, props: Record<string, unknown>) {
 }
 
 describe('brand in the rail (floating glass shell)', () => {
-  it('a bare title bar keeps the drag strip but drops the brand', async () => {
+  it('a bare title bar keeps the drag strip, and its brand only for when a banner holds the island down', async () => {
     const { TitleBar } = await load()
     const host = mount(TitleBar, { bare: true, hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
     const bar = host.querySelector('header.titlebar')!
     expect(bar.classList.contains('bare')).toBe(true)
-    expect(bar.querySelector('.brand, .brand-mark')).toBeNull()
+    // app.css hides it unless the window shows a banner.
+    expect(bar.querySelector(':scope > .brand')).not.toBeNull()
+  })
+
+  it('right-clicking the rail brand opens no menu', async () => {
+    const { Brand } = await load()
+    const host = mount(Brand, { inRail: true, hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+    act(() => {
+      host.querySelector('.rail-brand-button')!.dispatchEvent(event)
+    })
+    expect(event.defaultPrevented).toBe(true)
   })
 
   it('the title bar on the sign-in screens still carries the brand', async () => {
@@ -69,5 +80,32 @@ describe('brand in the rail (floating glass shell)', () => {
     const host = mount(Brand, { inRail: true, hosts: hosts.slice(0, 1), currentUrl: hosts[0].url, onSwitch: () => {} })
     expect(host.querySelector('.rail-brand button')).toBeNull()
     expect(host.querySelector('.rail-brand .brand-mark')).not.toBeNull()
+  })
+})
+
+describe('the Hermes list by keyboard', () => {
+  it('focuses the Hermes you are on, moves with the arrows, and gives focus back on Escape', async () => {
+    const { Brand } = await load()
+    const three = [...hosts, { url: 'https://c.example', method: 'password' }]
+    const host = mount(Brand, { inRail: true, hosts: three, currentUrl: three[1].url, onSwitch: () => {} })
+    const button = host.querySelector<HTMLButtonElement>('.rail-brand-button')!
+    act(() => button.click())
+    const items = [...host.querySelectorAll<HTMLButtonElement>('.host-menu [role="menuitemradio"]')]
+    expect(document.activeElement).toBe(items[1])
+    const key = (k: string) =>
+      act(() => {
+        ;(document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
+      })
+    key('ArrowDown')
+    expect(document.activeElement).toBe(items[2])
+    key('ArrowDown')
+    expect(document.activeElement).toBe(items[0])
+    key('End')
+    expect(document.activeElement).toBe(items[2])
+    key('Home')
+    expect(document.activeElement).toBe(items[0])
+    key('Escape')
+    expect(host.querySelector('.host-menu')).toBeNull()
+    expect(document.activeElement).toBe(button)
   })
 })

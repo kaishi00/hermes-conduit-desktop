@@ -60,6 +60,7 @@ import { useMouseBack } from './state/mouseBack'
 import { NeedsYou } from './components/NeedsYou'
 import { SignIn } from './components/SignIn'
 import { Brand, TitleBar } from './components/TitleBar'
+import { RailFaces } from './components/RailFaces'
 import { setRunningCall, switchEndingCall } from './state/callSwitch'
 import { LiveTranscript, prefillRequest, quoteRequest, revealMessage } from './components/Transcript'
 import { useTranscriptValue } from './state/transcriptStore'
@@ -2598,6 +2599,27 @@ function Shell({
           onSettings={() => setSection('settings')}
           onChangeLayout={changeRailLayout}
           brand={brand}
+          faces={
+            (section === 'chats' || section === 'room' || section === 'bots') && listHidden && profileTiles ? (
+              <RailFaces
+                tiles={profileTiles}
+                open={
+                  section !== 'chats'
+                    ? undefined
+                    : dockedChat
+                      ? dockedChat.botChat
+                        ? { profile: dockedChat.profile ?? 'default', host: dockedChat.host }
+                        : undefined
+                      : selected.botChat
+                        ? { profile: selected.profile ?? 'default' }
+                        : undefined
+                }
+                running={runningProfiles}
+                badgeFor={tileBadge}
+                onOpen={tile => (tile.own ? openBot(tile.bot) : openOtherBot({ host: tile.host, bot: tile.bot }))}
+              />
+            ) : undefined
+          }
         />
         {/* Chats stays mounted once shown, hidden while another section is open, so coming back doesn't rebuild every row and the open transcript. */}
         {chatsShown ? (

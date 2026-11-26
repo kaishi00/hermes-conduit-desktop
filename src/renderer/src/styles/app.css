@@ -13007,6 +13007,12 @@ main.docked-pulse.pulse-page {
   margin-left: auto;
 }
 
+/* The brand is in one place: the rail's top, or the title bar while a banner holds the island down. */
+.app:not(:has(> .banner)) > .titlebar.bare > .brand,
+.app:has(> .banner) .rail-brand {
+  display: none;
+}
+
 .app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .rail,
 .app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .chats-section > .list-keeper > .chatlist,
 .app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .list-keeper > .chatlist,
@@ -13068,9 +13074,88 @@ button.rail-brand-button:hover {
   left: calc(100% + 4px);
   /* Opens over the list's text, so no see-through. */
   background: var(--menu);
+  /* It can open over the title bar's drag strip, where nothing beside it is no-drag. */
+  -webkit-app-region: no-drag;
 }
 
 /* The traffic lights sit at the island's top corner on a Mac: the brand starts below them. */
 [data-platform='darwin'] .app:has(> .titlebar.bare):not(:has(> .banner)) > .body > .rail {
   padding-top: 40px;
+}
+
+/*
+ * The collapsed strip of faces: with the list hidden, the bots' faces sit
+ * under the rail's sections, past a hairline, and scroll there when they
+ * outgrow it. The open bot's face takes the accent ring.
+ */
+.rail-faces {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--glass-line);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+/* Only the strip gives way when the rail runs short; the rail's own buttons and dot keep their size. */
+.rail:has(> .rail-faces) > :not(.rail-faces, .spacer) {
+  flex-shrink: 0;
+}
+
+.rail-faces::-webkit-scrollbar {
+  display: none;
+}
+
+.rail-face {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  cursor: pointer;
+}
+
+.rail-face:hover {
+  background: var(--surface-hover);
+}
+
+.rail-face[aria-current='page'] {
+  background: var(--accent-soft);
+}
+
+.rail-face[aria-current='page'] .bot-avatar {
+  box-shadow: 0 0 0 2px var(--accent) !important;
+}
+
+.rail-face-running {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--rail);
+}
+
+/* Another dashboard's bot wears its dashboard's badge, as in the Bots list. */
+.rail-face-badge {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  display: flex;
+  transform: scale(0.8);
+  transform-origin: top right;
 }
