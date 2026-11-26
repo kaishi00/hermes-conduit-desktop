@@ -93,3 +93,74 @@ describe('DockPresence (desktop#586)', () => {
     expect(dock.hide).not.toHaveBeenCalled()
   })
 })
+
+describe('DockPresence leftovers (desktop#598 reviews)', () => {
+  it('hides again when the window closes while the icon is still coming back', async () => {
+    const { state, dock, presence, fire } = setup(false)
+    presence.setEnabled(true)
+    fire()
+    state.open = true
+    presence.update()
+    state.open = false
+    presence.update()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(state.visible).toBe(true)
+    fire()
+    expect(dock.hide).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the icon while a window steps aside, however long it takes', () => {
+    const { state, dock, presence, fire, pending } = setup(true)
+    presence.setEnabled(true)
+    presence.hold()
+    state.open = false
+    presence.update()
+    expect(pending()).toBe(false)
+    state.open = true
+    presence.release()
+    fire()
+    expect(dock.hide).not.toHaveBeenCalled()
+  })
+
+  it('starts one show at a time', () => {
+    const { state, dock, presence, fire } = setup(false)
+    presence.setEnabled(true)
+    fire()
+    state.open = true
+    presence.update()
+    presence.update()
+    expect(dock.show).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('DockPresence: two windows during one show (desktop#603 review)', () => {
+  it('brings every window forward that showed while the icon came back', async () => {
+    const { state, dock, presence, fire } = setup(false)
+    presence.setEnabled(true)
+    fire()
+    state.open = true
+    const first = vi.fn()
+    const second = vi.fn()
+    presence.update(first)
+    presence.update(second)
+    expect(dock.show).toHaveBeenCalledTimes(1)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('DockPresence: a hold with the icon hidden (desktop#603 review)', () => {
+  it("doesn't bring the icon back for Quick Ask's screenshot", () => {
+    const { state, dock, presence, fire } = setup(false)
+    presence.setEnabled(true)
+    fire()
+    expect(state.visible).toBe(false)
+    presence.hold()
+    presence.update()
+    presence.release()
+    expect(dock.show).not.toHaveBeenCalled()
+  })
+})

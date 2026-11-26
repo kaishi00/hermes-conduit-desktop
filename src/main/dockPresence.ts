@@ -5,9 +5,9 @@
  * no window of its own is open, and come back as soon as one opens. Quick Ask
  * is a floating panel, so it opens without bringing the Dock icon back.
  *
- * The icon leaves a moment after the last window closes, so a window that
- * steps aside and comes straight back (a screenshot for a call or Quick Ask)
- * doesn't make it flicker.
+ * The icon leaves a moment after the last window closes, and not at all while
+ * a window steps aside on purpose (hold(), a screenshot for a call or Quick
+ * Ask), so it doesn't flicker.
  */
 
 export interface DockHost {
@@ -27,6 +27,12 @@ export const DOCK_HIDE_DELAY_MS = 800
 export class DockPresence {
   private enabled = false
   private pending: unknown = null
+  /** A show() under way: the icon isn't visible yet, but will be. */
+  private showing = false
+  /** Windows stepping aside on purpose (a screenshot), however long it takes. */
+  private holds = 0
+  /** Windows waiting to come forward once the show under way settles. */
+  private waiting: (() => void)[] = []
 
   constructor(
     private readonly dock: DockHost,
@@ -51,21 +57,52 @@ export class DockPresence {
    * behind the app in front, so the caller focuses it then.
    */
   update(shown?: () => void): void {
-    if (!this.enabled || this.windowsOpen()) {
+    // A hold only keeps the icon where it is: Quick Ask's screenshot, with the icon hidden, mustn't bring it back.
+    if (this.holds > 0 && this.enabled && !this.windowsOpen()) {
       this.cancel()
-      if (!this.dock.isVisible()) {
-        void this.dock.show().then(
-          () => shown?.(),
-          () => undefined
-        )
-      }
       return
     }
-    if (this.pending !== null || !this.dock.isVisible()) return
+    if (!this.enabled || this.windowsOpen()) {
+      this.cancel()
+      // A show under way may already read as visible: the window waits for it all the same.
+      if (this.showing) {
+        if (shown) this.waiting.push(shown)
+        return
+      }
+      if (this.dock.isVisible()) return
+      if (shown) this.waiting.push(shown)
+      this.showing = true
+      const settle = (ok: boolean) => {
+        this.showing = false
+        const waiting = this.waiting
+        this.waiting = []
+        if (!ok) return
+        for (const run of waiting) run()
+        // The window that asked may have closed again while the icon came back.
+        this.update()
+      }
+      void this.dock.show().then(
+        () => settle(true),
+        () => settle(false)
+      )
+      return
+    }
+    if (this.pending !== null || (!this.dock.isVisible() && !this.showing)) return
     this.pending = this.timers.setTimeout(() => {
       this.pending = null
-      if (this.enabled && !this.windowsOpen()) this.dock.hide()
+      if (this.enabled && this.holds === 0 && !this.windowsOpen()) this.dock.hide()
     }, this.delay)
+  }
+
+  /** A window steps aside for a moment (a screenshot): the icon stays until release(), however long it takes. */
+  hold(): void {
+    this.holds += 1
+    this.cancel()
+  }
+
+  release(): void {
+    this.holds = Math.max(0, this.holds - 1)
+    this.update()
   }
 
   private cancel(): void {
