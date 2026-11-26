@@ -1235,6 +1235,7 @@ function macMenu(): Menu {
         { label: t('Make Text Normal Size'), accelerator: 'Cmd+0', click: textSize('text-normal') },
         { type: 'separator' },
         { label: t('Show or Hide Sidebar'), accelerator: 'Cmd+\\', click: command('toggle-sidebar') },
+        { label: t('Show or Hide Workbench'), accelerator: 'Cmd+B', click: command('toggle-workbench') },
         { type: 'separator' },
         ...go,
         { type: 'separator' },

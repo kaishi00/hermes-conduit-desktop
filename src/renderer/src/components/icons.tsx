@@ -83,6 +83,7 @@ const paths = {
     </>
   ),
   chevronDown: <path d="M5 9l7 7 7-7" />,
+  chevronUp: <path d="M5 15l7-7 7 7" />,
   send: <path d="M12 19V5M6 11l6-6 6 6" />,
   down: <path d="M12 5v14M6 13l6 6 6-6" />,
   stop: <rect x="7" y="7" width="10" height="10" rx="2" />,
@@ -132,6 +133,27 @@ const paths = {
     </>
   ),
   spinner: <path d="M12 4a8 8 0 108 8" />,
+  bench: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M10 4.5v15M10 13.5h10.5" />
+    </>
+  ),
+  branch: (
+    <>
+      <circle cx="7" cy="6" r="2" />
+      <circle cx="7" cy="18" r="2" />
+      <circle cx="17" cy="8" r="2" />
+      <path d="M7 8v8M17 10c0 4-10 2-10 6" />
+    </>
+  ),
+  terminal: (
+    <>
+      <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+      <path d="M7.5 10l2.5 2-2.5 2M12 14.5h4" />
+    </>
+  ),
+  undo: <path d="M9 6L5 10l4 4M5 10h9.5a4.5 4.5 0 010 9H11" />,
   clock: (
     <>
       <circle cx="12" cy="12" r="8" />

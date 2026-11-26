@@ -32,7 +32,7 @@ export interface HeaderButton {
  * window of its own. Its title with a workstream's status chip, a line under
  * it (a workstream's way back to its bot, or the bot a window's chat is
  * with), then the Call pill with its voice mode, Open in New Window, the
- * bot's screen and the side panel's toggle, each where the chat offers it,
+ * bot's screen, the workbench's and the side panel's toggles, each where the chat offers it,
  * and last the chat's own menu (issue 448), which a right-click on the title
  * opens too.
  */
@@ -44,6 +44,7 @@ export function ChatHeader({
   call,
   newWindow,
   screen,
+  bench,
   panel,
   menu,
   trailing
@@ -58,6 +59,8 @@ export function ChatHeader({
   call?: HeaderCall
   newWindow?: HeaderButton
   screen?: HeaderButton
+  /** The workbench's toggle, on a chat with a folder. */
+  bench?: HeaderButton
   /** The side panel's toggle, with its work dot. */
   panel?: HeaderButton & { dot?: { tone: string; label: string } | null }
   /** The chat's own menu: what its row in the chat list offers. Left out or empty, no button is drawn. */
@@ -142,6 +145,11 @@ export function ChatHeader({
         {screen ? (
           <button className={`chat-head-toggle${screen.on ? ' on' : ''}`} aria-label={screen.label} aria-pressed={!!screen.on} title={screen.title ?? screen.label} onClick={screen.onClick}>
             <Icon name="screen" />
+          </button>
+        ) : null}
+        {bench ? (
+          <button className={`chat-head-toggle${bench.on ? ' on' : ''}`} aria-label={bench.label} aria-pressed={!!bench.on} title={bench.title ?? bench.label} onClick={bench.onClick}>
+            <Icon name="bench" />
           </button>
         ) : null}
         {panel ? (
