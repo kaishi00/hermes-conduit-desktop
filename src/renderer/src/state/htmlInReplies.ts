@@ -58,8 +58,8 @@ function closesAt(text: string, from: number): number {
     if (emptied >= 0) {
       const lineEnd = text.indexOf('\n', emptied)
       if (!match || (lineEnd >= 0 && match.index > lineEnd)) return emptied
-      // Only another page element carries the page on; prose with a tag in it stays prose.
-      if (!match[2] || !PAGE_TAGS.has(match[2].toLowerCase())) return emptied
+      // Only another page element right after it carries the page on; prose with a tag in it stays prose.
+      if (!match[2] || !PAGE_TAGS.has(match[2].toLowerCase()) || text.slice(emptied, match.index).trim()) return emptied
     }
     // A `<` still being written (a tag cut mid-way) leaves the page open.
     if (!match) return -1
@@ -257,9 +257,9 @@ export function tagOf(text: string): Tag | null {
 type Node = { type: string; value?: string; children?: Node[]; data?: Record<string, unknown> }
 
 const DETAILS_OPEN = /^<details((?:\s+[\w-]+(?:=(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*>\s*(?:<summary>([\s\S]*?)<\/summary>)?\s*$/i
-const FOLD_LINE = /^ {0,3}(?:<details\b[^>]*>(?:\s*<summary>.*?<\/summary>)?|<summary>.*<\/summary>|<\/details\s*>)\s*$/i
+const FOLD_LINE = /^ {0,3}(?:<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summary>.*?<\/summary>)?|<summary>.*<\/summary>|<\/details\s*>)\s*$/i
 const FOLD_FENCE = /^ {0,3}(`{3,}|~{3,})/
-const FOLD_OPENING_START = /^ {0,3}(<details\b[^>]*>(?:\s*<summary>.*?<\/summary>)?)(.*)$/i
+const FOLD_OPENING_START = /^ {0,3}(<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summary>.*?<\/summary>)?)(.*)$/i
 const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
 
 /**
@@ -275,7 +275,15 @@ export function withFoldsApart(text: string): string {
     if (out.length && out[out.length - 1]!.trim()) out.push('')
     out.push(line.trim(), '')
   }
-  for (const line of text.split('\n')) {
+  const lines = text.split('\n')
+  // Whether a `</details>` comes after line `index`: a tag starting a line of prose opens a fold only then.
+  const closedAfter: boolean[] = []
+  let seen = false
+  for (let index = lines.length - 1; index >= 0; index--) {
+    closedAfter[index] = seen
+    if (/<\/details\s*>/i.test(lines[index]!)) seen = true
+  }
+  for (const [index, line] of lines.entries()) {
     const found = FOLD_FENCE.exec(line)
     if (fence) {
       if (found && found[1]![0] === fence[0] && found[1]!.length >= fence.length) fence = null
@@ -288,7 +296,10 @@ export function withFoldsApart(text: string): string {
       continue
     }
     // A fold written on one line, `<details><summary>S</summary>body</details>`, taken apart.
-    const opening = FOLD_OPENING_START.exec(line)
+    let opening = FOLD_OPENING_START.exec(line)
+    // Taken apart only when what follows is a fold's body: nothing, a body ending the fold on this line, or
+    // text with no tags that a later `</details>` closes. `<details> and <summary> make a fold.` stays prose.
+    if (opening && opening[2]!.trim() && !FOLD_CLOSING_END.test(opening[2]!) && (/[<>]/.test(opening[2]!) || !closedAfter[index])) opening = null
     let rest = line
     if (opening) {
       own(opening[1]!)
@@ -314,7 +325,8 @@ export function withFoldsApart(text: string): string {
 }
 
 /** Whether a `<details>` tag's attributes say it starts open. */
-const startsOpen = (attributes: string | undefined) => /(?:^|\s)open(?=[\s=]|$)/i.test(attributes ?? '')
+const startsOpen = (attributes: string | undefined) =>
+  /(?:^|\s)open(?=[\s=]|$)/i.test((attributes ?? '').replace(/"[^"]*"|'[^']*'/g, '""'))
 const SUMMARY = /^<summary>([\s\S]*?)<\/summary>$/i
 const DETAILS_CLOSE = /^<\/details\s*>$/i
 

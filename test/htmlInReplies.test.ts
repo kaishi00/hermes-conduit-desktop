@@ -161,6 +161,23 @@ describe('text tags in a reply', () => {
     expect(draw('<details><summary>S</summary>The body.</details>\n\nAfter.')).toBe('<details class="reply-fold"><summary>S</summary><p>The body.</p></details>\n<p>After.</p>')
   })
 
+  it('leaves prose that starts with <details> as prose, the rest of the reply unfolded', () => {
+    const html = draw('<details> and <summary> make a fold.\n\nAfter.')
+    expect(html).not.toContain('reply-fold')
+    expect(html).toContain('<p>After.</p>')
+    expect(draw('<details> is the tag.\n\nAfter.')).not.toContain('reply-fold')
+  })
+
+  it('reads open only as an attribute, never inside a quoted value', () => {
+    expect(draw('<details title="open me">\n<summary>S</summary>\nBody\n</details>')).toBe('<details class="reply-fold"><summary>S</summary><p>Body</p></details>')
+    expect(draw('<details data-x="a>b"><summary>S</summary>Body</details>')).toBe('<details class="reply-fold"><summary>S</summary><p>Body</p></details>')
+  })
+
+  it('carries a page on only at a page element right after it', () => {
+    expect(splitPages('<div>x</div> Use <div> to wrap.\nMore prose')[0]).toEqual({ kind: 'page', html: '<div>x</div> Use <div> to wrap.', complete: true })
+    expect(pageAt(['<div>a</div> <div>b', '</div>', 'After'], 0).end).toBe(2)
+  })
+
   it('takes off only the tags that pair up, as the chat draws only those', () => {
     expect(withoutTags('An <b>unclosed tag')).toBe('An <b>unclosed tag')
     expect(withoutTags('click <span hidden>secret</span> now')).toBe('click secret now')
