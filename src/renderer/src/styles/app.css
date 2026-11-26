@@ -11679,11 +11679,10 @@ button.secondary.danger {
   opacity: 0;
   animation: work-ring-ping 1.1s ease-out 1;
 }
-/* Top right, so a far bot's dashboard badge (bottom right) stays clear of it. */
 .work-ring-count {
   position: absolute;
   right: -6px;
-  top: -5px;
+  bottom: -5px;
   min-width: 15px;
   height: 15px;
   padding: 0 4px;
@@ -11693,6 +11692,11 @@ button.secondary.danger {
   font: 700 9.5px/15px var(--font);
   text-align: center;
   box-shadow: 0 0 0 2px var(--menu);
+}
+/* The dashboard badge sits bottom right in the Bots list (top right on the rail), so there the count goes on top. */
+.bot-side-face .work-ring-count {
+  top: -5px;
+  bottom: auto;
 }
 .bot-side-working {
   background: linear-gradient(90deg, var(--text-3) 0%, var(--text-3) 40%, var(--working) 50%, var(--text-3) 60%, var(--text-3) 100%);
