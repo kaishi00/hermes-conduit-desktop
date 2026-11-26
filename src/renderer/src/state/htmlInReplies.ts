@@ -279,7 +279,7 @@ export function withFoldsApart(text: string): string {
   const lines = text.split('\n')
   // Whether a `</details>` comes after line `index`: a tag starting a line of prose opens a fold only then.
   const closedAfter: boolean[] = []
-  // A `</details>` in code closes nothing.
+  // A `</details>` in code (a fence, a code span) or a comment closes nothing.
   const inCode: boolean[] = []
   let codeFence: string | null = null
   for (const [index, line] of lines.entries()) {
@@ -290,11 +290,12 @@ export function withFoldsApart(text: string): string {
     } else if (found) codeFence = found[1]!
   }
   // More `</details>` after it than folds opened after it: one is left over for this line's.
+  // The last line counts as closed later: while a reply streams, its `</details>` hasn't come yet.
   let closes = 0
   for (let index = lines.length - 1; index >= 0; index--) {
     closedAfter[index] = closes > 0
     if (inCode[index]) continue
-    closes += (lines[index]!.match(/<\/details\s*>/gi) ?? []).length
+    closes += (lines[index]!.replace(/`[^`]*`|<!--.*?-->/g, '').match(/<\/details\s*>/gi) ?? []).length
     if (FOLD_OPENING_START.test(lines[index]!)) closes = Math.max(0, closes - 1)
   }
   for (const [index, line] of lines.entries()) {
@@ -314,7 +315,7 @@ export function withFoldsApart(text: string): string {
     // Taken apart only when what follows is a fold's body: nothing, a body ending the fold on this line, or
     // text with no tags that a later `</details>` closes. `<details> and <summary> make a fold.` stays prose.
     // A body starting with a fence mark stays on the line, so it can't open a code block that runs on.
-    if (opening && opening[2]!.trim() && (/^\s*(?:`{3}|~{3})/.test(opening[2]!) || (!FOLD_CLOSING_END.test(opening[2]!) && (/<[a-zA-Z/!]/.test(opening[2]!) || !closedAfter[index])))) opening = null
+    if (opening && opening[2]!.trim() && (/^\s*(?:`{3}|~{3})/.test(opening[2]!) || (!FOLD_CLOSING_END.test(opening[2]!) && (/<[a-zA-Z/!]/.test(opening[2]!) || !(closedAfter[index] || index === lines.length - 1))))) opening = null
     let rest = line
     if (opening) {
       own(opening[1]!)
