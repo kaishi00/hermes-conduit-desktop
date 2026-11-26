@@ -12959,3 +12959,31 @@ main.docked-pulse.pulse-page {
   background: var(--glass-strong);
   box-shadow: var(--glass-shadow);
 }
+
+/* The chat's header floats as glass pills: its title on the left, its buttons together on the right. */
+.chat-head.soft {
+  padding: 0 4px 0 6px;
+}
+
+.chat-head.soft > .chat-titles {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 7px 18px;
+  border: 1px solid var(--glass-line);
+  border-radius: 22px;
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+}
+
+.chat-head.soft > .chat-head-actions {
+  margin-left: auto;
+}
+
+.chat-head.soft > .chat-head-actions:not(:empty) {
+  padding: 4px;
+  gap: 2px;
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+}
