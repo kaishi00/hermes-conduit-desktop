@@ -87,6 +87,10 @@ describe('a work read that says the same', () => {
     const current = { sessions: new Set(['a', 'b']), byBot: new Map([['atlas', { working: 1, needsYou: 0 }]]) }
     expect(sameWork(current, new Set(['b', 'a']), new Map([['atlas', { working: 1, needsYou: 0 }]]))).toBe(true)
     expect(sameWork(current, new Set(['a']), new Map([['atlas', { working: 1, needsYou: 0 }]]))).toBe(false)
+    // A new step under the same counts is a change: the row says what the bot is on now.
+    const doingNow = { sessions: new Set(['a']), byBot: new Map([['atlas', { working: 1, needsYou: 0, doing: 'Running a command' }]]) }
+    expect(sameWork(doingNow, new Set(['a']), new Map([['atlas', { working: 1, needsYou: 0, doing: 'Thinking…' }]]))).toBe(false)
+    expect(sameWork(doingNow, new Set(['a']), new Map([['atlas', { working: 1, needsYou: 0, doing: 'Running a command' }]]))).toBe(true)
     expect(sameWork(current, new Set(['a', 'b']), new Map([['atlas', { working: 1, needsYou: 1 }]]))).toBe(false)
   })
 })
