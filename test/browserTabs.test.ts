@@ -17,6 +17,11 @@ describe('Browser tab addresses (desktop issue 451)', () => {
     expect(readAddress('http://localhost')).toEqual({ kind: 'host', port: 80, path: '/' })
     expect(readAddress('[::1]:9000')).toEqual({ kind: 'host', port: 9000, path: '/' })
     expect(readAddress('127.0.0.2:3000')).toEqual({ kind: 'host', port: 3000, path: '/' })
+    expect(readAddress('app.localhost:5173/a')).toEqual({ kind: 'host', port: 5173, path: '/a' })
+    expect(readAddress('http://localhost.:5173')).toEqual({ kind: 'host', port: 5173, path: '/' })
+    expect(readAddress('http://[::ffff:127.0.0.1]:5173')).toEqual({ kind: 'host', port: 5173, path: '/' })
+    expect(readAddress('http://[::ffff:7f00:1]:5173')).toEqual({ kind: 'host', port: 5173, path: '/' })
+    expect(readAddress('localhostess.com')).toEqual({ kind: 'web', url: 'https://localhostess.com/' })
     expect(readAddress('http://[::]:5173/x')).toEqual({ kind: 'host', port: 5173, path: '/x' })
     expect(readAddress('example.com/docs')).toEqual({ kind: 'web', url: 'https://example.com/docs' })
     expect(readAddress('http://example.com')).toEqual({ kind: 'web', url: 'http://example.com/' })
@@ -44,6 +49,7 @@ describe('Browser tab addresses (desktop issue 451)', () => {
     expect(localLink('https://example.com/')).toBeNull()
     expect(localLink('5173')).toBeNull()
     expect(localLink('http://127.0.0.2:5173/a')).toEqual({ port: 5173, path: '/a' })
+    expect(localLink('http://app.localhost:5173/')).toEqual({ port: 5173, path: '/' })
   })
 
   it('opens an address on the dashboard on screen, or says why not', () => {

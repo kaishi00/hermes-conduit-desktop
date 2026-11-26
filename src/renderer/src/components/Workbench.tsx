@@ -106,6 +106,8 @@ export function Workbench({
     setPages(current => (current.length >= MAX_PAGES ? current : [...current, page]))
     setView(pageKey(page))
   }
+  // A tab the view names but the strip didn't take (a ninth, or a folder's tabs just swapped in): the Changes view shows.
+  const shown = view.startsWith('page:') && !pages.some(p => pageKey(p) === view) ? 'changes' : view
   const changePage = useCallback((next: BenchPage) => setPages(current => current.map(p => (p.id === next.id ? next : p))), [])
   const closePage = (page: BenchPage) => {
     const at = pages.findIndex(p => p.id === page.id)
@@ -227,7 +229,7 @@ export function Workbench({
       <TabStrip<BenchView | BenchPage>
         tabs={[...BENCH_VIEWS, ...pages]}
         keyOf={tab => (typeof tab === 'string' ? tab : pageKey(tab))}
-        active={view}
+        active={shown}
         label={tab =>
           tab === 'changes'
             ? { title: t('Changes'), icon: <Icon name="branch" />, count: changed || undefined, fixed: true }
@@ -249,21 +251,21 @@ export function Workbench({
         className="bench-tabs"
       />
       <div className="bench-body">
-        <div className="bench-view" hidden={view !== 'changes'}>
+        <div className="bench-view" hidden={shown !== 'changes'}>
           {plugin === null ? (
             <div className="bench-note">{t('Loading…')}</div>
           ) : plugin.git ? (
-            <ChangesView key={`${profile ?? ''}\t${root}`} root={root} profile={profile} refreshKey={refreshKey} shown={view === 'changes'} onStatus={onStatus} onOpenFile={openFile} />
+            <ChangesView key={`${profile ?? ''}\t${root}`} root={root} profile={profile} refreshKey={refreshKey} shown={shown === 'changes'} onStatus={onStatus} onOpenFile={openFile} />
           ) : (
             <div className="bench-note">{t('Update the Conduit plugin on this host to see what changed here.')}</div>
           )}
         </div>
-        <div className="bench-view" hidden={view !== 'files'}>
+        <div className="bench-view" hidden={shown !== 'files'}>
           <FilesPanel root={root} profile={profile} refreshKey={refreshKey} reveal={opened} onInsertPath={onInsertPath} onClose={onClose} embedded />
         </div>
         {pages.map(page => (
-          <div key={page.id} className="bench-view" hidden={view !== pageKey(page)}>
-            <BrowserView page={page} hostKey={hostKey} hostPages={plugin?.preview === true} shown={view === pageKey(page)} onChange={changePage} />
+          <div key={page.id} className="bench-view" hidden={shown !== pageKey(page)}>
+            <BrowserView page={page} hostKey={hostKey} hostPages={plugin?.preview === true} shown={shown === pageKey(page)} onChange={changePage} />
           </div>
         ))}
       </div>
