@@ -65,14 +65,14 @@ describe("another host's bot renamed only in case (desktop#249)", () => {
     const hook = renderHook(({ others }: { others: OtherBot[] }) => useKeptWork(others, true), { others: bot('Mira') })
     await settle()
     expect(paths.filter(p => p.includes('workstreams'))).toEqual(['/api/plugins/conduit_push/workstreams?profile=Mira'])
-    expect(hook.result().get(keptWorkKey(HOST, 'Mira'))).toEqual({ working: 1, needsYou: 0 })
+    expect(hook.result().get(keptWorkKey(HOST, 'Mira'))).toEqual({ working: 1, needsYou: 0, doing: null })
 
     paths = []
     hook.rerender({ others: bot('mira') })
     await settle()
     expect(paths.filter(p => p.includes('workstreams'))).toEqual(['/api/plugins/conduit_push/workstreams?profile=mira'])
     expect(keptWorkKey(HOST, 'mira')).toBe(keptWorkKey(HOST, 'Mira'))
-    expect(hook.result().get(keptWorkKey(HOST, 'mira'))).toEqual({ working: 1, needsYou: 0 })
+    expect(hook.result().get(keptWorkKey(HOST, 'mira'))).toEqual({ working: 1, needsYou: 0, doing: null })
     hook.unmount()
   })
 })

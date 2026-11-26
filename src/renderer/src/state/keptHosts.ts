@@ -20,7 +20,7 @@ import { PREFS_PATH } from './pinnedOrder'
 import { COPIES_PATH, parseCopies, type RoomCopy } from './roomCopies'
 import { keptCopies } from './useRoomCopies'
 import { keptOwnRooms } from './useGroups'
-import { WORK, parseWork } from './work'
+import { WORK, botDoing, parseWork } from './work'
 import { STATUS_PATH, pluginStatus } from './plugin'
 import { DASHBOARD_PROFILES_CAPABILITY } from './dashboardProfile'
 import type { BotWork } from './useWork'
@@ -675,7 +675,7 @@ export function useKeptWork(others: readonly OtherBot[], on: boolean): ReadonlyM
                 const outcome = await window.conduit.keptHttp(host, keptWorkPath(b.name, dashboardProfiles))
                 if (stopped || !outcome.ok) return
                 const answer = parseWork(outcome.result)
-                byBot.current.set(b.key, { working: answer.working, needsYou: answer.needsYou })
+                byBot.current.set(b.key, { working: answer.working, needsYou: answer.needsYou, doing: botDoing(answer) })
               })
           )
         })

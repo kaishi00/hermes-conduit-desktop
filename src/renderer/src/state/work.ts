@@ -290,6 +290,16 @@ export function doing(item: WorkItem): string | null {
   return item.checklist.find(step => step.state === 'doing')?.text ?? (item.step || null)
 }
 
+/** What a bot is doing now, for its row in the Bots list: its newest running workstream's step (Eric, 2026-11-26). */
+export function botDoing(snapshot: Pick<WorkSnapshot, 'items'>): string | null {
+  const running = snapshot.items.filter(isWorking).sort((a, b) => b.updatedAt - a.updatedAt)
+  for (const item of running) {
+    const now = doing(item)
+    if (now) return now
+  }
+  return null
+}
+
 export function statusWord(status: string): string {
   switch (status) {
     case 'starting':
@@ -416,15 +426,15 @@ export function sideWorkstreams(snapshot: WorkSnapshot | null | undefined): Work
 
 /** Whether a read says what the state already does. */
 export function sameWork(
-  current: { sessions: ReadonlySet<string>; byBot: ReadonlyMap<string, { working: number; needsYou: number }> },
+  current: { sessions: ReadonlySet<string>; byBot: ReadonlyMap<string, { working: number; needsYou: number; doing?: string | null }> },
   sessions: ReadonlySet<string>,
-  byBot: ReadonlyMap<string, { working: number; needsYou: number }>
+  byBot: ReadonlyMap<string, { working: number; needsYou: number; doing?: string | null }>
 ): boolean {
   if (current.sessions.size !== sessions.size || current.byBot.size !== byBot.size) return false
   for (const id of sessions) if (!current.sessions.has(id)) return false
   for (const [bot, work] of byBot) {
     const was = current.byBot.get(bot)
-    if (!was || was.working !== work.working || was.needsYou !== work.needsYou) return false
+    if (!was || was.working !== work.working || was.needsYou !== work.needsYou || (was.doing ?? null) !== (work.doing ?? null)) return false
   }
   return true
 }

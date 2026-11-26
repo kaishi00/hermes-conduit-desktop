@@ -1,3 +1,4 @@
+import { WorkRing } from "./WorkRing";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction } from "react";
 import type { BotWork } from "../state/useWork";
 import { timeLabel } from "../state/chats";
@@ -822,12 +823,18 @@ export function BotsHome({
           const picked = tile.own ? (draft?.members.includes(bot.name) ?? false) : draftFar.some((m) => m.key === tile.key);
           const pill = workPill(tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name)));
           const badge = tile.own ? ownBadge : (badgeFor?.(tile.host) ?? null);
+          // At work: a ring on the face, and its last line shimmering under the name (Eric, 2026-11-26). Needs you keeps its words.
+          const botWork = tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name));
+          const needs = pill?.needs ? botWork!.needsYou : 0;
+          const busy = !needs && (!!pill || (tile.own && runningProfiles.has(bot.name)));
+          const status = pill?.text ?? (busy ? t("Working") : null);
           return (
             <button
               key={tile.key}
               className={`row bot-side-bot${open ? " open" : ""}${picked ? " picked" : ""}${dropTarget === tile.key ? " drop-target" : ""}${moveTarget === tile.key ? " move-target" : ""}`}
               aria-current={open ? "true" : undefined}
               aria-pressed={picked || undefined}
+              title={status ? `${bot.title} · ${status}` : undefined}
               onClick={() => {
                 if (tile.own) return openOrPick(bot);
                 const far = draft ? farOf(tile) : null;
@@ -840,6 +847,7 @@ export function BotsHome({
             >
               <span className="bot-side-face bot-tile-face">
                 <BotAvatar bot={bot} size={30} moving host={tile.own ? undefined : tile.host} />
+                {needs || busy ? <WorkRing needs={needs} /> : null}
                 {dropTarget === tile.key ? (
                   <span className="drop-plus" aria-hidden="true">
                     <Icon name="plus" />
@@ -856,10 +864,14 @@ export function BotsHome({
                   ) : null}
                   {bot.title}
                 </span>
-                {pill ? (
-                  <span className={`meta bot-side-pill${pill.needs ? " needs" : ""}`}>{pill.text}</span>
-                ) : tile.own && runningProfiles.has(bot.name) ? (
-                  <span className="meta bot-side-pill">{t("Working")}</span>
+                {needs ? (
+                  <span className="meta bot-side-pill needs">{pill!.text}</span>
+                ) : busy ? (
+                  <>
+                    {/* What it's doing now, else its last line, shimmering while it works. */}
+                    <span className="meta bot-side-working">{botWork?.doing || bot.lastLine || t("Working")}</span>
+                    {botWork?.doing || bot.lastLine ? <span className="sr-only">{status}</span> : null}
+                  </>
                 ) : bot.lastLine ? (
                   <span className="meta">{bot.lastLine}</span>
                 ) : null}
