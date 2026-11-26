@@ -36,6 +36,7 @@
   --glass-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
   --glass-blur: blur(28px) saturate(150%);
   --shell-gap: 10px;
+  --rail-width: 72px;
   --radius-island: 20px;
   --surface: rgba(255, 255, 255, 0.05);
   --surface-hover: rgba(255, 255, 255, 0.08);

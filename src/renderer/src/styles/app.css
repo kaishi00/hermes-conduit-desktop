@@ -12876,7 +12876,7 @@ main.docked-pulse.pulse-page {
 }
 
 .rail {
-  align-self: stretch;
+  width: var(--rail-width);
   border: 1px solid var(--glass-line);
   border-radius: var(--radius-island);
   background: var(--glass);
@@ -12884,8 +12884,12 @@ main.docked-pulse.pulse-page {
   box-shadow: var(--glass-shadow);
 }
 
-/* The open section's list joins the rail: one island, no seam. */
-.body:has(> .chats-section:not(.away) > .list-keeper:not([hidden]) > .chatlist) > .rail {
+/*
+ * The open section's list joins the rail: one island, no seam. It's the
+ * Chats pane's (Chats, Projects, Bots beside a Bot Chat), the Bots list
+ * beside a group chat or a bot being edited, or Scheduled tasks' list.
+ */
+.body:has(> .chats-section:not(.away) > .list-keeper:not([hidden]) > .chatlist, > .list-keeper:not([hidden]) > .chatlist, > .chatlist) > .rail {
   border-right: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
@@ -12893,10 +12897,12 @@ main.docked-pulse.pulse-page {
 }
 
 .chats-section {
-  inset: 0 var(--shell-gap) var(--shell-gap) calc(72px + var(--shell-gap));
+  inset: 0 var(--shell-gap) var(--shell-gap) calc(var(--rail-width) + var(--shell-gap));
 }
 
-.chats-section > .list-keeper > .chatlist {
+.chats-section > .list-keeper > .chatlist,
+.body > .list-keeper > .chatlist,
+.body > .chatlist {
   border: 1px solid var(--glass-line);
   border-left: 0;
   border-radius: 0 var(--radius-island) var(--radius-island) 0;
@@ -12904,6 +12910,12 @@ main.docked-pulse.pulse-page {
   backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-shadow);
   clip-path: inset(-40px -40px -40px 0);
+}
+
+/* A list beside the rail in the window's own row leaves the gap to the page beside it. */
+.body > .list-keeper > .chatlist,
+.body > .chatlist {
+  margin-right: var(--shell-gap);
 }
 
 /* The divider beside the island is the gap between it and the chat: it shows its line only while dragged. */
