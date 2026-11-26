@@ -1128,12 +1128,18 @@ export function ChatList({
                     const row = menu.row
                     const scope = searchScope
                     setMenu(null)
+<<<<<<< HEAD
                     void onPin(row).then(
                       ok => {
                         if (ok && row.pinned && latest.current.searchScope === scope) latest.current.dropPin(row)
                       },
                       () => undefined
                     )
+=======
+                    void onPin(row).then(ok => {
+                      if (ok && row.pinned && latest.current.searchScope === scope) latest.current.dropPin(row)
+                    })
+>>>>>>> 83b9be676b5312367bf7b937e7adfc3d9175c6fd
                   }}
                 >
                   {menu.row.pinned ? t('Unpin') : t('Pin')}
