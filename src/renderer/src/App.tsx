@@ -2605,9 +2605,11 @@ function Shell({
                 tiles={profileTiles}
                 // Whatever chat is on screen marks its bot, as the Bots list's side does.
                 open={
-                  section !== 'chats'
-                    ? undefined
-                    : dockedChat
+                  section === 'bots' && editingBot
+                    ? { profile: editingBot.name }
+                    : section !== 'chats'
+                      ? undefined
+                      : dockedChat
                       ? { profile: dockedChat.profile ?? 'default', host: dockedChat.host }
                       : { profile: selected.profile ?? 'default' }
                 }
