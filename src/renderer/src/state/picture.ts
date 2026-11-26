@@ -4,9 +4,10 @@
  * 0.85), or PNG when some of its pixels are see-through, as on the phone; one
  * that size or smaller, a GIF, or one the resize wouldn't make smaller goes as
  * it is. A picture in a type providers don't read (BMP, TIFF...) goes as JPEG
- * when Chromium can draw it, else as a file.
+ * when Chromium can draw it, else as a file. A picture that goes as it is
+ * takes its type from its bytes and a name with that type's extension.
  */
-import { isPicture, type StagedAttachment } from './attachments'
+import { isPicture, typedPicture, type StagedAttachment } from './attachments'
 
 const LONG_EDGE = 2048
 const JPEG_QUALITY = 0.85
@@ -74,7 +75,15 @@ export async function stageFile(file: File, id: string): Promise<StagedAttachmen
         return { id, name: withExtension(name, drawn.ext), kind: 'image', mime: drawn.mime, size: drawn.blob.size, base64: await readBase64(drawn.blob) }
       }
     }
-    if (provider) return { id, name, kind: 'image', mime, size: file.size, base64: await readBase64(file) }
+    if (provider) {
+      // Its bytes say what it is, and its name follows (issue 3331); bytes
+      // that aren't a picture Hermes takes go as a file, since a provider
+      // refuses the whole message over a picture it can't read.
+      const base64 = await readBase64(file)
+      const typed = typedPicture(name, base64)
+      if (typed) return { id, name: typed.name, kind: 'image', mime: typed.mime, size: file.size, base64 }
+      return { id, name, kind: 'file', mime, size: file.size, base64 }
+    }
   }
   return { id, name, kind: 'file', mime: mime || 'application/octet-stream', size: file.size, base64: await readBase64(file) }
 }
