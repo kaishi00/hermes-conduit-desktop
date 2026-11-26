@@ -20,6 +20,25 @@ export interface ChatRef {
   bot?: string
 }
 
+/**
+ * Keeps the open chat's notification ref by its live id. Just after a pick the
+ * pane still holds the last chat's live id for a render, under the new pick's
+ * profile, bot and title: that chat's ref isn't rewritten with them, so a reply
+ * in Furina's chat, left for Zhongli's, isn't notified as Zhongli's (Eric,
+ * 2026-11-26). `liveProfile` is the profile the live session opened in.
+ */
+export function keepChatRef(
+  chats: Map<string, ChatRef>,
+  liveId: string | null,
+  liveProfile: string | undefined,
+  pickedProfile: string | undefined,
+  ref: ChatRef
+): void {
+  if (!liveId) return
+  const same = (liveProfile ?? pickedProfile ?? 'default').toLowerCase() === (pickedProfile ?? 'default').toLowerCase()
+  if (same) chats.set(liveId, ref)
+}
+
 export interface NotificationSpec {
   title: string
   body: string

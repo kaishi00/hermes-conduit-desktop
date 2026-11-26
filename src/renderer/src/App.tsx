@@ -91,6 +91,7 @@ import {
   askNotification,
   inviteNotification,
   isWatching,
+  keepChatRef,
   newlyArrived,
   notificationsEnabled,
   requestNotification,
@@ -1945,7 +1946,13 @@ function Shell({
   const chats = useRef(new Map<string, ChatRef>())
   // A notification takes the chat's own title, never "New chat" for one Hermes hasn't titled yet, and else its bot.
   const notifyTitle = workItem || selected.botChat ? title : cleanTitle(chat.title || selected.title || '')
-  if (chat.liveId) chats.current.set(chat.liveId, { storedId: chat.storedId, profile: selected.profile, title: notifyTitle || undefined, bot: botTitle })
+  // Kept only while the live session is the pick's profile's (keepChatRef).
+  keepChatRef(chats.current, chat.liveId, chat.profile, selected.profile, {
+    storedId: chat.storedId,
+    profile: selected.profile,
+    title: notifyTitle || undefined,
+    bot: botTitle
+  })
   const titleFor = useCallback(
     (sessionId: string) => chats.current.get(sessionId)?.title ?? waiting.rows.find(row => row.sessionIds.includes(sessionId))?.title,
     [waiting.rows]
