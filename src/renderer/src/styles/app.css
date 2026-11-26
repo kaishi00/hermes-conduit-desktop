@@ -12858,3 +12858,104 @@ main.docked-pulse.pulse-page {
   flex: 1;
   min-width: 0;
 }
+
+/*
+ * Floating glass shell (Eric, 2026-11-26, concept S2): one canvas, tinted by
+ * the open bot, with everything else floating on it as glass. The rail and
+ * the list beside it read as one island, the chat runs over the canvas with
+ * no box around it, the panels beside it are cards and the composer is a
+ * capsule. Last in the sheet, so it wins over the boxed layout above.
+ *
+ * The glass is see-through colour with no backdrop-filter or clip-path:
+ * either makes the surface the box its position: fixed menus are placed in
+ * and cut to, and the canvas behind is a soft gradient that blur wouldn't
+ * change anyway.
+ */
+.titlebar {
+  background: transparent;
+  border-bottom: 0;
+}
+
+.body {
+  padding: 0 var(--shell-gap) var(--shell-gap);
+}
+
+.rail {
+  width: var(--rail-width);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-island);
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+}
+
+/*
+ * The open section's list joins the rail: one island, no seam. It's the
+ * Chats pane's (Chats, Projects, Bots beside a Bot Chat), the Bots list
+ * beside a group chat or a bot being edited, or Scheduled tasks' list.
+ */
+.body:has(> .chats-section:not(.away) > .list-keeper:not([hidden]) > .chatlist, > .list-keeper:not([hidden]) > .chatlist, > .chatlist) > .rail {
+  border-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: none;
+}
+
+.chats-section {
+  inset: 0 var(--shell-gap) var(--shell-gap) calc(var(--rail-width) + var(--shell-gap));
+}
+
+.chats-section > .list-keeper > .chatlist,
+.body > .list-keeper > .chatlist,
+.body > .chatlist {
+  border: 1px solid var(--glass-line);
+  border-left: 0;
+  border-radius: 0 var(--radius-island) var(--radius-island) 0;
+  background: var(--glass);
+  /* Down and to the right only, so none of it falls on the rail it joins. */
+  box-shadow: var(--island-shadow);
+}
+
+/* A list beside the rail in the window's own row leaves the gap to the page beside it. */
+.body > .list-keeper > .chatlist,
+.body > .chatlist {
+  margin-right: var(--shell-gap);
+}
+
+/* The divider beside the island is the gap between it and the chat: it shows its line only while dragged. */
+.chats-section > .column-divider {
+  width: var(--shell-gap);
+  margin: 0;
+}
+
+.chats-section > .column-divider::after {
+  inset: 18px calc(var(--shell-gap) / 2 - 1px);
+  border-radius: 2px;
+}
+
+.chats-section .chat {
+  background: transparent;
+}
+
+.chat-head {
+  border-bottom: 0;
+}
+
+/* Panels beside the chat are cards of their own. */
+.chats-section .ws-panel {
+  margin: 0 0 0 var(--shell-gap);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-island);
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+.composer-wrap {
+  padding-bottom: 14px;
+}
+
+.composer {
+  border-color: var(--glass-line);
+  background: var(--glass-strong);
+  box-shadow: var(--glass-shadow);
+}
