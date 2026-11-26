@@ -12,6 +12,7 @@
  */
 import { t } from '../../../shared/i18n'
 import { toolTitle } from './liveDoing'
+import { isPlanTool } from './plan'
 import type { ToolItem, TranscriptItem } from './transcript'
 
 export type StepKind = 'ask' | 'command' | 'edit' | 'read' | 'page' | 'step'
@@ -79,7 +80,7 @@ export function commandAnswer(result: string | undefined): { output?: string; ex
 
 function toolStep(item: ToolItem): TimelineStep | null {
   // A card the bot showed, or its plan: drawn in the chat, not a step of the work.
-  if (item.board || item.name === 'todo') return null
+  if (item.board || isPlanTool(item.name)) return null
   const name = item.name.toLowerCase()
   const fields = toolFields(item.args)
   const base = { key: item.key, at: item.at, running: item.status === 'running', title: toolTitle(item.name, item.status === 'done') }
@@ -122,7 +123,7 @@ export function sameSteps(a: readonly TimelineStep[], b: readonly TimelineStep[]
   for (let i = 0; i < a.length; i++) {
     const x = a[i]!
     const y = b[i]!
-    if (x.key !== y.key || x.running !== y.running || x.detail !== y.detail || x.output !== y.output || x.title !== y.title || x.path !== y.path) return false
+    if (x.key !== y.key || x.running !== y.running || x.detail !== y.detail || x.output !== y.output || x.exitCode !== y.exitCode || x.title !== y.title || x.path !== y.path) return false
   }
   return true
 }
@@ -138,8 +139,10 @@ export function commandAt(steps: readonly TimelineStep[], key: string | null): s
 /** A file the bot named, as a path on the host: one it named from its folder is in the chat's folder. */
 export function stepPath(path: string, root: string): string {
   if (/^([a-z]:[\\/]|[\\/]|~)/i.test(path)) return path
-  const clean = path.replace(/^\.[\\/]/, '')
-  return `${root.replace(/[\\/]+$/, '')}/${clean}`
+  // Joined with the folder's own separator, so a Windows host's path stays one kind.
+  const sep = /^[a-z]:\\/i.test(root) || (root.includes('\\') && !root.includes('/')) ? '\\' : '/'
+  const clean = path.replace(/^\.[\\/]/, '').replace(/[\\/]/g, sep)
+  return `${root.replace(/[\\/]+$/, '')}${sep}${clean}`
 }
 
 /** When a step happened, for its label: the time today, else the day and the time. */

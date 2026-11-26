@@ -65,7 +65,10 @@ export function Workbench({
   const showTimer = useRef(0)
   useEffect(() => () => window.clearTimeout(showTimer.current), [])
   const stepAt = at === null ? null : (steps.find(step => step.key === at) ?? null)
-  const pickStep = (key: string | null) => {
+  // Another chat or folder starts at Now: a step's key names a row of one chat only.
+  const firstStep = steps[0]?.key
+  useEffect(() => setAt(null), [root, firstStep])
+  const pickStep = (key: string | null, chosen = false) => {
     setAt(key)
     const step = key === null ? null : steps.find(s => s.key === key)
     if (!step) return
@@ -74,7 +77,11 @@ export function Workbench({
     window.clearTimeout(showTimer.current)
     showTimer.current = window.setTimeout(() => onShowStep(step.key), 160)
     if (commandAt(steps, step.key)) setBotTurn(turn => turn + 1)
-    if (step.path) setOpened({ path: stepPath(step.path, root), id: (opens.current += 1) })
+    if (step.path) {
+      setOpened({ path: stepPath(step.path, root), id: (opens.current += 1) })
+      // Picked from the list, the file comes forward; a drag across steps leaves the view in front where it is.
+      if (chosen) setView('files')
+    }
   }
   const bench = useRef<HTMLElement>(null)
   // Each open has an id of its own, so the same file opened twice opens twice.

@@ -36,10 +36,12 @@ export function useBenchSteps(store: TranscriptStore): TimelineStep[] {
  * there (the chat, the bot's commands, Files); Now goes back to following
  * the chat as it goes. The list behind it shows every step.
  */
-export function BenchTimeline({ steps, at, onPick }: { steps: TimelineStep[]; at: string | null; onPick: (key: string | null) => void }) {
+export function BenchTimeline({ steps, at, onPick }: { steps: TimelineStep[]; at: string | null; onPick: (key: string | null, chosen?: boolean) => void }) {
   const [listOpen, setListOpen] = useState(false)
   const track = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLDivElement>(null)
+  const dragEnd = useRef<(() => void) | null>(null)
+  useEffect(() => () => dragEnd.current?.(), [])
   const found = at === null ? -1 : steps.findIndex(step => step.key === at)
   const index = found >= 0 ? found : steps.length - 1
   const live = found < 0
@@ -57,27 +59,42 @@ export function BenchTimeline({ steps, at, onPick }: { steps: TimelineStep[]; at
 
   if (!steps.length) return null
   const last = steps.length - 1
-  const pick = (i: number) => onPick(i >= last ? null : steps[Math.max(0, i)]!.key)
+  const pick = (i: number, chosen = false) => onPick(i >= last ? null : steps[Math.max(0, i)]!.key, chosen)
   const fromPointer = (clientX: number) => {
     const box = track.current?.getBoundingClientRect()
     if (!box || box.width <= 0) return index
     return Math.round(Math.max(0, Math.min(1, (clientX - box.left) / box.width)) * last)
   }
-  const drag = (e: React.PointerEvent) => {
+  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     e.preventDefault()
+    const el = e.currentTarget
+    const pointer = e.pointerId
+    // Captured, so a release outside the window still ends the drag.
+    try {
+      el.setPointerCapture(pointer)
+    } catch {
+      // Not capturable (a synthetic event): the window's listeners still end it.
+    }
     let shown = fromPointer(e.clientX)
     pick(shown)
     const move = (ev: PointerEvent) => {
       const next = fromPointer(ev.clientX)
       if (next !== shown) pick((shown = next))
     }
-    const up = () => {
+    const end = () => {
       window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      el.removeEventListener('lostpointercapture', end)
+      dragEnd.current = null
     }
+    dragEnd.current?.()
+    dragEnd.current = end
     window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    el.addEventListener('lostpointercapture', end)
   }
   const keys = (e: React.KeyboardEvent) => {
     const by: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, PageUp: -10, PageDown: 10 }
@@ -130,7 +147,7 @@ export function BenchTimeline({ steps, at, onPick }: { steps: TimelineStep[]; at
                 aria-selected={i === index}
                 className={i === index ? 'on' : undefined}
                 onClick={() => {
-                  pick(i)
+                  pick(i, true)
                   setListOpen(false)
                 }}
               >

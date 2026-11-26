@@ -8,6 +8,7 @@ const items: TranscriptItem[] = [
   { kind: 'tool', key: 't1', toolId: 'a', name: 'terminal', status: 'done', at: 2, args: '{\n  "command": "npm test"\n}', result: '{"output": "\\u001b[31m1 failed\\u001b[0m\\r\\n", "exit_code": 1, "error": null}' },
   { kind: 'tool', key: 't2', toolId: 'b', name: 'patch', status: 'done', at: 3, args: '{"path": "src/a.ts", "old_string": "x", "new_string": "y"}' },
   { kind: 'tool', key: 't3', toolId: 'c', name: 'todo', status: 'done', at: 4 },
+  { kind: 'tool', key: 't3b', toolId: 'c2', name: 'todo_list', status: 'done', at: 4 },
   { kind: 'tool', key: 't4', toolId: 'd', name: 'read_file', status: 'done', at: 5, args: '{"path": "/srv/app/README.md", "offset": 1, "content": "cut here…' },
   { kind: 'assistant', key: 'a1', text: 'Fixed.', at: 6, streaming: false },
   { kind: 'tool', key: 't5', toolId: 'e', name: 'browser_navigate', status: 'running', at: 7, context: 'http://localhost:5173' },
@@ -54,6 +55,8 @@ describe('the workbench timeline (desktop issue 453)', () => {
     expect(sameSteps(a, timelineSteps(streamed))).toBe(true)
     const done = items.map(item => (item.key === 't5' && item.kind === 'tool' ? { ...item, status: 'done' as const } : item))
     expect(sameSteps(a, timelineSteps(done))).toBe(false)
+    const coded = items.map(item => (item.key === 't1' && item.kind === 'tool' ? { ...item, result: '{"output": "\\u001b[31m1 failed\\u001b[0m\\r\\n", "exit_code": 2}' } : item))
+    expect(sameSteps(a, timelineSteps(coded))).toBe(false)
   })
 
   it('puts a file named from the bot’s folder in the chat’s folder', () => {
@@ -61,5 +64,7 @@ describe('the workbench timeline (desktop issue 453)', () => {
     expect(stepPath('./b.ts', '/srv/app')).toBe('/srv/app/b.ts')
     expect(stepPath('/etc/hosts', '/srv/app')).toBe('/etc/hosts')
     expect(stepPath('C:\\x\\y.txt', 'C:\\x')).toBe('C:\\x\\y.txt')
+    expect(stepPath('src\\a.ts', 'C:\\Users\\x')).toBe('C:\\Users\\x\\src\\a.ts')
+    expect(stepPath('src\\a.ts', '/srv/app')).toBe('/srv/app/src/a.ts')
   })
 })
