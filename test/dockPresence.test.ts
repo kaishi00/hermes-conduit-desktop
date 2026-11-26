@@ -133,3 +133,21 @@ describe('DockPresence leftovers (desktop#598 reviews)', () => {
     expect(dock.show).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('DockPresence: two windows during one show (desktop#603 review)', () => {
+  it('brings every window forward that showed while the icon came back', async () => {
+    const { state, dock, presence, fire } = setup(false)
+    presence.setEnabled(true)
+    fire()
+    state.open = true
+    const first = vi.fn()
+    const second = vi.fn()
+    presence.update(first)
+    presence.update(second)
+    expect(dock.show).toHaveBeenCalledTimes(1)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+  })
+})

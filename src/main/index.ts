@@ -1263,8 +1263,11 @@ async function captureScreen(win: BrowserWindow | null): Promise<string | null> 
     return null
   } finally {
     if (shown) {
-      win!.show()
-      win!.focus()
+      // A chat or screen window closed during the capture is gone; the hold goes back either way.
+      if (!win!.isDestroyed()) {
+        win!.show()
+        win!.focus()
+      }
       dockPresence?.release()
     }
   }

@@ -31,6 +31,8 @@ export class DockPresence {
   private showing = false
   /** Windows stepping aside on purpose (a screenshot), however long it takes. */
   private holds = 0
+  /** Windows waiting to come forward once the show under way settles. */
+  private waiting: (() => void)[] = []
 
   constructor(
     private readonly dock: DockHost,
@@ -57,20 +59,27 @@ export class DockPresence {
   update(shown?: () => void): void {
     if (!this.enabled || this.windowsOpen() || this.holds > 0) {
       this.cancel()
-      if (!this.dock.isVisible() && !this.showing) {
-        this.showing = true
-        void this.dock.show().then(
-          () => {
-            this.showing = false
-            shown?.()
-            // The window that asked may have closed again while the icon came back.
-            this.update()
-          },
-          () => {
-            this.showing = false
-          }
-        )
+      // A show under way may already read as visible: the window waits for it all the same.
+      if (this.showing) {
+        if (shown) this.waiting.push(shown)
+        return
       }
+      if (this.dock.isVisible()) return
+      if (shown) this.waiting.push(shown)
+      this.showing = true
+      const settle = (ok: boolean) => {
+        this.showing = false
+        const waiting = this.waiting
+        this.waiting = []
+        if (!ok) return
+        for (const run of waiting) run()
+        // The window that asked may have closed again while the icon came back.
+        this.update()
+      }
+      void this.dock.show().then(
+        () => settle(true),
+        () => settle(false)
+      )
       return
     }
     if (this.pending !== null || (!this.dock.isVisible() && !this.showing)) return
