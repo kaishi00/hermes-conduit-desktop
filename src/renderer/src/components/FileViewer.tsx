@@ -36,9 +36,7 @@ export function stagedViewerKind(staged: Pick<StagedAttachment, 'name' | 'mime'>
 /** A staged file's words, or null when its bytes aren't UTF-8 text. */
 export function stagedText(base64: string): string | null {
   try {
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     return text.includes('\u0000') ? null : text
   } catch {

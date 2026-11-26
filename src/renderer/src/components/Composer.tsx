@@ -125,6 +125,10 @@ export function Composer({
   /** The staged file its chip opened in the viewer, to check before it's sent (desktop#611); it closes once the file leaves the composer. */
   const [viewingId, setViewingId] = useState<string | null>(null)
   const viewing = viewingId ? (attachments.find(a => a.id === viewingId) ?? null) : null
+  // Once its file is gone (removed, sent, or another chat's draft swapped in), the viewer stays closed, so the draft coming back doesn't reopen it.
+  useEffect(() => {
+    if (viewingId && !viewing) setViewingId(null)
+  }, [viewingId, viewing])
   const closeViewer = useCallback(() => {
     setViewingId(null)
     area.current?.focus()

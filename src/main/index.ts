@@ -853,7 +853,8 @@ function registerIpc(): void {
     try {
       const url = await viewStagedFile(name, mime, base64)
       return url ? { url } : { error: t("Couldn't open this file") }
-    } catch {
+    } catch (error) {
+      console.warn('Conduit: staged file preview failed', error)
       return { error: t("Couldn't open this file") }
     }
   })
