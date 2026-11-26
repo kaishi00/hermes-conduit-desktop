@@ -54,6 +54,8 @@ function mount(send: (text: string) => Promise<boolean | string>) {
 }
 
 afterEach(() => {
+  // A mode switch keeps the mode picked (Settings > Voice): the next case starts in Classic again.
+  localStorage.clear()
   tagged.mockClear()
   archived.mockClear()
   say = null
