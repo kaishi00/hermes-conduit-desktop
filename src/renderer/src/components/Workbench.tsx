@@ -88,6 +88,8 @@ export function Workbench({
   // The key host pages name the dashboard on screen by.
   useEffect(() => {
     let live = true
+    // Another folder may be on another dashboard: its tabs wait for that one's key.
+    setHostKey(null)
     void window.conduit
       .hostPageKey()
       .then(key => live && setHostKey(key))
@@ -98,7 +100,7 @@ export function Workbench({
   }, [root, profile])
   const newPage = (url: string | null = null) => {
     const page: BenchPage = { id: crypto.randomUUID(), url, nav: url ? 1 : 0 }
-    setPages(current => [...current, page].slice(-MAX_PAGES))
+    setPages(current => (current.length >= MAX_PAGES ? current : [...current, page]))
     setView(pageKey(page))
   }
   const changePage = useCallback((next: BenchPage) => setPages(current => current.map(p => (p.id === next.id ? next : p))), [])
@@ -124,9 +126,11 @@ export function Workbench({
       e.stopPropagation()
       const url = hostPageUrl(key, local.port, local.path)
       const same = pagesNow.current.find(p => p.url && hostPageParts(p.url)?.port === local.port)
-      if (same) {
-        setPages(current => current.map(p => (p.id === same.id ? { ...p, url, nav: p.nav + 1 } : p)))
-        setView(pageKey(same))
+      // With every tab taken, the last one opens it: no tab is closed for it.
+      const into = same ?? (pagesNow.current.length >= MAX_PAGES ? pagesNow.current[pagesNow.current.length - 1] : undefined)
+      if (into) {
+        setPages(current => current.map(p => (p.id === into.id ? { ...p, url, title: undefined, nav: p.nav + 1 } : p)))
+        setView(pageKey(into))
       } else newPage(url)
     }
     document.addEventListener('click', onClick, true)
@@ -236,7 +240,7 @@ export function Workbench({
         onClose={tab => {
           if (typeof tab !== 'string') closePage(tab)
         }}
-        onNewTab={() => newPage()}
+        onNewTab={pages.length < MAX_PAGES ? () => newPage() : undefined}
         newTabLabel={t('New Browser Tab')}
         ariaLabel={t('Workbench')}
         className="bench-tabs"

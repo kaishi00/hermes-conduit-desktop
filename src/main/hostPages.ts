@@ -17,11 +17,9 @@
 import { session, shell, type WebContents } from 'electron'
 import { createHash } from 'node:crypto'
 import { t } from '../shared/i18n'
-import { HOST_PAGE_SCHEME, hostPageParts } from '../shared/browserAddress'
+import { HOST_PAGE_SCHEME, HOST_PAGES_PARTITION, WEB_PAGES_PARTITION, hostPageParts } from '../shared/browserAddress'
 import { PAGE_HEADERS, PAGE_STATUS, PageCookies, answerHeaders, bodiless, browserFrameStays, browserGoes, errorPage, pageHeaderPairs, pageStatus, type BrowserKind } from './hostPageRules'
 
-export const HOST_PAGES_PARTITION = 'conduit-host-pages'
-export const WEB_PAGES_PARTITION = 'persist:conduit-web-pages'
 const PREVIEW_PATH = '/api/plugins/conduit_push/workspace/preview'
 
 export const HOST_PAGE_PRIVILEGES: Electron.CustomScheme = {
@@ -38,7 +36,9 @@ export interface ShownDashboard {
 }
 
 const isMac = process.platform === 'darwin'
+/** The dev servers' cookies, per dashboard and port, the newest 50 kept. */
 const jars = new Map<string, PageCookies>()
+const MAX_JARS = 50
 
 function page(status: number, message: string): Response {
   return new Response(errorPage(message), { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } })
@@ -70,7 +70,9 @@ export function serveHostPages(shown: () => ShownDashboard | null): void {
     const local = `http://localhost:${parts.port}`
     const jarKey = `${parts.key}:${parts.port}`
     const jar = jars.get(jarKey) ?? new PageCookies()
+    jars.delete(jarKey)
     jars.set(jarKey, jar)
+    while (jars.size > MAX_JARS) jars.delete(jars.keys().next().value!)
     const pairs = pageHeaderPairs(request.headers, origin, local, jar.header())
     const path = parts.path.replace(/#.*$/, '')
     let answer: Response

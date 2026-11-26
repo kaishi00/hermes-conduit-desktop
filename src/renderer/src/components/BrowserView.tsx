@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
-import { hostPageParts, shownAddress } from '@shared/browserAddress'
+import { HOST_PAGES_PARTITION, WEB_PAGES_PARTITION, hostPageParts, shownAddress } from '@shared/browserAddress'
 import { addressFor, addressHere } from '../state/browserTabs'
 import type { BenchPage } from '../state/workbench'
 import { Icon } from './icons'
@@ -15,9 +15,6 @@ type PageFrame = HTMLElement & {
   stop(): void
   getURL(): string
 }
-
-const HOST_PARTITION = 'conduit-host-pages'
-const WEB_PARTITION = 'persist:conduit-web-pages'
 
 /**
  * A Browser tab in the workbench (desktop issue 451): a port or localhost
@@ -62,8 +59,10 @@ export function BrowserView({
     // Sent here by an address or a link: the newest wins.
   }, [page.nav]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // The key arrives after the tab: a saved host page loads once it's known.
-    if (load === null && latest.current.url && hostKey) setLoad(addressHere(latest.current.url, hostKey))
+    // The key arrives after the tab, or changes with the dashboard: a host page loads on the one on screen once it's known.
+    const url = latest.current.url
+    if (!url || !hostKey || !hostPageParts(url)) return
+    setLoad(current => (current && hostPageParts(current)?.key === hostKey ? current : addressHere(url, hostKey)))
   }, [hostKey]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (shown && !load) input.current?.focus()
@@ -199,7 +198,7 @@ export function BrowserView({
           key={kind}
           ref={frame as React.Ref<HTMLElement>}
           className="bench-browser-page"
-          partition={kind === 'host' ? HOST_PARTITION : WEB_PARTITION}
+          partition={kind === 'host' ? HOST_PAGES_PARTITION : WEB_PAGES_PARTITION}
           src={load}
         />
       ) : (

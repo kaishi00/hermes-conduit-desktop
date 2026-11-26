@@ -7,6 +7,9 @@
  */
 
 export const HOST_PAGE_SCHEME = 'conduit-host-page'
+/** The Browser tabs' sessions: host pages' kept in memory, web pages' kept on disk with their sign-ins. */
+export const HOST_PAGES_PARTITION = 'conduit-host-pages'
+export const WEB_PAGES_PARTITION = 'persist:conduit-web-pages'
 
 export type BrowserAddress = { kind: 'host'; port: number; path: string } | { kind: 'web'; url: string }
 
