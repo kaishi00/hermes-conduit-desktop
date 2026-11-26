@@ -82,3 +82,30 @@ describe('brand in the rail (floating glass shell)', () => {
     expect(host.querySelector('.rail-brand .brand-mark')).not.toBeNull()
   })
 })
+
+describe('the Hermes list by keyboard', () => {
+  it('focuses the Hermes you are on, moves with the arrows, and gives focus back on Escape', async () => {
+    const { Brand } = await load()
+    const three = [...hosts, { url: 'https://c.example', method: 'password' }]
+    const host = mount(Brand, { inRail: true, hosts: three, currentUrl: three[1].url, onSwitch: () => {} })
+    const button = host.querySelector<HTMLButtonElement>('.rail-brand-button')!
+    act(() => button.click())
+    const items = [...host.querySelectorAll<HTMLButtonElement>('.host-menu [role="menuitemradio"]')]
+    expect(document.activeElement).toBe(items[1])
+    const key = (k: string) =>
+      act(() => {
+        ;(document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
+      })
+    key('ArrowDown')
+    expect(document.activeElement).toBe(items[2])
+    key('ArrowDown')
+    expect(document.activeElement).toBe(items[0])
+    key('End')
+    expect(document.activeElement).toBe(items[2])
+    key('Home')
+    expect(document.activeElement).toBe(items[0])
+    key('Escape')
+    expect(host.querySelector('.host-menu')).toBeNull()
+    expect(document.activeElement).toBe(button)
+  })
+})

@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from 'react'
 import type { HostSummary } from '@shared/ipc'
 import { Icon } from './icons'
 import { t } from '@shared/i18n'
@@ -34,10 +34,20 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
   const kept = useKeptHosts()
   const icon = useAppIcon()
 
+  const menuRef = useRef<HTMLDivElement>(null)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+
   useEffect(() => {
     if (!open) return
+    // As the rail's menus: focus lands on the Hermes you're on, and Escape gives it back to the button.
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])]
+    ;(items.find(item => item.getAttribute('aria-checked') === 'true') ?? items[0])?.focus()
     const close = () => setOpen(false)
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      close()
+      toggleRef.current?.focus()
+    }
     window.addEventListener('click', close)
     window.addEventListener('keydown', onKey)
     return () => {
@@ -46,8 +56,19 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
     }
   }, [open])
 
+  const moveFocus = (e: ReactKeyboardEvent) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+    e.preventDefault()
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])]
+    if (!items.length) return
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    const next =
+      e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length
+    items[next].focus()
+  }
+
   const menu = open ? (
-    <div className="host-menu" role="menu">
+    <div className="host-menu" role="menu" ref={menuRef} onKeyDown={moveFocus}>
       {hosts.map(host => {
         const state = host.url === currentUrl ? null : (kept.find(k => k.url === host.url)?.state ?? null)
         const badge = hostBadge(hosts, host.url, hostName)
@@ -90,7 +111,7 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
         }}
       >
         {switchable ? (
-          <button className="rail-brand-button" aria-haspopup="menu" aria-expanded={open} aria-label={t('Switch Hermes')} title={`${label}\n${t('Switch Hermes')}`} onClick={toggle}>
+          <button className="rail-brand-button" ref={toggleRef} aria-haspopup="menu" aria-expanded={open} aria-label={t('Switch Hermes')} title={`${label}\n${t('Switch Hermes')}`} onClick={toggle}>
             {mark}
             {subtitle ? <span className="rail-brand-host">{subtitle}</span> : null}
           </button>
@@ -111,7 +132,7 @@ export function Brand({ subtitle, hosts = [], currentUrl, onSwitch, inRail = fal
       <span className="brand-name">Conduit</span>
       {subtitle && switchable ? (
         <span className="host-switch">
-          <button className="brand-sub host-button" aria-haspopup="menu" aria-expanded={open} title={t('Switch Hermes')} onClick={toggle}>
+          <button className="brand-sub host-button" ref={toggleRef} aria-haspopup="menu" aria-expanded={open} title={t('Switch Hermes')} onClick={toggle}>
             · {subtitle} ▾
           </button>
           {menu}

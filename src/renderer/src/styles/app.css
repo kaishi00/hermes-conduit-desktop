@@ -13074,6 +13074,8 @@ button.rail-brand-button:hover {
   left: calc(100% + 4px);
   /* Opens over the list's text, so no see-through. */
   background: var(--menu);
+  /* It can open over the title bar's drag strip, where nothing beside it is no-drag. */
+  -webkit-app-region: no-drag;
 }
 
 /* The traffic lights sit at the island's top corner on a Mac: the brand starts below them. */
