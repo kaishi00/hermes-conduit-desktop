@@ -103,4 +103,20 @@ describe('a Classic call started in the new-chat draft (desktop#538)', () => {
     expect(archived).not.toHaveBeenCalled()
     view.unmount()
   })
+
+  it('files and archives its chat when its first send resolves after the call ended (#613 review)', async () => {
+    let resolve: (sent: boolean | string) => void = () => undefined
+    const view = mount(() => new Promise(done => (resolve = done)))
+    act(() => view.call().start())
+    act(() => say!('Book a table for six tonight'))
+    view.draw('chat-x')
+    act(() => view.call().end())
+    await act(async () => undefined)
+    expect(tagged).not.toHaveBeenCalled()
+    await act(async () => resolve('made-by-call'))
+    expect(tagged).toHaveBeenCalledWith('work', 'made-by-call', 'classic')
+    expect(archived).toHaveBeenCalledWith('work', 'made-by-call')
+    expect(archived).not.toHaveBeenCalledWith('work', 'chat-x')
+    view.unmount()
+  })
 })

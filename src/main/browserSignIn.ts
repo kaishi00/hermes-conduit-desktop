@@ -93,8 +93,10 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
   const abort = (): void => finish(null)
   signal.addEventListener('abort', abort, { once: true })
 
-  async function look(navigated = false): Promise<void> {
+  async function look(navigated = false, loadFinished = false): Promise<void> {
     if (finished) return
+    // The end of a load a check already started on asks only if its cookies changed, as a timer look does.
+    if (loadFinished && !checking && loads === checkLoads) navigated = false
     const request = lookRequest(checking, navigated, pendingLook, loads === checkLoads)
     if (request.pending) pendingLook = true
     // A load during an in-flight check is kept for the look that follows it;
@@ -158,7 +160,7 @@ export function openSignInWindow(options: SignInWindowOptions): Promise<CookieJa
     loads++
     void look(true)
   })
-  contents.on('did-finish-load', () => void look(true))
+  contents.on('did-finish-load', () => void look(true, true))
   contents.on('did-fail-load', (_event, code, description, _target, isMainFrame) => {
     if (!isMainFrame || code === ERR_ABORTED) return
     finish(null, new AuthError(t('The sign-in page didn’t load ({reason}).', { reason: description || String(code) })))
