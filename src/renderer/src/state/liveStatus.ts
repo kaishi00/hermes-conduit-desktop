@@ -82,3 +82,51 @@ export function useLiveStatus(active: boolean, profiles: readonly string[], nudg
   }, [active, profileKey, nudge])
   return states
 }
+
+/** Whether an `session.active_list` answer has a chat answering now (working, or streaming its reply). */
+export function anyAnswering(response: unknown): boolean {
+  const rows = ((response ?? {}) as Raw).sessions
+  return Array.isArray(rows) && rows.some(raw => ['working', 'streaming'].includes(str(((raw ?? {}) as Raw).status)))
+}
+
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every(name => b.has(name))
+
+/**
+ * The bots with a chat answering now, any chat, not only the one open (Eric, 2026-11-26): the registry
+ * read for each of `profiles` at the list's pace, 4 s while one answers and slower as nothing does.
+ */
+export function useAnsweringProfiles(active: boolean, profiles: readonly string[], nudge: unknown): ReadonlySet<string> {
+  const [names, setNames] = useState<ReadonlySet<string>>(() => new Set())
+  const profileKey = profiles.join('\n')
+  const step = useRef(0)
+  useEffect(() => {
+    step.current = 0
+  }, [nudge])
+  useEffect(() => {
+    if (!active || !profileKey) {
+      setNames(current => (current.size ? new Set() : current))
+      return
+    }
+    let live = true
+    let timer: number | undefined
+    const read = async () => {
+      if (!document.hidden) {
+        const all = profileKey.split('\n')
+        const answers = await Promise.all(
+          all.map(name => gateway.rpc('session.active_list', name !== 'default' ? { profile: name } : {}).then(r => r, () => null))
+        )
+        if (!live) return
+        const next = new Set(all.filter((_, i) => anyAnswering(answers[i])))
+        setNames(current => (sameSet(current, next) ? current : next))
+        step.current = nextStep(step.current, next.size > 0)
+      }
+      timer = window.setTimeout(() => void read(), POLL_STEPS_MS[step.current])
+    }
+    void read()
+    return () => {
+      live = false
+      window.clearTimeout(timer)
+    }
+  }, [active, profileKey, nudge])
+  return names
+}

@@ -216,7 +216,7 @@ import { openRoomChatHere } from './state/roomChatOpen'
 import { DockedRoomFrame } from './components/DockedRoom'
 import type { DockedRoomRequest } from '@shared/chatWindows'
 import { parseProjects, type Project, type ProjectChat } from './state/projects'
-import { useLiveStatus } from './state/liveStatus'
+import { useAnsweringProfiles, useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, saveMarksSoon, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
@@ -1752,11 +1752,14 @@ function Shell({
     },
     [showRoom]
   )
+  // Every bot answering in some chat, the open one's at once (Eric, 2026-11-26: not only the chat open).
+  const answeringNames = useMemo(() => botNames.slice(0, 24), [botNames])
+  const answering = useAnsweringProfiles(connected, answeringNames, turnsDone)
   const runningProfiles = useMemo(() => {
-    const names = new Set<string>()
+    const names = new Set<string>(answering)
     if (running && selected.profile) names.add(selected.profile)
     return names
-  }, [running, selected.profile])
+  }, [answering, running, selected.profile])
 
   // Needs you: the requests this window holds, and every profile's waiting list.
   const requests = useRequests()
