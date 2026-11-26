@@ -59,7 +59,8 @@ export function BenchTimeline({ steps, at, onPick }: { steps: TimelineStep[]; at
 
   if (!steps.length) return null
   const last = steps.length - 1
-  const pick = (i: number, chosen = false) => onPick(i >= last ? null : steps[Math.max(0, i)]!.key, chosen)
+  // The newest step dragged to is Now; picked from the list, it's that step.
+  const pick = (i: number, chosen = false) => onPick(i >= last && !chosen ? null : steps[Math.max(0, Math.min(last, i))]!.key, chosen)
   const fromPointer = (clientX: number) => {
     const box = track.current?.getBoundingClientRect()
     if (!box || box.width <= 0) return index
@@ -180,7 +181,9 @@ export function BotCommands({ steps, at, shown }: { steps: TimelineStep[]; at: s
   useEffect(() => {
     const el = box.current
     if (!el || !shown) return
-    if (at) el.querySelector<HTMLElement>(`[data-step="${CSS.escape(at)}"]`)?.scrollIntoView({ block: 'start' })
+    // On a step before any command, the top: nothing had run yet.
+    if (at === '') el.scrollTop = 0
+    else if (at) el.querySelector<HTMLElement>(`[data-step="${CSS.escape(at)}"]`)?.scrollIntoView({ block: 'start' })
     else el.scrollTop = el.scrollHeight
   }, [at, shown, lastKey, lastOutput])
 

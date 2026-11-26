@@ -13,6 +13,7 @@
 import { t } from '../../../shared/i18n'
 import { toolTitle } from './liveDoing'
 import { isPlanTool } from './plan'
+import { SHOW_TOOL } from './boards'
 import type { ToolItem, TranscriptItem } from './transcript'
 
 export type StepKind = 'ask' | 'command' | 'edit' | 'read' | 'page' | 'step'
@@ -80,7 +81,7 @@ export function commandAnswer(result: string | undefined): { output?: string; ex
 
 function toolStep(item: ToolItem): TimelineStep | null {
   // A card the bot showed, or its plan: drawn in the chat, not a step of the work.
-  if (item.board || isPlanTool(item.name)) return null
+  if (item.board || item.name.toLowerCase() === SHOW_TOOL || isPlanTool(item.name)) return null
   const name = item.name.toLowerCase()
   const fields = toolFields(item.args)
   const base = { key: item.key, at: item.at, running: item.status === 'running', title: toolTitle(item.name, item.status === 'done') }

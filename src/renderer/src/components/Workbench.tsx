@@ -67,21 +67,30 @@ export function Workbench({
   const stepAt = at === null ? null : (steps.find(step => step.key === at) ?? null)
   // Another chat or folder starts at Now: a step's key names a row of one chat only.
   const firstStep = steps[0]?.key
-  useEffect(() => setAt(null), [root, firstStep])
+  useEffect(() => {
+    window.clearTimeout(showTimer.current)
+    setAt(null)
+    setBotTurn(0)
+  }, [root, profile, firstStep])
   const pickStep = (key: string | null, chosen = false) => {
+    // Whatever was waiting to show goes: Now, another step or another chat wins.
+    window.clearTimeout(showTimer.current)
     setAt(key)
     const step = key === null ? null : steps.find(s => s.key === key)
     if (!step) return
     // Every view moves to the step: the chat, the bot's commands, and Files to the step's file.
-    // A drag passes many steps: the chat scrolls to the one it stops on.
-    window.clearTimeout(showTimer.current)
-    showTimer.current = window.setTimeout(() => onShowStep(step.key), 160)
-    if (commandAt(steps, step.key)) setBotTurn(turn => turn + 1)
-    if (step.path) {
-      setOpened({ path: stepPath(step.path, root), id: (opens.current += 1) })
-      // Picked from the list, the file comes forward; a drag across steps leaves the view in front where it is.
-      if (chosen) setView('files')
+    // A drag passes many steps: the views move to the one it stops on, so no file opens for a step passed over.
+    const land = () => {
+      onShowStep(step.key)
+      if (commandAt(steps, step.key)) setBotTurn(turn => turn + 1)
+      if (step.path) {
+        setOpened({ path: stepPath(step.path, root), id: (opens.current += 1) })
+        // Picked from the list, the file comes forward; a drag leaves the view in front where it is.
+        if (chosen) setView('files')
+      }
     }
+    if (chosen) land()
+    else showTimer.current = window.setTimeout(land, 160)
   }
   const bench = useRef<HTMLElement>(null)
   // Each open has an id of its own, so the same file opened twice opens twice.
@@ -315,7 +324,7 @@ export function Workbench({
               onFold={() => changeDrawer({ ...drawer, folded: !drawer.folded })}
               shells={plugin.terminals}
               steps={steps}
-              at={stepAt ? commandAt(steps, stepAt.key) : null}
+              at={stepAt ? (commandAt(steps, stepAt.key) ?? '') : null}
               botTurn={botTurn}
             />
           </div>

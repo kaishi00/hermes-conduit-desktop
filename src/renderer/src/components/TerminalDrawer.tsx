@@ -57,7 +57,7 @@ export function TerminalDrawer({
   folded: boolean
   /** Whether the plugin serves terminals; without it the drawer has the bot's commands alone. */
   shells: boolean
-  /** The chat's steps, and the timeline's (null while it follows the chat). */
+  /** The chat's steps, and the timeline's command (null while it follows the chat, '' on a step before any command). */
   steps: TimelineStep[]
   at: string | null
   /** Changes when the timeline lands on a command: the bot's tab comes forward. */
