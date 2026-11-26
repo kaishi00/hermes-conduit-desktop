@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { renderHook, settle } from './hookHarness'
 import { useChat } from '../src/renderer/src/state/useChat'
 import { useTranscript } from '../src/renderer/src/state/transcriptStore'
-import { forgetTranscripts, hasKeptTranscript, keepTranscript, keptTranscript, standIn } from '../src/renderer/src/state/transcriptCache'
+import { forgetTranscripts, hasKeptTranscript, keepReadAhead, keepTranscript, keptTranscript, standIn, TRANSCRIPT_CACHE_SIZE } from '../src/renderer/src/state/transcriptCache'
 import { forgetChatLengths, knownChatLength } from '../src/renderer/src/state/chatLength'
 import { forgetReadsAhead, readChatAhead } from '../src/renderer/src/state/readAhead'
 import type { HistoryRow, TranscriptState } from '../src/renderer/src/state/transcript'
@@ -146,5 +146,27 @@ describe('a workstream card read ahead', () => {
     await settle()
     expect(knownChatLength('big')).toBeUndefined()
     expect(hasKeptTranscript('big', undefined)).toBe(true)
+  })
+
+  it('never pushes out a chat just left, however many cards are pointed at', () => {
+    const left: TranscriptState = { running: false, items: [{ kind: 'assistant', key: 'a', text: 'left', streaming: false }] as TranscriptState['items'] }
+    keepTranscript('left', undefined, left)
+    for (let i = 0; i < TRANSCRIPT_CACHE_SIZE + 2; i++) keepReadAhead(`w${i}`, undefined, left)
+    expect(keptTranscript('left', undefined)).toBe(left)
+    // Its own six: the oldest read ahead go first.
+    expect(hasKeptTranscript('w0', undefined)).toBe(false)
+    expect(hasKeptTranscript(`w${TRANSCRIPT_CACHE_SIZE + 1}`, undefined)).toBe(true)
+  })
+
+  it('gives way to the chat once it is left, and goes with a dropped connection', () => {
+    const read: TranscriptState = { running: false, items: [{ kind: 'assistant', key: 'r', text: 'read', streaming: false }] as TranscriptState['items'] }
+    const left: TranscriptState = { running: false, items: [{ kind: 'assistant', key: 'l', text: 'left', streaming: false }] as TranscriptState['items'] }
+    keepReadAhead('w1', undefined, read)
+    expect(keptTranscript('w1', undefined)).toBe(read)
+    keepTranscript('w1', undefined, left)
+    expect(keptTranscript('w1', undefined)).toBe(left)
+    keepReadAhead('w2', undefined, read)
+    forgetTranscripts()
+    expect(hasKeptTranscript('w2', undefined)).toBe(false)
   })
 })
