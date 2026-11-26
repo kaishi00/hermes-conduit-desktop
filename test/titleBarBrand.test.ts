@@ -250,6 +250,10 @@ describe('you on this Hermes, at the top of the rail', () => {
     })
     expect(bar.querySelector('.brand .brand-state.signIn')).not.toBeNull()
     expect(bar.querySelector('[role="status"]')?.textContent).toBe('Furina · Sign In required')
+    // Nothing to switch to: no caret, though the list opens for what to do.
+    expect(bar.querySelector('.brand .host-button')?.textContent).not.toContain('▾')
+    const two = mount(TitleBar, { subtitle: 'Here', hosts, currentUrl: hosts[0].url, onSwitch: () => {} })
+    expect(two.querySelector('.brand .host-button')?.textContent).toContain('▾')
     // One Hermes, but the list opens for what to do; two actions with the same words each run their own.
     act(() => bar.querySelector<HTMLButtonElement>('.brand .host-button')!.click())
     const items = [...bar.querySelectorAll<HTMLButtonElement>('.host-menu [role="menuitem"]')]

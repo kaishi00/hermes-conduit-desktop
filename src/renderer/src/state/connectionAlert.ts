@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 import type { ConnectionPhase, HostSummary, KeptHost } from '../../../shared/ipc'
 import { t } from '../../../shared/i18n'
 import { keptStateLabel } from './keptHosts'
@@ -97,7 +97,8 @@ export function brandAlert(inputs: Inputs): BrandAlert | null {
 export function useAway(phase: ConnectionPhase, host = '', shown = AWAY_SHOWN_MS, long = DOWN_LONG_MS): Away {
   const gone = phase === 'connecting' || phase === 'reconnecting'
   const [away, setAway] = useState<Away>('no')
-  useEffect(() => {
+  // Before paint, so a switched-to Hermes never shows the last one's state for a frame.
+  useLayoutEffect(() => {
     setAway('no')
     if (!gone) return
     const timers = [setTimeout(() => setAway('shown'), shown), setTimeout(() => setAway('long'), long)]
