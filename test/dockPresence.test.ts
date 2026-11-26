@@ -151,3 +151,16 @@ describe('DockPresence: two windows during one show (desktop#603 review)', () =>
     expect(second).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('DockPresence: a hold with the icon hidden (desktop#603 review)', () => {
+  it("doesn't bring the icon back for Quick Ask's screenshot", () => {
+    const { state, dock, presence, fire } = setup(false)
+    presence.setEnabled(true)
+    fire()
+    expect(state.visible).toBe(false)
+    presence.hold()
+    presence.update()
+    presence.release()
+    expect(dock.show).not.toHaveBeenCalled()
+  })
+})

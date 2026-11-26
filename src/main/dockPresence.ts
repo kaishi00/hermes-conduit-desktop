@@ -57,7 +57,12 @@ export class DockPresence {
    * behind the app in front, so the caller focuses it then.
    */
   update(shown?: () => void): void {
-    if (!this.enabled || this.windowsOpen() || this.holds > 0) {
+    // A hold only keeps the icon where it is: Quick Ask's screenshot, with the icon hidden, mustn't bring it back.
+    if (this.holds > 0 && this.enabled && !this.windowsOpen()) {
+      this.cancel()
+      return
+    }
+    if (!this.enabled || this.windowsOpen()) {
       this.cancel()
       // A show under way may already read as visible: the window waits for it all the same.
       if (this.showing) {
