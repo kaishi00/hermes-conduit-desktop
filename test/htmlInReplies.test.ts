@@ -69,6 +69,8 @@ describe('pages written in a reply', () => {
     const table = 'Tag | Meaning\n--- | ---\n<div> | container\n\nNext steps'
     expect(splitPages(table)).toEqual([{ kind: 'text', text: table }])
     expect(splitReply(table)).toEqual([{ kind: 'markdown', text: table }])
+    const header = 'Results:\n<div> | A\n--- | ---\n1 | 2'
+    expect(splitPages(header)).toEqual([{ kind: 'text', text: header }])
   })
 
   it('is one line for a void element', () => {

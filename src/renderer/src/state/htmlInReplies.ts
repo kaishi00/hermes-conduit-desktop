@@ -87,10 +87,15 @@ function closesAt(text: string, from: number): number {
   }
 }
 
-/** Whether line `i` starts a page: a table row that starts with a tag is the table's. */
+const TABLE_SEPARATOR = /^ {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$/
+
+/** Whether line `i` starts a page: a table row or header that starts with a tag is the table's. */
 export function startsPageAt(lines: readonly string[], i: number): boolean {
   const line = lines[i]!
-  return startsPage(line) && !(i > 0 && line.includes('|') && lines[i - 1]!.includes('|'))
+  if (!startsPage(line)) return false
+  if (!line.includes('|')) return true
+  if (i > 0 && lines[i - 1]!.includes('|')) return false
+  return !(i + 1 < lines.length && TABLE_SEPARATOR.test(lines[i + 1]!))
 }
 
 export type PageSpan = {
@@ -115,7 +120,7 @@ export function pageAt(lines: readonly string[], start: number): PageSpan {
     // Another page tag after blank lines continues the same page.
     let next = end
     while (next < lines.length && !lines[next]!.trim()) next++
-    if (next < lines.length && startsPage(lines[next]!)) {
+    if (next < lines.length && startsPageAt(lines, next)) {
       for (; line < next; line++) from += lines[line]!.length + 1
       continue
     }
