@@ -46844,6 +46844,36 @@
     "zh-Hans": "登录 {host}…",
     "zh-Hant": "登入 {host}…"
   },
+  "Drawing the page when it’s finished…": {
+    "de": "Die Seite wird gezeichnet, sobald sie fertig ist …",
+    "es": "Se dibujará la página cuando esté terminada…",
+    "fr": "La page s’affichera une fois terminée…",
+    "id": "Halaman digambar setelah selesai…",
+    "it": "La pagina verrà mostrata quando è finita…",
+    "ja": "ページは書き終わったら表示されます…",
+    "ko": "페이지가 완성되면 표시됩니다…",
+    "pl": "Strona pojawi się, gdy będzie gotowa…",
+    "pt-BR": "A página aparece quando estiver pronta…",
+    "ru": "Страница появится, когда будет готова…",
+    "tr": "Sayfa bitince çizilecek…",
+    "zh-Hans": "页面写完后显示…",
+    "zh-Hant": "頁面寫完後顯示…"
+  },
+  "(There’s a page here.)": {
+    "de": "(Hier ist eine Seite.)",
+    "es": "(Aquí hay una página.)",
+    "fr": "(Il y a une page ici.)",
+    "id": "(Ada halaman di sini.)",
+    "it": "(Qui c’è una pagina.)",
+    "ja": "（ここにページがあります。）",
+    "ko": "(여기에 페이지가 있습니다.)",
+    "pl": "(Tu jest strona.)",
+    "pt-BR": "(Aqui há uma página.)",
+    "ru": "(Здесь страница.)",
+    "tr": "(Burada bir sayfa var.)",
+    "zh-Hans": "（这里有一个页面。）",
+    "zh-Hant": "（這裡有一個頁面。）"
+  },
   "Menu Bar": {
     "de": "Menüleiste",
     "es": "Barra de menús",
