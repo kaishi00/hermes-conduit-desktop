@@ -204,7 +204,8 @@ export function ChangesView({
     setBranches('loading')
     gateway
       .http('GET', branchesPath(root, profile))
-      .then(raw => setBranches(parseBranches(raw)))
+      // Closed meanwhile (Escape, a click elsewhere, Fetch): it stays closed.
+      .then(raw => setBranches(current => (current === null ? current : parseBranches(raw))))
       .catch(e => {
         setBranches(null)
         setFailed(gitError(e))
