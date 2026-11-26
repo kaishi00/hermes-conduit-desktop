@@ -18,10 +18,7 @@ export function QuickAskShortcutSetting() {
   const mounted = useRef(true)
   useEffect(() => {
     let live = true
-<<<<<<< HEAD
     mounted.current = true
-=======
->>>>>>> 83b9be676b5312367bf7b937e7adfc3d9175c6fd
     const read = () => void window.conduit.quickAskShortcut().then(next => live && setShortcut(next))
     read()
     // Back from another app, which may have let go of the keys it held: the line about them is
@@ -33,10 +30,7 @@ export function QuickAskShortcutSetting() {
     window.addEventListener('focus', onFocus)
     return () => {
       live = false
-<<<<<<< HEAD
       mounted.current = false
-=======
->>>>>>> 83b9be676b5312367bf7b937e7adfc3d9175c6fd
       window.removeEventListener('focus', onFocus)
     }
   }, [])

@@ -220,7 +220,6 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
     if (calling && classicFresh.current.ended) classicFresh.current = { fresh: false, chat: null, ended: false }
     const kept = classicFresh.current
     if (calling && callMode === 'classic') {
-<<<<<<< HEAD
       if (!kept.fresh && !kept.chat && !chatId) {
         kept.fresh = true
         kept.profile = profile
@@ -228,12 +227,6 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
       if (kept.fresh && !kept.chat && createdByCall) {
         kept.chat = { id: createdByCall, profile: kept.profile }
         void tagVoiceSession(kept.profile, createdByCall, 'classic').catch(() => undefined)
-=======
-      if (!kept.fresh && !kept.chat && !chatId) kept.fresh = true
-      if (kept.fresh && !kept.chat && chatId && chatId === createdByCall) {
-        kept.chat = { id: chatId, profile }
-        void tagVoiceSession(profile, chatId, 'classic').catch(() => undefined)
->>>>>>> 83b9be676b5312367bf7b937e7adfc3d9175c6fd
       }
       return
     }
@@ -247,12 +240,8 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
       kept.chat = { id: createdByCall, profile: kept.profile }
     }
     if (kept.chat) void archiveClassicChat(kept.chat.profile, kept.chat.id).catch(() => undefined)
-<<<<<<< HEAD
     if (kept.ended && !kept.chat) return
     classicFresh.current = { fresh: false, chat: null, ended: false }
-=======
-    classicFresh.current = { fresh: false, chat: null }
->>>>>>> 83b9be676b5312367bf7b937e7adfc3d9175c6fd
   }, [calling, callMode, chatId, profile, createdByCall])
 
   // While a call runs here, its dashboard holds the user's call presence, so a call from Hermes doesn't ring over it.
