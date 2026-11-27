@@ -73,7 +73,8 @@ export function pcControlState(): PcControlState {
     driver: driverState,
     progress: downloading?.progress ?? 0,
     active,
-    stopKeys: STOP_KEYS
+    stopKeys: STOP_KEYS,
+    stops
   }
 }
 
@@ -287,7 +288,9 @@ const stopLabel = () => (process.platform === 'darwin' ? '⌘⌥⇧S' : 'Ctrl+Al
 
 /** Runs one action the plugin handed over. The renderer asked first (askPc, and the phone) when it needed asking. */
 export async function runPcRequest(request: PcRequest): Promise<Record<string, unknown>> {
-  const stopsAtStart = stops
+  // Stop since the renderer fetched it (or since it got here) stops it, the rest of its batch too.
+  const stopsAtStart = typeof request.gen === 'number' ? request.gen : stops
+  if (stops !== stopsAtStart) return { ok: false, code: 'stopped' }
   // No action runs while an ask is up: the ask is out of the bot's screenshots, so a
   // click meant for what it saw could land on Allow (desktop#721 review).
   while (asking.size) await Promise.allSettled([...asking.values()].map(open => open.shown))
@@ -300,7 +303,12 @@ export async function runPcRequest(request: PcRequest): Promise<Record<string, u
   // Counted from here, with no wait since the asks were checked, so no ask shows mid-action.
   running++
   try {
-    showBar(request.bot, request.chat)
+    try {
+      showBar(request.bot, request.chat)
+    } catch {
+      // The bar couldn't be drawn (the app is quitting): not a driver failure, so the driver stays.
+      return { ok: false, ...(grant ? { grant } : {}), code: 'failed', message: 'Conduit couldn’t show its control bar.' }
+    }
     executor ??= new Executor(await driver())
     const result = await executor.run(request.session, { action: request.action, args: request.args ?? {} })
     return { ...result, ...(grant ? { grant } : {}) }

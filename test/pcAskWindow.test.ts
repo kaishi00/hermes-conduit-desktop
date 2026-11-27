@@ -255,6 +255,20 @@ describe('more than one ask', () => {
     expect(drive.runs).toHaveLength(0)
   })
 
+  it('the rest of a batch fetched before Stop doesn’t run after it', async () => {
+    drive.path = '/driver'
+    const { pcControlState } = await import('../src/main/pcControl')
+    const gen = pcControlState().stops
+    stopControl(false)
+    await expect(runPcRequest(request('s24', { needs_ok: false, gen }))).resolves.toEqual({ ok: false, code: 'stopped' })
+    // Fetched after it: runs.
+    const run = runPcRequest(request('s25', { needs_ok: false, gen: pcControlState().stops }))
+    await tick()
+    expect(drive.runs).toHaveLength(1)
+    drive.runs[0].done()
+    await expect(run).resolves.toMatchObject({ ok: true })
+  })
+
   it('an ask waits for a running action before it shows', async () => {
     drive.path = '/driver'
     const run = runPcRequest(request('s22', { needs_ok: false }))

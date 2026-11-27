@@ -777,6 +777,8 @@ export interface PcControlState extends PcControlSettings {
   /** A bot is driving now: its name and chat. */
   active: { bot: string; chat: string } | null
   stopKeys: string
+  /** How many times Stop was pressed since launch: an action fetched before the latest Stop doesn't run. */
+  stops: number
 }
 
 /** One action from GET /pc/next, with the bot's name for the ask and the bar. */
@@ -792,6 +794,8 @@ export interface PcRequest {
   ask?: string
   bot: string
   profile: string
+  /** `stops` when the renderer fetched it, so Stop pressed after that stops it too. */
+  gen?: number
 }
 
 /**
