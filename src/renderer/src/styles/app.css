@@ -12442,7 +12442,8 @@ button.ghost:disabled {
     background: var(--surface);
   }
 
-  .chat-head.soft .chat-title {
+  /* Only a chat window's header, the one with Open in Main Window, keeps this room. */
+  .chat-head.soft:has(.open-main) .chat-title {
     min-width: 6em;
   }
 }
