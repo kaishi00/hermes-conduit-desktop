@@ -96,14 +96,16 @@ export function useReplySpeeds(
     if (reading && sessionId && connected && !running) void load()
   }, [reading, scope, sessionId, connected, running, load])
 
-  // The composer chip's last speed, kept for this chat while the next turn's is still to come.
+  // The composer chip's last speed, kept for this chat while the next turn's is still to come. A running turn dims it
+  // from its first render, before the effect above clears `fresh`.
   const kept = useRef<{ scope: string; rate: number } | undefined>(undefined)
-  const newest = current.fresh ? newestReplySpeed(speeds) : undefined
-  if (current.fresh) kept.current = newest === undefined ? undefined : { scope, rate: newest }
+  const settled = current.fresh && !running
+  const newest = settled ? newestReplySpeed(speeds) : undefined
+  if (settled) kept.current = newest === undefined ? undefined : { scope, rate: newest }
   else if (kept.current?.scope !== scope) kept.current = undefined
   const composer = !inComposer
     ? undefined
-    : current.fresh
+    : settled
       ? newest === undefined
         ? undefined
         : { rate: newest, stale: false }
