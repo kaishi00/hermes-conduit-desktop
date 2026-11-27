@@ -682,7 +682,7 @@ export function BotsHome({
   };
   const deleteCategory = async (name: string) => {
     setHeadingMenu(null);
-    if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots and group chats move to Other.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
+    if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots move to Other, and its group chats back to Group chats.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
     categories?.refileRooms?.(name, null);
     fileTiles(fileable.filter((tile) => sameCategory(tile.bot.category?.name, name)), null);
   };

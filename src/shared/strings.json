@@ -49034,20 +49034,20 @@
     "zh-Hans": "机器人列表会把它显示在这个标题下。",
     "zh-Hant": "機器人列表會把它顯示在這個標題下。"
   },
-  "Its bots and group chats move to Other.": {
-    "de": "Ihre Bots und Gruppenchats kommen zu „Andere“.",
-    "es": "Sus bots y chats de grupo pasan a Otro.",
-    "fr": "Ses bots et discussions de groupe passent dans Autre.",
-    "id": "Bot dan obrolan grupnya pindah ke Lainnya.",
-    "it": "I suoi bot e le chat di gruppo passano in Altro.",
-    "ja": "ボットとグループチャットは「その他」に移ります。",
-    "ko": "봇과 그룹 채팅은 기타로 이동합니다.",
-    "pl": "Jej boty i czaty grupowe trafią do Inne.",
-    "pt-BR": "Os bots e chats em grupo dela vão para Outro.",
-    "ru": "Её боты и групповые чаты перейдут в «Другое».",
-    "tr": "Botları ve grup sohbetleri Diğer'e taşınır.",
-    "zh-Hans": "其中的机器人和群聊会移到“其他”。",
-    "zh-Hant": "其中的機器人和群聊會移到「其他」。"
+  "Its bots move to Other, and its group chats back to Group chats.": {
+    "de": "Ihre Bots kommen zu „Andere“, ihre Gruppenchats zurück zu „Gruppenchats“.",
+    "es": "Sus bots pasan a Otro y sus chats de grupo vuelven a Chats de grupo.",
+    "fr": "Ses bots passent dans Autre, et ses discussions de groupe reviennent dans Discussions de groupe.",
+    "id": "Botnya pindah ke Lainnya, dan obrolan grupnya kembali ke Obrolan grup.",
+    "it": "I suoi bot passano in Altro e le chat di gruppo tornano in Chat di gruppo.",
+    "ja": "ボットは「その他」に、グループチャットは「グループチャット」に戻ります。",
+    "ko": "봇은 기타로, 그룹 채팅은 그룹 채팅으로 돌아갑니다.",
+    "pl": "Jej boty trafią do Inne, a czaty grupowe wrócą do Czatów grupowych.",
+    "pt-BR": "Os bots dela vão para Outro, e as conversas em grupo voltam para Conversas em grupo.",
+    "ru": "Её боты перейдут в «Другое», а групповые чаты вернутся в «Групповые чаты».",
+    "tr": "Botları Diğer'e, grup sohbetleri Grup sohbetleri'ne geri taşınır.",
+    "zh-Hans": "其中的机器人会移到“其他”，群聊回到“群聊”。",
+    "zh-Hant": "其中的機器人會移到「其他」，群組聊天回到「群組聊天」。"
   },
   "Rename…": {
     "de": "Umbenennen …",
