@@ -9,11 +9,13 @@ import { join } from 'node:path'
 import type { ChatWindowRequest } from '../shared/ipc'
 import { chatWindowTitle } from '../shared/chatWindows'
 import { confineNavigation } from './navigation'
+import { keepWindowPlace, openingPlace } from './windowPlaces'
 
 export function createChatWindow(chat: ChatWindowRequest, onClosed: () => void): BrowserWindow {
+  // Where this kind of window was last, beside any already open.
+  const place = openingPlace('chat', { width: 640, height: 780 }, { width: 360, height: 400 })
   const window = new BrowserWindow({
-    width: 640,
-    height: 780,
+    ...place.bounds,
     minWidth: 360,
     minHeight: 400,
     show: false,
@@ -27,7 +29,8 @@ export function createChatWindow(chat: ChatWindowRequest, onClosed: () => void):
       nodeIntegration: false
     }
   })
-  window.on('ready-to-show', () => window.show())
+  keepWindowPlace(window, 'chat', place.maximized)
+  window.on('ready-to-show', () => (place.maximized ? window.maximize() : window.show()))
   window.on('closed', onClosed)
   confineNavigation(window.webContents)
   const hash = `chat=${encodeURIComponent(JSON.stringify(chat))}`
