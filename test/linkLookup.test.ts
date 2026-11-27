@@ -60,9 +60,9 @@ describe('Show in Finder or Explorer', () => {
     expect(localSpelling('~/proj', { home: 'C:\\Users\\r', windows: true })).toBeNull()
     expect(localSpelling('C:/dev/app/x.ts', { home: 'C:\\Users\\r', windows: true })).toBe('C:\\dev\\app\\x.ts')
     expect(localSpelling('/', { home: '/Users/r', windows: false })).toBe('/')
-    // A network share's path, as Explorer takes it.
-    expect(localSpelling('\\\\nas\\share\\proj\\', { home: 'C:\\Users\\r', windows: true })).toBe('\\\\nas\\share\\proj')
-    expect(localSpelling('\\\\nas/share/a.md', { home: 'C:\\Users\\r', windows: true })).toBe('\\\\nas\\share\\a.md')
+    // A network share's path isn't shown: Windows would reach, and sign in to, a host a reply named.
+    expect(localSpelling('\\\\nas\\share\\proj\\', { home: 'C:\\Users\\r', windows: true })).toBeNull()
+    expect(localSpelling('//nas/share/a.md', { home: 'C:\\Users\\r', windows: true })).toBeNull()
   })
 
   it('names the item as each system names its file browser', () => {
