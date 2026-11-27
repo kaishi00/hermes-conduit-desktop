@@ -312,6 +312,16 @@ export function App() {
   const keptForAlert = useKeptHosts(url ?? '')
   const updateAway = updateBanner(useHostActions(url ?? '').update)
 
+  // The Live call shortcut or the tray's Start Live Call with no dashboard open (locked, signed out, picking or
+  // adding one): the window comes forward, as the shell that would start the call isn't there to hear it.
+  const shellShown = useRef(false)
+  useEffect(
+    () =>
+      window.conduit.onMenu(action => {
+        if (action === 'live-call' && !shellShown.current) window.conduit.window.show()
+      }),
+    []
+  )
   if (!status) return <div className="app" />
   const signedOut = status.phase === 'signed-out' || (status.phase === 'failed' && !status.url)
   // The open window: everything but the lock, sign-in and dashboard pick, which keep the brand in the title bar.
@@ -350,6 +360,13 @@ export function App() {
         })
       : null
   }
+  shellShown.current =
+    status.phase !== 'locked' &&
+    !editing &&
+    !adding &&
+    !(repairing && status.phase !== 'open') &&
+    !(status.phase === 'signed-out' && status.choosing && status.hosts?.length) &&
+    !(signedOut || status.phase === 'failed')
   return (
     <div className="app">
       <TitleBar {...brand} bare={inShell} />

@@ -12,6 +12,10 @@ const ROWS: Record<HotkeyName, { label: () => string; caption: () => string }> =
   }
 }
 
+/** The row listening for keys: one at a time, so a press picks only its keys and only it ends the listening. */
+let listening: HotkeyName | null = null
+const LISTEN_EVENT = 'conduit:hotkey-listening'
+
 /**
  * A global shortcut's row in Settings: the keys that open Quick Ask from
  * anywhere (desktop issue 406), or that start a Live call in a small window
@@ -71,13 +75,24 @@ export function HotkeySetting({ which }: { which: HotkeyName }) {
     }
     // The window hidden, minimized or left for another app stops listening, so the shortcuts' keys and the Mac's menu don't stay aside behind it.
     const onBlur = () => setRecording(false)
+    // Another row's Change: this one stops, leaving the listening to it.
+    const onOther = (event: Event) => {
+      if ((event as CustomEvent<HotkeyName>).detail !== which) setRecording(false)
+    }
+    listening = which
+    window.dispatchEvent(new CustomEvent<HotkeyName>(LISTEN_EVENT, { detail: which }))
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('blur', onBlur)
+    window.addEventListener(LISTEN_EVENT, onOther)
     window.conduit.setHotkeyRecording(true)
     return () => {
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('blur', onBlur)
-      window.conduit.setHotkeyRecording(false)
+      window.removeEventListener(LISTEN_EVENT, onOther)
+      if (listening === which) {
+        listening = null
+        window.conduit.setHotkeyRecording(false)
+      }
       // The keys were asked for again as listening ended: another app may have let go of them since, or taken them.
       void window.conduit.hotkey(which).then(next => mounted.current && setShortcut(next))
     }

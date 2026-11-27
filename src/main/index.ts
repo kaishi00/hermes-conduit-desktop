@@ -343,6 +343,9 @@ const chatBrowserById = new Map<string, BrowserWindow>()
 /** The Live call window, and the id it's kept under now: its chat's once the call makes one (a reload's new chat too). */
 let callBrowser: BrowserWindow | null = null
 let callWindowId = LIVE_CALL_WINDOW_ID
+/** A call window closed mid-call: the longest it waits for its call to end, and the moment it gives the call's saves. */
+const CALL_CLOSE_CAP_MS = 5000
+const CALL_SAVE_GRACE_MS = 1500
 const chatWindows = new ChatWindowSet(
   (chat, onClosed) => {
     const window = createChatWindow(chat, onClosed)
@@ -671,9 +674,33 @@ function registerIpc(): void {
       ...(request.botChat === true ? { botChat: true } : {}),
       ...(call ? { call: true, fresh: true } : {})
     })
-    if (shown && call) {
-      callBrowser = chatBrowserById.get(LIVE_CALL_WINDOW_ID) ?? null
+    const opened = shown && call ? chatBrowserById.get(LIVE_CALL_WINDOW_ID) : undefined
+    if (opened) {
+      callBrowser = opened
       callWindowId = LIVE_CALL_WINDOW_ID
+      // Under whichever id its chat gave it by then.
+      opened.once('closed', () => {
+        if (chatBrowserById.get(callWindowId) === opened) chatBrowserById.delete(callWindowId)
+      })
+      // Closed mid-call (its close button, a sign-out, a switch): the page ends the call first, so it saves the
+      // call, files a Classic call's chat and lets go of its presence, as the call's End does; closing at once
+      // would drop the page before any of that ran. Hidden meanwhile, it closes once the call has ended, or
+      // after a few seconds.
+      opened.on('close', event => {
+        if (quitting || opened.isDestroyed() || windowCallIn !== opened.webContents) return
+        event.preventDefault()
+        opened.hide()
+        const close = () => {
+          if (!opened.isDestroyed()) opened.destroy()
+        }
+        const cap = setTimeout(close, CALL_CLOSE_CAP_MS)
+        afterWindowCall = () => {
+          clearTimeout(cap)
+          // The call's last saves are under way as it ends: a moment for them before the page goes.
+          setTimeout(close, CALL_SAVE_GRACE_MS)
+        }
+        opened.webContents.send(IPC.menu, 'end-call')
+      })
     }
     return shown
   })
@@ -790,6 +817,8 @@ function registerIpc(): void {
   // The Live call window's call, told to the main window: it keeps wake phrases quiet and asks before a switch
   // meanwhile, and a call it starts itself ends this one (it takes the microphone).
   let windowCallIn: Electron.WebContents | null = null
+  /** A call window closed mid-call waits on its call ending (see openChatWindow). */
+  let afterWindowCall: (() => void) | null = null
   const tellWindowCall = (calling: boolean) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.windowCall, calling)
   }
@@ -800,6 +829,9 @@ function registerIpc(): void {
     }
     windowCallIn = null
     tellWindowCall(false)
+    const after = afterWindowCall
+    afterWindowCall = null
+    after?.()
   }
   // A reload keeps the webContents, so `destroyed` doesn't fire: the old page's call ended with it.
   const reloaded = (navigation: { isMainFrame: boolean; isSameDocument: boolean }) => {
@@ -827,9 +859,6 @@ function registerIpc(): void {
     callWindowId = storedId
     if (chatBrowserById.get(was) === window) chatBrowserById.delete(was)
     chatBrowserById.set(storedId, window)
-    window.once('closed', () => {
-      if (chatBrowserById.get(storedId) === window) chatBrowserById.delete(storedId)
-    })
   })
   ipcMain.on(IPC.endWindowCall, () => {
     if (windowCallIn && !windowCallIn.isDestroyed()) windowCallIn.send(IPC.menu, 'end-call')

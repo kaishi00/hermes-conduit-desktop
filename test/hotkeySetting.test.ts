@@ -139,4 +139,26 @@ describe("Settings' global shortcut keys while they are picked", () => {
     await settle()
     expect(host.querySelector('[role="alert"]')?.textContent).toBe('Quick Ask already uses Alt+Space. Pick a different one.')
   })
+
+  it('listens in one row at a time, and the keys pressed go to the row that listens', async () => {
+    const path = '../src/renderer/src/components/HotkeySetting'
+    const { HotkeySetting } = (await import(/* @vite-ignore */ path)) as { HotkeySetting: (props: { which: HotkeyName }) => unknown }
+    act(() =>
+      root.render(createElement('dl', null, createElement(HotkeySetting as never, { which: 'quickAsk' }), createElement(HotkeySetting as never, { which: 'liveCall' })))
+    )
+    await settle()
+    const changes = () => [...host.querySelectorAll('button')].filter(b => b.textContent === 'Change')
+    act(() => changes()[0]!.click())
+    act(() => changes()[0]!.click())
+    await settle()
+    // Only the Live Call row listens now; the main process heard listening start twice and never stop.
+    expect(host.querySelectorAll('[role="status"]')).toHaveLength(1)
+    expect(host.querySelectorAll('dd')[1]!.textContent).toContain('Press a shortcut…')
+    expect(recording.mock.calls).toEqual([[true], [true]])
+    set.mockResolvedValue({ accelerator: 'Ctrl+Alt+L', registered: true, changed: true })
+    act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', code: 'KeyL', ctrlKey: true, altKey: true, cancelable: true })))
+    await settle()
+    expect(set).toHaveBeenCalledTimes(1)
+    expect(recording.mock.calls.at(-1)).toEqual([false])
+  })
 })

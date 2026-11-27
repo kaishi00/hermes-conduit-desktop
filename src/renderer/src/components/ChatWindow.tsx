@@ -652,7 +652,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
               <button
                 className="link"
                 onClick={openInMain}
-                disabled={calling}
+                // The call window's chat is made by its call's first request: until then there's no chat to open.
+                disabled={calling || (callWindow && !chat.storedId)}
                 title={calling ? t('End the call to open this chat in the main window') : t('Opens this chat in the main window and closes this one.')}
               >
                 {t('Open in Main Window')}
