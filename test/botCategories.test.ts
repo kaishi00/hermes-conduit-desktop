@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryFiler, categoryNamed, categoryNamesOf, categoryOf, categoryPatch, categorySections, cleanRoomCategories, editCategoryPatch, movingCategory, OTHER_KEY, refilingRooms, renamingCategory } from '../src/renderer/src/state/botCategories'
+import { categoryFiler, categoryNamed, categoryNamesOf, categoryOf, categoryPatch, categorySections, cleanRoomCategories, editCategoryPatch, movingCategory, OTHER_KEY, refileTiles, refilingRooms, renamingCategory } from '../src/renderer/src/state/botCategories'
 import { rosterFromProfiles } from '../src/renderer/src/state/bots'
 import { mergedMeta } from '../src/renderer/src/state/botEditor'
 
@@ -89,5 +89,18 @@ describe('bot categories', () => {
     expect(b.id).toBe(a.id)
     expect(far.id).not.toBe(a.id)
     expect(file('https://far', 'clients', [], undefined).id).toBe(far.id)
+  })
+})
+
+describe('refileTiles', () => {
+  const tile = (host: string, name: string, own: boolean) => ({ key: `${host}/${name}`, host, bot: { name } as never, own })
+  it("re-files this host's and live hosts' bots, shown or hidden, and leaves a reconnecting host out", () => {
+    const shown = [tile('a', 'mine', true), tile('b', 'far', false), tile('c', 'dialing', false)]
+    const hidden = [tile('a', 'tucked', true)]
+    const farHidden = (host: string) => [tile(host, 'hidden', false)]
+    const keys = refileTiles(shown, hidden, ['b', 'a'], farHidden, 'a').map(t => t.key)
+    expect(keys).toEqual(['a/mine', 'b/far', 'a/tucked', 'b/hidden'])
+    // A host with every bot hidden still counts once it's live.
+    expect(refileTiles([], [], ['d'], farHidden, 'a').map(t => t.key)).toEqual(['d/hidden'])
   })
 })
