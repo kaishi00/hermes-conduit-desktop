@@ -138,6 +138,8 @@ export function movingCategory(order: readonly string[], name: string, step: -1 
 
 /** The order with a renamed category in its old name's place. */
 export function renamingCategory(order: readonly string[], old: string, to: string): string[] {
+  // A name the order doesn't hold keeps the order as it is: one merged into an ordered name keeps that place.
+  if (!order.some(n => sameCategory(n, old))) return [...order]
   return order.flatMap(n => (sameCategory(n, old) ? [to] : sameCategory(n, to) ? [] : [n]))
 }
 

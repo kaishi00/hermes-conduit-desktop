@@ -54,6 +54,7 @@ describe('bot categories', () => {
     expect(movingCategory([], 'Home', 1, shown)).toEqual(['Business', 'Home', 'Clients'])
     expect(movingCategory([], 'Home', -1, shown)).toEqual([])
     expect(renamingCategory(shown, 'business', 'Work')).toEqual(['Home', 'Work', 'Clients'])
+    expect(renamingCategory(['Business', 'Home'], 'Personal', 'business')).toEqual(['Business', 'Home'])
   })
 
   it("writes Edit Bot's Category only when it changed, keeping a host's id", () => {

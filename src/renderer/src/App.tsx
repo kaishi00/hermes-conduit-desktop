@@ -166,6 +166,7 @@ import { AskDashboardSetting, DashboardChoice } from './components/AskDashboard'
 import { CombineDashboardsSetting, HostBadgeMark } from './components/CombinedDashboards'
 import {
   hostBadge,
+  keptHiddenBots,
   keptStateLabel,
   showProfileAfterSwitch,
   type HostBadge,
@@ -1912,7 +1913,7 @@ function Shell({
               if (!outcome.ok) throw new Error(outcome.error)
               return outcome.result
             }
-        const among = tile.own ? own : otherBots.filter(o => o.host === tile.host).map(o => o.bot)
+        const among = tile.own ? own : [...otherBots.filter(o => o.host === tile.host), ...keptHiddenBots(tile.host)].map(o => o.bot)
         const category = name ? file(tile.own ? '' : tile.host, name, among, tile.bot.category) : null
         try {
           if (!(await writeMeta(rpc, tile.bot, categoryPatch(category)))) problem ??= t('Couldn’t save that change. Try again.')
