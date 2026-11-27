@@ -78,7 +78,7 @@ describe('what Hermes waits on', () => {
           device: 'Conduit for Mac',
           app_version: '0.1.0',
           results: [{ id: 'done', outcome: 'confirmed', via: 'tap' }],
-          features: ['room-asks', 'link-asks', 'room-work']
+          features: ['room-asks', 'link-asks', 'room-work', 'pc-asks']
         }
       ]
     ])

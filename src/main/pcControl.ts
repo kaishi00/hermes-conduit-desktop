@@ -2,8 +2,10 @@
  * Control from Hermes: a bot, wherever its Hermes runs, drives this computer
  * through the plugin's conduit_user_computer tool. The renderer asks each
  * allowed bot's plugin for work (state/pcControl.ts) and hands each action
- * here; this asks the user first when the plugin says the chat isn't allowed
- * yet, runs it with the driver (pcExecutor.ts) and shows the control bar.
+ * here, after asking the user when the plugin says the chat isn't allowed
+ * yet (askPc; the renderer also follows the same ask on the phone and closes
+ * this one when the phone answers first), runs it with the driver
+ * (pcExecutor.ts) and shows the control bar.
  *
  * The user stays in charge (Eric 2026-11-27): off until turned on, only the
  * bots picked in Settings, one ask per chat, and while a bot drives, a bar
@@ -36,8 +38,8 @@ let bar: BrowserWindow | null = null
 let barTimer: ReturnType<typeof setTimeout> | null = null
 /** Whether the bar holds the Stop keys, so hiding it never drops another shortcut's. */
 let ownKeys = false
-/** Asks already on screen, by chat, so a burst of actions asks once. */
-const asking = new Map<string, Promise<boolean>>()
+/** Asks already on screen, by chat, so a burst of actions asks once, and how to take each away. */
+const asking = new Map<string, { shown: Promise<'allowed' | 'denied' | 'closed'>; close: AbortController }>()
 
 const platform = (): PcControlState['platform'] => (process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'windows' : 'linux')
 
@@ -123,11 +125,11 @@ export function deletePcDriver(): PcControlState {
   return pcControlState()
 }
 
-/** Asks the user whether this chat may drive the computer: Allow or Don't Allow. */
-function ask(request: PcRequest): Promise<boolean> {
+/** Asks the user whether this chat may drive the computer: Allow or Don't Allow; 'closed' once closePcAsk took it away. */
+export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'closed'> {
   const key = request.session
   const open = asking.get(key)
-  if (open) return open
+  if (open) return open.shown
   const detail = [
     request.chat ? t('Chat: {chat}', { chat: request.chat }) : '',
     request.takes_over ? t('This takes over from “{chat}”.', { chat: request.takes_over }) : '',
@@ -135,6 +137,7 @@ function ask(request: PcRequest): Promise<boolean> {
   ]
     .filter(Boolean)
     .join('\n\n')
+  const close = new AbortController()
   const shown = dialog
     .showMessageBox({
       type: 'question',
@@ -144,26 +147,29 @@ function ask(request: PcRequest): Promise<boolean> {
       buttons: [t('Allow'), t('Don’t Allow')],
       defaultId: 1,
       cancelId: 1,
-      noLink: true
+      noLink: true,
+      signal: close.signal
     })
-    .then(answer => answer.response === 0)
+    .then(answer => (close.signal.aborted ? 'closed' : answer.response === 0 ? 'allowed' : 'denied') as 'allowed' | 'denied' | 'closed')
+    .catch(() => (close.signal.aborted ? 'closed' : 'denied') as 'closed' | 'denied')
     .finally(() => asking.delete(key))
-  asking.set(key, shown)
+  asking.set(key, { shown, close })
   return shown
+}
+
+/** The phone answered a chat's ask first: its dialog goes. */
+export function closePcAsk(session: string) {
+  asking.get(session)?.close.abort()
 }
 
 const stopLabel = () => (process.platform === 'darwin' ? '⌘⌥⇧S' : 'Ctrl+Alt+Shift+S')
 
-/** Runs one action the plugin handed over, asking first when it says so. */
+/** Runs one action the plugin handed over. The renderer asked first (askPc, and the phone) when it needed asking. */
 export async function runPcRequest(request: PcRequest): Promise<Record<string, unknown>> {
   const settings = pcControlSettings()
   if (!settings.on || !settings.bots.includes(request.profile)) return { ok: false, code: 'off' }
   if (!driverPath()) return { ok: false, code: 'unavailable', message: 'The driver isn’t downloaded on this computer yet.' }
-  let grant: 'allowed' | undefined
-  if (request.needs_ok) {
-    if (!(await ask(request))) return { ok: false, grant: 'denied' }
-    grant = 'allowed'
-  }
+  const grant: 'allowed' | undefined = request.needs_ok ? 'allowed' : undefined
   showBar(request.bot, request.chat)
   try {
     executor ??= new Executor(await driver())

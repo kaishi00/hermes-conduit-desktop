@@ -74,7 +74,7 @@ import { applyAppIcon, watchNewWindows } from './appIcon'
 import { rebuildMenu } from './menuGate'
 import { watchEditMenu } from './editMenu'
 import { launchedAtLogin, loginItemState, openStartupSettings, setLoginItem } from './loginItem'
-import { deletePcDriver, initPcControl, installPcDriver, pcControlState, resumePcDriverInstall, runPcRequest, setPcControl, stopControl } from './pcControl'
+import { askPc, closePcAsk, deletePcDriver, initPcControl, installPcDriver, pcControlState, resumePcDriverInstall, runPcRequest, setPcControl, stopControl } from './pcControl'
 import {
   appIconChoice,
   askHostAtLaunch,
@@ -650,6 +650,13 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pcControlInstall, event => (fromMain(event) ? installPcDriver() : null))
   ipcMain.handle(IPC.pcControlDelete, event => (fromMain(event) ? deletePcDriver() : null))
   ipcMain.handle(IPC.pcControlRun, (event, request: PcRequest) => (fromMain(event) ? runPcRequest(request) : refused))
+  ipcMain.handle(IPC.pcControlAsk, (event, request: PcRequest) => (fromMain(event) ? askPc(request) : 'denied'))
+  ipcMain.on(IPC.pcControlCloseAsk, (event, session: unknown) => {
+    if (fromMain(event) && typeof session === 'string') closePcAsk(session)
+  })
+  ipcMain.on(IPC.pcControlStoppedElsewhere, event => {
+    if (fromMain(event)) stopControl(false)
+  })
   // Stop stays open to every window: stopping is always safe.
   ipcMain.on(IPC.pcControlStop, () => stopControl())
   resumePcDriverInstall()

@@ -3,6 +3,7 @@ import { gateway } from '../gateway'
 import { installationId } from './pinnedOrder'
 import { PRESENT_CAPABILITY, answerResult, exchange, isExpired, localResults, withResult, type ConfirmOutcome, type PresentedConfirm } from './presented'
 import { everyWhileVisible } from './visibility'
+import { usePcControlState } from './pcControl'
 
 /** A confirmation and the profile whose Hermes waits on it. */
 export interface WaitingConfirm {
@@ -74,6 +75,10 @@ export function usePresented(connected: boolean, host: string, capabilities: rea
   )
 
   const now = Date.now() / 1000
-  const list: WaitingConfirm[] = Object.entries(waiting).flatMap(([profile, prompts]) => prompts.filter(p => !isExpired(p, now)).map(prompt => ({ profile, prompt })))
+  // This computer's own ask is its dialog (Control from Hermes); another computer's is answered here.
+  const computer = usePcControlState()?.id
+  const list: WaitingConfirm[] = Object.entries(waiting).flatMap(([profile, prompts]) =>
+    prompts.filter(p => !isExpired(p, now) && !(p.pc && computer && p.pc.computer === computer)).map(prompt => ({ profile, prompt }))
+  )
   return { served, waiting: served && connected ? list : [], answer }
 }

@@ -2,10 +2,14 @@
  * Control from Hermes, the asking side: while it's on, each allowed bot's
  * plugin (notifier `pc-control`) is asked for work on a long poll
  * (`GET /pc/next`, held open up to 25 seconds), each action goes to the main
- * process to run (main/pcControl.ts, which asks first when the chat isn't
- * allowed yet), and the answer goes back on `POST /pc/result`. Stop tells
- * every allowed bot's plugin, and a bot taken off the list (or the feature
- * turned off) tells its plugin this computer no longer offers control.
+ * process to run (main/pcControl.ts), and the answer goes back on
+ * `POST /pc/result`. A chat not allowed yet is asked first: the dialog here
+ * and, from plugin 0.204, the same ask on the phone (`ask`), which the dialog
+ * follows on `GET /pc/ask` and answers on `POST /pc/ask`; the first answer
+ * counts. Stop tells every allowed bot's plugin, Stop pressed elsewhere
+ * (`stopped` on /pc/next) takes the bar away, and a bot taken off the list
+ * (or the feature turned off) tells its plugin this computer no longer
+ * offers control.
  */
 import { useEffect, useRef, useState } from 'react'
 import type { PcControlState, PcRequest } from '../../../shared/ipc'
@@ -43,11 +47,63 @@ export function requestsFrom(body: unknown, profile: string, bot: string): PcReq
         args: r.args && typeof r.args === 'object' ? (r.args as Record<string, unknown>) : {},
         needs_ok: r.needs_ok !== false,
         ...(str(r.takes_over) ? { takes_over: str(r.takes_over) } : {}),
+        ...(str(r.ask) ? { ask: str(r.ask) } : {}),
         bot,
         profile
       }
     ]
   })
+}
+
+type AskAnswer = 'allowed' | 'denied' | 'closed' | 'waiting' | 'gone'
+const ASK_POLL_MS = 1_000
+const askAnswer = (body: unknown): AskAnswer => {
+  const status = str(((body ?? {}) as { status?: unknown }).status)
+  return status === 'allowed' || status === 'denied' || status === 'closed' || status === 'waiting' ? status : 'gone'
+}
+
+export interface AskSide {
+  /** The dialog on this computer: 'closed' once close() took it away. */
+  local: (request: PcRequest) => Promise<'allowed' | 'denied' | 'closed'>
+  close: (session: string) => void
+  /** The phone's copy, as it stands. */
+  read: (request: PcRequest) => Promise<AskAnswer>
+  /** This computer's answer to the phone's copy: the one that stands. */
+  settle: (request: PcRequest, answer: 'allowed' | 'denied') => Promise<AskAnswer>
+  wait: (ms: number) => Promise<void>
+}
+
+/**
+ * Whether the request's chat may drive this computer: the dialog here, and
+ * the phone's copy of the ask when the plugin made one. Whichever answers
+ * first counts: the phone's answer closes the dialog, and the dialog's goes
+ * to the plugin, which says whether the phone got there first. An ask that
+ * ran out or was taken back is a no.
+ */
+export async function askEverywhere(request: PcRequest, side: AskSide): Promise<boolean> {
+  const local = side.local(request)
+  if (!request.ask) return (await local) === 'allowed'
+  let settled = false
+  const phone = (async (): Promise<AskAnswer> => {
+    while (!settled) {
+      await side.wait(ASK_POLL_MS)
+      if (settled) break
+      const now = await side.read(request).catch((): AskAnswer => 'waiting')
+      // An older plugin without the route, or one that forgot the ask: the dialog alone decides.
+      if (now === 'gone') return new Promise<AskAnswer>(() => undefined)
+      if (now !== 'waiting') return now
+    }
+    return 'waiting'
+  })()
+  const first = await Promise.race([local.then(answer => ({ from: 'here' as const, answer })), phone.then(answer => ({ from: 'phone' as const, answer }))])
+  settled = true
+  if (first.from === 'phone') {
+    side.close(request.session)
+    return first.answer === 'allowed'
+  }
+  if (first.answer === 'closed') return false
+  const stands = await side.settle(request, first.answer).catch((): AskAnswer => first.answer)
+  return stands === 'gone' || stands === 'waiting' ? first.answer === 'allowed' : stands === 'allowed'
 }
 
 /** The bots that may ask: picked in Settings, and still bots on this dashboard. */
@@ -67,6 +123,14 @@ export function usePcControlState(): PcControlState | null {
   }, [])
   return state
 }
+
+const askSide = (profile: string, computer: string): AskSide => ({
+  local: request => window.conduit.pcControl.ask(request),
+  close: session => window.conduit.pcControl.closeAsk(session),
+  read: async request => askAnswer(await gateway.http('GET', pcPath('/ask', profile, { computer, id: request.ask ?? '' }), undefined, 10_000)),
+  settle: async (request, answer) => askAnswer(await gateway.http('POST', pcPath('/ask', profile), { computer, id: request.ask, answer }, 10_000)),
+  wait: ms => new Promise(resolve => setTimeout(resolve, ms))
+})
 
 /** Asks each allowed bot's plugin for work while connected. */
 export function usePcControl(connected: boolean, bots: readonly { name: string; title: string }[], state: PcControlState | null) {
@@ -94,6 +158,8 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
             (PC_WAIT_S + 10) * 1000
           )
           requests = requestsFrom(body, profile, titles.current.get(profile) ?? profile)
+          // Stop pressed elsewhere (the phone): the bar goes before anything new runs.
+          if ((body as { stopped?: unknown } | null)?.stopped === true) window.conduit.pcControl.stoppedElsewhere()
         } catch {
           await new Promise(resolve => setTimeout(resolve, RETRY_MS))
           continue
@@ -102,7 +168,8 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
           if (!live) return
           let result: Record<string, unknown>
           try {
-            result = await window.conduit.pcControl.run(request)
+            const allowed = !request.needs_ok || (await askEverywhere(request, askSide(profile, state.id)))
+            result = allowed ? await window.conduit.pcControl.run(request) : { ok: false, grant: 'denied' }
           } catch (error) {
             result = { ok: false, code: 'failed', message: String(error) }
           }

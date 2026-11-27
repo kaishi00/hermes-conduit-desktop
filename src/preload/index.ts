@@ -104,7 +104,10 @@ const api: ConduitApi = {
     set: change => ipcRenderer.invoke(IPC.pcControlSet, change),
     install: () => ipcRenderer.invoke(IPC.pcControlInstall),
     deleteDriver: () => ipcRenderer.invoke(IPC.pcControlDelete),
+    ask: request => ipcRenderer.invoke(IPC.pcControlAsk, request),
+    closeAsk: session => ipcRenderer.send(IPC.pcControlCloseAsk, session),
     run: request => ipcRenderer.invoke(IPC.pcControlRun, request),
+    stoppedElsewhere: () => ipcRenderer.send(IPC.pcControlStoppedElsewhere),
     stop: () => ipcRenderer.send(IPC.pcControlStop),
     onState: listener => listen(IPC.pcControlChanged, listener),
     onStopped: listener => listen<void>(IPC.pcControlStopped, () => listener())
