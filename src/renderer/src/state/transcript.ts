@@ -7,6 +7,7 @@ import { cleanUserText, type Attachment } from './text'
 import { isPlanTool, parsePlan, type Plan } from './plan'
 import { t } from '../../../shared/i18n'
 import { sideAgentNote } from './slash'
+import { newNoteKey } from './chatNotes'
 import { isQuestion } from './stepSummaries'
 import { SHOW_TOOL, boardFrom, type Board } from './boards'
 import { appliedOver, connectionFrom, type ConnectionCard } from './connections'
@@ -785,7 +786,8 @@ export function openConnection(state: TranscriptState): ConnectionCard | null {
 
 /** A command's output or a note, after what's there (a live reply's words stay above it). */
 export function addOutput(state: TranscriptState, output: { command?: string; text: string; format: OutputItem['format'] }): TranscriptState {
-  return { ...state, items: [...seal(state.items), { kind: 'output', key: nextKey('o'), ...output }] }
+  // A key no other launch gives, as the chat keeps its notes across them (chatNotes.ts).
+  return { ...state, items: [...seal(state.items), { kind: 'output', key: newNoteKey(), ...output }] }
 }
 
 export function addNotice(state: TranscriptState, text: string, tone: NoticeItem['tone'] = 'info'): TranscriptState {
