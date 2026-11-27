@@ -98,7 +98,9 @@ export function installDriver(onProgress?: (fraction: number) => void): Promise<
     const archive = join(target, artifact.file)
     writeFileSync(archive, bytes)
     // tar unpacks both: Windows 10 and later ship bsdtar, which reads zips.
-    await run('tar', ['-xf', archive, '-C', target])
+    // Windows' own tar by its path: a PATH with Git first finds GNU tar, which can't read zips (Asuka).
+    const tar = process.platform === 'win32' ? join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar'
+    await run(tar, ['-xf', archive, '-C', target])
     rmSync(archive, { force: true })
     const path = driverPath()
     if (!path) throw new Error('unpack')

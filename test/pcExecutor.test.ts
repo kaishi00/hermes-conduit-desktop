@@ -61,9 +61,22 @@ describe('pcExecutor', () => {
     await run.run('chat-1', { action: 'click', args: { element: 1 } })
     expect(fake.calls.at(-1)).toEqual({ name: 'click', args: { element_token: 's00000007:1', button: 'left' } })
     await run.run('chat-1', { action: 'type', args: { text: 'hello' } })
-    expect(fake.calls.at(-1)).toEqual({ name: 'type_text', args: { pid: 3, window_id: 30, text: 'hello' } })
+    expect(fake.calls.slice(-2)).toEqual([
+      { name: 'bring_to_front', args: { pid: 3, window_id: 30 } },
+      { name: 'type_text', args: { pid: 3, window_id: 30, text: 'hello', delivery_mode: 'foreground' } }
+    ])
     await run.run('chat-1', { action: 'key', args: { keys: 'ctrl+s' } })
-    expect(fake.calls.at(-1)).toEqual({ name: 'hotkey', args: { pid: 3, window_id: 30, keys: ['ctrl', 's'] } })
+    expect(fake.calls.at(-1)).toEqual({ name: 'hotkey', args: { pid: 3, window_id: 30, keys: ['ctrl', 's'], delivery_mode: 'foreground' } })
+  })
+
+  it('types nothing when the window can’t come to the front', async () => {
+    const fake = new FakeDriver()
+    const real = fake.callTool.bind(fake)
+    fake.callTool = async (name, args) => (name === 'bring_to_front' ? (fake.calls.push({ name, args }), { isError: true }) : real(name, args))
+    const run = new Executor(fake)
+    await run.run('chat-1', { action: 'capture', args: { app: 'notepad' } })
+    expect(await run.run('chat-1', { action: 'type', args: { text: 'hello' } })).toMatchObject({ ok: false, code: 'not_in_front' })
+    expect(fake.calls.some(c => c.name === 'type_text')).toBe(false)
   })
 
   it('keeps each chat’s window apart, and asks for a capture first', async () => {

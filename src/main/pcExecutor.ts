@@ -221,15 +221,20 @@ export class Executor {
         result = await this.client.callTool('scroll', { ...at, direction: str(a.direction), amount: Math.max(1, Math.min(50, num(a.amount) ?? 3)) })
         break
       }
-      case 'type':
-        result = await this.client.callTool('type_text', { ...where(target), text: str(a.text) })
+      case 'type': {
+        const front = await this.toFront(target)
+        if (front) return front
+        result = await this.client.callTool('type_text', { ...where(target), text: str(a.text), delivery_mode: 'foreground' })
         break
+      }
       case 'key': {
         const { key, modifiers: held } = parseKeys(str(a.keys))
         if (!key) return fail(`Couldn't read the key in ${JSON.stringify(str(a.keys))}.`)
+        const front = await this.toFront(target)
+        if (front) return front
         result = held.length
-          ? await this.client.callTool('hotkey', { ...where(target), keys: [...held, key] })
-          : await this.client.callTool('press_key', { ...where(target), key })
+          ? await this.client.callTool('hotkey', { ...where(target), keys: [...held, key], delivery_mode: 'foreground' })
+          : await this.client.callTool('press_key', { ...where(target), key, delivery_mode: 'foreground' })
         break
       }
       case 'set_value': {
@@ -241,6 +246,24 @@ export class Executor {
         return fail(`This computer can't do ${request.action}.`, 'unsupported_action')
     }
     return this.after(session, done(result, 'Done.'), a)
+  }
+
+  /**
+   * Keys go to the window in front, the way the user's own typing would. The driver's
+   * background delivery posts them to a window handle instead, and in an app with tabs
+   * (Notepad) that can be a tab the user isn't looking at, unseen by the next capture
+   * (Asuka, 2026-11-27). So the target comes to the front first, and if it can't, nothing
+   * is typed: keys would land in whatever window is in front instead.
+   */
+  private async toFront(target: Target): Promise<PcResult | null> {
+    if (target.screen) return null
+    try {
+      const focused = await this.client.callTool('bring_to_front', { pid: target.pid, window_id: target.windowId })
+      if (!focused.isError) return null
+    } catch {
+      // Falls through to the refusal.
+    }
+    return fail(`Couldn't bring ${target.app} to the front, so typing could land in another window. Use set_value on the field instead, or capture again.`, 'not_in_front')
   }
 
   /** capture_after: the action's answer with a fresh capture of the same window. */
