@@ -187,6 +187,13 @@ describe('text tags in a reply', () => {
     expect(draw('<details title="</summary>"> Click <b>here</b>\n</details>')).not.toContain('reply-fold')
   })
 
+  it('reads a close with a code span after it, or one inside a code span, the same in both passes (hermes-conduit#3349)', () => {
+    const shown = draw('<details> Tap for details.\nThe details.\n</details> `note`\n\nMore prose.')
+    expect(shown).not.toContain('reply-fold')
+    expect(shown).toContain('More prose.')
+    expect(draw('<details><summary>S</summary>Wrap it in `</details>` to close.\nMore.\n</details>')).toContain('<details class="reply-fold"><summary>S</summary>')
+  })
+
   it('folds a one-line fold while its </details> is still being written', () => {
     expect(draw('<details><summary>S</summary>Body so far')).toBe('<details class="reply-fold"><summary>S</summary><p>Body so far</p></details>')
     expect(draw('<details><summary>S</summary>Click <b>here</b>')).toContain('<details class="reply-fold"><summary>S</summary>')

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { forgetTranscriptHosts, forgetTranscripts, keepTranscript, keptOlderAt, keptTranscript, TRANSCRIPT_CACHE_SIZE } from '../src/renderer/src/state/transcriptCache'
+import { forgetTranscriptHosts, forgetTranscripts, hasKeptTranscript, keepReadAhead, keepTranscript, keptOlderAt, keptTranscript, TRANSCRIPT_CACHE_SIZE } from '../src/renderer/src/state/transcriptCache'
 import type { TranscriptState } from '../src/renderer/src/state/transcript'
 
 const state = (text: string, extra: Partial<TranscriptState> = {}): TranscriptState => ({
@@ -40,9 +40,22 @@ describe('the transcripts kept for coming back', () => {
     const kept = state('kept')
     keepTranscript('s1', undefined, kept, A)
     keepTranscript('s1', undefined, state('gone'), B)
+    keepReadAhead('s2', undefined, state('ahead kept'), A)
+    keepReadAhead('s2', undefined, state('ahead gone'), B)
     forgetTranscriptHosts([A])
     expect(keptTranscript('s1', undefined, A)).toBe(kept)
     expect(keptTranscript('s1', undefined, B)).toBeNull()
+    expect(hasKeptTranscript('s2', undefined, A)).toBe(true)
+    expect(hasKeptTranscript('s2', undefined, B)).toBe(false)
+  })
+
+  it('moves a read-ahead copy to the chats left when it is opened (#634)', () => {
+    const early = state('early')
+    keepReadAhead('s1', undefined, early, A)
+    expect(keptTranscript('s1', undefined, A)).toBe(early)
+    // Kept as a chat opened now, so more reads ahead can't push it out.
+    for (let i = 0; i < 10; i++) keepReadAhead(`r${i}`, undefined, state(`r${i}`), A)
+    expect(keptTranscript('s1', undefined, A)).toBe(early)
   })
 
   it('gives back a chat as it was left, per profile', () => {

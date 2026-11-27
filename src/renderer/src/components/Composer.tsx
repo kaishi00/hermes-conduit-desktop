@@ -15,7 +15,6 @@ import { insertingMention, mentionCandidates, mentionQueryAt, mentionTag } from 
 import type { Bot } from '../state/bots'
 import { carriesReply, excerpt, insertQuote, replyEnvelope, type QuoteRequest, type ReplyReference } from '../state/quote'
 import { ask } from '../state/dialogs'
-import { createPortal } from 'react-dom'
 import { FileViewer } from './FileViewer'
 
 /** The last folder of a path, the way the phone's chip shows it. */
@@ -718,7 +717,8 @@ export function Composer({
             {staging ? <span className="staged-chip busy">{t('Attaching…')}</span> : null}
           </div>
         ) : null}
-        {viewing ? createPortal(<FileViewer file={{ staged: viewing }} name={displayName(viewing.name)} onClose={closeViewer} />, document.body) : null}
+        {/* FileViewer portals itself (OverWindow). */}
+        {viewing ? <FileViewer file={{ staged: viewing }} name={displayName(viewing.name)} onClose={closeViewer} /> : null}
         {picked ? (
           <div className="slash-suggestions" role="listbox" aria-label={t('Slash commands')}>
             {suggestions.map((command, i) => (

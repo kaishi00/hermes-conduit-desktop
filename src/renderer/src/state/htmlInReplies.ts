@@ -262,6 +262,8 @@ const FOLD_LINE = /^ {0,3}(?:<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summar
 const FOLD_FENCE = /^ {0,3}(`{3,}|~{3,})/
 const FOLD_OPENING_START = /^ {0,3}(<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summary>.*?<\/summary>)?)(.*)$/i
 const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
+/** A line without its code spans and comments: a `</details>` in one closes nothing. */
+const withoutCode = (line: string) => line.replace(/(`+)(?:(?!\1).)*?\1/g, '').replace(/<!--.*?-->/g, '')
 
 /**
  * A fold's own lines (`<details>`, its `<summary>`, `</details>`) set apart by blank lines, so Markdown reads
@@ -295,8 +297,10 @@ export function withFoldsApart(text: string): string {
     closedAfter[index] = closes > 0
     if (inCode[index]) continue
     // Only a `</details>` ending its line closes a fold, as the chat reads it (one per line, nothing after it, not
-    // even a comment); one in prose or in a code span doesn't.
-    if (FOLD_CLOSING_END.test(lines[index]!.replace(/(`+)(?:(?!\1).)*?\1/g, ''))) closes++
+    // even a comment or a code span); one in prose doesn't. The line as written, as the pass below reads it, so a
+    // fold this counts as closed is closed there too (hermes-conduit#3349). A `</details>` ending the line can't be
+    // inside a code span, which would end after it.
+    if (FOLD_CLOSING_END.test(lines[index]!)) closes++
     if (FOLD_OPENING_START.test(lines[index]!)) closes = Math.max(0, closes - 1)
   }
   for (const [index, line] of lines.entries()) {
@@ -325,7 +329,8 @@ export function withFoldsApart(text: string): string {
         ? false
         : FOLD_CLOSING_END.test(body) ||
           // A close with words after it on the line stays as written: folded, they'd hide the rest of the reply.
-          (!/<\/details\s*>/i.test(body) && (withSummary || (closedAfter[index] && !/<[a-zA-Z/!]/.test(body))))
+          // One in a code span or a comment closes nothing, so it doesn't count (hermes-conduit#3349).
+          (!/<\/details\s*>/i.test(withoutCode(body)) && (withSummary || (closedAfter[index] && !/<[a-zA-Z/!]/.test(body))))
       if (!isFold) opening = null
     }
     let rest = line

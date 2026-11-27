@@ -13,6 +13,8 @@ export interface ChatPlace {
   start: number
   anchor?: string
   top: number
+  /** The text size `top` was read at: coming back at another, it scales with the rows (#641). */
+  scale?: number
 }
 
 /** Places kept at once; the oldest goes first. */

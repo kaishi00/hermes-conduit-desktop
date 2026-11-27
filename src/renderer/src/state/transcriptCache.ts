@@ -26,7 +26,7 @@ const ahead = new Map<string, TranscriptState>()
 const keptOlder = new Map<string, OlderAt>()
 
 /** Each dashboard's own, so switching between combined dashboards draws the chat it opens at once. */
-const keyOf = (storedId: string, profile: string | undefined, host = '') => `${host}\n${profile || 'default'}\n${storedId}`
+export const keyOf = (storedId: string, profile: string | undefined, host = '') => `${host}\n${profile || 'default'}\n${storedId}`
 
 export function settled(state: TranscriptState): boolean {
   return !state.running && !state.held?.length && state.items.length > 0 && !state.items.some(i => i.kind === 'user' && i.pending)
@@ -96,7 +96,13 @@ export function hasKeptTranscript(storedId: string, profile: string | undefined,
 export function keptTranscript(storedId: string, profile: string | undefined, host = ''): TranscriptState | null {
   const key = keyOf(storedId, profile, host)
   const state = kept.get(key)
-  if (!state) return ahead.get(key) ?? null
+  if (!state) {
+    const early = ahead.get(key)
+    if (!early) return null
+    // Opening it moves it to `kept`, so it gives back its read-ahead slot (#634).
+    keepTranscript(storedId, profile, early, host)
+    return kept.get(key) ?? null
+  }
   kept.delete(key)
   kept.set(key, state)
   return state

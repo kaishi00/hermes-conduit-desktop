@@ -55,7 +55,7 @@ import {
 import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
 import { absolutePath, pathForDraft } from './state/workspace'
 import { Workbench } from './components/Workbench'
-import { BENCH_COLUMN, benchPlace, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
+import { BENCH_COLUMN, benchHold, benchPlace, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
 import { FileLinks } from './components/Markdown'
 import { WorkLinks, type WorkLinkActions } from './components/WorkLinkCard'
 import { readChatAhead } from './state/readAhead'
@@ -214,7 +214,7 @@ import { READ_ALOUD_SPEEDS, readAloudSpeed, setReadAloudSpeed, speedLabel } from
 import { useCommands } from './state/useCommands'
 import { authorityMutation, busyOnGateway, moveChat, mutateSession } from './state/chatActions'
 import { branchPlan } from './state/branch'
-import { ROOM_CHATS_CAPABILITY, wrapUpPrompt, type RoomChatAgent } from './state/roomChats'
+import { ROOM_CHATS_CAPABILITY, sameAsk, wrapUpPrompt, type PendingAsk, type RoomChatAgent } from './state/roomChats'
 import { openRoomChatHere } from './state/roomChatOpen'
 import { DockedRoomFrame } from './components/DockedRoom'
 import type { DockedRoomRequest } from '@shared/chatWindows'
@@ -741,9 +741,8 @@ function Shell({
   const lastBenchRoot = useRef<string | null>(null)
   const { root: benchRoot, waiting: benchWaiting } = benchPlace(chatFolder, loading, lastBenchRoot.current)
   const benchShown = section === 'chats' && !!benchRoot && benchOpen && !dockedChat
-  // Held through the open, even off the Chats screen, so coming back mid-open still finds the bench's place.
-  if (benchShown) lastBenchRoot.current = benchRoot
-  else if (!loading) lastBenchRoot.current = null
+  // Held through the open, even off the Chats screen, so coming back mid-open still finds the bench's place (benchHold).
+  lastBenchRoot.current = benchHold(benchRoot, benchShown, loading, lastBenchRoot.current)
   const showBench = useCallback((open: boolean) => {
     setBenchOpen(open)
     writeBenchOpen(open)
@@ -1185,7 +1184,9 @@ function Shell({
   }
   /** Open in New Tab, from a row's menu or a middle or ⌘/Ctrl click on it: the chat in a tab of its own beside the shown one. */
   const openRowInTab = (row: ChatRow) => {
-    if (chatWindowIds.includes(row.id)) {
+    // An ask waiting for this chat opens it in a tab, which can take it, as selectRow does (#621, #649's review).
+    const waits = pendingAsks.current.some(a => sameAsk(a, row.id, row.profile))
+    if (chatWindowIds.includes(row.id) && !waits) {
       void window.conduit.openChatWindow({ id: row.id, profile: row.profile, title: row.title })
       return
     }
@@ -1304,7 +1305,9 @@ function Shell({
   /** A row whose chat has a window of its own brings that window to the front; any other opens here. */
   const selectRow = useCallback(
     (row: ChatRow) => {
-      if (chatWindowIds.includes(row.id)) void window.conduit.openChatWindow({ id: row.id, profile: row.profile, title: row.title })
+      // An ask waiting for this chat (Wrap Up) needs it here: a window can't take it, as it can't take a draft (#621).
+      const waits = pendingAsks.current.some(a => sameAsk(a, row.id, row.profile))
+      if (chatWindowIds.includes(row.id) && !waits) void window.conduit.openChatWindow({ id: row.id, profile: row.profile, title: row.title })
       else setSelected({ id: row.id, profile: row.profile, title: row.title })
     },
     [chatWindowIds]
@@ -1734,17 +1737,26 @@ function Shell({
     },
     [roster]
   )
-  const pendingAsk = useRef<{ text: string; storedId: string | null; profile: string; resumed?: boolean } | null>(null)
+  // Asks waiting for their chat to open, one per chat: a bot's introduce and a room chat's Wrap Up no longer
+  // take each other's place (#621).
+  const pendingAsks = useRef<PendingAsk[]>([])
+  const askWhenOpen = useCallback((ask: PendingAsk) => {
+    pendingAsks.current = [...pendingAsks.current.filter(a => !sameAsk(a, ask.storedId, ask.profile)), ask]
+  }, [])
+  const dropAsk = (ask: PendingAsk) => {
+    pendingAsks.current = pendingAsks.current.filter(a => a !== ask)
+  }
   const askBot = useCallback(
     (bot: Bot, text: string) => {
-      pendingAsk.current = { text, storedId: bot.botChatId ?? null, profile: bot.name }
+      askWhenOpen({ text, storedId: bot.botChatId ?? null, profile: bot.name })
       openBot(bot)
     },
-    [openBot]
+    [openBot, askWhenOpen]
   )
   useEffect(() => {
-    const ask = pendingAsk.current
-    if (!ask || ask.profile !== selected.profile || ask.storedId !== selected.id) return
+    // The profile as rows name it: the default one may be left out or spelled in another case (#621).
+    const ask = pendingAsks.current.find(a => sameAsk(a, selected.id, selected.profile))
+    if (!ask) return
     if (ask.storedId) {
       // A Bot Chat waits until it has resumed (this render may still hold the chat open before it).
       if (loading) {
@@ -1752,12 +1764,12 @@ function Shell({
         return
       }
       if (error && ask.resumed) {
-        pendingAsk.current = null
+        dropAsk(ask)
         return
       }
       if (!chat.liveId || (chat.storedId !== ask.storedId && !ask.resumed)) return
     }
-    pendingAsk.current = null
+    dropAsk(ask)
     void onSend(ask.text)
   }, [selected, loading, error, chat.liveId, chat.storedId, onSend])
   const groupRooms = useRooms(connected, status.url ?? '')
@@ -2534,7 +2546,7 @@ function Shell({
       const at = roomChatNavigation.current
       const opened = await openRoomChatHere(room.roomId, room.name, agent.profile, status.sessionAuthority === true)
       // Wrap Up's ask goes once that chat is open, now or when they open it from the list.
-      if (wrapUp) pendingAsk.current = { text: wrapUpPrompt(), storedId: opened.chatId, profile: agent.profile }
+      if (wrapUp) askWhenOpen({ text: wrapUpPrompt(), storedId: opened.chatId, profile: agent.profile })
       // Moved on while it opened (a gone chat's replacement takes a while): it waits in the list, and
       // nothing is pulled over where they went (hermes-conduit #3323's viewport fence).
       if (roomChatNavigation.current !== at) {

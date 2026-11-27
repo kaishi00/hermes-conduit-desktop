@@ -101,13 +101,17 @@ describe('a jump to a row a window left out (desktop#291)', () => {
     drawn.setAttribute('data-key', 'a')
     container.append(drawn)
     const asked: string[] = []
+    let jumps = 0
     const off = registerRowOpener(container, key => {
       asked.push(key)
       return false
-    }, () => {})
+    }, () => {}, () => (jumps += 1))
     expect(rowElement(container, 'a')).toBe(drawn)
+    // A jump to a drawn row is still a jump: a pin still being read for gives way (#648).
+    expect(jumps).toBe(1)
     expect(rowElement(container, 'b')).toBeNull()
     expect(asked).toEqual(['b'])
+    expect(jumps).toBe(1)
     off()
   })
 })

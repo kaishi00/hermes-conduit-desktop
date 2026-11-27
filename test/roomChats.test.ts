@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatTitle, openRoomChat, parseChat, roomChatAgents, roomChatsClient, titleTaken, type RoomChat } from '../src/renderer/src/state/roomChats'
+import { chatTitle, openRoomChat, parseChat, roomChatAgents, roomChatsClient, sameAsk, titleTaken, type PendingAsk, type RoomChat } from '../src/renderer/src/state/roomChats'
 
 const steps = (over: Partial<Parameters<typeof openRoomChat>[0]> = {}, log: string[] = []) => ({
   chats: async (): Promise<RoomChat[]> => [],
@@ -88,5 +88,16 @@ describe('a room’s private chat with your agent', () => {
       ['PUT', '/api/plugins/conduit_push/rooms/chats', { room_id: 'r1', chat_id: 'c2' }]
     ])
     expect(parseChat({ room_id: 'r', chat_id: 'c', notes_seq: 'x' })).toEqual({ roomId: 'r', chatId: 'c', notesSeq: 0 })
+  })
+})
+
+describe('asks waiting for their chat to open (#621)', () => {
+  it('match their chat with the profile as rows name it', () => {
+    const wrapUp: PendingAsk = { text: 'notes', storedId: 's1', profile: 'default' }
+    expect(sameAsk(wrapUp, 's1', undefined)).toBe(true)
+    expect(sameAsk(wrapUp, 's1', 'Default')).toBe(true)
+    expect(sameAsk({ ...wrapUp, profile: 'Coder' }, 's1', 'coder')).toBe(true)
+    expect(sameAsk(wrapUp, 's2', 'default')).toBe(false)
+    expect(sameAsk(wrapUp, 's1', 'coder')).toBe(false)
   })
 })

@@ -7,7 +7,7 @@
  * when Chromium can draw it, else as a file. A picture that goes as it is
  * takes its type from its bytes and a name with that type's extension.
  */
-import { isPicture, pictureType, typedPicture, withPictureExtension, type StagedAttachment } from './attachments'
+import { isPicture, pictureExtension, pictureType, typedPicture, withPictureExtension, type StagedAttachment } from './attachments'
 
 const LONG_EDGE = 2048
 const JPEG_QUALITY = 0.85
@@ -66,7 +66,7 @@ export async function stageFile(file: File, id: string): Promise<StagedAttachmen
   if (!mime || mime === 'application/octet-stream') {
     mime = pictureType(new Uint8Array(await file.slice(0, 16).arrayBuffer())) ?? mime
   }
-  const name = file.name || (mime.startsWith('image/') ? withPictureExtension('image', mime.split('/')[1] ?? 'png') : 'file')
+  const name = file.name || (mime.startsWith('image/') ? withPictureExtension('image', pictureExtension(mime)) : 'file')
   if (mime.startsWith('image/') && mime !== 'image/svg+xml') {
     const provider = isPicture(mime)
     if (mime !== 'image/gif') {
