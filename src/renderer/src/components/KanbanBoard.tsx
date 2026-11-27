@@ -467,7 +467,8 @@ export function TaskPanel({
   onPatch,
   onComment,
   onDelete,
-  extra
+  extra,
+  pinned = false
 }: {
   id: string
   task: KanbanTask | null
@@ -484,6 +485,8 @@ export function TaskPanel({
   onDelete: () => Promise<void>
   /** More in the header, beside Close: a chat's task (desktop#593) offers Open in Tasks there. */
   extra?: ReactNode
+  /** `board` names the task's own board, never "whichever is current" (a chat's task, desktop#593): its attachments save without the task on a board shown. */
+  pinned?: boolean
 }) {
   const [detail, setDetail] = useState<KanbanTaskDetail | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
@@ -815,8 +818,8 @@ export function TaskPanel({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={saving !== null || !task}
-                  title={task ? undefined : t('This task is no longer on the board shown.')}
+                  disabled={saving !== null || (!task && !pinned)}
+                  title={task || pinned ? undefined : t('This task is no longer on the board shown.')}
                   onClick={() => void saveAttachment(attachment)}
                 >
                   {saving === attachment.id ? t('Saving…') : t('Save')}

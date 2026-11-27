@@ -6,6 +6,10 @@ import { chatTasksLabel, isBlockedTask, isOpenTask, type ChatTask } from '../sta
 import { boardPath, columnTitle, parseTaskDetail } from '../state/kanban'
 import { TaskPanel } from './KanbanBoard'
 import { Icon } from './icons'
+import { everyWhileVisible } from '../state/visibility'
+
+/** The open panel reads its task again this often while the window shows. */
+export const CHAT_TASK_PANEL_READ_MS = 15_000
 
 interface Props {
   tasks: ChatTask[]
@@ -140,10 +144,13 @@ function ChatTaskPanel({
     () => (bots ?? []).map(b => b.name).sort((a, b) => (bots?.find(x => x.name === a)?.title ?? a).localeCompare(bots?.find(x => x.name === b)?.title ?? b)),
     [bots]
   )
-  // The line's own reads (every 15 s while a task is open) read the panel again when the task moved on.
+  // No live stream here: the panel reads its task again when the line's reads (every 15 s while one is open) see it
+  // move on, and every 15 s on its own while it shows, so a worker's new summary, comment or result shows too.
+  const [tick, setTick] = useState(0)
+  useEffect(() => everyWhileVisible(() => setTick(n => n + 1), CHAT_TASK_PANEL_READ_MS), [])
   const revision = useRef(0)
   const seen = useRef('')
-  const moved = `${task.status}\n${task.assignee ?? ''}\n${task.error ?? ''}`
+  const moved = `${task.status}\n${task.assignee ?? ''}\n${task.error ?? ''}\n${tick}`
   if (seen.current !== moved) {
     seen.current = moved
     revision.current += 1
@@ -158,6 +165,7 @@ function ChatTaskPanel({
       botTitle={botTitle}
       load={load}
       board={task.board}
+      pinned
       touched={touched}
       onClose={onClose}
       onPatch={async fields => {
