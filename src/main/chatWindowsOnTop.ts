@@ -36,6 +36,6 @@ export function keepOnTop(key: string, on: boolean): void {
   try {
     writeFileAtomic(path(), JSON.stringify(next))
   } catch {
-    // Not saved: this window stays as chosen, and the next open forgets it.
+    // Not saved: the choice holds until Conduit quits, then it's forgotten.
   }
 }

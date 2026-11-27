@@ -163,7 +163,7 @@ export function ChatHeader({
           </button>
         ) : null}
         {pin ? (
-          <button className={`chat-head-toggle${pin.on ? ' on' : ''}`} aria-label={pin.label} aria-pressed={!!pin.on} title={pin.title ?? pin.label} onClick={pin.onClick}>
+          <button className={`chat-head-toggle${pin.on ? ' on' : ''}`} aria-label={pin.label} aria-pressed={!!pin.on} title={pin.title ?? pin.label} disabled={pin.disabled} onClick={pin.onClick}>
             <Icon name="pin" />
           </button>
         ) : null}
