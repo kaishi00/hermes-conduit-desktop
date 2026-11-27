@@ -12,7 +12,7 @@
  * on top of every window says who, with Stop and a hotkey. The bar is kept
  * out of screenshots, so the bot never sees it or clicks it.
  */
-import { BrowserWindow, dialog, globalShortcut, screen } from 'electron'
+import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { hostname } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { t } from '../shared/i18n'
@@ -127,37 +127,108 @@ export function deletePcDriver(): PcControlState {
   return pcControlState()
 }
 
-/** Asks the user whether this chat may drive the computer: Allow or Don't Allow; 'closed' once closePcAsk took it away. */
+const ASK_URL = 'conduit-ask://'
+const ASK_WIDTH = 440
+const ASK_HEIGHT = 220
+
+/**
+ * Asks the user whether this chat may drive the computer: Allow or Don't
+ * Allow; 'closed' once closePcAsk took it away. Conduit's own small window,
+ * on top of every other one and centered, since a system dialog with no
+ * window of its own could open behind the app the user was in (Asuka,
+ * 2026-11-27) and looked like any other prompt (Eric). Kept out of
+ * screenshots, as the bar is. Don't Allow has the focus, so a stray Enter
+ * never lets a bot in; Esc and closing it are a no.
+ */
 export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'closed'> {
   const key = request?.session
   if (typeof key !== 'string' || !key) return Promise.resolve('denied')
   const open = asking.get(key)
   if (open) return open.shown
-  const detail = [
-    request.chat ? t('Chat: {chat}', { chat: request.chat }) : '',
-    request.takes_over ? t('This takes over from “{chat}”.', { chat: request.takes_over }) : '',
-    t('It can see your screen, click and type until you press Stop ({keys}).', { keys: stopLabel() })
-  ]
-    .filter(Boolean)
-    .join('\n\n')
   const close = new AbortController()
-  const shown = dialog
-    .showMessageBox({
-      type: 'question',
-      title: t('Control from Hermes'),
-      message: t('Allow {bot} to control this computer?', { bot: request.bot }),
-      detail,
-      buttons: [t('Allow'), t('Don’t Allow')],
-      defaultId: 1,
-      cancelId: 1,
-      noLink: true,
-      signal: close.signal
+  const shown = new Promise<'allowed' | 'denied' | 'closed'>(resolve => {
+    let answered = false
+    const answer = (value: 'allowed' | 'denied' | 'closed') => {
+      if (answered) return
+      answered = true
+      resolve(value)
+      if (!win.isDestroyed()) win.destroy()
+    }
+    // The screen the user is on: the one under the cursor.
+    const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+    const win = new BrowserWindow({
+      width: ASK_WIDTH,
+      height: ASK_HEIGHT,
+      x: Math.round(area.x + (area.width - ASK_WIDTH) / 2),
+      y: Math.round(area.y + (area.height - ASK_HEIGHT) / 3),
+      frame: false,
+      transparent: true,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      alwaysOnTop: true,
+      show: false,
+      // The bar's title, so the bot's actions never pick this window (pcExecutor).
+      title: OWN_TITLES[0],
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false }
     })
-    .then(answer => (close.signal.aborted ? 'closed' : answer.response === 0 ? 'allowed' : 'denied') as 'allowed' | 'denied' | 'closed')
-    .catch(() => (close.signal.aborted ? 'closed' : 'denied') as 'closed' | 'denied')
-    .finally(() => asking.delete(key))
+    win.setAlwaysOnTop(true, 'screen-saver')
+    win.setContentProtection(true)
+    win.webContents.on('will-navigate', (event, url) => {
+      event.preventDefault()
+      if (url.startsWith(ASK_URL)) answer(url.startsWith(`${ASK_URL}allow`) ? 'allowed' : 'denied')
+    })
+    // Esc is Don't Allow, as closing is (the page runs no script).
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && input.key === 'Escape') {
+        event.preventDefault()
+        answer('denied')
+      }
+    })
+    win.on('closed', () => answer(close.signal.aborted ? 'closed' : 'denied'))
+    close.signal.addEventListener('abort', () => answer('closed'))
+    win.once('ready-to-show', () => {
+      if (win.isDestroyed()) return
+      win.show()
+      win.focus()
+      win.flashFrame(true)
+    })
+    void win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(askPage(request))).catch(() => answer('denied'))
+  }).finally(() => asking.delete(key))
   asking.set(key, { shown, close })
   return shown
+}
+
+const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+
+/** The ask's page, in Conduit's colors (theme.css) for the system's light or dark. */
+export function askPage(request: PcRequest): string {
+  const initial = esc((request.bot.trim()[0] ?? '?').toUpperCase())
+  const lines = [
+    request.chat ? `<p class="chat">${esc(t('Chat: {chat}', { chat: request.chat }))}</p>` : '',
+    request.takes_over ? `<p>${esc(t('This takes over from “{chat}”.', { chat: request.takes_over }))}</p>` : '',
+    `<p>${esc(t('It can see your screen, click and type until you press Stop ({keys}).', { keys: stopLabel() }))}</p>`
+  ].join('')
+  return `<!doctype html><meta charset="utf-8"><title>${OWN_TITLES[0]}</title><style>
+:root{color-scheme:dark;--card:#16181f;--line:rgba(255,255,255,.12);--text:#fff;--text-3:rgba(235,235,245,.6);--soft:rgba(255,255,255,.07);--accent:#e0ab47;--ink:#1a1408}
+@media (prefers-color-scheme: light){:root{color-scheme:light;--card:#fff;--line:rgba(0,0,0,.14);--text:#111318;--text-3:rgba(60,60,67,.65);--soft:rgba(0,0,0,.05)}}
+html,body{margin:0;height:100%;background:transparent;font:13px 'Segoe UI Variable','Segoe UI',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--text);-webkit-user-select:none;overflow:hidden}
+.card{box-sizing:border-box;height:calc(100% - 16px);margin:8px;padding:18px 20px 16px;border-radius:18px;background:var(--card);border:1px solid var(--line);box-shadow:0 10px 28px rgba(0,0,0,.35);display:flex;flex-direction:column;-webkit-app-region:drag}
+.top{display:flex;gap:12px;align-items:center}
+.face{flex:none;width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-weight:700;font-size:17px}
+.kicker{margin:0;font-size:12px;color:var(--text-3)}
+h1{margin:2px 0 0;font-size:16px;font-weight:600;line-height:1.3}
+.body{flex:1;margin-top:10px}
+p{margin:4px 0 0;color:var(--text-3);line-height:1.4}
+p.chat{color:var(--text)}
+.chat,h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actions{display:flex;justify-content:flex-end;gap:8px;-webkit-app-region:no-drag}
+a{text-decoration:none;padding:7px 16px;border-radius:10px;font-weight:600}
+a.no{color:var(--text);background:var(--soft);border:1px solid var(--line)}
+a.yes{color:var(--ink);background:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style><div class="card"><div class="top"><div class="face">${initial}</div><div><p class="kicker">${esc(t('Control from Hermes'))}</p><h1>${esc(t('Allow {bot} to control this computer?', { bot: request.bot }))}</h1></div></div><div class="body">${lines}</div><div class="actions"><a class="no" href="${ASK_URL}deny" autofocus>${esc(t('Don’t Allow'))}</a><a class="yes" href="${ASK_URL}allow">${esc(t('Allow'))}</a></div></div>`
 }
 
 /** The phone answered a chat's ask first: its dialog goes. */
@@ -203,7 +274,6 @@ export function stopControl(tell = true) {
 }
 
 function barPage(botName: string, chat: string, hotkey: boolean): string {
-  const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
   const line = esc(t('{bot} is controlling this computer', { bot: botName }))
   return `<!doctype html><meta charset="utf-8"><title>${OWN_TITLES[0]}</title><style>
 html,body{margin:0;height:100%;background:transparent;font:13px system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none}
