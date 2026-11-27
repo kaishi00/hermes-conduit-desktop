@@ -48538,5 +48538,20 @@
     "tr": "Bu pencere diğer pencerelerin önünde kalır. Durdurmak için tıklayın.",
     "zh-Hans": "此窗口保持在其他窗口前面。点按以停止。",
     "zh-Hant": "此視窗保持在其他視窗前面。按一下以停止。"
+  },
+  "Send this to Hermes?": {
+    "de": "Das an Hermes senden?",
+    "es": "¿Enviar esto a Hermes?",
+    "fr": "Envoyer ceci à Hermes ?",
+    "id": "Kirim ini ke Hermes?",
+    "it": "Inviare questo a Hermes?",
+    "ja": "これをHermesに送信しますか？",
+    "ko": "이 내용을 Hermes에 보낼까요?",
+    "pl": "Wysłać to do Hermesa?",
+    "pt-BR": "Enviar isto para o Hermes?",
+    "ru": "Отправить это Hermes?",
+    "tr": "Bu Hermes'e gönderilsin mi?",
+    "zh-Hans": "将此发送给 Hermes？",
+    "zh-Hant": "將此傳送給 Hermes？"
   }
 }

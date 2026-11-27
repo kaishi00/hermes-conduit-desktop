@@ -242,6 +242,7 @@ import { CallTranscriptSheet } from './components/CallTranscriptSheet'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
 import { ask, askText, tell } from './state/dialogs'
+import { newChatLink, newChatLinkPreview, type NewChatLink } from '@shared/linkUrls'
 import { Select } from './components/Select'
 import { KeptPane } from './components/KeptPane'
 import { DockedChatPane, tellDockedShown, type DockedChat, type DockedFrame } from './components/DockedChat'
@@ -542,7 +543,7 @@ function Shell({
     olderRows,
     seekRow,
     react: reactTo
-  } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '', selected.draft)
+  } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '', selected.draft, selected.id ? undefined : selected.title)
   // What this window shows of the transcript; the transcript itself is drawn by LiveTranscript, so a streaming
   // reply runs that, not App, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
@@ -601,17 +602,45 @@ function Shell({
       }),
     []
   )
+  // A new chat link (`conduit://new`, hermes-conduit issue 3389): a new chat with the link's title, its text in the composer.
+  // One that sends asks first, showing the text, since any app or web page can open a link (Eric, 2026-11-27); Cancel leaves
+  // the text in the composer, unsent.
+  const [linkSend, setLinkSend] = useState<{ draft: number; text: string } | null>(null)
+  const openNewChatLink = useCallback(async (request: NewChatLink) => {
+    const draft = ++draftCount.current
+    setArchivedOpen(false)
+    setSection('chats')
+    setSelected({ id: null, profile: request.profile ?? chatProfileRef.current ?? undefined, ...(request.title ? { title: request.title } : {}), draft })
+    if (!request.text) return
+    if (request.sends && (await ask(`${t('Send this to Hermes?')}\n\n${newChatLinkPreview(request.text)}`, { confirm: t('Send') }))) {
+      setLinkSend({ draft, text: request.text })
+      return
+    }
+    setQuote(quoteRequest({ draft: request.text }))
+  }, [])
+  useEffect(() => {
+    if (!linkSend) return
+    // Another chat opened before the Send: nothing is sent into it.
+    if (selected.id || selected.draft !== linkSend.draft) return setLinkSend(null)
+    setLinkSend(null)
+    // A link's text is literal: "/…" never runs a command.
+    void send(linkSend.text).then(went => {
+      if (went === false) setQuote(quoteRequest({ draft: linkSend.text }))
+    })
+  }, [linkSend, selected.id, selected.draft, send])
   // A Link invite opened from another app opens in Settings > Multiplayer, as on the phone.
   const [linkRequest, setLinkRequest] = useState<{ url: string; at: number } | null>(null)
   useEffect(() => {
     const open = (url: string | null) => {
       if (!url) return
+      const newChat = newChatLink(url)
+      if (newChat) return void openNewChatLink(newChat)
       setLinkRequest({ url, at: Date.now() })
       setSection('settings')
     }
     void window.conduit.takeLinkUrl().then(open).catch(() => undefined)
     return window.conduit.onLinkUrl(open)
-  }, [])
+  }, [openNewChatLink])
   const runShortcut = useRef<(action: MenuAction) => void>(() => {})
   runShortcut.current = action => {
     if (action === 'new-chat') newChat()

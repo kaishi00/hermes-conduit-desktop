@@ -388,7 +388,10 @@ class ChatMovedOn extends Error {}
 const DELTA_FLUSH_MS = 100
 
 /** `host`: the dashboard this window shows, which keeps its own transcripts. */
-export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string, host = '', draft?: number) {
+/** `title`: a new chat's title from a `conduit://new` link, given to Hermes as the chat is made. */
+export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string, host = '', draft?: number, title?: string) {
+  const newChatTitle = useRef(title)
+  newChatTitle.current = title
   // A chat this window opens on, kept from before (a dashboard switch remounts it), draws on the first frame.
   // Held outside React state, so only what reads it runs as a reply streams (transcriptStore.ts).
   const [transcriptStore] = useState(() => new TranscriptStore((storedId && connected ? keptTranscript(storedId, profile, host) : null) ?? emptyTranscript))
@@ -691,6 +694,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (profile) params.profile = profile
     if (botChat) Object.assign(params, { title: 'Bot Chat', hidden: true, follow_profile_config: true })
     else if (folder) params.cwd = folder
+    if (!botChat && newChatTitle.current) params.title = newChatTitle.current
     const draft = { ...draftOverrides.current }
     if (draft.model) params.model = draft.model
     if (draft.provider) params.provider = draft.provider
