@@ -157,4 +157,26 @@ describe("applyLiveWork on hermes dashboard", () => {
     })
     expect(resumes()).toBeGreaterThan(opened)
   })
+
+  it('waits for the turn to end before reading history for a queued message nothing holds', async () => {
+    const hook = renderHook(chatHook, {})
+    mounted.push(hook)
+    await settle()
+    const resumes = () => calls.filter(c => c === 'session.resume').length
+    const listed = { ...noLiveWork, running: true, queued: [queued('adm-7')] }
+    act(() => hook.result().applyLiveWork(listed, noLiveWork, Date.now() + 1))
+    const opened = resumes()
+    await act(async () => {
+      // It left the queue while a turn runs here: drawing a bubble now would drop the read-drawn one.
+      hook.result().applyLiveWork({ ...noLiveWork, running: true }, listed, Date.now() + 1)
+      await settle()
+    })
+    expect(resumes()).toBe(opened)
+    await act(async () => {
+      hook.result().applyLiveWork(noLiveWork, { ...listed, running: true }, Date.now() + 1)
+      await settle()
+    })
+    expect(resumes()).toBeGreaterThan(opened)
+  })
+
 })
