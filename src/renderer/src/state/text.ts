@@ -253,8 +253,18 @@ export function previewText(raw: string): string {
   // A compaction's summary is nobody's last line; a preview can be cut off before its delimiter.
   let own = withoutCompaction(raw)
   if (own === null) return ''
-  if (own.trimStart().startsWith(PRIOR_CONTEXT_HEADER)) own = own.trimStart().slice(PRIOR_CONTEXT_HEADER.length)
+  const head = own.trimStart()
+  // Cut off inside the header, or after it and inside the delimiter that would end the row's words.
+  if (head && PRIOR_CONTEXT_HEADER.startsWith(head)) return ''
+  if (head.startsWith(PRIOR_CONTEXT_HEADER)) {
+    own = head.slice(PRIOR_CONTEXT_HEADER.length)
+    const bracket = own.lastIndexOf('[')
+    if (bracket >= 0 && SUMMARY_DELIMITER.startsWith(own.slice(bracket))) own = own.slice(0, bracket)
+  }
   const cleaned = stripStored(own)
+  // A picture sent with no words has only its stand-in: the list shows the chat's name instead.
+  if (cleaned.text.split('\n').every(line => !line.trim() || PICTURE_LINE.test(line.trim())))
+    cleaned.text = ''
   const pictures = splitImageReferences(cleaned.text)
   const attachments = [...cleaned.attachments, ...pictures.images]
   let text = pictures.text
