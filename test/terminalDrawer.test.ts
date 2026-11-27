@@ -97,8 +97,11 @@ describe('the terminal drawer when a list read fails (issue 681)', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     try {
       http.mockRejectedValueOnce(new Error('timed out'))
-      const { root } = await mount()
+      const { host, root } = await mount()
       expect(opened.length).toBe(0)
+      // Said on the only tab there is, with Try Again.
+      expect(host.textContent).toContain('timed out')
+      expect(buttons(host, 'Try Again').length).toBe(1)
       http.mockResolvedValue(list('a'))
       act(() => vi.advanceTimersByTime(10_000))
       await settle()

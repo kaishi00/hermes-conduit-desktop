@@ -178,7 +178,8 @@ export function TerminalDrawer({
       {/* Folded, the views stay mounted, so their shells keep their sockets and screens. */}
       <div className="bench-drawer-body" hidden={folded}>
         <BotCommands steps={steps} at={at} shown={onBot && !folded} />
-        {onBot ? null : listed === 'loading' ? (
+        {/* A failed read with no terminals yet says so on the Bot's Commands tab too, the only one there is. */}
+        {onBot && !(listed !== 'loading' && 'error' in listed && !terminals.length) ? null : listed === 'loading' ? (
           <div className="bench-note">{t('Loading…')}</div>
         ) : 'error' in listed ? (
           <div className="bench-note">
@@ -200,7 +201,7 @@ export function TerminalDrawer({
           </div>
         ) : null}
         {failed && !onBot ? <div className="bench-note error-text">{failed}</div> : null}
-        {readFailed && !onBot && listed !== 'loading' && !('error' in listed) ? (
+        {readFailed && (!onBot || !terminals.length) && listed !== 'loading' && !('error' in listed) ? (
           <div className="bench-note error-text">
             {t('Couldn’t read the terminals: {reason}', { reason: readFailed })}
             <button className="secondary small" onClick={() => void read()}>

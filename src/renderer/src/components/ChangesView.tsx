@@ -144,7 +144,7 @@ export function ChangesView({
       return
     }
     let live = true
-    setDiff(current => (current && current !== 'loading' && !('error' in current) && current.path === picked.path ? current : 'loading'))
+    setDiff(current => (current && current !== 'loading' && !('error' in current) && current.path === picked.path && current.staged === picked.staged ? current : 'loading'))
     gateway
       .http('GET', diffPath(root, picked.path, picked.staged, profile))
       .then(raw => live && setDiff(parseDiff(raw)))

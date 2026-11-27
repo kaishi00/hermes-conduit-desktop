@@ -822,6 +822,8 @@ export function LocalLiveCall({
     // first run's work still on its way stops at its next check instead of leaving it on Connecting… (desktop#669).
     ended.current = false
     ending.current = false
+    // The first run's teardown saved its empty call: the real call saves again when it ends.
+    saved.current = false
     let gone = false
     const over = () => gone || ended.current
     let readyTimer = 0
