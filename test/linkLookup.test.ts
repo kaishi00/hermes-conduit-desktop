@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { lookUpLink, resolvePath } from '../src/renderer/src/state/workspace'
-import { servedAnswerHolds } from '../src/renderer/src/state/linkOpener'
-import { localSpelling } from '../src/main/localFolders'
+import { servedAnswerHolds, servedAskHolds, type ServedAsk } from '../src/renderer/src/state/linkOpener'
+import { localSpelling, showOnComputerLabel } from '../src/main/localFolders'
 
 // Desktop issue 686: a folder link a reply named, looked up for the chat as the phone looks files up.
 describe('a path link', () => {
@@ -60,6 +60,18 @@ describe('Show in Finder or Explorer', () => {
     expect(localSpelling('~/proj', { home: 'C:\\Users\\r', windows: true })).toBeNull()
     expect(localSpelling('C:/dev/app/x.ts', { home: 'C:\\Users\\r', windows: true })).toBe('C:\\dev\\app\\x.ts')
     expect(localSpelling('/', { home: '/Users/r', windows: false })).toBe('/')
+    // A network share's path, as Explorer takes it.
+    expect(localSpelling('\\\\nas\\share\\proj\\', { home: 'C:\\Users\\r', windows: true })).toBe('\\\\nas\\share\\proj')
+    expect(localSpelling('\\\\nas/share/a.md', { home: 'C:\\Users\\r', windows: true })).toBe('\\\\nas\\share\\a.md')
+  })
+
+  it('names the item as each system names its file browser', () => {
+    const t = (key: string) => key
+    expect(['darwin', 'win32', 'linux'].map(platform => showOnComputerLabel(platform as NodeJS.Platform, t))).toEqual([
+      'Show in Finder',
+      'Show in Explorer',
+      'Show in File Manager'
+    ])
   })
 })
 
@@ -68,5 +80,16 @@ describe('the plugin’s answer about folder lookups', () => {
     expect(servedAnswerHolds(true, 0, 10 * 60_000)).toBe(true)
     expect(servedAnswerHolds(false, 0, 30_000)).toBe(true)
     expect(servedAnswerHolds(false, 0, 61_000)).toBe(false)
+  })
+
+  it('asks again on the first click after a no expires, and at once after one that couldn’t tell', () => {
+    const ask = (settled?: boolean | null): ServedAsk => ({ key: 'k', askedAt: 0, answer: Promise.resolve(settled ?? null), settled })
+    expect(servedAskHolds(null, 'k', 0)).toBe(false)
+    expect(servedAskHolds(ask(), 'k', 10 * 60_000)).toBe(true)
+    expect(servedAskHolds(ask(true), 'k', 10 * 60_000)).toBe(true)
+    expect(servedAskHolds(ask(true), 'other', 0)).toBe(false)
+    expect(servedAskHolds(ask(false), 'k', 30_000)).toBe(true)
+    expect(servedAskHolds(ask(false), 'k', 61_000)).toBe(false)
+    expect(servedAskHolds(ask(null), 'k', 0)).toBe(false)
   })
 })

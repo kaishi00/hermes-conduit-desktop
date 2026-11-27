@@ -36,25 +36,44 @@ export interface FileLinkActions {
  */
 export const servedAnswerHolds = (answer: boolean, askedAt: number, now: number) => answer || now - askedAt < 60_000
 
+/** A plugin's answer about the folder lookup, asked or being asked. */
+export interface ServedAsk {
+  key: string
+  askedAt: number
+  answer: Promise<boolean | null>
+  /** The answer once it came: null when the ask couldn't tell. */
+  settled?: boolean | null
+}
+
+/**
+ * Whether an ask still answers for this dashboard and profile: one still running does, and a settled one as long as
+ * servedAnswerHolds says; one that couldn't tell is asked again at once. Checked before a click uses it, so the first
+ * click after a no expires asks the plugin again.
+ */
+export const servedAskHolds = (ask: ServedAsk | null, key: string, now: number) =>
+  !!ask && ask.key === key && (ask.settled === undefined || (ask.settled !== null && servedAnswerHolds(ask.settled, ask.askedAt, now)))
+
 export const missingNotice = (name: string) => t('{name} isn’t on the server. It may have been deleted, or it’s on another computer.', { name })
 
 export function useLinkOpener({ cwd, dashboard, profile, sessionIds, reveal, notice }: LinkOpenerOptions): FileLinkActions | null {
   const ids = sessionIds.filter((id): id is string => !!id)
   const idsKey = [...new Set(ids)].join('\n')
   // Whether the profile's plugin finds folders, asked per profile and dashboard and kept as servedAnswerHolds says.
-  const served = useRef<{ key: string; askedAt: number; answer: Promise<boolean | null> } | null>(null)
+  const served = useRef<ServedAsk | null>(null)
   const servedKey = `${dashboard ?? ''}\n${profile ?? 'default'}`
   const servesFolders = useCallback(async () => {
-    if (served.current?.key !== servedKey) {
-      const answer = askPluginStatus(() => gateway.http('GET', scoped(STATUS_PATH, profile ?? 'default'), undefined, 8_000)).then(status =>
-        status ? serves(status, [RESOLVE_FOLDERS_CAPABILITY]) : null
-      )
-      served.current = { key: servedKey, askedAt: Date.now(), answer }
+    if (!servedAskHolds(served.current, servedKey, Date.now())) {
+      const ask: ServedAsk = {
+        key: servedKey,
+        askedAt: Date.now(),
+        answer: askPluginStatus(() => gateway.http('GET', scoped(STATUS_PATH, profile ?? 'default'), undefined, 8_000)).then(status =>
+          status ? serves(status, [RESOLVE_FOLDERS_CAPABILITY]) : null
+        )
+      }
+      void ask.answer.then(answer => (ask.settled = answer))
+      served.current = ask
     }
-    const asked = served.current
-    const answer = await asked.answer
-    if (served.current === asked && (answer === null || !servedAnswerHolds(answer, asked.askedAt, Date.now()))) served.current = null
-    return answer === true
+    return (await served.current!.answer) === true
   }, [servedKey, profile])
   // A later click wins over a lookup still running for an earlier one.
   const clicks = useRef(0)

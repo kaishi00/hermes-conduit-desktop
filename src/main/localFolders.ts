@@ -47,7 +47,7 @@ export function hostSpellings(path: string): string[] {
  * A path on the Hermes host as this computer has it, for Show in Finder or Explorer on a dashboard that runs here
  * (desktop issue 686), or null when it can't be told: `~` is this computer's home on a Mac or Linux; on Windows a WSL
  * Hermes' /mnt/<drive>/… is that drive's path, and any other POSIX path (a WSL home, `~` there) isn't one this
- * computer can show. The caller checks it's there before showing it.
+ * computer can show; a `\\server\share` path is shown as it is. The caller checks it's there before showing it.
  */
 export function localSpelling(path: string, deps: { home: string; windows: boolean }): string | null {
   let local = path.trim()
@@ -55,10 +55,17 @@ export function localSpelling(path: string, deps: { home: string; windows: boole
     const wsl = /^\/mnt\/([a-z])(?:\/(.*))?$/i.exec(local)
     if (wsl) local = `${wsl[1]!.toUpperCase()}:\\${(wsl[2] ?? '').replace(/\//g, '\\')}`
     else if (/^[A-Za-z]:[\\/]/.test(local)) local = local.replace(/\//g, '\\')
+    // A network share's path: Explorer shows it as it is.
+    else if (/^\\\\[^\\/]/.test(local)) local = local.replace(/\//g, '\\')
     else return null
   } else if (local === '~' || local.startsWith('~/')) {
     local = `${deps.home.replace(/\/+$/, '')}${local.slice(1)}`
   }
   // A folder's trailing separator: Finder and Explorer show the folder itself.
   return local.length > 1 && !/^[A-Za-z]:[\\/]$/.test(local) ? local.replace(/[\\/]+$/, '') : local
+}
+
+/** The path-link menu's item that shows the path on this computer, named as each system names its file browser. */
+export function showOnComputerLabel(platform: NodeJS.Platform, t: (key: string) => string): string {
+  return platform === 'darwin' ? t('Show in Finder') : platform === 'win32' ? t('Show in Explorer') : t('Show in File Manager')
 }

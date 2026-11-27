@@ -119,8 +119,10 @@ describe('a reply’s marks', () => {
     act(() => link.dispatchEvent(right))
     expect(right.defaultPrevented).toBe(true)
     act(() => link.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true })))
+    act(() => link.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true })))
     expect(menus.map(m => [m.path, m.at === undefined])).toEqual([
       ['.agents/skills/x/', true],
+      ['.agents/skills/x/', false],
       ['.agents/skills/x/', false]
     ])
   })
