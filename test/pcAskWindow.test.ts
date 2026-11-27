@@ -87,7 +87,7 @@ vi.mock('../src/main/settings', () => ({
   pcControlSettings: () => ({ on: true, name: '', bots: ['default'], id: 'computer-1' })
 }))
 
-import { askPage, askPc, closePcAsk } from '../src/main/pcControl'
+import { askPage, askPc, closePcAsk, runPcRequest } from '../src/main/pcControl'
 import { OWN_TITLES } from '../src/main/pcExecutor'
 import type { PcRequest } from '../src/shared/ipc'
 
@@ -158,6 +158,42 @@ describe('askPc', () => {
     expect(windows[0].destroyed).toBe(false)
     windows[0].navigate('conduit-ask://deny')
     await expect(shown).resolves.toBe('denied')
+  })
+})
+
+describe('more than one ask', () => {
+  it('asks again once a chat’s ask was answered', async () => {
+    const first = askPc(request('s9'))
+    windows[0].navigate('conduit-ask://deny')
+    await expect(first).resolves.toBe('denied')
+    const again = askPc(request('s9'))
+    expect(windows).toHaveLength(2)
+    windows[1].navigate('conduit-ask://allow')
+    await expect(again).resolves.toBe('allowed')
+  })
+
+  it('cascades asks open at once, so none hides another', async () => {
+    const a = askPc(request('s10'))
+    const b = askPc(request('s11'))
+    expect((windows[1].options.x as number) - (windows[0].options.x as number)).toBe(24)
+    expect((windows[1].options.y as number) - (windows[0].options.y as number)).toBe(24)
+    windows[0].navigate('conduit-ask://deny')
+    windows[1].navigate('conduit-ask://deny')
+    await Promise.all([a, b])
+  })
+
+  it('runs no action while an ask is up, since a click could land on Allow', async () => {
+    const ask = askPc(request('s12'))
+    let ran = false
+    const run = runPcRequest(request('s13', { needs_ok: false })).then(result => {
+      ran = true
+      return result
+    })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(ran).toBe(false)
+    windows[0].navigate('conduit-ask://deny')
+    await ask
+    await expect(run).resolves.toMatchObject({ ok: false, code: 'unavailable' })
   })
 })
 

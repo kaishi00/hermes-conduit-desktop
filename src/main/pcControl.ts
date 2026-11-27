@@ -129,7 +129,9 @@ export function deletePcDriver(): PcControlState {
 
 const ASK_URL = 'conduit-ask://'
 const ASK_WIDTH = 440
-const ASK_HEIGHT = 220
+const ASK_HEIGHT = 250
+/** Each ask open at once sits this much lower and to the right, so none hides another. */
+const ASK_CASCADE = 24
 
 /**
  * Asks the user whether this chat may drive the computer: Allow or Don't
@@ -154,13 +156,14 @@ export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'close
       resolve(value)
       if (!win.isDestroyed()) win.destroy()
     }
+    const cascade = asking.size * ASK_CASCADE
     // The screen the user is on: the one under the cursor.
     const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
     const win = new BrowserWindow({
       width: ASK_WIDTH,
       height: ASK_HEIGHT,
-      x: Math.round(area.x + (area.width - ASK_WIDTH) / 2),
-      y: Math.round(area.y + (area.height - ASK_HEIGHT) / 3),
+      x: Math.round(area.x + (area.width - ASK_WIDTH) / 2) + cascade,
+      y: Math.round(area.y + (area.height - ASK_HEIGHT) / 3) + cascade,
       frame: false,
       transparent: true,
       resizable: false,
@@ -219,7 +222,7 @@ html,body{margin:0;height:100%;background:transparent;font:13px 'Segoe UI Variab
 .face{flex:none;width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-weight:700;font-size:17px}
 .kicker{margin:0;font-size:12px;color:var(--text-3)}
 h1{margin:2px 0 0;font-size:16px;font-weight:600;line-height:1.3}
-.body{flex:1;margin-top:10px}
+.body{flex:1;min-height:0;overflow:hidden;margin:10px 0 12px}
 p{margin:4px 0 0;color:var(--text-3);line-height:1.4}
 p.chat{color:var(--text)}
 .chat,h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -240,6 +243,9 @@ const stopLabel = () => (process.platform === 'darwin' ? '⌘⌥⇧S' : 'Ctrl+Al
 
 /** Runs one action the plugin handed over. The renderer asked first (askPc, and the phone) when it needed asking. */
 export async function runPcRequest(request: PcRequest): Promise<Record<string, unknown>> {
+  // No action runs while an ask is up: the ask is out of the bot's screenshots, so a
+  // click meant for what it saw could land on Allow (desktop#721 review).
+  while (asking.size) await Promise.allSettled([...asking.values()].map(open => open.shown))
   const settings = pcControlSettings()
   if (!settings.on || !settings.bots.includes(request.profile)) return { ok: false, code: 'off' }
   if (!driverPath()) return { ok: false, code: 'unavailable', message: 'The driver isn’t downloaded on this computer yet.' }
