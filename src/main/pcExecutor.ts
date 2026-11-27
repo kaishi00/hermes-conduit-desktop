@@ -232,9 +232,9 @@ export class Executor {
         if (!key) return fail(`Couldn't read the key in ${JSON.stringify(str(a.keys))}.`)
         const front = await this.toFront(target)
         if (front) return front
-        result = held.length
-          ? await this.client.callTool('hotkey', { ...where(target), keys: [...held, key], delivery_mode: 'foreground' })
-          : await this.client.callTool('press_key', { ...where(target), key, delivery_mode: 'foreground' })
+        // press_key with modifiers, not hotkey: on a modern (XAML) window hotkey only looks for a
+        // menu accelerator and fails on ctrl+s; press_key sends the keys themselves (Asuka, 2026-11-27).
+        result = await this.client.callTool('press_key', { ...where(target), key, ...(held.length ? { modifiers: held } : {}), delivery_mode: 'foreground' })
         break
       }
       case 'set_value': {

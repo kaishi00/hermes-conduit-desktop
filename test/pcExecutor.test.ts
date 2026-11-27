@@ -66,7 +66,7 @@ describe('pcExecutor', () => {
       { name: 'type_text', args: { pid: 3, window_id: 30, text: 'hello', delivery_mode: 'foreground' } }
     ])
     await run.run('chat-1', { action: 'key', args: { keys: 'ctrl+s' } })
-    expect(fake.calls.at(-1)).toEqual({ name: 'hotkey', args: { pid: 3, window_id: 30, keys: ['ctrl', 's'], delivery_mode: 'foreground' } })
+    expect(fake.calls.at(-1)).toEqual({ name: 'press_key', args: { pid: 3, window_id: 30, key: 's', modifiers: ['ctrl'], delivery_mode: 'foreground' } })
   })
 
   it('types nothing when the window can’t come to the front', async () => {
