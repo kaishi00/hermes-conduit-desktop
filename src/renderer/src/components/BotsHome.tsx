@@ -655,6 +655,8 @@ export function BotsHome({
       .then(setActionError)
       .finally(() => setBusy(false));
   };
+  /** Every bot a rename or delete re-files: the shown ones and this host's hidden ones, so none keeps the old name. */
+  const fileable: MixedTile[] = [...tiles, ...(hidden ?? []).map((bot) => ({ key: bot.name, host: hostUrl ?? "", bot, own: true }))];
   const newCategory = async (tile: MixedTile) => {
     setMenu(null);
     const name = cleanName(await askText(t("New Category"), "", { confirm: t("Create"), maxLength: 40 }));
@@ -666,13 +668,13 @@ export function BotsHome({
     if (!name || name === old || !categories) return;
     categories.setOrder(renamingCategory(categories.order, old, name));
     categories.refileRooms?.(old, name);
-    fileTiles(tiles.filter((tile) => sameCategory(tile.bot.category?.name, old)), name);
+    fileTiles(fileable.filter((tile) => sameCategory(tile.bot.category?.name, old)), name);
   };
   const deleteCategory = async (name: string) => {
     setHeadingMenu(null);
     if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots move to Other.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
     categories?.refileRooms?.(name, null);
-    fileTiles(tiles.filter((tile) => sameCategory(tile.bot.category?.name, name)), null);
+    fileTiles(fileable.filter((tile) => sameCategory(tile.bot.category?.name, name)), null);
   };
   const moveCategory = (name: string, by: -1 | 1) => {
     setHeadingMenu(null);

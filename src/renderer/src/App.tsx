@@ -197,7 +197,7 @@ import {
   type OtherChatRow,
   KEPT_BOTS_CHANGED
 } from './state/keptHosts'
-import { categoryNamed, categoryPatch, refilingRooms, useCategoryOrder, useRoomCategories } from './state/botCategories'
+import { categoryNamed, categoryPatch, refilingRooms, useCategoryOrder, useRoomCategories, type BotCategory } from './state/botCategories'
 import { StepSummarySettings } from './components/StepSummarySettings'
 import { ReplySpeedSetting } from './components/ReplySpeedSetting'
 import { PredictiveSettings } from './components/PredictiveSettings'
@@ -1902,6 +1902,9 @@ function Shell({
       const own = [...(roster.bots ?? []), ...roster.hidden]
       let problem: string | null = null
       let far = false
+      // What this call filed already, per host: a rename's later bots take the id its first one got, so the
+      // host keeps one id for the name (Hermes Desktop draws one section).
+      const filed = new Map<string, { category?: BotCategory }[]>()
       for (const tile of tiles) {
         const rpc = tile.own
           ? (method: string, params?: Record<string, unknown>) => gateway.rpc(method, params)
@@ -1910,8 +1913,10 @@ function Shell({
               if (!outcome.ok) throw new Error(outcome.error)
               return outcome.result
             }
-        const among = tile.own ? own : otherBots.filter(o => o.host === tile.host).map(o => o.bot)
+        const hostKey = tile.own ? '' : tile.host
+        const among = [...(filed.get(hostKey) ?? []), ...(tile.own ? own : otherBots.filter(o => o.host === tile.host).map(o => o.bot))]
         const category = name ? categoryNamed(name, among, tile.bot.category) : null
+        if (category) filed.set(hostKey, [...(filed.get(hostKey) ?? []), { category }])
         try {
           if (!(await writeMeta(rpc, tile.bot, categoryPatch(category)))) problem ??= t('Couldn’t save that change. Try again.')
         } catch (e) {
