@@ -3,6 +3,7 @@ import { applyScale, nextScale, readScale, scaleFromStorage, scaleStep, shortcut
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { t } from '@shared/i18n'
 import type { ChatWindowRequest, ConnectionStatus } from '@shared/ipc'
+import { pinDecision } from '../state/chatWindowPin'
 import { useChatDisplay } from '../state/display'
 import { useBots } from '../state/useBots'
 import { useDashboardProfiles } from '../state/useDashboardProfiles'
@@ -544,12 +545,13 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       live = false
     }
   }, [docked])
+  const pin = pinDecision(onTop)
   const toggleOnTop = useCallback(() => {
-    if (onTop === null) return
-    void window.conduit.setChatWindowOnTop(!onTop).then(on => {
+    if (pin.next === null) return
+    void window.conduit.setChatWindowOnTop(pin.next).then(on => {
       if (on !== null) setOnTop(on)
     })
-  }, [onTop])
+  }, [pin.next])
   const openInMain = useCallback(() => {
     window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, fromWindow: true, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
@@ -669,9 +671,9 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
               ? undefined
               : {
                   label: t('Keep on Top'),
-                  title: onTop ? t('This window stays in front of other windows. Click to stop.') : `${t('Keep on Top')}: ${t('Keeps this window in front of other windows, other apps’ too.')}`,
-                  on: onTop === true,
-                  disabled: onTop === null,
+                  title: pin.on ? t('This window stays in front of other windows. Click to stop.') : `${t('Keep on Top')}: ${t('Keeps this window in front of other windows, other apps’ too.')}`,
+                  on: pin.on,
+                  disabled: pin.disabled,
                   onClick: toggleOnTop
                 }
           }
