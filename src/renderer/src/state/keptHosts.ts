@@ -564,6 +564,8 @@ export interface OtherBot {
  * is the roster the host's own window reads (keptRosters), so the first switch there draws its bots at once too.
  */
 const botsOf = (url: string): OtherBot[] => (keptRosters.get(url)?.bots ?? []).map(bot => ({ host: url, bot }))
+/** A kept host's hidden bots, as its last read gave them: a category's rename or delete re-files them too. */
+export const keptHiddenBots = (url: string): OtherBot[] => (keptRosters.get(url)?.hidden ?? []).map(bot => ({ host: url, bot }))
 
 /** Sent after a write to another dashboard's bot: useKeptBots reads the kept hosts' bots again. */
 export const KEPT_BOTS_CHANGED = 'conduit:kept-bots-changed'

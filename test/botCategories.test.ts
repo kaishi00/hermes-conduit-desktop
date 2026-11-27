@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryNamed, categoryNamesOf, categoryOf, categoryPatch, categorySections, cleanRoomCategories, editCategoryPatch, movingCategory, OTHER_KEY, refilingRooms, renamingCategory } from '../src/renderer/src/state/botCategories'
+import { categoryFiler, categoryNamed, categoryNamesOf, categoryOf, categoryPatch, categorySections, cleanRoomCategories, editCategoryPatch, movingCategory, OTHER_KEY, refilingRooms, renamingCategory } from '../src/renderer/src/state/botCategories'
 import { rosterFromProfiles } from '../src/renderer/src/state/bots'
 import { mergedMeta } from '../src/renderer/src/state/botEditor'
 
@@ -76,5 +76,15 @@ describe('bot categories', () => {
     const sections = categorySections([{ n: 'a', c: undefined as string | undefined }], [], i => i.c, ['Clients'])!
     expect(sections.map(s => s.name)).toEqual(['Clients', null])
     expect(sections[0]!.items).toEqual([])
+  })
+
+  it('gives every bot a rename files on one host the same id', () => {
+    const file = categoryFiler()
+    const a = file('', 'Clients', [], { id: 'w', name: 'Work' })
+    const b = file('', 'Clients', [], { id: 'w', name: 'Work' })
+    const far = file('https://far', 'Clients', [], { id: 'x', name: 'Work' })
+    expect(b.id).toBe(a.id)
+    expect(far.id).not.toBe(a.id)
+    expect(file('https://far', 'clients', [], undefined).id).toBe(far.id)
   })
 })

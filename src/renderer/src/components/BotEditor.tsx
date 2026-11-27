@@ -240,7 +240,7 @@ export function BotEditor({ bot, among = [], onClose, onSaved }: Props) {
           if (outcome === 'conflict') outcome = await retryMeta(patch)
           metaSaved = outcome === 'persisted' || outcome === 'unsupported'
           if (!metaSaved) {
-            if (changesLook) problems.push(t('The name or color was not saved.'))
+            if (changesLook) problems.push(Object.keys(patch).every(key => key === 'sectionId' || key === 'sectionName') ? t('Couldn’t save that change. Try again.') : t('The name or color was not saved.'))
             if (uploaded) problems.push(t('The picture was saved, but its look was not.'))
             if (removing) problems.push(t('The picture was not removed.'))
           }
