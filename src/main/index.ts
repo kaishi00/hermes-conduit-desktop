@@ -340,6 +340,8 @@ const chatBrowserWindows = new WeakSet<BrowserWindow>()
 // Asking again for a chat's window brings it back, out of the dock or the taskbar too.
 /** Each chat window by its chat's stored id, so it's found before its session opens. */
 const chatBrowserById = new Map<string, BrowserWindow>()
+/** The Live call window, whatever id its chat has now. */
+let callBrowser: BrowserWindow | null = null
 const chatWindows = new ChatWindowSet(
   (chat, onClosed) => {
     const window = createChatWindow(chat, onClosed)
@@ -650,7 +652,15 @@ function registerIpc(): void {
     // The Live call shortcut's window: a new chat that starts a call as it opens. Asked for again, the window
     // it already is comes forward and starts another call if it has none.
     const call = request.call === true && request.id === LIVE_CALL_WINDOW_ID
-    const had = call ? chatBrowserById.get(LIVE_CALL_WINDOW_ID) : undefined
+    // By the window, as its id becomes its chat's once the call's first request makes one.
+    const had = call && callBrowser && !callBrowser.isDestroyed() ? callBrowser : undefined
+    if (had) {
+      if (had.isMinimized()) had.restore()
+      had.show()
+      had.focus()
+      had.webContents.send(IPC.menu, 'live-call')
+      return true
+    }
     const shown = chatWindows.show({
       host,
       id: request.id,
@@ -660,7 +670,7 @@ function registerIpc(): void {
       ...(request.botChat === true ? { botChat: true } : {}),
       ...(call ? { call: true, fresh: true } : {})
     })
-    if (shown && had && !had.isDestroyed()) had.webContents.send(IPC.menu, 'live-call')
+    if (shown && call) callBrowser = chatBrowserById.get(LIVE_CALL_WINDOW_ID) ?? null
     return shown
   })
   ipcMain.handle(IPC.pageWatched, event => {
@@ -780,21 +790,40 @@ function registerIpc(): void {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.windowCall, calling)
   }
   const windowCallGone = () => {
+    if (windowCallIn && !windowCallIn.isDestroyed()) {
+      windowCallIn.off('destroyed', windowCallGone)
+      windowCallIn.off('did-start-navigation', reloaded)
+    }
     windowCallIn = null
     tellWindowCall(false)
+  }
+  // A reload keeps the webContents, so `destroyed` doesn't fire: the old page's call ended with it.
+  const reloaded = (navigation: { isMainFrame: boolean; isSameDocument: boolean }) => {
+    if (replacesPage(navigation)) windowCallGone()
   }
   ipcMain.on(IPC.windowCall, (event, calling: unknown) => {
     if (calling === true) {
       if (windowCallIn !== event.sender) {
-        windowCallIn?.off('destroyed', windowCallGone)
+        if (windowCallIn && !windowCallIn.isDestroyed()) {
+          windowCallIn.off('destroyed', windowCallGone)
+          windowCallIn.off('did-start-navigation', reloaded)
+        }
         windowCallIn = event.sender
         windowCallIn.once('destroyed', windowCallGone)
+        windowCallIn.on('did-start-navigation', reloaded)
       }
       tellWindowCall(true)
-    } else if (windowCallIn === event.sender) {
-      windowCallIn.off('destroyed', windowCallGone)
-      windowCallGone()
-    }
+    } else if (windowCallIn === event.sender) windowCallGone()
+  })
+  ipcMain.on(IPC.callWindowChat, (event, storedId: unknown) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (typeof storedId !== 'string' || !storedId || !window || window !== callBrowser) return
+    if (!chatWindows.rename(LIVE_CALL_WINDOW_ID, storedId)) return
+    if (chatBrowserById.get(LIVE_CALL_WINDOW_ID) === window) chatBrowserById.delete(LIVE_CALL_WINDOW_ID)
+    chatBrowserById.set(storedId, window)
+    window.once('closed', () => {
+      if (chatBrowserById.get(storedId) === window) chatBrowserById.delete(storedId)
+    })
   })
   ipcMain.on(IPC.endWindowCall, () => {
     if (windowCallIn && !windowCallIn.isDestroyed()) windowCallIn.send(IPC.menu, 'end-call')

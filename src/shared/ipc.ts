@@ -439,6 +439,8 @@ export interface ConduitApi {
   noteWindowCall(calling: boolean): void
   /** Whether a call runs in its own window (the Live call shortcut's). */
   onWindowCall(listener: (calling: boolean) => void): () => void
+  /** The Live call window's chat was made (the call's first request): the window is now that chat's. */
+  noteCallWindowChat(storedId: string): void
   /** Ends the call running in its own window: a call started in the main window takes the microphone. */
   endWindowCall(): void
   /** How many things wait on the user, for the tray and the Dock's badge. */
@@ -573,6 +575,7 @@ export const IPC = {
   hotkeyRecording: 'conduit:hotkey-recording',
   windowCall: 'conduit:window-call',
   endWindowCall: 'conduit:end-window-call',
+  callWindowChat: 'conduit:call-window-chat',
   windowShow: 'conduit:window-show',
   probe: 'conduit:probe',
   signIn: 'conduit:sign-in',

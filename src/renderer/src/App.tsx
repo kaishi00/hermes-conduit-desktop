@@ -820,10 +820,11 @@ function Shell({
   }, [windowCalling])
   // A dashboard switch ends the call, so a pick asks first (state/callSwitch.ts); the docked chat's ends as its pane closes.
   useEffect(() => {
-    if (!calling && !dockedCalling) return
-    setRunningCall(calling ? endCall : closeDocked)
+    if (!calling && !dockedCalling && !windowCalling) return
+    // The Live call window's call too: a switch may close its window, so it asks first and ends that call.
+    setRunningCall(calling ? endCall : dockedCalling ? closeDocked : () => window.conduit.endWindowCall())
     return () => setRunningCall(null)
-  }, [calling, dockedCalling, endCall, closeDocked])
+  }, [calling, dockedCalling, windowCalling, endCall, closeDocked])
   const nextMode = chatCall.nextMode
   // Resume call, from a saved call's card: a live call in its chat that continues it, on the mode picked now.
   const resumeCall = (callId: string, saved: CallTranscript) => {

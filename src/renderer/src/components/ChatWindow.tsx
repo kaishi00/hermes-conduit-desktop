@@ -346,6 +346,12 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     callAsked.current = false
     startCall.current()
   }, [connected, callAskedTick])
+  // Once the call's first request makes the chat, the window is that chat's: its row brings it forward, a delete closes it.
+  useEffect(() => {
+    if (callWindow && chat.storedId) window.conduit.noteCallWindowChat(chat.storedId)
+  }, [callWindow, chat.storedId])
+  // Each opening is a new chat: an unsent draft from the last one isn't brought back.
+  const [openedAt] = useState(() => Date.now())
   useEffect(() => {
     if (!callWindow || !calling) return
     window.conduit.noteWindowCall(true)
@@ -770,7 +776,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           onSuggestion={text => void onSend(text, [])}
           onStop={() => void stop()}
           focusKey={request.id}
-          draftKey={chatDraft(profile, request.id)}
+          draftKey={chatDraft(profile, callWindow ? (chat.storedId ?? `${request.id}-${openedAt}`) : request.id)}
           canAttach
           dropZone={pane}
           voice={calling ? undefined : { profile }}

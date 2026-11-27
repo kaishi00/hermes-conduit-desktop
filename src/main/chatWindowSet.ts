@@ -38,13 +38,34 @@ export class ChatWindowSet<W extends ChatWindowHandle = ChatWindowHandle> {
     }
     if (this.open.size >= CHAT_WINDOW_LIMIT) return false
     const window = this.create(chat, () => {
-      if (this.open.get(chat.id) !== window) return
-      this.open.delete(chat.id)
-      this.chats.delete(chat.id)
+      // Found by the window, not the id it opened with: the Live call window's is renamed once its chat is made.
+      const id = [...this.open].find(([, open]) => open === window)?.[0]
+      if (id === undefined) return
+      this.open.delete(id)
+      this.chats.delete(id)
       this.changed(this.ids())
     })
     this.open.set(chat.id, window)
     this.chats.set(chat.id, chat)
+    this.changed(this.ids())
+    return true
+  }
+
+  /**
+   * A window's chat named itself: the Live call window opens on a new chat
+   * under LIVE_CALL_WINDOW_ID, and once the call's first request makes the
+   * chat, the window is that chat's, so its row brings it forward and a
+   * delete closes it. False when there's no such window, or the chat has
+   * another window already.
+   */
+  rename(from: string, to: string): boolean {
+    const window = this.open.get(from)
+    const chat = this.chats.get(from)
+    if (!window || !chat || !to || from === to || this.open.has(to)) return false
+    this.open.delete(from)
+    this.chats.delete(from)
+    this.open.set(to, window)
+    this.chats.set(to, { ...chat, id: to })
     this.changed(this.ids())
     return true
   }

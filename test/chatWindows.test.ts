@@ -44,6 +44,30 @@ describe('chat windows of their own', () => {
     expect(set.show({ id: 'g' })).toBe(true)
   })
 
+  it('gives the Live call window its chat’s id once the call makes the chat', () => {
+    const { set, made, changes } = harness()
+    set.show({ id: LIVE_CALL_WINDOW_ID, host: 'https://a.example', fresh: true, call: true })
+    set.show({ id: 'other' })
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 's9')).toBe(true)
+    expect(set.ids()).toEqual(['other', 's9'])
+    expect(changes.at(-1)).toEqual(['other', 's9'])
+    // Its row brings it forward, a delete closes it, and the closing window drops its new id.
+    expect(set.show({ id: 's9' })).toBe(true)
+    expect(made[0]!.focused).toBe(1)
+    expect(made).toHaveLength(2)
+    set.close(['s9'])
+    expect(made[0]!.closed).toBe(true)
+    expect(set.ids()).toEqual(['other'])
+    // Nothing to rename, or a chat that has a window already.
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 's9')).toBe(false)
+    set.show({ id: LIVE_CALL_WINDOW_ID, call: true })
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 'other')).toBe(false)
+    // The user closing a renamed window frees its place.
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 's10')).toBe(true)
+    made[2]!.onClosed()
+    expect(set.ids()).toEqual(['other'])
+  })
+
   it('closes named chats’ windows, or every one on a switch', () => {
     const { set, made, changes } = harness()
     set.show({ id: 'a' })
