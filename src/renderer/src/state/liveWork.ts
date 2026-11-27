@@ -38,9 +38,11 @@ export interface LiveWork {
   agents: LiveAgent[]
   /** The messages waiting behind it (and a turn a restart cut off), oldest first, read-only. */
   queued: QueuedPrompt[]
+  /** The admissions whose turn runs now: one that left the queue for it started, any other was withdrawn or ended. */
+  started: string[]
 }
 
-export const noLiveWork: LiveWork = { running: false, step: null, agents: [], queued: [] }
+export const noLiveWork: LiveWork = { running: false, step: null, agents: [], queued: [], started: [] }
 
 export function liveWorkPath(sessionId: string, profile?: string | null): string {
   return dashboardProfilePath(`${LIVE_WORK_PATH}?session_id=${encodeURIComponent(sessionId)}`, profile)
@@ -85,7 +87,8 @@ export function parseLiveWork(raw: unknown): LiveWork {
     })
   }
   queued.sort((a, b) => a.sequence - b.sequence)
-  return { running: body.running === true, step: stepOf(body.step), agents, queued }
+  const started = (Array.isArray(body.started) ? body.started : []).filter((id): id is string => typeof id === 'string' && !!id)
+  return { running: body.running === true, step: stepOf(body.step), agents, queued, started }
 }
 
 /** Something still to follow: a turn running there, or a message waiting. */

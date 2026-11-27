@@ -6,6 +6,7 @@ describe('a chat’s turn running in the gateway, on hermes dashboard', () => {
   it('reads the turn, its agents’ own steps and the queue behind it, read-only', () => {
     const work = parseLiveWork({
       running: true,
+      started: ['adm-1', 7, ''],
       step: { phase: 'tool', tool: 'agents', since: 11 },
       agents: [
         { id: 'child-1', goal: ' Generate the office still ', phase: 'tool', tool: 'terminal', since: 13, started: 12 },
@@ -20,6 +21,7 @@ describe('a chat’s turn running in the gateway, on hermes dashboard', () => {
     })
     expect(work.running).toBe(true)
     expect(work.step).toEqual({ phase: 'tool', tool: 'agents' })
+    expect(work.started).toEqual(['adm-1'])
     expect(work.agents).toEqual([{ id: 'child-1', goal: 'Generate the office still', step: { phase: 'tool', tool: 'terminal' }, started: 12 }])
     expect(work.queued.map(row => [row.admissionId, row.status])).toEqual([['adm-2', 'unknown'], ['adm-3', 'queued']])
     // The dashboard serves none of the queue's verbs.

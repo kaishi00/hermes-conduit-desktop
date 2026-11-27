@@ -63,9 +63,21 @@ describe("applyLiveWork on hermes dashboard", () => {
     // A later read that lists it keeps it; one that doesn't starts its turn.
     act(() => hook.result().applyLiveWork({ ...noLiveWork, running: true, queued: [queued('adm-1')] }, noLiveWork, Date.now() + 1))
     expect(hook.result().queue.map(r => r.admissionId)).toEqual(['adm-1'])
-    act(() => hook.result().applyLiveWork({ ...noLiveWork, running: true }, noLiveWork, Date.now() + 1))
+    act(() => hook.result().applyLiveWork({ ...noLiveWork, running: true, started: ['adm-1'] }, noLiveWork, Date.now() + 1))
     expect(hook.result().queue).toEqual([])
     expect(userWords(hook.result().transcript)).toEqual(['later'])
+  })
+
+  it('drops a forwarded send withdrawn behind a turn still running, without drawing it', async () => {
+    const hook = renderHook(chatHook, {})
+    mounted.push(hook)
+    await settle()
+    await act(async () => {
+      await hook.result().send('later')
+    })
+    act(() => hook.result().applyLiveWork({ ...noLiveWork, running: true, started: ['someone-else'] }, noLiveWork, Date.now() + 1))
+    expect(hook.result().queue).toEqual([])
+    expect(userWords(hook.result().transcript)).toEqual([])
   })
 
   it('reads the history again once when the gateway turn it followed ends', async () => {
