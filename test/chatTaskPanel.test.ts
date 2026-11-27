@@ -269,6 +269,52 @@ describe('A chat’s Kanban task in the chat', () => {
     act(() => root.unmount())
   })
 
+
+  it('a delete that lands after another task opened leaves the new panel alone', async () => {
+    const conduit = (window as unknown as { conduit: Record<string, unknown> }).conduit
+    let deleted: (outcome: unknown) => void = () => undefined
+    conduit.httpOutcome = async (method: string, path: string) => {
+      if (method === 'DELETE' && path.startsWith('/api/plugins/kanban/tasks/t2')) return new Promise(resolve => (deleted = resolve))
+      const id = path.startsWith('/api/plugins/kanban/tasks/t3') ? 't3' : 't2'
+      return { ok: true, result: { task: { id, title: id === 't3' ? 'Write it up' : 'Dig in', status: 'running', body: id === 't3' ? 'The report' : 'Find the cause' }, comments: [], events: [], links: { parents: [], children: [] } } }
+    }
+    const dockPath = '../src/renderer/src/components/ChatTasksDock.tsx'
+    const dialogPath = '../src/renderer/src/components/Dialogs.tsx'
+    const { ChatTasksDock } = (await import(/* @vite-ignore */ dockPath)) as { ChatTasksDock: unknown }
+    const { DialogHost } = (await import(/* @vite-ignore */ dialogPath)) as { DialogHost: unknown }
+    const box = document.createElement('div')
+    document.body.append(box)
+    const root = createRoot(box)
+    let changed = 0
+    const tasks = [
+      { id: 't2', title: 'Dig in', status: 'running', board: 'research', boardName: 'Research' },
+      { id: 't3', title: 'Write it up', status: 'running', board: 'research', boardName: 'Research' }
+    ]
+    act(() => root.render(createElement('div', null,
+      createElement(ChatTasksDock as never, { tasks, chatKey: 'c1', bots: [], onChanged: () => changed++ }),
+      createElement(DialogHost as never)
+    )))
+    click(box.querySelector('.plan-toggle'))
+    const rows = () => [...box.querySelectorAll('.chat-task-open')]
+    click(rows()[0])
+    await settle()
+    const remove = [...box.querySelectorAll('.task-panel .job-actions button')].find(button => button.textContent === 'Delete')
+    click(remove)
+    await settle()
+    const confirm = [...box.querySelectorAll('button')].find(button => button.textContent === 'Delete' && button !== remove)
+    click(confirm)
+    await settle()
+    // The other task opens while the DELETE is still out.
+    click(rows()[1])
+    await settle()
+    expect(box.querySelector('.task-panel')?.textContent).toContain('The report')
+    deleted({ ok: true, result: {} })
+    await settle()
+    expect(box.querySelector('.task-panel')?.textContent).toContain('The report')
+    expect(changed).toBe(0)
+    act(() => root.unmount())
+  })
+
 })
 
 afterEach(() => vi.useRealTimers())

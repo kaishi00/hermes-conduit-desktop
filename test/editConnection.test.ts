@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Connection } from '../src/main/connection'
 import type { Fetch } from '../src/main/auth'
 import { createHostList } from '../src/main/hosts'
@@ -27,7 +27,9 @@ class FakeSocket extends EventTarget {
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } })
-const tick = () => new Promise(resolve => setTimeout(resolve, 5))
+/** The connection's state, once it has settled: a fixed wait is a race under load. */
+const opened = (connection: { current(): { phase?: string; url?: string } | null }, url: string) =>
+  vi.waitFor(() => expect(connection.current()).toMatchObject({ phase: 'open', url }), { timeout: 5_000, interval: 20 })
 
 function harness() {
   const logins: string[] = []
@@ -74,7 +76,7 @@ describe('Edit Connection', () => {
     expect(h.hostList.list!().map(host => host.url)).toEqual(['https://a.example', 'https://c.example'])
     expect(h.hostList.list!()[1]).toMatchObject({ combined: true })
     expect(h.hostList.load()).toMatchObject({ url: 'https://c.example', password: 'pw2' })
-    await tick()
+    await opened(h.connection, 'https://c.example')
     expect(h.connection.current()).toMatchObject({ phase: 'open', url: 'https://c.example' })
   })
 
@@ -95,11 +97,11 @@ describe('Edit Connection', () => {
   it('leaves the host as it was when the new sign-in fails, and opens it again', async () => {
     const h = harness()
     await h.connection.signIn({ url: 'https://a.example', method: 'password', username: 'eric', password: 'pw' })
-    await tick()
+    await opened(h.connection, 'https://a.example')
     const result = await h.connection.editHost('https://a.example', { url: 'https://a.example', method: 'password', username: 'eric', password: 'wrong' })
     expect(result).toMatchObject({ ok: false })
     expect(h.hostList.load()).toMatchObject({ url: 'https://a.example', password: 'pw' })
-    await tick()
+    await opened(h.connection, 'https://a.example')
     expect(h.connection.current()).toMatchObject({ phase: 'open', url: 'https://a.example' })
   })
 

@@ -198,6 +198,8 @@ function ChatTaskPanel({
       }}
       onDelete={async () => {
         await gateway.http('DELETE', path(''))
+        // A task opened while the DELETE was out owns the panel now; don't close its read with this one's end.
+        if (!live.current) return
         onClose()
         onChanged?.()
       }}

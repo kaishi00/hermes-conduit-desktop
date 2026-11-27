@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, createElement } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, type Root } from 'react-dom/client'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,7 +14,13 @@ beforeEach(() => {
   })
 })
 
+/** The roots this file mounted: a root left standing flushes its work after the environment is gone. */
+const mounted: Root[] = []
+
 afterEach(() => {
+  act(() => {
+    for (const root of mounted.splice(0)) root.unmount()
+  })
   document.body.innerHTML = ''
 })
 
@@ -32,6 +38,7 @@ function mount(el: unknown, props: Record<string, unknown>) {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
+  mounted.push(root)
   act(() => root.render(createElement(el as never, props as never)))
   return host
 }

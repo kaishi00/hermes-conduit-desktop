@@ -9,6 +9,9 @@ import { spawnSync } from 'node:child_process'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const marker = `X-Conduit-Source=${Buffer.from(root).toString('base64url')}`
 
+/** How long the desktop database refresh may take before it is given up on. */
+const REFRESH_TIMEOUT_MS = 5_000
+
 // Desktop Entry strings are unescaped once before Exec's quoted arguments are parsed.
 function value(text) {
   if (/[\r\n\0]/.test(text)) throw new Error('Paths containing a newline or NUL cannot be written to a desktop entry.')
@@ -139,7 +142,10 @@ try {
   writeFileSync(destination, entry, { mode: 0o644 })
   // The entry is written: a failed refresh is a warning, never a failed install.
   console.log(`Installed ${destination}`)
-  const refresh = spawnSync('update-desktop-database', [applications], { encoding: 'utf8' })
+  // The refresh has a time limit: update-desktop-database follows a symlink back into the
+  // applications dir (desktop#461) and walks it in every combination, so it never comes back.
+  // A refresh that overstays is a warning like any other, not an install that hangs.
+  const refresh = spawnSync('update-desktop-database', [applications], { encoding: 'utf8', timeout: REFRESH_TIMEOUT_MS })
   if (refresh.error?.code === 'ENOENT') {
     console.log('update-desktop-database is not installed; refresh the desktop database when it becomes available.')
   } else if (refresh.error) {
