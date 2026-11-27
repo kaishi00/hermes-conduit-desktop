@@ -199,6 +199,10 @@ describe('text tags in a reply', () => {
     expect(draw('<details><summary>S</summary>Use </det<!-- x -->ails> as text.\nMore.\n</details>')).toContain('<details class="reply-fold"><summary>S</summary>')
   })
 
+  it('gives no close to an opening joined across a code span (hermes-conduit#3385)', () => {
+    expect(draw('<details> Tap for details.\n<det`x`ails> is the tag.\n</details>')).toContain('reply-fold')
+  })
+
   it('reads a close inside a comment still being written as no close', () => {
     expect(draw('<details><summary>S</summary><!-- </details> still being written')).toContain('<details class="reply-fold"><summary>S</summary>')
   })
