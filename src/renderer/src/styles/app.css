@@ -1353,6 +1353,13 @@ a:hover {
   margin-top: 8px;
 }
 
+/* A caption under a setting wraps: .meta alone cuts it to one line, which
+   hid instructions (Stop's keys, what a toggle does). */
+.settings .settings-card > dd > p.meta {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* A control's own top margin would put it below its label. */
 .settings .settings-card > dd > :first-child {
   margin-top: 0;
