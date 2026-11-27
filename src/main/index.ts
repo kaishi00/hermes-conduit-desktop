@@ -1177,6 +1177,8 @@ if (!app.requestSingleInstanceLock()) {
   // Conduit opens conduit://link/ invites; a run from source names its script too.
   if (process.defaultApp && process.argv.length >= 2) app.setAsDefaultProtocolClient(LINK_SCHEME, process.execPath, [resolve(process.argv[1]!)])
   else app.setAsDefaultProtocolClient(LINK_SCHEME)
+  // After every window has closed, so a move or maximize just before Quit is kept too.
+  app.on('will-quit', () => saveWindowPlaces())
   app.on('before-quit', () => {
     quitting = true
     saveWindowPlaces()

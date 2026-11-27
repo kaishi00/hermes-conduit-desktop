@@ -18,6 +18,8 @@ const path = () => join(app.getPath('userData'), 'window-places.json')
 
 let places: Partial<Record<WindowKind, WindowPlace>> | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+/** A place changed since the file was last written. */
+let dirty = false
 /** The windows of each kind open now, which a new one opens beside. */
 const open: Record<WindowKind, Set<BrowserWindow>> = { main: new Set(), chat: new Set(), screen: new Set() }
 
@@ -40,9 +42,10 @@ function load(): Partial<Record<WindowKind, WindowPlace>> {
 export function saveWindowPlaces(): void {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = null
-  if (!places) return
+  if (!places || !dirty) return
   try {
     writeFileAtomic(path(), JSON.stringify(places, null, 2))
+    dirty = false
   } catch {
     // Not saved: the next move tries again.
   }
@@ -94,13 +97,23 @@ export function keepWindowPlace(window: BrowserWindow, kind: WindowKind, opening
   let normal: Rect | null = maximized ? window.getBounds() : null
   let settle: ReturnType<typeof setTimeout> | null = null
   let restoring: ReturnType<typeof setTimeout> | null = null
+  /** Its bounds at the last move or resize while it was normal, read at once: a maximize within the settle time keeps them. */
+  let seen: Rect | null = null
+  // A window that never showed (the sign-in's start, in the tray) has no place of its own to save.
+  let shown = false
+  window.once('show', () => (shown = true))
   open[kind].add(window)
   window.on('closed', () => open[kind].delete(window))
   const remember = () => {
-    if (restoring || window.isDestroyed() || window.isMinimized() || window.isFullScreen()) return
+    if (!shown || restoring || window.isDestroyed() || window.isMinimized() || window.isFullScreen()) return
     const isMax = window.isMaximized()
     if (!isMax) normal = window.getBounds()
-    load()[kind] = { ...steadyPlace(normal ?? window.getNormalBounds(), opened), maximized: isMax }
+    const next: WindowPlace = { ...steadyPlace(normal ?? window.getNormalBounds(), opened), maximized: isMax }
+    const store = load()
+    const was = store[kind]
+    if (was && was.x === next.x && was.y === next.y && was.width === next.width && was.height === next.height && was.maximized === next.maximized) return
+    store[kind] = next
+    dirty = true
     saveSoon()
   }
   // Read once a move or resize has settled: mid-maximize, Windows can report the full-screen size before it says maximized.
@@ -111,9 +124,21 @@ export function keepWindowPlace(window: BrowserWindow, kind: WindowKind, opening
       remember()
     }, ms)
   }
-  window.on('resize', () => later(250))
-  window.on('move', () => later(250))
-  window.on('maximize', () => later(250))
+  const moved = () => {
+    if (!window.isDestroyed() && !window.isMaximized() && !window.isMinimized() && !window.isFullScreen()) {
+      const bounds = window.getBounds()
+      // Not mid-maximize, when Windows can already report the whole screen before it says maximized.
+      const area = screen.getDisplayMatching(bounds).workArea
+      if (bounds.width < area.width - 2 || bounds.height < area.height - 2) seen = bounds
+    }
+    later(250)
+  }
+  window.on('resize', moved)
+  window.on('move', moved)
+  window.on('maximize', () => {
+    if (seen && !restoring) normal = seen
+    later(250)
+  })
   // Its own timer, which the restore's own resize events don't cancel, and nothing is read as normal until it has run.
   window.on('unmaximize', () => {
     if (restoring) clearTimeout(restoring)

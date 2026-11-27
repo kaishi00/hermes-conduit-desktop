@@ -26,6 +26,10 @@ describe('window places (Eric, 2026-11-27)', () => {
     expect(placeOnScreen({ x: 2000, y: 50, width: 2400, height: 1350 }, [{ x: 0, y: 0, width: 1366, height: 728 }, { x: 1366, y: 0, width: 1920, height: 1040 }], min)).toEqual({ x: 1366, y: 0, width: 1920, height: 1040 })
   })
 
+  it('grows a saved place smaller than the window allows back to its minimum', () => {
+    expect(placeOnScreen({ x: 10, y: 10, width: 300, height: 200 }, [primary], min)).toEqual({ x: 10, y: 10, width: 760, height: 520 })
+  })
+
   it('nudges a window hanging off the edge back in, and keeps one whose title bar is off the top out of reach', () => {
     expect(placeOnScreen({ x: 1500, y: 600, width: 1000, height: 700 }, [primary], min)).toEqual({ x: 920, y: 340, width: 1000, height: 700 })
     // Only the bottom showing: the title bar can't be grabbed, so it is centered.
