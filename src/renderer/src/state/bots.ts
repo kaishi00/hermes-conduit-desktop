@@ -10,7 +10,8 @@ import { toMillis } from './chats'
 import { assignFaces, faceColor, starterFace } from './starterFaces'
 import { categoryOf, type BotCategory } from './botCategories'
 
-export const BOTS_META_KEY = 'hermes-bots'
+import { BOTS_META_KEY } from '../../../shared/botsMeta'
+export { BOTS_META_KEY }
 
 export interface Bot {
   name: string

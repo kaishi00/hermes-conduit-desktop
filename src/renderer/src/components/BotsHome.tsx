@@ -28,7 +28,7 @@ import { canAddFar, mixedBotKey, mixedTiles, neighbour, type MixedTile } from ".
 import type { OwnHermesBot } from "../state/roomDrafts";
 import { HostBadgeMark } from "./CombinedDashboards";
 import { botSideScroll } from "../state/keptScroll";
-import { categorySections, movingCategory, renamingCategory, sameCategory, cleanName, useFoldedCategories, type CategorySection } from "../state/botCategories";
+import { categorySections, movingCategory, renamingCategory, refileTiles, sameCategory, cleanName, useFoldedCategories, type CategorySection } from "../state/botCategories";
 import { ask, askText } from "../state/dialogs";
 
 const BOT_DRAG = "application/x-conduit-bot";
@@ -658,16 +658,14 @@ export function BotsHome({
       .then(setActionError)
       .finally(() => setBusy(false));
   };
-  /** Every bot a rename or delete re-files: the shown ones and every host's hidden ones, so none keeps the old name. */
-  const fileable: MixedTile[] = [
-    ...tiles,
-    ...(hidden ?? []).map((bot) => ({ key: mixed ? mixedBotKey(hostUrl!, bot.name) : bot.name, host: hostUrl ?? "", bot, own: true })),
-    // Every live combined host, not just those with a shown bot, so a host whose bots are all hidden is re-filed too.
-    ...[...new Set([...keptHostUrls, ...otherBots.map((o) => o.host)])]
-      .filter((url) => url !== hostUrl)
-      .flatMap(keptHiddenBots)
-      .map((o) => ({ key: mixedBotKey(o.host, o.bot.name), host: o.host, bot: o.bot, own: false })),
-  ];
+  /** Every bot a rename or delete re-files, shown or hidden, on this host and each live combined one (refileTiles). */
+  const fileable = refileTiles(
+    tiles,
+    (hidden ?? []).map((bot) => ({ key: mixed ? mixedBotKey(hostUrl!, bot.name) : bot.name, host: hostUrl ?? "", bot, own: true })),
+    keptHostUrls,
+    (url) => keptHiddenBots(url).map((o) => ({ key: mixedBotKey(o.host, o.bot.name), host: o.host, bot: o.bot, own: false })),
+    hostUrl,
+  );
   const newCategory = async (tile: MixedTile) => {
     setMenu(null);
     const name = cleanName(await askText(t("New Category"), "", { confirm: t("Create"), maxLength: 40 }));

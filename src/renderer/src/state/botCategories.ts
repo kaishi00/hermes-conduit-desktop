@@ -10,7 +10,7 @@
  * phone reads and writes too. Group chats are filed by room id in `groups.categories`, kept and synced per host too.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { cleanOrder, arrange, hostOrder } from './botOrder'
+import { cleanOrder, arrange, hostOrder, type MixedTile } from './botOrder'
 import { installationId, PREFS_PATH } from './pinnedOrder'
 
 export const CATEGORIES_SYNC_KEY = 'bots.categories'
@@ -318,4 +318,14 @@ export function useFoldedCategories() {
     })
   }, [])
   return { folded, toggle }
+}
+
+/**
+ * The bots a category rename or delete re-files: this host's shown and hidden ones, and every live combined
+ * host's shown and hidden ones. A host still reconnecting is left out (its socket refuses the write, which
+ * would fail the whole rename); its bots catch up on the next rename. `liveHosts` is the live kept set.
+ */
+export function refileTiles(shown: readonly MixedTile[], ownHidden: readonly MixedTile[], liveHosts: readonly string[], farHidden: (host: string) => MixedTile[], openHost?: string): MixedTile[] {
+  const live = new Set(liveHosts.filter(url => url !== openHost))
+  return [...shown.filter(tile => tile.own || live.has(tile.host)), ...ownHidden, ...[...live].flatMap(farHidden)]
 }
