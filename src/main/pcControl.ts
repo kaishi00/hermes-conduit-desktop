@@ -41,7 +41,13 @@ let barTimer: ReturnType<typeof setTimeout> | null = null
 /** Whether the bar holds the Stop keys, so hiding it never drops another shortcut's. */
 let ownKeys = false
 /** Asks already on screen, by chat, so a burst of actions asks once, and how to take each away. */
-const asking = new Map<string, { shown: Promise<'allowed' | 'denied' | 'closed'>; close: AbortController }>()
+const asking = new Map<string, { shown: Promise<'allowed' | 'denied' | 'closed'>; close: AbortController; profile: string; pos: number }>()
+/** Bumped by Stop (and turning it off), so an action that waited through one doesn't run after it. */
+let stops = 0
+/** Actions running on the driver now, and who waits for none to be (an ask about to show). */
+let running = 0
+let idleWaiters: (() => void)[] = []
+const whenIdle = () => (running ? new Promise<void>(resolve => idleWaiters.push(resolve)) : Promise.resolve())
 
 const platform = (): PcControlState['platform'] => (process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'windows' : 'linux')
 
@@ -67,7 +73,8 @@ export function pcControlState(): PcControlState {
     driver: driverState,
     progress: downloading?.progress ?? 0,
     active,
-    stopKeys: STOP_KEYS
+    stopKeys: STOP_KEYS,
+    stops
   }
 }
 
@@ -89,6 +96,10 @@ export function setPcControl(change: Partial<PcControlSettings> & { bot?: unknow
   if (typeof change.name === 'string') clean.name = change.name.slice(0, 64)
   if (Array.isArray(change.bots)) clean.bots = change.bots.filter(b => typeof b === 'string').slice(0, 64)
   choosePcControl(clean)
+  if (clean.bots) {
+    const allowed = new Set(clean.bots)
+    closeAsks(profile => allowed.has(profile))
+  }
   if (clean.on === false) stopControl(false)
   if (clean.on === true && !driverPath()) void installPcDriver()
   changed()
@@ -130,7 +141,7 @@ export function deletePcDriver(): PcControlState {
 const ASK_URL = 'conduit-ask://'
 const ASK_WIDTH = 440
 const ASK_HEIGHT = 250
-/** Each ask open at once sits this much lower and to the right, so none hides another. */
+/** Each ask open at once sits a step lower and to the right, so none hides another. */
 const ASK_CASCADE = 24
 
 /**
@@ -148,59 +159,88 @@ export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'close
   const open = asking.get(key)
   if (open) return open.shown
   const close = new AbortController()
+  const entry = { shown: Promise.resolve<'allowed' | 'denied' | 'closed'>('closed'), close, profile: request.profile, pos: -1 }
   const shown = new Promise<'allowed' | 'denied' | 'closed'>(resolve => {
     let answered = false
+    let win: BrowserWindow | null = null
     const answer = (value: 'allowed' | 'denied' | 'closed') => {
       if (answered) return
       answered = true
       resolve(value)
-      if (!win.isDestroyed()) win.destroy()
+      if (win && !win.isDestroyed()) win.destroy()
     }
-    const cascade = asking.size * ASK_CASCADE
-    // The screen the user is on: the one under the cursor.
-    const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
-    const win = new BrowserWindow({
-      width: ASK_WIDTH,
-      height: ASK_HEIGHT,
-      x: Math.round(area.x + (area.width - ASK_WIDTH) / 2) + cascade,
-      y: Math.round(area.y + (area.height - ASK_HEIGHT) / 3) + cascade,
-      frame: false,
-      transparent: true,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      alwaysOnTop: true,
-      show: false,
-      // The bar's title, so the bot's actions never pick this window (pcExecutor).
-      title: OWN_TITLES[0],
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false }
-    })
-    win.setAlwaysOnTop(true, 'screen-saver')
-    win.setContentProtection(true)
-    win.webContents.on('will-navigate', (event, url) => {
-      event.preventDefault()
-      if (url.startsWith(ASK_URL)) answer(url.startsWith(`${ASK_URL}allow`) ? 'allowed' : 'denied')
-    })
-    // Esc is Don't Allow, as closing is (the page runs no script).
-    win.webContents.on('before-input-event', (event, input) => {
-      if (input.type === 'keyDown' && input.key === 'Escape') {
-        event.preventDefault()
-        answer('denied')
-      }
-    })
-    win.on('closed', () => answer(close.signal.aborted ? 'closed' : 'denied'))
     close.signal.addEventListener('abort', () => answer('closed'))
-    win.once('ready-to-show', () => {
-      if (win.isDestroyed()) return
-      win.show()
-      win.focus()
-      win.flashFrame(true)
-    })
-    void win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(askPage(request))).catch(() => answer('denied'))
+    // Shown once no action is mid-way: one already past its wait (runPcRequest) could
+    // otherwise click where the ask just opened.
+    void whenIdle()
+      .then(() => {
+        if (answered) return
+        win = askWindow(request, entry, answer, close)
+      })
+      // A window that couldn't be made is a no, so the ask never hangs (nor the actions behind it).
+      .catch(() => answer('denied'))
   }).finally(() => asking.delete(key))
-  asking.set(key, { shown, close })
+  entry.shown = shown
+  asking.set(key, entry)
   return shown
+}
+
+function askWindow(
+  request: PcRequest,
+  entry: { pos: number },
+  answer: (value: 'allowed' | 'denied' | 'closed') => void,
+  close: AbortController
+): BrowserWindow {
+  // The screen the user is on: the one under the cursor; the cascade wraps before it leaves it.
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  const left = Math.round(area.x + (area.width - ASK_WIDTH) / 2)
+  const top = Math.round(area.y + (area.height - ASK_HEIGHT) / 3)
+  const room = Math.max(1, Math.floor(Math.min(area.x + area.width - ASK_WIDTH - left, area.y + area.height - ASK_HEIGHT - top) / ASK_CASCADE) + 1)
+  // The lowest step no open ask is drawn at, so a new ask never lands on an open one while there's room.
+  const used = new Set([...asking.values()].map(open => open.pos))
+  let pos = 0
+  while (pos < room && used.has(pos)) pos++
+  entry.pos = pos % room
+  const cascade = entry.pos * ASK_CASCADE
+  const win = new BrowserWindow({
+    width: ASK_WIDTH,
+    height: ASK_HEIGHT,
+    x: left + cascade,
+    y: top + cascade,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    show: false,
+    // The bar's title, so the bot's actions never pick this window (pcExecutor).
+    title: OWN_TITLES[0],
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false }
+  })
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setContentProtection(true)
+  win.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault()
+    if (url.startsWith(ASK_URL)) answer(url.startsWith(`${ASK_URL}allow`) ? 'allowed' : 'denied')
+  })
+  // Esc is Don't Allow, as closing is (the page runs no script).
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') {
+      event.preventDefault()
+      answer('denied')
+    }
+  })
+  win.on('closed', () => answer(close.signal.aborted ? 'closed' : 'denied'))
+  win.once('ready-to-show', () => {
+    if (win.isDestroyed()) return
+    win.show()
+    win.focus()
+    win.flashFrame(true)
+  })
+  void win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(askPage(request))).catch(() => answer('denied'))
+  return win
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
@@ -222,7 +262,7 @@ html,body{margin:0;height:100%;background:transparent;font:13px 'Segoe UI Variab
 .face{flex:none;width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-weight:700;font-size:17px}
 .kicker{margin:0;font-size:12px;color:var(--text-3)}
 h1{margin:2px 0 0;font-size:16px;font-weight:600;line-height:1.3}
-.body{flex:1;min-height:0;overflow:hidden;margin:10px 0 12px}
+.body{flex:1;min-height:0;overflow-y:auto;margin:10px 0 12px}
 p{margin:4px 0 0;color:var(--text-3);line-height:1.4}
 p.chat{color:var(--text)}
 .chat,h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -234,6 +274,11 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style><div class="card"><div class="top"><div class="face">${initial}</div><div><p class="kicker">${esc(t('Control from Hermes'))}</p><h1>${esc(t('Allow {bot} to control this computer?', { bot: request.bot }))}</h1></div></div><div class="body">${lines}</div><div class="actions"><a class="no" href="${ASK_URL}deny" autofocus>${esc(t('Don’t Allow'))}</a><a class="yes" href="${ASK_URL}allow">${esc(t('Allow'))}</a></div></div>`
 }
 
+/** Takes away the asks of bots that may no longer ask (all of them once it's off or stopped). */
+function closeAsks(keep: (profile: string) => boolean = () => false) {
+  for (const entry of asking.values()) if (!keep(entry.profile)) entry.close.abort()
+}
+
 /** The phone answered a chat's ask first: its dialog goes. */
 export function closePcAsk(session: string) {
   asking.get(session)?.close.abort()
@@ -243,15 +288,27 @@ const stopLabel = () => (process.platform === 'darwin' ? '⌘⌥⇧S' : 'Ctrl+Al
 
 /** Runs one action the plugin handed over. The renderer asked first (askPc, and the phone) when it needed asking. */
 export async function runPcRequest(request: PcRequest): Promise<Record<string, unknown>> {
+  // Stop since the renderer fetched it (or since it got here) stops it, the rest of its batch too.
+  const stopsAtStart = typeof request.gen === 'number' ? request.gen : stops
+  if (stops !== stopsAtStart) return { ok: false, code: 'stopped' }
   // No action runs while an ask is up: the ask is out of the bot's screenshots, so a
   // click meant for what it saw could land on Allow (desktop#721 review).
   while (asking.size) await Promise.allSettled([...asking.values()].map(open => open.shown))
+  // Stop pressed while it waited: it doesn't run after it.
+  if (stops !== stopsAtStart) return { ok: false, code: 'stopped' }
   const settings = pcControlSettings()
   if (!settings.on || !settings.bots.includes(request.profile)) return { ok: false, code: 'off' }
   if (!driverPath()) return { ok: false, code: 'unavailable', message: 'The driver isn’t downloaded on this computer yet.' }
   const grant: 'allowed' | undefined = request.needs_ok ? 'allowed' : undefined
-  showBar(request.bot, request.chat)
+  // Counted from here, with no wait since the asks were checked, so no ask shows mid-action.
+  running++
   try {
+    try {
+      showBar(request.bot, request.chat)
+    } catch {
+      // The bar couldn't be drawn (the app is quitting): not a driver failure, so the driver stays.
+      return { ok: false, ...(grant ? { grant } : {}), code: 'failed', message: 'Conduit couldn’t show its control bar.' }
+    }
     executor ??= new Executor(await driver())
     const result = await executor.run(request.session, { action: request.action, args: request.args ?? {} })
     return { ...result, ...(grant ? { grant } : {}) }
@@ -262,11 +319,20 @@ export async function runPcRequest(request: PcRequest): Promise<Record<string, u
     return { ok: false, ...(grant ? { grant } : {}), code: 'driver', message: `The driver failed: ${(error as Error).message}` }
   } finally {
     holdBar()
+    running--
+    if (!running) {
+      const waiting = idleWaiters
+      idleWaiters = []
+      for (const wake of waiting) wake()
+    }
   }
 }
 
 /** Stop: the bar goes, and each allowed bot's plugin hears it (the renderer posts /pc/stop). */
 export function stopControl(tell = true) {
+  stops++
+  // Stop takes away the asks too: a no, as the phone's answer closing one is.
+  closeAsks()
   active = null
   executor?.forget()
   hideBar()

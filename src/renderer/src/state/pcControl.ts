@@ -168,6 +168,9 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
           requests = requestsFrom(body, profile, titles.current.get(profile) ?? profile)
           // Stop pressed elsewhere (the phone): the bar goes before anything new runs.
           if ((body as { stopped?: unknown } | null)?.stopped === true) window.conduit.pcControl.stoppedElsewhere()
+          // Stop pressed from here on stops the whole batch, not just the action running then.
+          const gen = (await window.conduit.pcControl.state().catch(() => null))?.stops
+          if (typeof gen === 'number') requests = requests.map(request => ({ ...request, gen }))
         } catch {
           await new Promise(resolve => setTimeout(resolve, RETRY_MS))
           continue
