@@ -130,3 +130,17 @@ describe('the tabs over the chat column', () => {
     expect(shown(tabs)).toBe(String(WORKSPACE_TAB_LIMIT))
   })
 })
+
+describe('a New Chat’s tab (#656 review)', () => {
+  it('keeps the draft it holds, so showing it again opens the same draft', () => {
+    let tabs = openInNewTab(followChat(NO_WORKSPACE_TABS, chat('a'), key()), { id: null, profile: 'work' }, key())
+    tabs = followChat(tabs, { id: null, profile: 'work', draft: 3 }, key())
+    const draftTab = tabs.tabs.find(tab => tab.key === tabs.active)!
+    expect(tabTarget(draftTab)).toEqual({ id: null, profile: 'work', title: undefined, draft: 3 })
+  })
+
+  it('drops the draft once the chat is saved', () => {
+    const tabs = followChat(followChat(NO_WORKSPACE_TABS, { id: null, draft: 3 }, key()), { id: 's1', draft: 3 }, key())
+    expect(tabTarget(tabs.tabs[0])).toEqual({ id: 's1', profile: undefined, title: undefined })
+  })
+})

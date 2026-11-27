@@ -36,10 +36,10 @@ export function newChatProjects(projects: readonly Project[]): Project[] {
 /** The new chat's project as its chip names it: the one whose folder it starts in, else the folder's name. */
 export function projectFor(folder: string | undefined, projects: readonly Project[] | null): Project | null {
   const key = folderKey(folder)
-  if (!key || !projects) return null
+  if (!folder || !key || !projects) return null
   const made = projects.filter(p => !p.isHome)
   // The exact spelling first: a Linux host may hold two folders that differ only by case.
-  const exact = folder!.trim().replace(/[\\/]+$/, '')
+  const exact = folder.trim().replace(/[\\/]+$/, '')
   return made.find(p => p.path?.trim().replace(/[\\/]+$/, '') === exact) ?? made.find(p => folderKey(p.path) === key) ?? null
 }
 

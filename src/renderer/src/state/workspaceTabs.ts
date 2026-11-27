@@ -20,6 +20,8 @@ export interface ChatTabTarget {
   title?: string
   /** A new chat's folder, from a project's New Chat. */
   folder?: string
+  /** A New Chat's draft, so its picks come back with its tab (desktop#656's review). */
+  draft?: number
 }
 
 export interface ChatTab {
@@ -56,8 +58,8 @@ export function tabHolding(tabs: WorkspaceTabs, chat: Pick<ChatTabTarget, 'id' |
 
 /** What the chat column opens for a tab. */
 export function tabTarget(tab: WorkspaceTab): ChatTabTarget {
-  const { id, profile, title, folder } = tab.chat
-  return { id, profile, title, ...(folder ? { folder } : {}) }
+  const { id, profile, title, folder, draft } = tab.chat
+  return { id, profile, title, ...(folder ? { folder } : {}), ...(draft !== undefined && id === null ? { draft } : {}) }
 }
 
 export function activeTab(tabs: WorkspaceTabs): WorkspaceTab | undefined {
@@ -75,7 +77,7 @@ function limited(tabs: WorkspaceTab[], keep: string): WorkspaceTab[] {
 }
 
 const sameTarget = (a: ChatTabTarget, b: ChatTabTarget) =>
-  a.id === b.id && profileOf(a.profile) === profileOf(b.profile) && a.title === b.title && a.folder === b.folder
+  a.id === b.id && profileOf(a.profile) === profileOf(b.profile) && a.title === b.title && a.folder === b.folder && a.draft === b.draft
 
 /**
  * The chat column now shows `chat`: its own tab shows when one holds it;

@@ -1167,8 +1167,8 @@ function Shell({
   const nextTabKey = () => `tab-${++tabCount.current}`
   useEffect(() => {
     if (selected.botChat) return
-    setTabs(current => followChat(current, { id: selected.id, profile: selected.profile, title: selected.title, folder: selected.folder }, nextTabKey()))
-  }, [selected.id, selected.profile, selected.title, selected.folder, selected.botChat])
+    setTabs(current => followChat(current, { id: selected.id, profile: selected.profile, title: selected.title, folder: selected.folder, draft: selected.draft }, nextTabKey()))
+  }, [selected.id, selected.profile, selected.title, selected.folder, selected.draft, selected.botChat])
   // A chat with a window of its own shows only there, so its tab closes.
   useEffect(() => {
     if (!chatWindowIds.length) return
@@ -1281,7 +1281,7 @@ function Shell({
         setTabs(current => ({ ...current, active: besideTab.key }))
         setSelected(tabTarget(besideTab))
       }
-      else if (onScreen) setSelected({ id: null, profile: selected.profile })
+      else if (onScreen) setSelected({ id: null, profile: selected.profile, draft: ++draftCount.current })
       const opened = await window.conduit.openChatWindow({
         id: target.id,
         profile: target.profile,
@@ -2822,7 +2822,7 @@ function Shell({
                   connected={connected}
                   selectedId={chat.storedId ?? selected.id}
                   onSelect={item => setSelected({ id: item.id, profile: item.profile ?? chatProfile ?? undefined, title: item.title })}
-                  onNewChat={(folder, project) => setSelected({ id: null, profile: project.profile ?? chatProfile ?? undefined, folder })}
+                  onNewChat={(folder, project) => setSelected({ id: null, profile: project.profile ?? chatProfile ?? undefined, folder, draft: ++draftCount.current })}
                   onClose={() => setProjectsOpen(false)}
                   isUnread={projectChatUnread}
                   runningIds={runningIds}
@@ -3432,7 +3432,7 @@ function Shell({
                 ? draft => {
                     // A new chat's canvas: what's sent from it goes only into the chat it makes (A new chat that something waits on).
                     // In the profile the Calls page showed and edited (the resolved one, never a hidden or gone name).
-                    setSelected({ id: null, profile: settingsProfile })
+                    setSelected({ id: null, profile: settingsProfile, draft: ++draftCount.current })
                     setSection('chats')
                     setQuote(quoteRequest({ draft }))
                   }

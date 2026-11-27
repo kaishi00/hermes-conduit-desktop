@@ -828,6 +828,21 @@ describe("model and run settings before a new chat's first message", () => {
     expect(hook.result().chat.cwd).toBeUndefined()
   })
 
+  it('gives a New Chat’s picks back when its tab shows again, and none to another (#656 review)', async () => {
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', profile: 'work', draft: 1 })
+    await act(async () => {
+      await hook.result().setModel('claude-opus-4-6', 'anthropic')
+      await hook.result().setYolo(true)
+    })
+    hook.rerender({ storedId: null, connected: true, url: 'h1', profile: 'work', draft: 2 })
+    expect(hook.result().chat.model).toBeUndefined()
+    hook.rerender({ storedId: null, connected: true, url: 'h1', profile: 'work', draft: 1 })
+    expect(hook.result().chat.model).toBe('claude-opus-4-6')
+    expect(hook.result().chat.yolo).toBe(true)
+    hook.rerender({ storedId: null, connected: true, url: 'h1', profile: 'work', draft: 2 })
+    expect(hook.result().chat.yolo).toBeUndefined()
+  })
+
   it('does not treat a stored chat still resuming as a draft in setModel', async () => {
     holdResumes = true
     const hook = mount(chatInApp, { storedId: 'a', connected: true, url: 'h1' })
