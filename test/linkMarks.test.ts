@@ -27,7 +27,7 @@ async function render(text: string, openFile?: (path: string) => void) {
   const path = '../src/renderer/src/components/Markdown.tsx'
   const { Markdown, FileLinks } = (await import(/* @vite-ignore */ path)) as { Markdown: unknown; FileLinks: { Provider: unknown } }
   root = createRoot(host)
-  act(() => root!.render(createElement(FileLinks.Provider as never, { value: openFile ?? null } as never, createElement(Markdown as never, { text } as never))))
+  act(() => root!.render(createElement(FileLinks.Provider as never, { value: openFile ? { open: openFile, menu: () => undefined } : null } as never, createElement(Markdown as never, { text } as never))))
 }
 
 describe('a site’s icon for a link', () => {
