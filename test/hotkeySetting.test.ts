@@ -149,10 +149,14 @@ describe("Settings' global shortcut keys while they are picked", () => {
     await settle()
     const changes = () => [...host.querySelectorAll('button')].filter(b => b.textContent === 'Change')
     act(() => changes()[0]!.click())
+    // While a row listens both shortcuts stand aside, so the main process reads Quick Ask's keys as unregistered.
+    state = { ...state, registered: false }
     act(() => changes()[0]!.click())
     await settle()
     // Only the Live Call row listens now; the main process heard listening start twice and never stop.
     expect(host.querySelectorAll('[role="status"]')).toHaveLength(1)
+    // The row that lost the listening doesn't take its stood-aside keys for another app's (desktop#663 review).
+    expect(host.querySelectorAll('dd')[0]!.textContent).not.toContain('Another app')
     expect(host.querySelectorAll('dd')[1]!.textContent).toContain('Press a shortcut…')
     expect(recording.mock.calls).toEqual([[true], [true]])
     set.mockResolvedValue({ accelerator: 'Ctrl+Alt+L', registered: true, changed: true })
