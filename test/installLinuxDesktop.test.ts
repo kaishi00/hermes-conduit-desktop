@@ -230,10 +230,17 @@ describe.skipIf(process.platform !== 'linux')('Linux source launcher', () => {
 
   it('reinstalls past symlinks that lead back into applications (#461)', () => {
     const f = fixture()
-    expect(f.install().status).toBe(0)
+    // The refresh is stubbed: update-desktop-database follows those symlinks itself and walks
+    // every combination of them, so the system tool is what needs the guard, not this install.
+    const bin = join(f.base, 'bin')
+    mkdirSync(bin, { recursive: true })
+    writeFileSync(join(bin, 'update-desktop-database'), '#!/bin/sh\nexit 0\n')
+    chmodSync(join(bin, 'update-desktop-database'), 0o755)
+    const env = { PATH: `${bin}:${process.env.PATH}` }
+    expect(f.install(undefined, env).status).toBe(0)
     symlinkSync('.', join(f.data, 'applications/alias'))
     symlinkSync('.', join(f.data, 'applications/other'))
-    const again = f.install()
+    const again = f.install(undefined, env)
     expect(again.status, again.stderr).toBe(0)
     expect(again.stdout).toContain(`Installed ${f.entry}`)
   })
