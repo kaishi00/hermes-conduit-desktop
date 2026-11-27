@@ -124,4 +124,37 @@ describe("applyLiveWork on hermes dashboard", () => {
     act(() => hook.result().applyLiveWork(turn, listed, Date.now() + 1))
     expect(userWords(hook.result().transcript)).toEqual(['later'])
   })
+
+  it("draws a queued message's words once, even after the history is read again", async () => {
+    const hook = renderHook(chatHook, {})
+    mounted.push(hook)
+    await settle()
+    const listed = { ...noLiveWork, running: true, queued: [queued('adm-7')] }
+    const turn = { ...noLiveWork, running: true, started: ['adm-7'] }
+    act(() => hook.result().applyLiveWork(turn, listed, Date.now() + 1))
+    expect(userWords(hook.result().transcript)).toEqual(['later'])
+    // The turn ends: the history is read again (its stored rows), and the transcript is rebuilt from them.
+    await act(async () => {
+      hook.result().applyLiveWork(noLiveWork, turn, Date.now() + 1)
+      await settle()
+    })
+    // A read still pairing the old listing with the running turn draws nothing more.
+    act(() => hook.result().applyLiveWork(turn, listed, Date.now() + 1))
+    expect(userWords(hook.result().transcript)).toEqual([])
+  })
+
+  it('reads the history again when a queued message nothing holds left the queue without running', async () => {
+    const hook = renderHook(chatHook, {})
+    mounted.push(hook)
+    await settle()
+    const resumes = () => calls.filter(c => c === 'session.resume').length
+    const listed = { ...noLiveWork, running: true, queued: [queued('adm-7')] }
+    act(() => hook.result().applyLiveWork(listed, noLiveWork, Date.now() + 1))
+    const opened = resumes()
+    await act(async () => {
+      hook.result().applyLiveWork(noLiveWork, { ...listed, running: false }, Date.now() + 1)
+      await settle()
+    })
+    expect(resumes()).toBeGreaterThan(opened)
+  })
 })

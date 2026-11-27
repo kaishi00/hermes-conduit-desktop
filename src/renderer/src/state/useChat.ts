@@ -534,6 +534,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const [queue, setQueue] = useState<QueuedPrompt[]>([])
   /** When each forwarded send was held (ms): a live-work read asked before that can't know it yet. */
   const heldAt = useRef(new Map<string, number>())
+  /** Queued messages whose words a live-work read drew in: kept past a resume's reset, so they come in once. */
+  const wordsDrawn = useRef<string[]>([])
   const queueRef = useRef(queue)
   queueRef.current = queue
   /** The stored rows before the open chat's drawn ones, and whether it has more (longChat.ts). */
@@ -580,6 +582,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     followedLive.current = false
     reloadedAt.current = 0
     gapPending.current = false
+    wordsDrawn.current = []
     // A create still out belongs to the chat that just left: a pick in this one mustn't wait on it and be dropped.
     creating.current = null
     // A resume this re-run abandons can't clear it any more: its finally is fenced by the ticket.
@@ -1723,8 +1726,15 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       // while it waited, or another app sent it): its words come in once, from the queue.
       const heldNow = new Set((transcriptRef.current.held ?? []).map(h => h.admission))
       for (const row of was.queued) {
-        if (work.started.includes(row.admissionId) && !heldNow.has(row.admissionId))
+        if (heldNow.has(row.admissionId) || wordsDrawn.current.includes(row.admissionId) || waiting.has(row.admissionId)) continue
+        if (work.started.includes(row.admissionId)) {
           dispatch({ type: 'queuedStarted', admission: row.admissionId, text: row.text })
+          wordsDrawn.current = [...wordsDrawn.current.slice(-15), row.admissionId]
+        } else if (!work.running) {
+          // It ran and ended between reads, or was withdrawn: the history tells which. Not while a turn
+          // runs there: words drawn above may not be stored yet, and the turn's end reads the history anyway.
+          settled = true
+        }
       }
       // Holds the read could know of are settled now (released, dropped, or started by an unnamed message.start).
       for (const admission of [...heldAt.current.keys()]) if (!newer(admission) && !waiting.has(admission)) heldAt.current.delete(admission)
