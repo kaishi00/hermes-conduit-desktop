@@ -57,24 +57,22 @@ export function PictureViewerHost({ children }: { children: ReactNode }) {
  * right-click on any picture has Copy Image too (src/main/editMenu.ts).
  */
 function ViewerCopy({ src }: { src: string }) {
-  const [note, setNote] = useState<{ src: string; copied: boolean } | null>(null)
+  const [note, setNote] = useState<{ copied: boolean } | null>(null)
   useEffect(() => {
     if (!note) return
     const timer = setTimeout(() => setNote(null), 1500)
     return () => clearTimeout(timer)
   }, [note])
-  // The note is for the picture it copied: another one shown in its place hasn't been.
-  const shown = note && note.src === src ? note : null
   return (
     <button
       className="picture-viewer-save"
       aria-live="polite"
       onClick={event => {
         event.stopPropagation()
-        void copyPicture(src).then(copied => setNote({ src, copied }))
+        void copyPicture(src).then(copied => setNote({ copied }))
       }}
     >
-      {shown ? (shown.copied ? t('Copied') : t("Couldn't copy")) : t('Copy')}
+      {note ? (note.copied ? t('Copied') : t("Couldn't copy")) : t('Copy')}
     </button>
   )
 }

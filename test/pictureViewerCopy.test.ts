@@ -72,7 +72,7 @@ describe("the picture viewer's Copy", () => {
     view.unmount()
   })
 
-  it('keeps its note for the picture it copied, not one shown in its place', async () => {
+  it('starts at Copy again when the viewer opens another picture', async () => {
     const view = await mount('data:image/png;base64,AQID')
     view.open()
     act(() => view.copy()!.click())

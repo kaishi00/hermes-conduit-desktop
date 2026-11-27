@@ -2864,8 +2864,9 @@ html[data-window='quick'] body {
 }
 
 .picture-viewer-save {
-  /* Copy's Copied and Couldn't copy don't nudge Download aside as they come and go. */
+  /* Copy keeps one line and about its width as Copied or Couldn't copy comes and goes. */
   min-width: 96px;
+  white-space: nowrap;
   height: 36px;
   padding: 0 14px;
   border-radius: 18px;
