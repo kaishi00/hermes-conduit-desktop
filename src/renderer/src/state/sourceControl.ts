@@ -219,6 +219,11 @@ export function sameStatus(a: GitStatus, b: GitStatus): boolean {
   return a === b || JSON.stringify(a) === JSON.stringify(b)
 }
 
+/** Whether two reads of a file's diff found it the same. */
+export function sameDiff(a: FileDiff, b: FileDiff): boolean {
+  return a.path === b.path && a.staged === b.staged && a.diff === b.diff && a.binary === b.binary && a.truncated === b.truncated
+}
+
 /** A unified diff as rows to draw: hunks, and each line with its old and new numbers. Git's file header is left out. */
 export function diffLines(diff: string): DiffLine[] {
   const lines: DiffLine[] = []

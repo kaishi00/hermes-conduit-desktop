@@ -71,4 +71,22 @@ describe('the Changes view', () => {
     expect(reported).toHaveLength(2)
     act(() => view.root.unmount())
   })
+
+  it('reads the picked diff again when a file changes but its row stays as it was', async () => {
+    let body = '@@ -1 +1 @@\n-old\n+first'
+    http.mockImplementation(async (_method: string, url?: string) =>
+      String(url ?? '').includes('/diff') ? { path: 'a.txt', staged: false, diff: body } : status(null, 'modified')
+    )
+    const view = await mount(() => {})
+    await settle()
+    const row = view.host.querySelector('.git-row-main') as HTMLElement
+    act(() => row.click())
+    await settle()
+    expect(view.host.textContent).toContain('first')
+    body = '@@ -1 +1 @@\n-old\n+second'
+    view.rerender(1)
+    await settle()
+    expect(view.host.textContent).toContain('second')
+    act(() => view.root.unmount())
+  })
 })

@@ -14,6 +14,7 @@ import {
   parseBranches,
   parseDiff,
   parseStatus,
+  sameDiff,
   sameStatus,
   splitPath,
   statusPath,
@@ -79,8 +80,12 @@ export function ChangesView({
   // What onStatus was last given. A read that finds the folder as it was keeps the
   // objects it already has, so the lists, the bench and the diff don't draw again (issue 679).
   const reported = useRef<GitStatus | null>(null)
+  // Each status read that lands, the same folder too: the picked file's diff is read again, since an
+  // edit can leave its row as it was (+1/−1 before and after).
+  const [statusReads, setStatusReads] = useState(0)
   const apply = useCallback(
     (next: GitStatus) => {
+      setStatusReads(n => n + 1)
       setStatus(current => (current !== 'loading' && !('error' in current) && sameStatus(current, next) ? current : next))
       if (reported.current && sameStatus(reported.current, next)) return
       reported.current = next
@@ -147,13 +152,18 @@ export function ChangesView({
     setDiff(current => (current && current !== 'loading' && !('error' in current) && current.path === picked.path && current.staged === picked.staged ? current : 'loading'))
     gateway
       .http('GET', diffPath(root, picked.path, picked.staged, profile))
-      .then(raw => live && setDiff(parseDiff(raw)))
+      .then(raw => {
+        if (!live) return
+        const next = parseDiff(raw)
+        // The same diff keeps the object it has, so an idle poll draws nothing again (issue 679).
+        setDiff(current => (current && current !== 'loading' && !('error' in current) && sameDiff(current, next) ? current : next))
+      })
       .catch(e => live && setDiff({ error: gitError(e) }))
     return () => {
       live = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickedKey, statusStamp, root, profile])
+  }, [pickedKey, statusStamp, statusReads, root, profile])
 
   const act = async (action: GitAction, body: Record<string, unknown> = {}): Promise<boolean> => {
     // The branch list may change under it.
