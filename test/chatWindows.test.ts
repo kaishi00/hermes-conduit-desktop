@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_WINDOW_LIMIT, ChatWindowSet } from '../src/main/chatWindowSet'
-import { chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, dockedRoomUrl, pulseFrameRequest, roomFrameRequest } from '../src/shared/chatWindows'
+import { KEPT_ON_TOP_LIMIT, onTopKey, withKeptOnTop, chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, dockedRoomUrl, pulseFrameRequest, roomFrameRequest } from '../src/shared/chatWindows'
 
 function harness() {
   const made: { id: string; focused: number; closed: boolean; onClosed: () => void }[] = []
@@ -140,5 +140,25 @@ describe('chat windows of their own', () => {
     expect(roomFrameRequest(hash({ host: 'https://b.example', kind: 'room', docked: true }))).toBeNull()
     expect(roomFrameRequest(hash({ host: 'https://b.example', kind: 'room', id: 'r1', docked: true }))).toEqual({ host: 'https://b.example', kind: 'room', id: 'r1' })
     expect(roomFrameRequest('#room=%zz')).toBeNull()
+  })
+})
+
+describe('chat windows kept on top (issue 608)', () => {
+  it('remembers each chat by its dashboard, profile and id', () => {
+    const a = onTopKey({ host: 'https://a.example', profile: 'work', id: 'c1' })
+    expect(onTopKey({ host: 'https://b.example', profile: 'work', id: 'c1' })).not.toBe(a)
+    expect(onTopKey({ host: 'https://a.example', id: 'c1' })).not.toBe(a)
+    expect(onTopKey({ host: 'https://a.example', profile: 'work', id: 'c1' })).toBe(a)
+  })
+
+  it('adds a chat once, newest last, takes it off, and drops the oldest past the limit', () => {
+    expect(withKeptOnTop(['a', 'b'], 'a', true)).toEqual(['b', 'a'])
+    expect(withKeptOnTop(['a', 'b'], 'a', false)).toEqual(['b'])
+    expect(withKeptOnTop(['a'], 'z', false)).toEqual(['a'])
+    const full = Array.from({ length: KEPT_ON_TOP_LIMIT }, (_, i) => `k${i}`)
+    const next = withKeptOnTop(full, 'new', true)
+    expect(next).toHaveLength(KEPT_ON_TOP_LIMIT)
+    expect(next[0]).toBe('k1')
+    expect(next.at(-1)).toBe('new')
   })
 })
