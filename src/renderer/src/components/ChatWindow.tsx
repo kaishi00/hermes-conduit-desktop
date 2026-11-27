@@ -490,7 +490,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     )
   }, [windowId, profile, title, botTitle, host, botChat, notice, docked])
   // A window's pin keeps it in front of every other window, other apps' too, remembered for its chat (issue 608).
-  const [onTop, setOnTop] = useState(false)
+  // Null until the window says, so a click before then (a window that opened kept on top) can't ask for what it already is.
+  const [onTop, setOnTop] = useState<boolean | null>(null)
   useEffect(() => {
     if (docked) return
     let live = true
@@ -500,6 +501,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     }
   }, [docked])
   const toggleOnTop = useCallback(() => {
+    if (onTop === null) return
     void window.conduit.setChatWindowOnTop(!onTop).then(on => {
       if (on !== null) setOnTop(on)
     })
@@ -624,7 +626,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
               : {
                   label: t('Keep on Top'),
                   title: onTop ? t('This window stays in front of other windows. Click to stop.') : `${t('Keep on Top')}: ${t('Keeps this window in front of other windows, other apps’ too.')}`,
-                  on: onTop,
+                  on: onTop === true,
+                  disabled: onTop === null,
                   onClick: toggleOnTop
                 }
           }
