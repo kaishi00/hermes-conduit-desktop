@@ -540,12 +540,18 @@ export function GptLiveCall({
   // Connect once; hang up on leaving.
   useEffect(() => {
     stopReading()
+    // StrictMode mounts twice in a dev build with the same refs: the second run starts the call afresh, and the
+    // first run's work still on its way stops at its next check instead of leaving it on Connecting… (desktop#669).
+    ended.current = false
+    ending.current = false
+    let gone = false
+    const over = () => gone || ended.current
     let startTimer = 0
     const connect = async () => {
       trace.current = startCallTrace('GPT-Live')
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-        if (ended.current) return stream.getTracks().forEach(track => track.stop())
+        if (over()) return stream.getTracks().forEach(track => track.stop())
         trace.current.step(micStep(stream))
         mic.current = stream
         setMicStream(stream)
@@ -575,7 +581,7 @@ export function GptLiveCall({
           peer.addEventListener('icegatheringstatechange', done)
           window.setTimeout(resolve, 3000)
         })
-        if (ended.current) return
+        if (over()) return
         // A resumed call is seeded with the saved call's turns, a fresh one with the chat's.
         const seed = history(
           resumed.current?.turns ??
@@ -592,7 +598,7 @@ export function GptLiveCall({
           loadPhoneReads(profile, 'gpt-live')
         ])
         const asked = await askedQuestionsForCall(profile)
-        if (ended.current) return
+        if (over()) return
         phoneRef.current = phone
         // The phone's read rules only where a delegation carries its text: GA's carries none (the request is in the
         // transcript), so a marker could never match there and the model would be taught a read it can't make.
@@ -605,7 +611,7 @@ export function GptLiveCall({
         trace.current.step(`Session requested (${String(billing)}, ${peer.iceGatheringState} ICE, ${seed.length} history items)`)
         const answer = sessionAnswer(await gateway.http('POST', withProfile(SESSION_PATH, profile), body, SESSION_TIMEOUT_MS), billing)
         trace.current.step(`Session answered (${answer.dialect} events, briefing ${answer.briefingApplied ? 'applied' : 'sent after start'})`)
-        if (ended.current) return
+        if (over()) return
         dialect.current = answer.dialect
         // What Conduit sends shows the read rules as this host's next call would get them (desktop#363).
         rememberGptLiveDialect(dashboardHost(), billing, answer.dialect)
@@ -638,6 +644,7 @@ export function GptLiveCall({
       window.clearTimeout(startTimer)
       window.clearTimeout(limitTimer.current)
       window.clearTimeout(openingTimer.current)
+      gone = true
       ended.current = true
       teardown()
       // Still waiting for the chat: they go once it's free.

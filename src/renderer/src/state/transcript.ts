@@ -94,7 +94,7 @@ export function reactionTarget(state: TranscriptState, key: string): { row_id: n
   if (!item || item.kind !== 'assistant' || !item.text.trim()) return null
   if (item.rowId) return { row_id: item.rowId }
   const newest = [...state.items].reverse().find(i => i.kind === 'assistant')
-  return !state.running && newest?.key === key ? { newest_role: 'assistant' } : null
+  return !state.running && !state.newestUndrawn && newest?.key === key ? { newest_role: 'assistant' } : null
 }
 
 /** A reply's reactions (and its row, once known) replaced. */
@@ -369,6 +369,12 @@ export interface TranscriptState {
    * replies are its own.
    */
   turnFrom?: number
+  /**
+   * The last turn ended without drawing a reply (a hidden one): Hermes' newest
+   * reply row may be that turn's, so the newest drawn reply without a row id
+   * can't be named as "the newest reply" (desktop#701).
+   */
+  newestUndrawn?: boolean
 }
 
 export const emptyTranscript: TranscriptState = { items: [], running: false }
@@ -703,6 +709,7 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       // A hidden turn has no row of the user's: its replies are the ones since its start, not since
       // the last message, or a reply sent whole (no deltas) after an earlier one is dropped (desktop#432).
       const repliedThisTurn = items.slice(Math.max(lastUser + 1, state.turnFrom ?? 0)).some(i => i.kind === 'assistant')
+      const drew = repliedThisTurn || !!finalText?.trim()
       if (finalText?.trim() && !repliedThisTurn) {
         items = [...items, { kind: 'assistant', key: nextKey('a'), text: finalText.trim(), at: Date.now(), streaming: false }]
       }
@@ -724,7 +731,7 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       } else if (status === 'interrupted') {
         items = [...items, { kind: 'notice', key: nextKey('n'), text: t('Stopped'), tone: 'info' }]
       }
-      return { ...state, items, running: false, status: undefined, turnFrom: undefined }
+      return { ...state, items, running: false, status: undefined, turnFrom: undefined, newestUndrawn: drew ? undefined : true }
     }
     case 'message.reaction': {
       // The agent reacted (or a reaction changed elsewhere): the row's whole list. A live reply
@@ -890,7 +897,7 @@ export function addPendingUser(state: TranscriptState, text: string, attachments
 export function withdrawPendingUser(state: TranscriptState): TranscriptState {
   const index = state.items.map(i => i.kind === 'user' && i.pending).lastIndexOf(true)
   if (index < 0) return state
-  // A pending row taken back below the turn boundary moves the boundary up with it.
+  // A pending row taken back above the turn boundary moves the boundary up with it.
   const turnFrom = state.turnFrom === undefined || state.turnFrom <= index ? state.turnFrom : state.turnFrom - 1
   return { ...state, items: state.items.filter((_, i) => i !== index), turnFrom }
 }
@@ -1060,9 +1067,11 @@ export function toolNames(raw: unknown): Map<string, string> {
 export function holdSent(state: TranscriptState, key: string, admission: string): TranscriptState {
   const item = state.items.find((i): i is UserItem => i.kind === 'user' && i.key === key)
   if (!item) return state
+  const { items, turnFrom } = joinAround(state.items, state.items.indexOf(item), state.turnFrom)
   return {
     ...state,
-    items: joinAround(state.items, state.items.indexOf(item)),
+    items,
+    turnFrom,
     held: [...(state.held ?? []).filter(h => h.admission !== admission), { admission, item: { ...item, pending: false } }]
   }
 }
@@ -1107,14 +1116,20 @@ export function reholdEdited(state: TranscriptState, admission: string, edited: 
   return { ...state, held: [...rest, { admission: edited, item }] }
 }
 
-/** The items without the one at `index`; a reply its bubble had split in two is one again. */
-function joinAround(items: TranscriptItem[], index: number): TranscriptItem[] {
+/**
+ * The items without the one at `index`; a reply its bubble had split in two is one again. `turnFrom`, the running
+ * turn's first item, moves up with a row taken from above it, and an earlier turn's reply is never joined to this
+ * turn's (a delta that came before the queued send's receipt drew the live reply below the bubble, desktop#701).
+ */
+function joinAround(items: TranscriptItem[], index: number, turnFrom?: number): { items: TranscriptItem[]; turnFrom?: number } {
   const before = items[index - 1]
   const after = items[index + 1]
   const rest = items.filter((_, i) => i !== index)
-  if (before?.kind !== 'assistant' || after?.kind !== 'assistant') return rest
+  const from = turnFrom === undefined || turnFrom <= index ? turnFrom : turnFrom - 1
+  const across = turnFrom !== undefined && index - 1 < turnFrom && index + 1 >= turnFrom
+  if (before?.kind !== 'assistant' || after?.kind !== 'assistant' || across) return { items: rest, turnFrom: from }
   const joined: AssistantItem = { ...before, text: before.text + after.text, streaming: after.streaming }
-  return [...rest.slice(0, index - 1), joined, ...rest.slice(index + 1)]
+  return { items: [...rest.slice(0, index - 1), joined, ...rest.slice(index + 1)], turnFrom: from }
 }
 
 /**

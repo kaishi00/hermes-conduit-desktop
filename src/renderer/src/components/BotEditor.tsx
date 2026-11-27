@@ -12,6 +12,7 @@ import {
   faceName,
   mergedMeta,
   metaOutcome,
+  categoryOnlyPatch,
   metaPatch,
   normalizedPicture,
   onSummary,
@@ -209,7 +210,7 @@ export function BotEditor({ bot, among = [], onClose, onSaved }: Props) {
       Object.assign(patch, editCategoryPatch(bot.category, draft.category, among) ?? {})
       const changesLook = Object.keys(patch).length > 0
       // Read before the picture's fields join the patch, so a picture plus a Category change still counts.
-      const categoryOnly = changesLook && Object.keys(patch).every(key => key === 'sectionId' || key === 'sectionName')
+      const categoryOnly = categoryOnlyPatch(patch)
       if (uploaded) Object.assign(patch, { imageKind: 'photo', custom: true })
       else if (removing) patch.imageKind = 'shape'
 

@@ -207,6 +207,22 @@ describe('text tags in a reply', () => {
     expect(draw('<details><summary>S</summary><!-- </details> still being written')).toContain('<details class="reply-fold"><summary>S</summary>')
   })
 
+  it('keeps a fold open past a line-ending close inside a comment still being written (hermes-conduit#3388)', () => {
+    const html = draw('<details><summary>S</summary>Body <!-- </details>\nMore.')
+    expect(html).toContain('<details class="reply-fold"><summary>S</summary>')
+    expect(html.indexOf('More.')).toBeLessThan(html.lastIndexOf('</details>'))
+  })
+
+  it('gives a close only to a line that opens a fold, in both passes (hermes-conduit#3388)', () => {
+    const html = draw('<details> Here is the syntax:\n<details> and <summary> make a fold.\n</details>')
+    expect(html).toContain('reply-fold')
+    expect(html).toContain('&lt;details&gt; and &lt;summary&gt; make a fold.')
+  })
+
+  it('reads no summary from a </summary> inside the details tag (hermes-conduit#3349)', () => {
+    expect(draw('<details title=</summary>> x\n\nAfter.')).not.toContain('reply-fold')
+  })
+
   it('folds a one-line fold while its </details> is still being written', () => {
     expect(draw('<details><summary>S</summary>Body so far')).toBe('<details class="reply-fold"><summary>S</summary><p>Body so far</p></details>')
     expect(draw('<details><summary>S</summary>Click <b>here</b>')).toContain('<details class="reply-fold"><summary>S</summary>')

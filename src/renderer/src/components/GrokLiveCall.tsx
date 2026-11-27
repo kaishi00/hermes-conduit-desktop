@@ -567,6 +567,12 @@ export function GrokLiveCall({
   // Connect once; hang up on leaving.
   useEffect(() => {
     stopReading()
+    // StrictMode mounts twice in a dev build with the same refs: the second run starts the call afresh, and the
+    // first run's work still on its way stops at its next check instead of leaving it on Connecting… (desktop#669).
+    ended.current = false
+    ending.current = false
+    let gone = false
+    const over = () => gone || ended.current
     let startTimer = 0
     let toldWith: Parameters<typeof instructions>[0] | null = null
     let recall = false
@@ -583,7 +589,7 @@ export function GrokLiveCall({
       } else if (event.type === 'close') {
         socket.current = null
         trace.current?.step(`Socket closed (${event.code ?? 'no code'})`)
-        if (ending.current) return void (!ended.current && finish())
+        if (ending.current) return void (!over() && finish())
         if (!isRefusalClose(event.code, event.reason)) {
           // A live call that dropped opens a new session at once; a setup that failed is tried again after a pause.
           if (ready.current) return void reopen(0)
@@ -603,7 +609,7 @@ export function GrokLiveCall({
         fail(t("Couldn't connect to Grok Live: {reason}", { reason: opened.error }))
         return false
       }
-      if (ended.current) {
+      if (over()) {
         window.conduit.liveClose(opened.id)
         return false
       }
@@ -616,7 +622,7 @@ export function GrokLiveCall({
     }
     // A new connection, and so a new xAI session: what the old one was saying stops.
     const reopen = (next: number) => {
-      if (ended.current) return
+      if (over()) return
       attempt.current = next
       connection.current += 1
       if (ready.current) {
@@ -632,13 +638,13 @@ export function GrokLiveCall({
     const retryAfter = (failed: number) => {
       window.clearTimeout(startTimer)
       trace.current?.step(`Setup failed: trying again in ${reconnectDelayMs(failed) / 1000} s`)
-      window.setTimeout(() => !ended.current && reopen(failed + 1), reconnectDelayMs(failed))
+      window.setTimeout(() => !over() && reopen(failed + 1), reconnectDelayMs(failed))
     }
     const connect = async () => {
       trace.current = startCallTrace('Grok Live')
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-        if (ended.current) return stream.getTracks().forEach(track => track.stop())
+        if (over()) return stream.getTracks().forEach(track => track.stop())
         trace.current.step(micStep(stream))
         mic.current = stream
         setMicStream(stream)
@@ -659,7 +665,7 @@ export function GrokLiveCall({
           loadPhoneReads(profile, 'grok-live')
         ])
         const asked = await askedQuestionsForCall(profile)
-        if (ended.current) return
+        if (over()) return
         recall = memory.recall
         phoneRef.current = phoneReads
         toldWith = {
@@ -684,7 +690,7 @@ export function GrokLiveCall({
         )
         processor.current = node
         node.onaudioprocess = event => {
-          if (!ready.current || ended.current || ending.current || mutedRef.current) return
+          if (!ready.current || over() || ending.current || mutedRef.current) return
           // While the model talks on the speakers, its own voice isn't sent back.
           if (gate.current.holds(ctx, playUntil.current, echo.current)) return
           const samples = event.inputBuffer.getChannelData(0)
@@ -705,6 +711,7 @@ export function GrokLiveCall({
     return () => {
       window.clearTimeout(startTimer)
       stopListening()
+      gone = true
       ended.current = true
       teardown()
       // Still waiting for the chat: they go once it's free.

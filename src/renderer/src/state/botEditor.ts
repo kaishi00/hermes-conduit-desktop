@@ -245,6 +245,15 @@ export function metaPatch(bot: Bot, draft: Draft): Record<string, unknown> {
 }
 
 /** The face a draft shows: the picked one, else the bot's own. */
+/**
+ * Whether a bot's look patch changes only its Category (`sectionId`/`sectionName`), read before a picture's own
+ * fields join it: a failed save then says the change wasn't saved rather than naming the name or color.
+ */
+export function categoryOnlyPatch(patch: Record<string, unknown>): boolean {
+  const keys = Object.keys(patch)
+  return keys.length > 0 && keys.every(key => key === 'sectionId' || key === 'sectionName')
+}
+
 export function shownFace(bot: Bot, draft: Draft): StarterFace {
   return starterFace(draft.face ?? bot.face)
 }

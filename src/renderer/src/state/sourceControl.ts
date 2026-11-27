@@ -215,6 +215,11 @@ export type DiffLine =
   | { kind: 'note'; text: string }
 
 /** A unified diff as rows to draw: hunks, and each line with its old and new numbers. Git's file header is left out. */
+/** Whether two reads found the folder the same: its branch, every file row and the cut. */
+export function sameStatus(a: GitStatus, b: GitStatus): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b)
+}
+
 export function diffLines(diff: string): DiffLine[] {
   const lines: DiffLine[] = []
   let oldAt = 0

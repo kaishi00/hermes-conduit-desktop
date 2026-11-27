@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import {
@@ -14,6 +14,7 @@ import {
   parseBranches,
   parseDiff,
   parseStatus,
+  sameStatus,
   splitPath,
   statusPath,
   type BranchRow,
@@ -75,19 +76,32 @@ export function ChangesView({
     }
   }, [])
 
+  // What onStatus was last given. A read that finds the folder as it was keeps the
+  // objects it already has, so the lists, the bench and the diff don't draw again (issue 679).
+  const reported = useRef<GitStatus | null>(null)
+  const apply = useCallback(
+    (next: GitStatus) => {
+      setStatus(current => (current !== 'loading' && !('error' in current) && sameStatus(current, next) ? current : next))
+      if (reported.current && sameStatus(reported.current, next)) return
+      reported.current = next
+      onStatus(next)
+    },
+    [onStatus]
+  )
+
   const read = useCallback(async () => {
     const asked = ++reading.current
     try {
       const next = parseStatus(await gateway.http('GET', statusPath(root, profile)))
       if (asked !== reading.current) return
-      setStatus(next)
-      onStatus(next)
+      apply(next)
     } catch (e) {
       if (asked !== reading.current) return
       setStatus(current => (current === 'loading' || 'error' in (current as object) ? { error: gitError(e) } : current))
+      reported.current = null
       onStatus(null)
     }
-  }, [root, profile, onStatus])
+  }, [root, profile, onStatus, apply])
 
   useEffect(() => {
     setStatus('loading')
@@ -150,9 +164,10 @@ export function ChangesView({
       const answer = (await gateway.http('POST', actionPath(action, profile), { root, ...body })) as { status?: unknown }
       if (!alive.current) return true
       if (answer?.status) {
-        const next = parseStatus(answer.status)
-        setStatus(next)
-        onStatus(next)
+        // The folder after the action. A status read already on its way began before it, so
+        // its answer is older and must not land over this one (issue 680).
+        reading.current += 1
+        apply(parseStatus(answer.status))
       } else void read()
       return true
     } catch (e) {
@@ -406,47 +421,56 @@ export function ChangesView({
   )
 }
 
-function DiffView({ diff, onOpen }: { diff: FileDiff; onOpen: () => void }) {
-  const lines = diffLines(diff.diff)
-  return (
-    <div className="diff-view">
-      <div className="diff-head">
-        <span className="diff-path" title={diff.path}>
-          {diff.path}
-        </span>
-        <span className="meta">{diff.staged ? t('Staged') : t('Changes')}</span>
-        <span className="spacer" />
-        <button className="secondary small" onClick={onOpen}>
-          {t('Open File')}
-        </button>
+/**
+ * Drawn again only for a new diff object. The diff effect above keeps the one it has
+ * while the picked file's row is unchanged, so typing a commit message or a poll that
+ * finds nothing new doesn't parse the whole diff again (issue 679). `onOpen` is left
+ * out of the comparison: it opens `diff.path` in the same folder.
+ */
+const DiffView = memo(
+  function DiffView({ diff, onOpen }: { diff: FileDiff; onOpen: () => void }) {
+    const lines = useMemo(() => diffLines(diff.diff), [diff.diff])
+    return (
+      <div className="diff-view">
+        <div className="diff-head">
+          <span className="diff-path" title={diff.path}>
+            {diff.path}
+          </span>
+          <span className="meta">{diff.staged ? t('Staged') : t('Changes')}</span>
+          <span className="spacer" />
+          <button className="secondary small" onClick={onOpen}>
+            {t('Open File')}
+          </button>
+        </div>
+        {diff.binary ? (
+          <p className="bench-note">{t("This file isn't text, so its changes can't be shown here.")}</p>
+        ) : !lines.length ? (
+          <p className="bench-note">{t('No changes to show.')}</p>
+        ) : (
+          <pre className="diff-lines">
+            {lines.map((line, at) =>
+              line.kind === 'hunk' ? (
+                <div key={at} className="diff-hunk">
+                  {line.text}
+                </div>
+              ) : line.kind === 'note' ? (
+                <div key={at} className="diff-note">
+                  {line.text}
+                </div>
+              ) : (
+                <div key={at} className={`diff-line ${line.kind}`}>
+                  <span className="diff-num">{line.old ?? ''}</span>
+                  <span className="diff-num">{line.new ?? ''}</span>
+                  <span className="diff-sign">{line.kind === 'add' ? '+' : line.kind === 'remove' ? '−' : ' '}</span>
+                  <span className="diff-text">{line.text || ' '}</span>
+                </div>
+              )
+            )}
+            {diff.truncated ? <div className="diff-note">{t('Only the start of this diff is shown.')}</div> : null}
+          </pre>
+        )}
       </div>
-      {diff.binary ? (
-        <p className="bench-note">{t("This file isn't text, so its changes can't be shown here.")}</p>
-      ) : !lines.length ? (
-        <p className="bench-note">{t('No changes to show.')}</p>
-      ) : (
-        <pre className="diff-lines">
-          {lines.map((line, at) =>
-            line.kind === 'hunk' ? (
-              <div key={at} className="diff-hunk">
-                {line.text}
-              </div>
-            ) : line.kind === 'note' ? (
-              <div key={at} className="diff-note">
-                {line.text}
-              </div>
-            ) : (
-              <div key={at} className={`diff-line ${line.kind}`}>
-                <span className="diff-num">{line.old ?? ''}</span>
-                <span className="diff-num">{line.new ?? ''}</span>
-                <span className="diff-sign">{line.kind === 'add' ? '+' : line.kind === 'remove' ? '−' : ' '}</span>
-                <span className="diff-text">{line.text || ' '}</span>
-              </div>
-            )
-          )}
-          {diff.truncated ? <div className="diff-note">{t('Only the start of this diff is shown.')}</div> : null}
-        </pre>
-      )}
-    </div>
-  )
-}
+    )
+  },
+  (before, after) => before.diff === after.diff
+)

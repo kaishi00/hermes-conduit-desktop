@@ -4,7 +4,7 @@ import { renderHook, settle } from './hookHarness'
 import { useReplySpeeds } from '../src/renderer/src/state/useReplySpeeds'
 
 type Props = { running: boolean }
-let answer: () => { ok: boolean; result?: unknown; status?: number; error?: string }
+let answer: () => { ok: boolean; result?: unknown; code?: number; error?: string }
 
 beforeEach(() => {
   localStorage.setItem('conduit.showReplySpeed', 'true')
@@ -22,7 +22,7 @@ describe('the reply speeds hook', () => {
     expect(hook.result()?.unsaved).toBe(55)
     expect(hook.result()?.byRow.get(7)).toBe(42)
 
-    answer = () => ({ ok: false, status: 503, error: 'restarting' })
+    answer = () => ({ ok: false, code: 503, error: 'restarting' })
     hook.rerender({ running: true })
     await settle()
     expect(hook.result()?.unsaved).toBeUndefined()
@@ -30,6 +30,20 @@ describe('the reply speeds hook', () => {
 
     // The turn ends and its read fails: still no earlier turn's speed on its reply.
     hook.rerender({ running: false })
+    await settle()
+    expect(hook.result()?.unsaved).toBeUndefined()
+    expect(hook.result()?.byRow.get(7)).toBe(42)
+    hook.unmount()
+  })
+
+  it('drops the newest turn’s speed when a read fails without a turn starting first', async () => {
+    const hook = renderHook(({ connected }: { connected: boolean }) => useReplySpeeds('a', undefined, connected, false), { connected: true })
+    await settle()
+    expect(hook.result()?.unsaved).toBe(55)
+    // The connection drops and comes back; that read fails.
+    hook.rerender({ connected: false })
+    answer = () => ({ ok: false, code: 503, error: 'restarting' })
+    hook.rerender({ connected: true })
     await settle()
     expect(hook.result()?.unsaved).toBeUndefined()
     expect(hook.result()?.byRow.get(7)).toBe(42)

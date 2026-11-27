@@ -601,6 +601,12 @@ export function GeminiLiveCall({
   // Connect once; hang up on leaving.
   useEffect(() => {
     stopReading()
+    // StrictMode mounts twice in a dev build with the same refs: the second run starts the call afresh, and the
+    // first run's work still on its way stops at its next check instead of leaving it on Connecting… (desktop#669).
+    ended.current = false
+    ending.current = false
+    let gone = false
+    const over = () => gone || ended.current
     let startTimer = 0
     let told = ''
     let model = DEFAULT_MODEL
@@ -639,7 +645,7 @@ export function GeminiLiveCall({
         )
         return false
       }
-      if (ended.current) {
+      if (over()) {
         window.conduit.liveClose(opened.id)
         return false
       }
@@ -664,7 +670,7 @@ export function GeminiLiveCall({
     }
     // A new connection after the current one dropped: Gemini resumes the session with its handle; Qwen, with none, starts a new one.
     const reconnect = (next: number) => {
-      if (ended.current) return
+      if (over()) return
       attempt.current = next
       replaced()
       if (ready.current) {
@@ -681,16 +687,16 @@ export function GeminiLiveCall({
       // The setup timeout restarts with the next attempt, not during the pause.
       window.clearTimeout(startTimer)
       trace.current?.step(`Setup failed: trying again in ${reconnectDelayMs(failed) / 1000} s`)
-      window.setTimeout(() => !ended.current && reconnect(failed + 1), reconnectDelayMs(failed))
+      window.setTimeout(() => !over() && reconnect(failed + 1), reconnectDelayMs(failed))
     }
     startHandoff.current = next => {
-      if (ended.current || ending.current || !handoff.current.active) return
+      if (over() || ending.current || !handoff.current.active) return
       attempt.current = next
       void open(true)
     }
     const handoffAfter = (failed: number) => {
       trace.current?.step(`The next connection failed: trying again in ${reconnectDelayMs(failed) / 1000} s`)
-      window.setTimeout(() => !ended.current && startHandoff.current?.(failed + 1), reconnectDelayMs(failed))
+      window.setTimeout(() => !over() && startHandoff.current?.(failed + 1), reconnectDelayMs(failed))
     }
     // The handed-off connection is set up: it takes over, and the old one closes.
     const takeOver = () => {
@@ -721,7 +727,7 @@ export function GeminiLiveCall({
         } else if (event.type === 'close') {
           handoff.current.closed()
           trace.current?.step(`The next connection closed (${event.code ?? 'no code'})`)
-          if (ended.current || ending.current) return
+          if (over() || ending.current) return
           if (isRefusalClose(event.code, event.reason)) {
             // Google lost the session the handle named: a fresh one sets up while the current connection serves.
             if (resumeHandle.current && isResumptionLost(event.code, event.reason)) {
@@ -758,12 +764,12 @@ export function GeminiLiveCall({
         }
         for (const decoded of decode(frame)) {
           handle(decoded)
-          if (ended.current) return
+          if (over()) return
         }
       } else if (event.type === 'close') {
         socket.current = null
         trace.current?.step(`Socket closed (${event.code ?? 'no code'})`)
-        if (ending.current) return void (!ended.current && finish())
+        if (ending.current) return void (!over() && finish())
         if (!qwen && search === 'google' && quotaExhausted(event.reason)) {
           // As on the phone: most likely Search's own quota, so the call opens again without it.
           search = 'none'
@@ -804,7 +810,7 @@ export function GeminiLiveCall({
       if (qwen) trace.current = startCallTrace('Qwen Live')
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-        if (ended.current) return stream.getTracks().forEach(track => track.stop())
+        if (over()) return stream.getTracks().forEach(track => track.stop())
         trace.current?.step(micStep(stream))
         mic.current = stream
         setMicStream(stream)
@@ -831,7 +837,7 @@ export function GeminiLiveCall({
           loadPhoneReads(profile, qwen ? 'qwen-live' : 'gemini-live')
         ])
         const asked = await askedQuestionsForCall(profile)
-        if (ended.current) return
+        if (over()) return
         recall = memory.recall
         phoneRef.current = phoneReads
         search = resolvedSearch(searchMode(provider), searches, provider)
@@ -858,7 +864,7 @@ export function GeminiLiveCall({
         )
         processor.current = node
         node.onaudioprocess = event => {
-          if (!ready.current || ended.current || ending.current || mutedRef.current) return
+          if (!ready.current || over() || ending.current || mutedRef.current) return
           // While the model talks on the speakers, its own voice isn't sent back.
           if (gate.current.holds(speaker.current, playUntil.current, echo.current)) return
           const samples = event.inputBuffer.getChannelData(0)
@@ -880,6 +886,7 @@ export function GeminiLiveCall({
     return () => {
       window.clearTimeout(startTimer)
       stopListening()
+      gone = true
       ended.current = true
       teardown()
       // Still waiting for the chat: they go once it's free.

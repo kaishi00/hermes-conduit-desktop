@@ -6,6 +6,7 @@ import {
   faceHex,
   mergedMeta,
   metaOutcome,
+  categoryOnlyPatch,
   metaPatch,
   parseDetails,
   setCapability
@@ -40,6 +41,13 @@ describe('edit bot', () => {
     expect(metaPatch(bot, draft)).toEqual({})
     expect(metaPatch(bot, { ...draft, title: '  ' })).toEqual({ title: undefined })
     expect(metaPatch(bot, { ...draft, face: 5, color: faceHex(starterFace(5)) })).toEqual({ face: 5, color: faceHex(starterFace(5)), custom: true })
+  })
+
+  it('tells a Category-only change from one that touches the look (hermes-conduit#3433)', () => {
+    expect(categoryOnlyPatch({ sectionId: 'home', sectionName: 'Home' })).toBe(true)
+    expect(categoryOnlyPatch({ sectionId: undefined, sectionName: undefined })).toBe(true)
+    expect(categoryOnlyPatch({ sectionName: 'Home', title: 'Furina' })).toBe(false)
+    expect(categoryOnlyPatch({})).toBe(false)
   })
 
   it("writes a face's color as the phone does", () => {
