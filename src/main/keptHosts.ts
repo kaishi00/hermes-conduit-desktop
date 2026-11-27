@@ -12,6 +12,7 @@
  */
 import { Connection, type ConnectionStore, type HandedSocket, type SocketFactory } from './connection'
 import type { Fetch } from './auth'
+import { BOTS_META_KEY } from '../shared/botsMeta'
 import type { ConnectionStatus, GatewayEventMessage, KeptHost, KeptHostState, PendingRequest } from '../shared/ipc'
 
 /** Kept beside the one on screen (stage 0's cap of four live dashboards). */
@@ -27,7 +28,7 @@ export function keptRpcWritable(method: string, params: Record<string, unknown>)
   if (method !== 'profiles.configure' || typeof params.name !== 'string') return false
   if (!Object.keys(params).every(key => key === 'name' || key === 'ui_meta' || key === 'ui_meta_expected_revisions')) return false
   const botsOnly = (value: unknown) =>
-    !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0 && Object.keys(value).every(key => key === 'hermes-bots')
+    !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0 && Object.keys(value).every(key => key === BOTS_META_KEY)
   return botsOnly(params.ui_meta) && (params.ui_meta_expected_revisions === undefined || botsOnly(params.ui_meta_expected_revisions))
 }
 /**

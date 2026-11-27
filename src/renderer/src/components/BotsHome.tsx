@@ -662,8 +662,9 @@ export function BotsHome({
   const fileable: MixedTile[] = [
     ...tiles,
     ...(hidden ?? []).map((bot) => ({ key: mixed ? mixedBotKey(hostUrl!, bot.name) : bot.name, host: hostUrl ?? "", bot, own: true })),
-    // Every live combined host, not just those with a shown bot, so a host whose bots are all hidden is re-filed too.
-    ...[...new Set([...keptHostUrls, ...otherBots.map((o) => o.host)])]
+    // Every live combined host, not just those with a shown bot, so a host whose bots are all hidden is re-filed too;
+    // one still reconnecting is left out (its socket refuses the write) and catches up on the next rename.
+    ...keptHostUrls
       .filter((url) => url !== hostUrl)
       .flatMap(keptHiddenBots)
       .map((o) => ({ key: mixedBotKey(o.host, o.bot.name), host: o.host, bot: o.bot, own: false })),
