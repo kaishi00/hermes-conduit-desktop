@@ -37,6 +37,29 @@ describe('stored history', () => {
   })
 })
 
+describe("a context engine's summary", () => {
+  it('shows nothing for the summary a compaction carries forward as a user row', () => {
+    // LCM-X's frontier as Furina's Bot Chat stored it on 2026-11-26: no flag or display kind,
+    // parts of every depth, and a row it merged with after it (that row keeps its own copy).
+    const carrier =
+      '[Session Arc Summary (d1, node 22)]\n# Summary: Homelab Infra Ops\n[Expand for details: about: mail]\n\n---\n\n' +
+      '[Recent Summary (d0, node 40)]\nThe user asked about j1.\n[Expand for details: about: j1]\n\nWork update from another bot'
+    const items = fromHistory([
+      { role: 'user', content: carrier, row_id: 1 },
+      { role: 'user', content: '  \n[Durable Summary (d2, node 7)]\nOld.', row_id: 2 },
+      { role: 'user', text: '[Depth-4 Summary (d4, node 1234567)]\nOlder.', row_id: 3 },
+      { role: 'user', content: 'so the model is just too dumb to do it lol', row_id: 4 },
+      { role: 'user', content: 'What does [Session Arc Summary (d1, node 22)] mean?', row_id: 5 },
+      { role: 'user', content: '[Session Arc Summary of the trip]\nOurs.', row_id: 6 }
+    ])
+    expect(items.map(item => (item.kind === 'user' ? item.text : item.kind))).toEqual([
+      'so the model is just too dumb to do it lol',
+      'What does [Session Arc Summary (d1, node 22)] mean?',
+      '[Session Arc Summary of the trip]\nOurs.'
+    ])
+  })
+})
+
 describe("a workstream's brief", () => {
   const brief =
     "You're working on a task for Furina, who coordinates the user's work in their Bot Chat. This chat is that workstream (W24: Image gen); " +

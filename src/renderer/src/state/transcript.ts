@@ -291,7 +291,24 @@ export function workstreamBrief(raw: string): { bot: string; task: string; words
 }
 
 /** A user row: a cron report's note, a workstream's brief, or a message of yours. */
+/**
+ * A context engine's summary of the chat, written in Hermes' place: LCM-X
+ * stores its frontier as a user row of parts headed
+ * `[Session Arc Summary (d1, node 22)]` (Recent, Session Arc, Durable or
+ * Depth-N; its engine.py `_LCM_SUMMARY_PART_HEADER_RE`), with no flag or
+ * display kind, so Hermes' projection passes it through, and a compaction
+ * carries it forward as a fresh row. A row it merged with keeps its own copy,
+ * so the whole carrier is nobody's message (the phone's
+ * MessageNormalizer.hasCompactionSummaryPrefix).
+ */
+const CONTEXT_ENGINE_SUMMARY = /^\[(?:recent|session arc|durable|depth-\d+) summary \(d\d+, node \d+\)\]/i
+
+export function isContextEngineSummary(raw: string): boolean {
+  return CONTEXT_ENGINE_SUMMARY.test(raw.slice(0, 200).trimStart())
+}
+
 function userRow(key: string, raw: string, at?: number): UserItem | CronReportItem | BriefItem | null {
+  if (isContextEngineSummary(raw)) return null
   const cron = cronReport(raw)
   if (cron) return { kind: 'cron', key, ...cron, at }
   const brief = workstreamBrief(raw)
