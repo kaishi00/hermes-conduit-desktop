@@ -175,6 +175,15 @@ describe('a live turn', () => {
     expect(again.items.filter(i => i.kind === 'assistant').map(i => (i as { rowId?: number }).rowId)).toEqual([2, 6, undefined])
   })
 
+  it('leaves an earlier reply alone when a hidden turn draws none', () => {
+    const live = play([{ type: 'message.start' }, { type: 'message.delta', payload: { text: 'Done.' } }, { type: 'message.complete', payload: { text: 'Done.' } }])
+    const state = play(
+      [{ type: 'message.start' }, { type: 'message.complete', payload: { text: '[SILENT]', persisted_turn: { row_ids: [9], complete: true, final_assistant_row_id: 9 } } }],
+      live
+    )
+    expect(state.items.filter(i => i.kind === 'assistant').map(i => (i as { rowId?: number }).rowId)).toEqual([undefined])
+  })
+
   it('says why a turn failed, and that a stopped one stopped', () => {
     const failed = play([{ type: 'message.start' }, { type: 'message.complete', payload: { status: 'error', error: 'Rate limited' } }])
     expect(failed.items).toMatchObject([{ kind: 'notice', tone: 'error', text: 'Rate limited' }])
