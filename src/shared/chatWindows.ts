@@ -121,3 +121,21 @@ export function dockedFrameHost(src: string, base: string): string | null {
   const hash = src.slice(page.length)
   return pulseFrameRequest(hash)?.host ?? roomFrameRequest(hash)?.host ?? null
 }
+
+/**
+ * Chats whose windows are kept on top, remembered so the chat's window opens
+ * kept on top again (issue 608). The newest last, at most this many.
+ */
+export const KEPT_ON_TOP_LIMIT = 100
+
+/** What a chat's window is remembered by: its dashboard, profile and chat. */
+export function onTopKey(chat: Pick<ChatWindowRequest, 'host' | 'id' | 'profile'>): string {
+  return JSON.stringify([chat.host ?? '', chat.profile ?? '', chat.id])
+}
+
+/** The remembered chats with this one kept on top (moved to newest) or not, the oldest dropped past the limit. */
+export function withKeptOnTop(keys: readonly string[], key: string, on: boolean, limit = KEPT_ON_TOP_LIMIT): string[] {
+  const rest = keys.filter(k => k !== key)
+  if (!on) return rest
+  return [...rest, key].slice(-limit)
+}

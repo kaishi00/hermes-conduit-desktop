@@ -489,6 +489,21 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       'error'
     )
   }, [windowId, profile, title, botTitle, host, botChat, notice, docked])
+  // A window's pin keeps it in front of every other window, other apps' too, remembered for its chat (issue 608).
+  const [onTop, setOnTop] = useState(false)
+  useEffect(() => {
+    if (docked) return
+    let live = true
+    void window.conduit.chatWindowOnTop().then(on => live && setOnTop(on === true))
+    return () => {
+      live = false
+    }
+  }, [docked])
+  const toggleOnTop = useCallback(() => {
+    void window.conduit.setChatWindowOnTop(!onTop).then(on => {
+      if (on !== null) setOnTop(on)
+    })
+  }, [onTop])
   const openInMain = useCallback(() => {
     window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, fromWindow: true, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
@@ -602,6 +617,16 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                   dot: workDot && shownTab !== 'work' ? workDot : null
                 }
               : undefined
+          }
+          pin={
+            docked
+              ? undefined
+              : {
+                  label: t('Keep on Top'),
+                  title: onTop ? t('This window stays in front of other windows. Click to stop.') : `${t('Keep on Top')}: ${t('Keeps this window in front of other windows, other apps’ too.')}`,
+                  on: onTop,
+                  onClick: toggleOnTop
+                }
           }
           menu={headerMenu}
           trailing={
