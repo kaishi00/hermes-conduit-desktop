@@ -2,7 +2,7 @@
   "name": "conduit-desktop",
   "productName": "Conduit",
   "desktopName": "dev.conduit",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Conduit for Mac, Windows and Linux: a desktop client for Hermes Agent",
   "license": "MIT",
