@@ -61,7 +61,8 @@ import { WorkLinks, type WorkLinkActions } from './WorkLinkCard'
 import { revealMessage } from './Transcript'
 import { useWork } from '../state/useWork'
 import { shownTitle, type WorkItem } from '../state/work'
-import { absolutePath, pathForDraft } from '../state/workspace'
+import { pathForDraft } from '../state/workspace'
+import { useLinkOpener } from '../state/linkOpener'
 import { useRevealRow } from '../state/revealRow'
 import { PANEL_COLUMN, readWidth, shownWindowPanelWidth, writeWidth } from '../state/columnWidths'
 import { screenKey } from '@shared/screenWindows'
@@ -299,16 +300,19 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   // A file path in a reply opens in the Files tab.
   const [reveal, setReveal] = useState<{ path: string; id: number } | null>(null)
   const cwd = chat.cwd
-  const openPath = useMemo(
-    () =>
-      cwd
-        ? (path: string) => {
-            setReveal(current => ({ path: absolutePath(path, cwd), id: (current?.id ?? 0) + 1 }))
-            openTab('files')
-          }
-        : null,
-    [cwd, openTab]
-  )
+  // Looked up for the chat first, as the phone does: a name the host doesn't have says so (desktop issue 686).
+  const fileLinks = useLinkOpener({
+    cwd,
+    dashboard: host,
+    profile,
+    sessionIds: [chatId, chat.storedId],
+    reveal: path => {
+      setReveal(current => ({ path, id: (current?.id ?? 0) + 1 }))
+      openTab('files')
+    },
+    notice: text => notice(text, 'info')
+  })
+  const openPath = fileLinks?.open ?? null
   // An artifact's Show in Chat: its message, here.
   const showInChat = useRevealRow(transcriptStore, chatId, chat.storedId, key => requestAnimationFrame(() => revealMessage(pane.current, key)), seekRow)
   // Docked, the chat's call (components/ChatCall.tsx), running here on the chat's own dashboard.
@@ -703,7 +707,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           }
         />
         <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} liveId={chat.liveId} />
-        <FileLinks.Provider value={openPath}>
+        <FileLinks.Provider value={fileLinks}>
           <WorkLinks.Provider value={workLinkActions}>
             <ConnectionActionsContext.Provider value={connectionActions}>
               <LiveTranscript
@@ -720,7 +724,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 display={display}
                 sessionId={chat.liveId ?? undefined}
                 onReact={chat.liveId ? react : undefined}
-                replySpeeds={replySpeeds}
+                replySpeeds={replySpeeds.rows}
                 onLoadOlder={loadOlder}
                 onSeekRow={seekRow}
                 loadingOlder={loadingOlder}
@@ -804,6 +808,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
               : undefined
           }
           context={chat.context}
+          speed={replySpeeds.composer}
           onContext={
             chat.liveId
               ? () => {

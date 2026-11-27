@@ -54,7 +54,8 @@ import {
   type WorkspaceTabs
 } from './state/workspaceTabs'
 import { CHAT_WINDOW_LIMIT, LIVE_CALL_WINDOW_ID } from '@shared/chatWindows'
-import { absolutePath, baseName, pathForDraft } from './state/workspace'
+import { baseName, pathForDraft } from './state/workspace'
+import { useLinkOpener } from './state/linkOpener'
 import { HeaderMenu, useHeaderMenu, type HeaderMenuItem } from './components/HeaderMenu'
 import { Workbench } from './components/Workbench'
 import { BENCH_COLUMN, benchHold, benchPlace, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
@@ -600,6 +601,8 @@ function Shell({
   const [appsRequest, setAppsRequest] = useState<AppsRequest | null>(null)
   // The rail brand's Your Picture: Settings opens on Appearance, where it's chosen.
   const [appearanceRequest, setAppearanceRequest] = useState<number | null>(null)
+  // A composer's reply speed chip, in this window or a chat's own: Settings opens on Chat (desktop#718).
+  const [chatSettingsRequest, setChatSettingsRequest] = useState<number | null>(null)
   useEffect(
     () =>
       onAppsDirectory(request => {
@@ -676,6 +679,10 @@ function Shell({
     if (action === 'new-chat') newChat()
     else if (action === 'needs-you') setSection('needs')
     else if (action === 'settings') setSection('settings')
+    else if (action === 'chat-settings') {
+      setChatSettingsRequest(Date.now())
+      setSection('settings')
+    }
     else if (action === 'shortcuts') setShortcutsOpen(open => !open)
     else if (action === 'text-bigger') setChatScale(s => nextScale(s, 1))
     else if (action === 'text-smaller') setChatScale(s => nextScale(s, -1))
@@ -831,20 +838,23 @@ function Shell({
   // A file path in a reply opens in the Folder, or in the workbench's Files while it's open.
   const [reveal, setReveal] = useState<{ path: string; id: number } | null>(null)
   const cwd = chat.cwd
-  const openPath = useMemo(
-    () =>
-      cwd
-        ? (path: string) => {
-            setReveal(current => ({ path: absolutePath(path, cwd), id: (current?.id ?? 0) + 1 }))
-            if (benchShownRef.current) return
-            lastTab.current = 'files'
-            setArtifactsOpen(false)
-            setWorkOpen(false)
-            showFiles(true)
-          }
-        : null,
-    [cwd, showFiles]
-  )
+  // Looked up for the chat first, as the phone does: a name the host doesn't have says so (desktop issue 686).
+  const fileLinks = useLinkOpener({
+    cwd,
+    dashboard: status.url,
+    profile: selected.profile,
+    sessionIds: [selected.id, chat.storedId],
+    reveal: path => {
+      setReveal(current => ({ path, id: (current?.id ?? 0) + 1 }))
+      if (benchShownRef.current) return
+      lastTab.current = 'files'
+      setArtifactsOpen(false)
+      setWorkOpen(false)
+      showFiles(true)
+    },
+    notice: text => notice(text, 'info')
+  })
+  const openPath = fileLinks?.open ?? null
   // Each reply's end reads the open folders again: the agent may have changed files.
   const [turnsDone, setTurnsDone] = useState(0)
   // The chat's call (components/ChatCall.tsx), drawn over the chat below.
@@ -3123,7 +3133,7 @@ function Shell({
               />
               {/* A question the bot asked here that waits past its turn. */}
               <AskedQuestionBar rows={askedHere} onChanged={() => void waiting.refresh()} liveId={chat.liveId} />
-              <FileLinks.Provider value={openPath}>
+              <FileLinks.Provider value={fileLinks}>
                 <WorkLinks.Provider value={workLinkActions}>
                   <ConnectionActionsContext.Provider value={connectionActions}>
                     <LiveTranscript
@@ -3145,7 +3155,7 @@ function Shell({
                       calls={chatCallList}
                       onOpenCall={setOpenCall}
                       followedUp={followedUp}
-                      replySpeeds={replySpeeds}
+                      replySpeeds={replySpeeds.rows}
                       pins={pinControls}
                       onReact={chat.liveId ? reactTo : undefined}
                       onBranch={chat.liveId && !running ? branchFrom : undefined}
@@ -3263,6 +3273,7 @@ function Shell({
                     : undefined
                 }
                 context={chat.context}
+                speed={replySpeeds.composer}
                 onContext={
                   chat.liveId
                     ? () => {
@@ -3585,6 +3596,8 @@ function Shell({
             personPicture={personPicture}
             appearanceRequest={appearanceRequest}
             onAppearanceRequestTaken={() => setAppearanceRequest(null)}
+            chatSettingsRequest={chatSettingsRequest}
+            onChatSettingsRequestTaken={() => setChatSettingsRequest(null)}
             onNewChatWith={
               connected
                 ? draft => {
@@ -3736,6 +3749,8 @@ function Settings({
   personPicture,
   appearanceRequest,
   onAppearanceRequestTaken,
+  chatSettingsRequest,
+  onChatSettingsRequestTaken,
   onNewChatWith,
   onOpensOn,
   opensHere
@@ -3773,6 +3788,8 @@ function Settings({
   /** The rail brand's Your Picture asked for Appearance. */
   appearanceRequest: number | null
   onAppearanceRequestTaken: () => void
+  chatSettingsRequest: number | null
+  onChatSettingsRequestTaken: () => void
   /** A new chat with `draft` in its composer, for the user to send (Try a test call, Have Hermes watch for this). */
   onNewChatWith?: (draft: string) => void
 }) {
@@ -3818,6 +3835,11 @@ function Settings({
     setPage('appearance')
     onAppearanceRequestTaken()
   }, [appearanceRequest, onAppearanceRequestTaken])
+  useEffect(() => {
+    if (chatSettingsRequest === null) return
+    setPage('chat')
+    onChatSettingsRequestTaken()
+  }, [chatSettingsRequest, onChatSettingsRequestTaken])
   // A link into Models, taken once: it opens on that profile.
   const [modelsProfile, setModelsProfile] = useState<{ profile: string; n: number } | null>(null)
   useEffect(() => {

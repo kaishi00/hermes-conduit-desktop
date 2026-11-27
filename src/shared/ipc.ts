@@ -315,6 +315,13 @@ export interface ConduitApi {
    */
   pickLocalFolder(): Promise<string[] | null>
   /**
+   * A path link's right-click menu (desktop issue 686): Show in Folder, Show in Finder or Explorer while this
+   * window's dashboard runs on this computer, and Copy Path; `at` places it for the keyboard. The choice, or null when none was picked.
+   */
+  pathLinkMenu(at?: { x: number; y: number }): Promise<'folder' | 'computer' | 'copy' | null>
+  /** Shows a host path in Finder or Explorer, while the dashboard runs on this computer and the path is here; false otherwise. */
+  showOnComputer(path: string): Promise<boolean>
+  /**
    * Copies a picture, sound, video or PDF on the Hermes host down for the
    * viewer a chat's file card opens, and gives the copy's address on the
    * file scheme, or what went wrong (desktop#554). `ticket` names the copy
@@ -414,6 +421,8 @@ export interface ConduitApi {
   /** Shows a chat in the main window (quick ask's Open in Conduit). */
   openChat(chat: OpenChatRequest): void
   onOpenChat(listener: (chat: OpenChatRequest) => void): () => void
+  /** Opens Settings > Chat in the main window, from any window (the composer's reply speed chip, desktop#718). */
+  openChatSettings(): void
   /** Moves a chat to a window of its own, or brings its window to the front; false when the limit is open. */
   openChatWindow(chat: ChatWindowRequest): Promise<boolean>
   /**
@@ -519,6 +528,8 @@ export type MenuAction =
   | 'live-call'
   /** To a call window: the main window started a call, which takes the microphone. */
   | 'end-call'
+  /** To the main window: Settings > Chat, asked from a composer's reply speed chip in any window. */
+  | 'chat-settings'
 
 export interface OpenChatRequest {
   storedId: string
@@ -583,6 +594,7 @@ export const IPC = {
   dismissRequest: 'conduit:dismiss-request',
   setWaiting: 'conduit:set-waiting',
   openChat: 'conduit:open-chat',
+  openChatSettings: 'conduit:open-chat-settings',
   openChatWindow: 'conduit:open-chat-window',
   closeChatWindows: 'conduit:close-chat-windows',
   chatWindows: 'conduit:chat-windows',
@@ -631,6 +643,8 @@ export const IPC = {
   saveHostFile: 'conduit:save-host-file',
   hostIsThisComputer: 'conduit:host-is-this-computer',
   pickLocalFolder: 'conduit:pick-local-folder',
+  pathLinkMenu: 'conduit:path-link-menu',
+  showOnComputer: 'conduit:show-on-computer',
   viewHostFile: 'conduit:view-host-file',
   cancelViewHostFile: 'conduit:cancel-view-host-file',
   viewStagedFile: 'conduit:view-staged-file',
@@ -777,6 +791,8 @@ export interface PcControlState extends PcControlSettings {
   /** A bot is driving now: its name and chat. */
   active: { bot: string; chat: string } | null
   stopKeys: string
+  /** How many times Stop was pressed since launch: an action fetched before the latest Stop doesn't run. */
+  stops: number
 }
 
 /** One action from GET /pc/next, with the bot's name for the ask and the bar. */
@@ -792,6 +808,8 @@ export interface PcRequest {
   ask?: string
   bot: string
   profile: string
+  /** `stops` when the renderer fetched it, so Stop pressed after that stops it too. */
+  gen?: number
 }
 
 /**

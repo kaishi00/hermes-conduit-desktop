@@ -3,6 +3,7 @@ import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markd
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import { looksLikePath } from '../state/workspace'
+import type { FileLinkActions } from '../state/linkOpener'
 import { faviconFailed, faviconUrl, fileType } from '../state/linkMarks'
 import { remarkDesktopCards } from '../state/desktopCards'
 import { remarkHtmlTags, withFoldsApart } from '../state/htmlInReplies'
@@ -18,8 +19,8 @@ import { t } from '@shared/i18n'
 // The few tags that read as text draw (htmlInReplies); any other HTML stays text.
 const plugins = [remarkGfm, remarkBreaks, remarkDesktopCards, remarkHtmlTags]
 
-/** Opens a file path a reply names in inline code, in the Folder; null where there's no folder. */
-export const FileLinks = createContext<((path: string) => void) | null>(null)
+/** Opens a file path a reply names in inline code, in the Folder, and its right-click menu; null where there's no folder. */
+export const FileLinks = createContext<FileLinkActions | null>(null)
 
 /** A file's type beside its name (issue 455): its extension in capitals, the type's name on hover. */
 function FileType({ path }: { path: string }) {
@@ -33,20 +34,31 @@ function FileType({ path }: { path: string }) {
 
 /** Inline code: a link when it names a file and there's a Folder to open it in; a file's name carries its type. */
 function Code({ className, children }: { className?: string; children?: ReactNode }) {
-  const open = useContext(FileLinks)
+  const links = useContext(FileLinks)
   const text = typeof children === 'string' ? children : Array.isArray(children) && children.every(c => typeof c === 'string') ? children.join('') : null
   // A block's code ends with its newline, and carries its language.
   const path = text && !className && !text.includes('\n') && looksLikePath(text) ? text : null
-  if (open && path) {
+  if (links && path) {
     return (
       <code
         className="file-link"
         role="link"
         tabIndex={0}
         title={path}
-        onClick={() => open(path)}
+        onClick={() => links.open(path)}
+        onContextMenu={e => {
+          // Show in Folder, Show in Finder or Explorer when Hermes is this computer, Copy Path (desktop issue 686).
+          e.preventDefault()
+          e.stopPropagation()
+          links.menu(path)
+        }}
         onKeyDown={e => {
-          if (e.key === 'Enter') open(path)
+          if (e.key === 'Enter') links.open(path)
+          else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+            e.preventDefault()
+            const box = e.currentTarget.getBoundingClientRect()
+            links.menu(path, { x: box.left, y: box.bottom })
+          }
         }}
       >
         <FileType path={path} />

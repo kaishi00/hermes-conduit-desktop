@@ -168,6 +168,9 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
           requests = requestsFrom(body, profile, titles.current.get(profile) ?? profile)
           // Stop pressed elsewhere (the phone): the bar goes before anything new runs.
           if ((body as { stopped?: unknown } | null)?.stopped === true) window.conduit.pcControl.stoppedElsewhere()
+          // Stop pressed from here on stops the whole batch, not just the action running then.
+          const gen = (await window.conduit.pcControl.state().catch(() => null))?.stops
+          if (typeof gen === 'number') requests = requests.map(request => ({ ...request, gen }))
         } catch {
           await new Promise(resolve => setTimeout(resolve, RETRY_MS))
           continue
@@ -176,8 +179,13 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
           if (!live) return
           let result: Record<string, unknown>
           try {
-            const allowed = !request.needs_ok || (await askEverywhere(request, askSide(profile, state.id)))
-            result = allowed ? await window.conduit.pcControl.run(request) : { ok: false, grant: 'denied' }
+            // Stopped since this batch came in: answer stopped without asking first.
+            const stops = typeof request.gen === 'number' ? (await window.conduit.pcControl.state().catch(() => null))?.stops : undefined
+            if (stops !== undefined && stops !== request.gen) result = { ok: false, code: 'stopped' }
+            else {
+              const allowed = !request.needs_ok || (await askEverywhere(request, askSide(profile, state.id)))
+              result = allowed ? await window.conduit.pcControl.run(request) : { ok: false, grant: 'denied' }
+            }
           } catch (error) {
             result = { ok: false, code: 'failed', message: String(error) }
           }
