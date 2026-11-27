@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   inflightRemainder,
+  prependOlder,
+  withdrawPendingUser,
   coalesceDeltas,
   addPendingUser,
   applyEvent,
@@ -305,5 +307,32 @@ describe('inflightRemainder', () => {
   it('keeps the reply whole when the rows are an earlier turn’s, or do not lead it', () => {
     expect(inflightRemainder({ ...emptyTranscript, items: [said('41 42', 'row-0'), asked] }, '41 42 43')).toBe('41 42 43')
     expect(inflightRemainder({ ...emptyTranscript, items: [asked, said('something else', 'row-2')] }, '41 42 43')).toBe('41 42 43')
+  })
+})
+
+
+describe('a turn boundary while rows move', () => {
+  const stored = (): TranscriptState => ({ items: fromHistory([{ role: 'user', text: 'Hi', row_id: 1 }, { role: 'assistant', text: 'Hello.', row_id: 2 }]), running: false })
+  const page = [{ kind: 'user', key: 'old-u', text: 'Older', at: 1 }, { kind: 'assistant', key: 'old-a', text: 'Earlier', at: 2 }] as TranscriptState['items']
+
+  it('moves the boundary when older rows are read during a hidden turn', () => {
+    const started = play([{ type: 'message.start' }], stored())
+    expect(started.turnFrom).toBe(2)
+    const paged = prependOlder(started, page)
+    expect(paged.turnFrom).toBe(4)
+    const done = play([{ type: 'message.complete', payload: { text: 'Your report is ready.' } }], paged)
+    expect(done.items.map(i => ('text' in i ? i.text : ''))).toEqual(['Older', 'Earlier', 'Hi', 'Hello.', 'Your report is ready.'])
+  })
+
+  it('moves the boundary when a pending prompt below it is taken back', () => {
+    let state = addPendingUser(addPendingUser(emptyTranscript, 'first'), 'second')
+    state = play([{ type: 'message.start' }], state)
+    expect(state.turnFrom).toBe(2)
+    // The second prompt was taken back before it ran; the turn's boundary moves up with its row.
+    state = withdrawPendingUser(state)
+    expect(state.turnFrom).toBe(1)
+    state = play([{ type: 'message.delta', payload: { text: 'Ready.' } }], state)
+    const done = play([{ type: 'message.complete', payload: { text: 'Ready.', persisted_turn: { final_assistant_row_id: 9 } } }], state)
+    expect(done.items.filter(i => i.kind === 'assistant').map(i => (i as { rowId?: number }).rowId)).toEqual([9])
   })
 })
