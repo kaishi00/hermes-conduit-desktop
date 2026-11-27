@@ -8,6 +8,7 @@ import {
   openInNewTab,
   showsTabStrip,
   stepTab,
+  savedSelection,
   tabTarget,
   type WorkspaceTabs
 } from '../src/renderer/src/state/workspaceTabs'
@@ -142,5 +143,18 @@ describe('a New Chat’s tab (#656 review)', () => {
   it('drops the draft once the chat is saved', () => {
     const tabs = followChat(followChat(NO_WORKSPACE_TABS, { id: null, draft: 3 }, key()), { id: 's1', draft: 3 }, key())
     expect(tabTarget(tabs.tabs[0])).toEqual({ id: 's1', profile: undefined, title: undefined })
+  })
+})
+
+
+describe('savedSelection', () => {
+  it('clears the draft number and folder once the chat has an id', () => {
+    expect(savedSelection({ id: null, profile: 'work', draft: 7, folder: '/tmp/project' }, 's1'))
+      .toEqual({ id: 's1', profile: 'work' })
+  })
+
+  it('leaves the other target fields alone', () => {
+    expect(savedSelection({ id: null, title: 'Draft', botChat: true, draft: 2 }, 's2'))
+      .toEqual({ id: 's2', title: 'Draft', botChat: true })
   })
 })

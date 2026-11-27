@@ -62,6 +62,16 @@ export function tabTarget(tab: WorkspaceTab): ChatTabTarget {
   return { id, profile, title, ...(folder ? { folder } : {}), ...(draft !== undefined && id === null ? { draft } : {}) }
 }
 
+/**
+ * A New Chat's draft number and folder belong to the draft tab only. Once the
+ * session has an id, keeping them would make `sameTarget` report a difference
+ * once, even though the tab still shows the same chat (desktop#661).
+ */
+export function savedSelection<T extends { draft?: number; folder?: string }>(selected: T, id: string): Omit<T, 'draft' | 'folder'> & { id: string } {
+  const { draft: _draft, folder: _folder, ...rest } = selected
+  return { ...rest, id }
+}
+
 export function activeTab(tabs: WorkspaceTabs): WorkspaceTab | undefined {
   return tabs.active === null ? undefined : tabs.tabs.find(tab => tab.key === tabs.active)
 }

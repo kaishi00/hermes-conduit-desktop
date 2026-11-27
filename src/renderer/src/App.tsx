@@ -49,6 +49,7 @@ import {
   showsTabStrip,
   stepTab,
   tabTarget,
+  savedSelection,
   type WorkspaceTab,
   type WorkspaceTabs
 } from './state/workspaceTabs'
@@ -633,7 +634,7 @@ function Shell({
       if (created === false) {
         if (!now.id && now.draft === linkSend.draft) setQuote(quoteRequest({ draft: linkSend.text }))
       } else if (created) {
-        setSelected(s => (s.draft === linkSend.draft && !s.id ? { ...s, id: created } : s))
+        setSelected(s => (s.draft === linkSend.draft && !s.id ? savedSelection(s, created) : s))
         void list.refresh()
       }
     })
@@ -1679,7 +1680,7 @@ function Shell({
       }
       if (created) {
         callChat.current = created
-        setSelected(s => ({ ...s, id: created }))
+        setSelected(s => savedSelection(s, created))
         void list.refresh()
       }
       // Hand the created id back to a call: it must not claim a chat that opened meanwhile.
