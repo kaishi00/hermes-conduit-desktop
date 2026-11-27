@@ -135,7 +135,8 @@ const ASK_HEIGHT = 220
  * on top of every other one and centered, since a system dialog with no
  * window of its own could open behind the app the user was in (Asuka,
  * 2026-11-27) and looked like any other prompt (Eric). Kept out of
- * screenshots, as the bar is. Closing it is a no.
+ * screenshots, as the bar is. Don't Allow has the focus, so a stray Enter
+ * never lets a bot in; Esc and closing it are a no.
  */
 export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'closed'> {
   const key = request?.session
@@ -151,7 +152,8 @@ export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'close
       resolve(value)
       if (!win.isDestroyed()) win.destroy()
     }
-    const area = screen.getPrimaryDisplay().workArea
+    // The screen the user is on: the one under the cursor.
+    const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
     const win = new BrowserWindow({
       width: ASK_WIDTH,
       height: ASK_HEIGHT,
@@ -174,6 +176,13 @@ export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'close
     win.webContents.on('will-navigate', (event, url) => {
       event.preventDefault()
       if (url.startsWith(ASK_URL)) answer(url.startsWith(`${ASK_URL}allow`) ? 'allowed' : 'denied')
+    })
+    // Esc is Don't Allow, as closing is (the page runs no script).
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && input.key === 'Escape') {
+        event.preventDefault()
+        answer('denied')
+      }
     })
     win.on('closed', () => answer(close.signal.aborted ? 'closed' : 'denied'))
     close.signal.addEventListener('abort', () => answer('closed'))
@@ -216,7 +225,8 @@ p.chat{color:var(--text)}
 a{text-decoration:none;padding:7px 16px;border-radius:10px;font-weight:600}
 a.no{color:var(--text);background:var(--soft);border:1px solid var(--line)}
 a.yes{color:var(--ink);background:var(--accent)}
-</style><div class="card"><div class="top"><div class="face">${initial}</div><div><p class="kicker">${esc(t('Control from Hermes'))}</p><h1>${esc(t('Allow {bot} to control this computer?', { bot: request.bot }))}</h1></div></div><div class="body">${lines}</div><div class="actions"><a class="no" href="${ASK_URL}deny">${esc(t('Don’t Allow'))}</a><a class="yes" href="${ASK_URL}allow">${esc(t('Allow'))}</a></div></div>`
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style><div class="card"><div class="top"><div class="face">${initial}</div><div><p class="kicker">${esc(t('Control from Hermes'))}</p><h1>${esc(t('Allow {bot} to control this computer?', { bot: request.bot }))}</h1></div></div><div class="body">${lines}</div><div class="actions"><a class="no" href="${ASK_URL}deny" autofocus>${esc(t('Don’t Allow'))}</a><a class="yes" href="${ASK_URL}allow">${esc(t('Allow'))}</a></div></div>`
 }
 
 /** The phone answered a chat's ask first: its dialog goes. */

@@ -9,6 +9,7 @@ interface FakeWindow {
   destroyed: boolean
   handlers: Record<string, Handler[]>
   navigate: (url: string) => boolean
+  key: (key: string) => boolean
   emit: (name: string) => void
 }
 
@@ -19,7 +20,10 @@ const electron = vi.hoisted(() => {
     destroyed = false
     handlers: Record<string, Handler[]> = {}
     navHandlers: Handler[] = []
-    webContents = { on: (_name: string, handler: Handler) => this.navHandlers.push(handler) }
+    inputHandlers: Handler[] = []
+    webContents = {
+      on: (name: string, handler: Handler) => (name === 'before-input-event' ? this.inputHandlers : this.navHandlers).push(handler)
+    }
     constructor(options: Record<string, unknown>) {
       this.options = options
       windows.push(this as never)
@@ -32,6 +36,11 @@ const electron = vi.hoisted(() => {
     }
     emit(name: string) {
       for (const handler of this.handlers[name] ?? []) handler()
+    }
+    key(key: string) {
+      let prevented = false
+      for (const handler of this.inputHandlers) handler({ preventDefault: () => (prevented = true) }, { type: 'keyDown', key })
+      return prevented
     }
     navigate(url: string) {
       let prevented = false
@@ -58,7 +67,10 @@ const electron = vi.hoisted(() => {
   return {
     BrowserWindow,
     globalShortcut: { register: vi.fn(), isRegistered: vi.fn(() => false), unregister: vi.fn() },
-    screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }) }
+    screen: {
+      getCursorScreenPoint: () => ({ x: 2500, y: 300 }),
+      getDisplayNearestPoint: (point: { x: number }) => ({ workArea: point.x > 1920 ? { x: 1920, y: 0, width: 2560, height: 1440 } : { x: 0, y: 0, width: 1920, height: 1080 } })
+    }
   }
 })
 vi.mock('electron', () => electron)
@@ -100,6 +112,8 @@ describe('askPc', () => {
     const shown = askPc(request('s1'))
     const win = windows[0] as unknown as InstanceType<typeof electron.BrowserWindow>
     expect(win.options).toMatchObject({ frame: false, alwaysOnTop: true, show: false, title: OWN_TITLES[0] })
+    // Centered on the screen under the cursor.
+    expect(win.options.x).toBe(1920 + (2560 - 440) / 2)
     expect(win.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
     expect(win.setContentProtection).toHaveBeenCalledWith(true)
     win.emit('ready-to-show')
@@ -119,10 +133,15 @@ describe('askPc', () => {
     ;(windows[1] as unknown as { destroy: () => void }).destroy()
     await expect(closed).resolves.toBe('denied')
 
+    const esc = askPc(request('s8'))
+    expect(windows[2].key('a')).toBe(false)
+    expect(windows[2].key('Escape')).toBe(true)
+    await expect(esc).resolves.toBe('denied')
+
     const phone = askPc(request('s4'))
     closePcAsk('s4')
     await expect(phone).resolves.toBe('closed')
-    expect(windows[2].destroyed).toBe(true)
+    expect(windows[3].destroyed).toBe(true)
   })
 
   it('asks once per chat while its window is up', async () => {
@@ -151,5 +170,7 @@ describe('askPage', () => {
     expect(page).toContain('conduit-ask://allow')
     expect(page).toContain('conduit-ask://deny')
     expect(page).not.toContain('<my>')
+    // Don't Allow has the focus, so Enter is a no.
+    expect(page).toMatch(/href="conduit-ask:\/\/deny" autofocus/)
   })
 })
