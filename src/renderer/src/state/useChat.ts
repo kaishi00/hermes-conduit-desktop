@@ -388,7 +388,7 @@ class ChatMovedOn extends Error {}
 const DELTA_FLUSH_MS = 100
 
 /** `host`: the dashboard this window shows, which keeps its own transcripts. */
-export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string, host = '') {
+export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string, host = '', draft?: number) {
   // A chat this window opens on, kept from before (a dashboard switch remounts it), draws on the first frame.
   // Held outside React state, so only what reads it runs as a reply streams (transcriptStore.ts).
   const [transcriptStore] = useState(() => new TranscriptStore((storedId && connected ? keptTranscript(storedId, profile, host) : null) ?? emptyTranscript))
@@ -514,8 +514,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     }
     created.current = null
     // A new chat whose folder alone changed (its Project chip, desktop#605) is the same draft: its model,
-    // reasoning, speed and approval picks stay with it.
-    const draftKey = storedId ? null : `${botChat}\n${profile ?? ''}\n${host}\n${connected}\n${sessionAuthority}`
+    // reasoning, speed and approval picks stay with it. Another New Chat names another `draft` and starts clean.
+    const draftKey = storedId ? null : `${draft ?? ''}\n${botChat}\n${profile ?? ''}\n${host}\n${connected}\n${sessionAuthority}`
     const sameDraft = draftKey !== null && openedDraft.current === draftKey
     openedDraft.current = draftKey
     const ticket = ++request.current
@@ -645,7 +645,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       })
     // Leaving the chat keeps its transcript for coming back.
     return () => keepTranscript(storedId, profile, transcriptRef.current, host, olderNow.current)
-  }, [storedId, profile, sessionAuthority, connected, folder, host])
+  }, [storedId, profile, sessionAuthority, connected, folder, host, draft])
 
   // Live events for this chat.
   useEffect(
