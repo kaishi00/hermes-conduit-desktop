@@ -347,6 +347,16 @@ let callBrowser: BrowserWindow | null = null
 let callWindowId = LIVE_CALL_WINDOW_ID
 /** The call window's close, waiting on its call to end when it's closed mid-call (main/callWindowClose.ts). */
 let callClosing: CallWindowClose | null = null
+/**
+ * The call window brought forward while it closes (its chat's row, a notification, the shortcut) stays open, while
+ * it's still the set's (its own close button). One a sign-out or a lock dropped from the set finishes closing.
+ */
+function keepClosingCallWindow(window: BrowserWindow): boolean {
+  if (window !== callBrowser || !callClosing?.closing) return true
+  if (!chatWindows.ids().includes(callWindowId)) return false
+  callClosing.cancel()
+  return true
+}
 /** What each chat window's pin is remembered by (issue 608). The call window's pin isn't remembered: it opens on top. */
 const chatOnTopKeys = new WeakMap<BrowserWindow, string>()
 const chatWindows = new ChatWindowSet(
@@ -362,6 +372,7 @@ const chatWindows = new ChatWindowSet(
     return {
       focus: () => {
         if (window.isDestroyed()) return
+        keepClosingCallWindow(window)
         if (window.isMinimized()) window.restore()
         window.show()
         window.focus()
@@ -666,7 +677,7 @@ function registerIpc(): void {
     const kept = callBrowser && !callBrowser.isDestroyed() && (!callClosing?.closing || chatWindows.ids().includes(callWindowId))
     const had = call && kept ? callBrowser : undefined
     if (had) {
-      callClosing?.cancel()
+      keepClosingCallWindow(had)
       if (had.isMinimized()) had.restore()
       had.show()
       had.focus()
@@ -688,7 +699,8 @@ function registerIpc(): void {
       callWindowId = LIVE_CALL_WINDOW_ID
       // Under whichever id its chat gave it by then.
       opened.once('closed', () => {
-        if (chatBrowserById.get(callWindowId) === opened) chatBrowserById.delete(callWindowId)
+        // By the window: a newer call window may have the module's id by then.
+        for (const [id, window] of chatBrowserById) if (window === opened) chatBrowserById.delete(id)
       })
       // Closed mid-call (its close button, a sign-out, a switch): the page ends the call first, so it saves the
       // call, files a Classic call's chat and lets go of its presence, as the call's End does; closing at once
@@ -751,7 +763,7 @@ function registerIpc(): void {
     const window = found?.window.window
     if (!found || !window) return null
     const watching = window.isVisible() && !window.isMinimized() && window.isFocused()
-    if (show === true) {
+    if (show === true && keepClosingCallWindow(window)) {
       if (window.isMinimized()) window.restore()
       window.show()
       window.focus()
