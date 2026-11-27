@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mkdtemp, readFile, readdir, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ReadableStream } from 'node:stream/web'
 import { dataUrlBytes as hostBytes, hostFileName, hostFilePath, isDashboardPage, isPartOf, kanbanAttachmentPath, streamToFile, STALE_PART_MS } from '../src/main/hostFiles'
-import { dataUrlBytes, pictureFileName } from '../src/renderer/src/state/saveMedia'
+import { copyPicture, dataUrlBytes, pictureFileName } from '../src/renderer/src/state/saveMedia'
 
 describe('saving pictures, files and audio to this computer', () => {
   it("saves a Kanban attachment from its board's route, never the dashboard's page in its place", () => {
@@ -120,6 +120,20 @@ describe('saving pictures, files and audio to this computer', () => {
     expect(pictureFileName('cat', 'data:image/jpeg;base64,')).toBe('cat.jpg')
     expect(pictureFileName('', 'data:image/svg+xml;base64,')).toBe('Picture.svg')
     expect(pictureFileName('cat', 'blob:x')).toBe('cat')
+  })
+
+  it("copies a picture's own bytes to the clipboard, and says when it couldn't", async () => {
+    const copyImage = vi.fn(async (_bytes: ArrayBuffer) => true)
+    vi.stubGlobal('window', { conduit: { copyImage } })
+    try {
+      expect(await copyPicture('data:image/png;base64,AQID')).toBe(true)
+      expect([...new Uint8Array(copyImage.mock.calls[0]![0])]).toEqual([1, 2, 3])
+      // Bytes the system can't read as a picture, and a page that can't draw them either.
+      copyImage.mockResolvedValue(false)
+      expect(await copyPicture('data:image/webp;base64,AQID')).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

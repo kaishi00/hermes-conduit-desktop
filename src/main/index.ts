@@ -1,5 +1,6 @@
 import {
   BrowserWindow,
+  ClipboardItem,
   Menu,
   app,
   clipboard,
@@ -7,6 +8,7 @@ import {
   desktopCapturer,
   globalShortcut,
   ipcMain,
+  nativeImage,
   nativeTheme,
   screen,
   shell,
@@ -791,6 +793,15 @@ function registerIpc(): void {
     return url
   })
   ipcMain.on(IPC.hideQuickAsk, () => quickAsk.hide())
+  // A picture's Copy (the viewer's button): the picture itself, as a PNG every app pastes.
+  ipcMain.handle(IPC.copyImage, async (_event, bytes: unknown) => {
+    if (!(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return false
+    const data = bytes instanceof ArrayBuffer ? Buffer.from(bytes) : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    const image = nativeImage.createFromBuffer(data)
+    if (image.isEmpty()) return false
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }) })])
+    return true
+  })
   ipcMain.on(IPC.copyText, (_event, text: unknown) => {
     if (typeof text === 'string') clipboard.writeText(text)
   })

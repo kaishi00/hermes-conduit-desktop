@@ -23,6 +23,37 @@ export async function saveFromUrl(src: string, name: string): Promise<boolean> {
   }
 }
 
+/**
+ * Copies a picture from the data or blob URL it's drawn from to the clipboard
+ * as a picture, never its address: PNG and JPEG as they are, any other kind
+ * the page draws (GIF, WebP, SVG) as a PNG of it. False when it couldn't.
+ */
+export async function copyPicture(src: string): Promise<boolean> {
+  try {
+    const bytes = src.startsWith('data:') ? dataUrlBytes(src) : await (await fetch(src)).arrayBuffer()
+    if (bytes && (await window.conduit.copyImage(bytes))) return true
+    const png = await drawnAsPng(src)
+    return png ? await window.conduit.copyImage(png) : false
+  } catch {
+    return false
+  }
+}
+
+/** The picture at `src` as the page draws it, as PNG bytes; null when it won't draw. */
+async function drawnAsPng(src: string): Promise<ArrayBuffer | null> {
+  const image = new Image()
+  image.src = src
+  await image.decode()
+  const canvas = document.createElement('canvas')
+  canvas.width = image.naturalWidth || image.width
+  canvas.height = image.naturalHeight || image.height
+  const context = canvas.getContext('2d')
+  if (!context || !canvas.width || !canvas.height) return null
+  context.drawImage(image, 0, 0)
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+  return blob ? await blob.arrayBuffer() : null
+}
+
 /** Says what went wrong, if anything. */
 export function sayIfFailed(error: string | null): void {
   if (error) void tell(error)

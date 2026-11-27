@@ -6374,6 +6374,21 @@
     "zh-Hans": "复制命令",
     "zh-Hant": "拷貝指令"
   },
+  "Copy Image": {
+    "de": "Bild kopieren",
+    "es": "Copiar imagen",
+    "fr": "Copier l’image",
+    "id": "Salin Gambar",
+    "it": "Copia immagine",
+    "ja": "イメージをコピー",
+    "ko": "이미지 복사",
+    "pl": "Kopiuj obraz",
+    "pt-BR": "Copiar imagem",
+    "ru": "Скопировать изображение",
+    "tr": "Görüntüyü Kopyala",
+    "zh-Hans": "拷贝图像",
+    "zh-Hant": "拷貝影像"
+  },
   "Copy Link": {
     "de": "Link kopieren",
     "es": "Copiar enlace",
