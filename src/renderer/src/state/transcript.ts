@@ -291,23 +291,66 @@ export function workstreamBrief(raw: string): { bot: string; task: string; words
   return words ? { bot, task, words } : { bot, task }
 }
 
-/** A user row: a cron report's note, a workstream's brief, or a message of yours. */
 /**
- * A context engine's summary of the chat, written in Hermes' place: LCM-X
- * stores its frontier as a user row of parts headed
- * `[Session Arc Summary (d1, node 22)]` (Recent, Session Arc, Durable or
- * Depth-N; its engine.py `_LCM_SUMMARY_PART_HEADER_RE`), with no flag or
- * display kind, so Hermes' projection passes it through, and a compaction
- * carries it forward as a fresh row. A row it merged with keeps its own copy,
- * so the whole carrier is nobody's message (the phone's
- * MessageNormalizer.hasCompactionSummaryPrefix).
+ * A chat's summary after a compaction, written for the model, never anybody's
+ * message (the phone's MessageNormalizer.visibleContentRemovingCompaction).
+ *
+ * Hermes' own handoff opens with `[CONTEXT COMPACTION` or `[CONTEXT SUMMARY]:`,
+ * or carries the `_compressed_summary` flag. When no role alternates, its
+ * compaction folds the summary into the first row it keeps, a user row or a
+ * reply (agent/context_compressor.py `_merge_summary_into_tail_row`): the
+ * row's own words between `[PRIOR CONTEXT …]` and `[END OF PRIOR CONTEXT …]`
+ * with the summary after, or the summary, an end marker and the row's words.
+ * Hermes' projection doesn't unwrap a reply's, so Nahida's chat drew one in
+ * full (2026-11-27).
+ *
+ * A context engine can write the summary in Hermes' place: LCM-X stores its
+ * frontier as a user row of parts headed `[Session Arc Summary (d1, node 22)]`
+ * (Recent, Session Arc, Durable or Depth-N; its engine.py
+ * `_LCM_SUMMARY_PART_HEADER_RE`), with no flag or display kind, and a
+ * compaction carries it forward as a fresh row. A row it merged with keeps its
+ * own copy, so the whole carrier is nobody's message.
  */
 const CONTEXT_ENGINE_SUMMARY = /^\[(?:recent|session arc|durable|depth-\d+) summary \(d\d+, node \d+\)\]/i
+const HERMES_SUMMARY = /^\[(?:context compaction|context summary\]:)/i
+const PRIOR_CONTEXT_HEADER = '[PRIOR CONTEXT \u2014 for reference only; not a new message]'
+const SUMMARY_DELIMITER = '[END OF PRIOR CONTEXT \u2014 COMPACTION SUMMARY BELOW]'
+const SUMMARY_END_MARKER = '--- END OF CONTEXT SUMMARY \u2014 respond to the message below, not the summary above ---'
 
 export function isContextEngineSummary(raw: string): boolean {
   return CONTEXT_ENGINE_SUMMARY.test(raw.slice(0, 200).trimStart())
 }
 
+/** Whether the text opens as a summary does; only its head is read. */
+function opensAsSummary(raw: string): boolean {
+  const head = raw.slice(0, 200).trimStart()
+  return CONTEXT_ENGINE_SUMMARY.test(head) || HERMES_SUMMARY.test(head)
+}
+
+/** A user row's or a reply's text without a compaction's summary; null when nothing of its own is left. */
+export function withoutCompaction(raw: string, flagged = false): string | null {
+  const delimiter = raw.indexOf(SUMMARY_DELIMITER)
+  if (delimiter >= 0 && !opensAsSummary(raw)) {
+    let own = raw.slice(0, delimiter).trim()
+    if (own.startsWith(PRIOR_CONTEXT_HEADER)) own = own.slice(PRIOR_CONTEXT_HEADER.length).trim()
+    return own && !opensAsSummary(own) ? own : null
+  }
+  if (isContextEngineSummary(raw)) return null
+  if (HERMES_SUMMARY.test(raw.slice(0, 200).trimStart())) {
+    const end = raw.indexOf(SUMMARY_END_MARKER)
+    const own = end >= 0 ? raw.slice(end + SUMMARY_END_MARKER.length).trim() : ''
+    return own || null
+  }
+  return flagged ? null : raw
+}
+
+/** Whether the row says it is Hermes' summary (`_compressed_summary`, on the row or its metadata). */
+function flaggedSummary(row: HistoryRow): boolean {
+  const meta = row.metadata && typeof row.metadata === 'object' ? (row.metadata as Record<string, unknown>) : null
+  return row._compressed_summary === true || row._compressed_summary === 1 || meta?._compressed_summary === true
+}
+
+/** A user row: a cron report's note, a workstream's brief, or a message of yours. */
 function userRow(key: string, raw: string, at?: number): UserItem | CronReportItem | BriefItem | null {
   if (isContextEngineSummary(raw)) return null
   const cron = cronReport(raw)
@@ -492,7 +535,8 @@ export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
     const key = row.row_id != null ? `row-${row.row_id}` : nextKey('h')
     switch (row.role) {
       case 'user': {
-        const item = userRow(key, rowText(row), at)
+        const own = withoutCompaction(rowText(row), flaggedSummary(row))
+        const item = own === null ? null : userRow(key, own, at)
         if (item) items.push(item.kind === 'user' && row.display_kind === 'steer' ? { ...item, steer: true } : item)
         break
       }
@@ -501,7 +545,7 @@ export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
           items.push({ kind: 'thinking', key: `${key}-r`, text: row.reasoning.trim(), streaming: false })
         }
         // A reply that is only Hermes' silence marker shows nothing (issue 2700).
-        const text = silenceShown(rowText(row)).trim()
+        const text = silenceShown(withoutCompaction(rowText(row), flaggedSummary(row)) ?? '').trim()
         const reactions = reactionsFrom(metadataOf(row.display_metadata)?.reactions)
         if (text)
           items.push({

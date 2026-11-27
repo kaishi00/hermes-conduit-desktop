@@ -46,6 +46,34 @@ export function plainReferences(text: string, short = false): string {
   })
 }
 
+/** Hermes' fence around recalled memory (agent/memory_context.py), to the end when its closing tag was cut off. */
+const MEMORY_CONTEXT = /<\s*memory-context\s*>[\s\S]*?(?:<\s*\/\s*memory-context\s*>|$)/gi
+
+/** One line Hermes stores for each picture a prompt held (agent/session_persistence.py `_image_marker`). */
+const PICTURE_LINE = /^[ \t]*\[screenshot(?: detail=(?:low|high|auto))?\][ \t]*$/
+
+/**
+ * A prompt without the context Hermes added for the model on that turn:
+ * recalled memory (`<memory-context>`) and plugins' `pre_llm_call` notes.
+ * On a turn with a picture Hermes adds them as one more text part after the
+ * pictures, and the stored row keeps it (Hermes #71998), flattened to the
+ * text after the pictures' `[screenshot]` lines. Those lines and everything
+ * after the last one go, and so does any memory fence; the pictures
+ * themselves come from the row's parts (the phone's
+ * MessageNormalizer.removingTurnContext).
+ */
+export function removeTurnContext(text: string): string {
+  if (!text.includes('[screenshot') && !/memory-context/i.test(text)) return text
+  let lines = text.split('\n')
+  let last = -1
+  lines.forEach((line, index) => {
+    if (PICTURE_LINE.test(line.trim())) last = index
+  })
+  if (last >= 0) lines = lines.slice(0, last + 1).filter(line => !PICTURE_LINE.test(line.trim()))
+  const visible = lines.join('\n').replace(MEMORY_CONTEXT, '')
+  return visible === text ? text : visible.trim()
+}
+
 /** Cuts the expanded context Hermes stores after a message that named `@file:` and the like. */
 export function removeContextFooter(text: string): string {
   if (!CONTEXT_REFERENCE.test(text)) return text
@@ -146,7 +174,7 @@ function footerPictures(raw: string): Attachment[] {
 
 /** What Hermes stored around the words, taken off; references inside the words are left as written. */
 function stripStored(raw: string): { text: string; attachments: Attachment[] } {
-  const withoutFooter = removeContextFooter(removeVoiceJobPrefix(raw))
+  const withoutFooter = removeContextFooter(removeTurnContext(removeVoiceJobPrefix(raw)))
   const { attachments, text } = splitLeadingReferences(withoutFooter.trim())
   return { text: text.trim(), attachments }
 }

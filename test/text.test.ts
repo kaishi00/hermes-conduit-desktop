@@ -6,6 +6,16 @@ const VOICE_BRIEF =
   '[Background job started from a Conduit voice conversation. Nobody is watching this chat live, so work on it on your own. When you are done, end your final message with a plain-language summary that can be read aloud: what you found or did, with the key details.]'
 
 describe('cleanUserText', () => {
+  it("drops the turn's recalled memory a picture turn stored with the words", () => {
+    // Eric's message to Nahida, 2026-11-27: Hermes kept the turn's context after the picture's line.
+    const stored =
+      'new reference sheet for conduit chan. also did i give you the one for nori chan?\n\n[screenshot]\n<memory-context>\n' +
+      '[System note: The following is recalled memory context, NOT new user input.]\n\n- The conduit-chan comics project is live.\n</memory-context>\n\nA plugin note.'
+    expect(cleanUserText(stored).text).toBe('new reference sheet for conduit chan. also did i give you the one for nori chan?')
+    expect(cleanUserText('Before\n<memory-context>\nrecalled, cut off').text).toBe('Before')
+    expect(cleanUserText('[screenshot] is what Hermes writes').text).toBe('[screenshot] is what Hermes writes')
+  })
+
   it('keeps a picture Hermes 0.23 noted below the attached context', () => {
     const raw =
       '@file:attachments/note.txt\n\nWhat colour is the square?\n\n--- Attached Context ---\n\n📄 @file:attachments/note.txt (16 tokens)\n```\nThe secret word is pineapple. @image:/not/this.png\n```\n\n[Image attached at: /root/.hermes/images/upload_npp8jbz1.png]\n[screenshot]\n[Current Time: Wednesday]'
