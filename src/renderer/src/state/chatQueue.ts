@@ -29,6 +29,11 @@ export interface QueuedPrompt {
   canEdit: boolean
   /** On its way into the running turn. */
   steering: boolean
+  /**
+   * The gateway's queue as the plugin reads it on `hermes dashboard` (liveWork.ts), which serves
+   * none of the queue's verbs: the row shows, with nothing to do on it.
+   */
+  readOnly?: boolean
 }
 
 const STATUSES: QueueStatus[] = ['queued', 'started', 'unknown', 'terminal']

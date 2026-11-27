@@ -39,6 +39,8 @@ import { PlanDock } from './PlanDock'
 import { AgentsDock } from './AgentsDock'
 import { ControlDock } from './ControlDock'
 import { ChatQueueDock } from './ChatQueueDock'
+import { LiveWorkDock } from './LiveWorkDock'
+import { useLiveWork } from '../state/useLiveWork'
 import { ConnectionActionsContext } from './ConnectionCardView'
 import { useReplyFace } from './BotsHome'
 import { AskedQuestionBar, WorkPanel } from './WorkPanel'
@@ -194,6 +196,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     sendQueuedNow,
     discardLost,
     resendLost,
+    applyLiveWork,
     loadOlder,
     loadingOlder,
     olderRows,
@@ -201,6 +204,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     react,
     noteCorrection
   } = useChat(request.fresh ? null : request.id, profile, status.sessionAuthority === true, connected, botChat, undefined, host)
+  // A turn of the chat running in the gateway, on hermes dashboard, and the gateway's queue (liveWork.ts).
+  const liveWork = useLiveWork(chat.storedId ?? null, profile, connected && status.sessionAuthority !== true, useTranscriptValue(transcriptStore, state => state.running), queue.some(row => row.readOnly), applyLiveWork)
   // The transcript is drawn by LiveTranscript, so a streaming reply runs that, not this window, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
   const plan = useTranscriptValue(transcriptStore, state => state.plan)
@@ -768,6 +773,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             </button>
           </div>
         ) : null}
+        {/* A turn running in the gateway, on hermes dashboard, with its subagents' own steps (liveWork.ts). */}
+        <LiveWorkDock work={liveWork} running={running} />
         <ChatQueueDock
           rows={queue}
           chatKey={request.id}

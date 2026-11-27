@@ -29,6 +29,7 @@ import {
   dropHeld,
   holdSent,
   releaseHeld,
+  startQueuedWords,
   reholdEdited,
   attachBoards,
   withKeptDetails,
@@ -61,6 +62,7 @@ import type { Attachment } from './text'
 import { helpText, parseSlashCommand, parseSlashResult, wantsDispatch, type SlashCommand, type SlashResult } from './slash'
 import { t } from '../../../shared/i18n'
 import { lostRows, queueFrom, refusalMeansSettled, resendWords, type QueuedPrompt } from './chatQueue'
+import { forwardedRow, type LiveWork } from './liveWork'
 import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
@@ -76,7 +78,9 @@ type Action =
   | { type: 'pending'; text: string; attachments?: Attachment[]; key?: string }
   /** The queue took a send behind the running turn, or a dock action settled one. */
   | { type: 'held'; key: string; admission: string }
-  | { type: 'released' | 'dropped'; admission: string }
+  | { type: 'liveIdle' }
+  | { type: 'queuedStarted'; admission: string; text: string }
+  | { type: 'released' | 'dropped' | 'started'; admission: string }
   | { type: 'edited'; admission: string; edited: string; text: string }
   | { type: 'failed'; error: string }
   | { type: 'withdrawn' }
@@ -258,6 +262,19 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
     case 'released':
       // Only Send now releases a message this way: it steers the running turn.
       return releaseHeld(state, action.admission, true)
+    case 'started':
+      // A live-work read names its turn as running there (liveWork.ts); the unnamed start still to come is its own.
+      return state.held?.some(h => h.admission === action.admission)
+        ? { ...releaseHeld(state, action.admission), readStarted: [...(state.readStarted ?? []).slice(-7), action.admission] }
+        : state
+    case 'queuedStarted': {
+      // A read names the turn of a queued message this transcript doesn't hold: its words come in.
+      const next = startQueuedWords(state, action.admission, action.text)
+      return next === state ? state : { ...next, readStarted: [...(state.readStarted ?? []).slice(-7), action.admission] }
+    }
+    case 'liveIdle':
+      // No turn runs there: no unnamed start is still to come.
+      return state.readStarted ? { ...state, readStarted: undefined } : state
     case 'dropped':
       return dropHeld(state, action.admission)
     case 'edited':
@@ -515,6 +532,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const [takeover, setTakeover] = useState<{ surface?: string; busy: boolean } | null>(null)
   /** The open chat's queue on the Webapp; empty on `hermes dashboard`, which keeps none. */
   const [queue, setQueue] = useState<QueuedPrompt[]>([])
+  /** When each forwarded send was held (ms): a live-work read asked before that can't know it yet. */
+  const heldAt = useRef(new Map<string, number>())
   const queueRef = useRef(queue)
   queueRef.current = queue
   /** The stored rows before the open chat's drawn ones, and whether it has more (longChat.ts). */
@@ -650,7 +669,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         drawnTip.current = tipOf(rows ?? result.messages)
         // A turn still running is followed from here, and stores its rows as it goes.
         followedLive.current = result.running === true
-        setQueue(queueFrom(result.pending) ?? [])
+        // `hermes dashboard` sends no `pending`: the gateway's queue the live-work read gave stays (liveWork.ts).
+        setQueue(kept => queueFrom(result.pending) ?? kept.filter(row => row.readOnly))
         if (!rows) {
           const key = result.stored_session_id ?? storedId
           void loadBoards(state, key, profile, () => ticket === request.current, dispatch, skippedIds(key), ids => rememberRead(key, ids))
@@ -836,7 +856,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       if (result.running === true) gapPending.current = true
       drawnTip.current = tipOf(rows ?? result.messages)
       followedLive.current = result.running === true
-      setQueue(queueFrom(result.pending) ?? [])
+      // `hermes dashboard` sends no `pending`: the gateway's queue the live-work read gave stays (liveWork.ts).
+      setQueue(kept => queueFrom(result.pending) ?? kept.filter(row => row.readOnly))
       if (!rows) {
         const key = result.stored_session_id ?? stored
         void loadBoards(state, key, profile, () => ticket === request.current, dispatch, skippedIds(key), ids => rememberRead(key, ids))
@@ -1042,7 +1063,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       text: string,
       attachments: StagedAttachment[] = [],
       wire?: string,
-      options: { takeOver?: boolean; spoken?: boolean } = {}
+      options: {
+        takeOver?: boolean
+        spoken?: boolean
+        /** A pane with no queue dock (Beside): a forwarded send keeps its bubble in the chat instead. */
+        noDock?: boolean
+      } = {}
     ): Promise<string | null | false> => {
       const trimmed = text.trim()
       if (!trimmed && !attachments.length) return null
@@ -1089,7 +1115,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         reported = params.text as string
         await reportTurnSurface(sid, reported, options.spoken ? 'spoken' : 'typed', readsRepliesAloud())
         const submit = async () => {
-          let receipt: { status?: unknown; admission_id?: unknown } | null
+          let receipt: { status?: unknown; admission_id?: unknown; forwarded?: unknown } | null
           try {
             receipt = await gateway.rpc('prompt.submit', params)
           } catch (e) {
@@ -1099,8 +1125,14 @@ export function useChat(storedId: string | null, profile: string | undefined, se
             receipt = await gateway.rpc('prompt.submit', params)
           }
           // The Webapp's queue took it behind the running turn: it waits in the dock until its turn starts.
-          if (sessionAuthority && joinsRunningTurn && receipt?.status === 'queued' && typeof receipt.admission_id === 'string' && receipt.admission_id) {
-            dispatch({ type: 'held', key, admission: receipt.admission_id })
+          // `hermes dashboard` forwards a send into a turn the gateway runs to the gateway's queue: it waits
+          // there too, where the plugin's reads keep it (liveWork.ts).
+          const forwarded = !sessionAuthority && receipt?.forwarded === true && !options.noDock
+          if ((forwarded || (sessionAuthority && joinsRunningTurn)) && receipt?.status === 'queued' && typeof receipt.admission_id === 'string' && receipt.admission_id) {
+            const admission = receipt.admission_id
+            dispatch({ type: 'held', key, admission })
+            if (forwarded) heldAt.current.set(admission, Date.now())
+            if (forwarded) setQueue(rows => (rows.some(row => row.admissionId === admission) ? rows : [...rows, forwardedRow(admission, trimmed, rows)]))
           }
         }
         /** Hermes cleared the chat's runtime: resumed by its stored id, which still finds it, the message goes once more. */
@@ -1663,6 +1695,45 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   // Each page read, and the open itself, moves `older`: the wanted row is looked for again.
   useEffect(() => seekMore(), [older, seekMore])
 
+  /**
+   * A read of the chat's turn in the gateway on `hermes dashboard` (useLiveWork): its queue into the dock,
+   * without buttons; a message of the user's the queue no longer lists back into the chat, since its turn
+   * started there; the history read again once the turn it followed there has ended.
+   */
+  const applyLiveWork = useCallback(
+    (work: LiveWork, was: LiveWork, askedAt: number) => {
+      if (sessionAuthority) return
+      // A send held after the read was asked isn't in it yet: its row stays, and a later read releases it.
+      const newer = (admission: string) => (heldAt.current.get(admission) ?? 0) > askedAt
+      const waiting = new Set(work.queued.map(row => row.admissionId))
+      setQueue(rows => [...work.queued, ...rows.filter(row => row.readOnly && !waiting.has(row.admissionId) && newer(row.admissionId))])
+      let settled = false
+      for (const held of transcriptRef.current.held ?? []) {
+        if (waiting.has(held.admission) || newer(held.admission)) continue
+        if (work.started.includes(held.admission)) {
+          // Its turn runs there now.
+          dispatch({ type: 'started', admission: held.admission })
+        } else {
+          // It ran and ended between reads, or was withdrawn in the Webapp or Hermes Desktop: the history tells which.
+          dispatch({ type: 'dropped', admission: held.admission })
+          settled = true
+        }
+      }
+      // A message the last read listed whose turn runs now, that nothing here holds (the chat was reopened
+      // while it waited, or another app sent it): its words come in once, from the queue.
+      const heldNow = new Set((transcriptRef.current.held ?? []).map(h => h.admission))
+      for (const row of was.queued) {
+        if (work.started.includes(row.admissionId) && !heldNow.has(row.admissionId))
+          dispatch({ type: 'queuedStarted', admission: row.admissionId, text: row.text })
+      }
+      // Holds the read could know of are settled now (released, dropped, or started by an unnamed message.start).
+      for (const admission of [...heldAt.current.keys()]) if (!newer(admission) && !waiting.has(admission)) heldAt.current.delete(admission)
+      if (!work.running) dispatch({ type: 'liveIdle' })
+      if (((was.running && !work.running) || settled) && !transcriptRef.current.running) void reloadHistory(true)
+    },
+    [sessionAuthority, transcriptRef, reloadHistory]
+  )
+
   return {
     /**
      * Whether the chat has stored rows before the ones it holds. While it opens, that isn't
@@ -1692,6 +1763,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     reissueConnection,
     wakeConnection,
     queue,
+    applyLiveWork,
     cancelQueued,
     editQueued,
     sendQueuedNow,

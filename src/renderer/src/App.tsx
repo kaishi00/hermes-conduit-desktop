@@ -158,6 +158,8 @@ import { ConfirmPanel } from './components/ConfirmPanel'
 import { everyWhileVisible } from './state/visibility'
 import { ROOM_LINKS_CAPABILITY } from './state/roomLinks'
 import { ChatQueueDock } from './components/ChatQueueDock'
+import { LiveWorkDock } from './components/LiveWorkDock'
+import { useLiveWork } from './state/useLiveWork'
 import { AppLockSetting, LockedScreen } from './components/AppLock'
 import { AskDashboardSetting, DashboardChoice } from './components/AskDashboard'
 import { CombineDashboardsSetting, HostBadgeMark } from './components/CombinedDashboards'
@@ -541,12 +543,15 @@ function Shell({
     sendQueuedNow,
     discardLost,
     resendLost,
+    applyLiveWork,
     loadOlder,
     loadingOlder,
     olderRows,
     seekRow,
     react: reactTo
   } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '', selected.draft, selected.id ? undefined : selected.title)
+  // A turn of the chat running in the gateway, on hermes dashboard, and the gateway's queue (liveWork.ts).
+  const liveWork = useLiveWork(chat.storedId ?? null, selected.profile, connected && status.sessionAuthority !== true, useTranscriptValue(transcriptStore, state => state.running), queue.some(row => row.readOnly), applyLiveWork)
   // What this window shows of the transcript; the transcript itself is drawn by LiveTranscript, so a streaming
   // reply runs that, not App, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
@@ -3171,6 +3176,8 @@ function Shell({
                   </button>
                 </div>
               ) : null}
+              {/* A turn running in the gateway, on hermes dashboard, with its subagents' own steps (liveWork.ts). */}
+              <LiveWorkDock work={liveWork} running={running} />
               <ChatQueueDock
                 rows={queue}
                 chatKey={selected.id ?? 'new'}
