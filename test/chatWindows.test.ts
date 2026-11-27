@@ -62,8 +62,12 @@ describe('chat windows of their own', () => {
     expect(set.rename(LIVE_CALL_WINDOW_ID, 's9')).toBe(false)
     set.show({ id: LIVE_CALL_WINDOW_ID, call: true })
     expect(set.rename(LIVE_CALL_WINDOW_ID, 'other')).toBe(false)
-    // The user closing a renamed window frees its place.
     expect(set.rename(LIVE_CALL_WINDOW_ID, 's10')).toBe(true)
+    // Renamed again from the id it has now: a reload of the window makes a new chat.
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 's11')).toBe(false)
+    expect(set.rename('s10', 's11')).toBe(true)
+    expect(set.ids()).toEqual(['other', 's11'])
+    // The user closing a renamed window frees its place.
     made[2]!.onClosed()
     expect(set.ids()).toEqual(['other'])
   })

@@ -350,7 +350,8 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   useEffect(() => {
     if (callWindow && chat.storedId) window.conduit.noteCallWindowChat(chat.storedId)
   }, [callWindow, chat.storedId])
-  // Each opening is a new chat: an unsent draft from the last one isn't brought back.
+  // Each opening is a new chat: an unsent draft from the last one isn't brought back. The key stays the same once
+  // the call makes the chat, so words typed meanwhile stay in the box.
   const [openedAt] = useState(() => Date.now())
   useEffect(() => {
     if (!callWindow || !calling) return
@@ -776,7 +777,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           onSuggestion={text => void onSend(text, [])}
           onStop={() => void stop()}
           focusKey={request.id}
-          draftKey={chatDraft(profile, callWindow ? (chat.storedId ?? `${request.id}-${openedAt}`) : request.id)}
+          draftKey={chatDraft(profile, callWindow ? `${request.id}-${openedAt}` : request.id)}
           canAttach
           dropZone={pane}
           voice={calling ? undefined : { profile }}

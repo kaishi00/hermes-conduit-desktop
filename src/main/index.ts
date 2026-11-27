@@ -340,8 +340,9 @@ const chatBrowserWindows = new WeakSet<BrowserWindow>()
 // Asking again for a chat's window brings it back, out of the dock or the taskbar too.
 /** Each chat window by its chat's stored id, so it's found before its session opens. */
 const chatBrowserById = new Map<string, BrowserWindow>()
-/** The Live call window, whatever id its chat has now. */
+/** The Live call window, and the id it's kept under now: its chat's once the call makes one (a reload's new chat too). */
 let callBrowser: BrowserWindow | null = null
+let callWindowId = LIVE_CALL_WINDOW_ID
 const chatWindows = new ChatWindowSet(
   (chat, onClosed) => {
     const window = createChatWindow(chat, onClosed)
@@ -670,7 +671,10 @@ function registerIpc(): void {
       ...(request.botChat === true ? { botChat: true } : {}),
       ...(call ? { call: true, fresh: true } : {})
     })
-    if (shown && call) callBrowser = chatBrowserById.get(LIVE_CALL_WINDOW_ID) ?? null
+    if (shown && call) {
+      callBrowser = chatBrowserById.get(LIVE_CALL_WINDOW_ID) ?? null
+      callWindowId = LIVE_CALL_WINDOW_ID
+    }
     return shown
   })
   ipcMain.handle(IPC.pageWatched, event => {
@@ -818,8 +822,10 @@ function registerIpc(): void {
   ipcMain.on(IPC.callWindowChat, (event, storedId: unknown) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     if (typeof storedId !== 'string' || !storedId || !window || window !== callBrowser) return
-    if (!chatWindows.rename(LIVE_CALL_WINDOW_ID, storedId)) return
-    if (chatBrowserById.get(LIVE_CALL_WINDOW_ID) === window) chatBrowserById.delete(LIVE_CALL_WINDOW_ID)
+    const was = callWindowId
+    if (!chatWindows.rename(was, storedId)) return
+    callWindowId = storedId
+    if (chatBrowserById.get(was) === window) chatBrowserById.delete(was)
     chatBrowserById.set(storedId, window)
     window.once('closed', () => {
       if (chatBrowserById.get(storedId) === window) chatBrowserById.delete(storedId)
