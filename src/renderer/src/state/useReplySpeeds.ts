@@ -63,20 +63,23 @@ export function useReplySpeeds(
   const [read, setRead] = useState<Read>({ scope, fresh: false })
   const scopeRef = useRef(scope)
   scopeRef.current = scope
+  // Bumped as each turn starts: a read asked before it answers for the turn before, so it can't mark this one's speed fresh.
+  const turnRef = useRef(0)
   // Another chat's read never shows here, not even for the render before the effects below run.
   const current = read.scope === scope ? read : { scope, fresh: false }
   const speeds = current.speeds
 
   const load = useCallback(async () => {
     const asked = scopeRef.current
+    const turn = turnRef.current
     if (!sessionId) return
     try {
       const answer = parseReplySpeeds(await gateway.http('GET', replySpeedsPath(sessionId, profile)))
-      if (scopeRef.current === asked) setRead({ scope: asked, speeds: answer, fresh: true })
+      if (scopeRef.current === asked) setRead({ scope: asked, speeds: answer, fresh: turnRef.current === turn })
     } catch {
       // An older plugin (404), a chat Hermes has no row for yet, or a failed read: the saved rows' speeds
-      // stay; the newest turn's, which may be an earlier turn's, goes.
-      if (scopeRef.current === asked) setRead(was => (was.scope === asked ? dropUnsaved(was) : was))
+      // stay; the newest turn's, which may be an earlier turn's, goes, and the composer's chip stays dimmed.
+      if (scopeRef.current === asked) setRead(was => (was.scope === asked ? { ...dropUnsaved(was), fresh: false } : was))
     }
   }, [sessionId, profile])
 
@@ -85,20 +88,24 @@ export function useReplySpeeds(
   }, [scope])
   useEffect(() => {
     // A new turn's reply isn't the one the last read's newest turn wrote.
-    if (running) setRead(was => ({ ...dropUnsaved(was), fresh: false }))
+    if (!running) return
+    turnRef.current += 1
+    setRead(was => ({ ...dropUnsaved(was), fresh: false }))
   }, [running])
   useEffect(() => {
     if (reading && sessionId && connected && !running) void load()
   }, [reading, scope, sessionId, connected, running, load])
 
-  // The composer chip's last speed, kept for this chat while the next turn's is still to come.
+  // The composer chip's last speed, kept for this chat while the next turn's is still to come. A running turn dims it
+  // from its first render, before the effect above clears `fresh`.
   const kept = useRef<{ scope: string; rate: number } | undefined>(undefined)
-  const newest = current.fresh ? newestReplySpeed(speeds) : undefined
-  if (current.fresh) kept.current = newest === undefined ? undefined : { scope, rate: newest }
+  const settled = current.fresh && !running
+  const newest = settled ? newestReplySpeed(speeds) : undefined
+  if (settled) kept.current = newest === undefined ? undefined : { scope, rate: newest }
   else if (kept.current?.scope !== scope) kept.current = undefined
   const composer = !inComposer
     ? undefined
-    : current.fresh
+    : settled
       ? newest === undefined
         ? undefined
         : { rate: newest, stale: false }

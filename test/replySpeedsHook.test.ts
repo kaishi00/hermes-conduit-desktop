@@ -4,7 +4,8 @@ import { renderHook, settle } from './hookHarness'
 import { useReplySpeeds } from '../src/renderer/src/state/useReplySpeeds'
 
 type Props = { running: boolean }
-let answer: () => { ok: boolean; result?: unknown; status?: number; error?: string }
+type Outcome = { ok: boolean; result?: unknown; status?: number; error?: string }
+let answer: () => Outcome | Promise<Outcome>
 
 beforeEach(() => {
   localStorage.setItem('conduit.showReplySpeed', 'true')
@@ -69,6 +70,33 @@ describe('the reply speeds hook', () => {
     hook.rerender({ running: false })
     await settle()
     expect(hook.result().composer).toEqual({ rate: 61, stale: false })
+    hook.unmount()
+    localStorage.removeItem('conduit.showReplySpeedInComposer')
+  })
+
+  it('keeps the chip dimmed when a read asked before the next turn started answers during it', async () => {
+    localStorage.setItem('conduit.showReplySpeedInComposer', 'true')
+    const hook = renderHook(({ running }: Props) => useReplySpeeds('a', undefined, true, running), { running: false })
+    await settle()
+    expect(hook.result().composer).toEqual({ rate: 55, stale: false })
+
+    // A turn ends and its read hangs; the next turn starts before it answers.
+    let release: (outcome: Outcome) => void = () => undefined
+    answer = () => new Promise<Outcome>(resolve => (release = resolve))
+    hook.rerender({ running: true })
+    await settle()
+    hook.rerender({ running: false })
+    await settle()
+    hook.rerender({ running: true })
+    release({ ok: true, result: { session_id: 'a', replies: [{ row_id: 7, tokens_per_s: 42 }, { row_id: 9, tokens_per_s: 61 }] } })
+    await settle()
+    expect(hook.result().composer).toEqual({ rate: 55, stale: true })
+
+    // That turn's own read fails: still dimmed, never gone.
+    answer = () => ({ ok: false, status: 503, error: 'restarting' })
+    hook.rerender({ running: false })
+    await settle()
+    expect(hook.result().composer).toEqual({ rate: 55, stale: true })
     hook.unmount()
     localStorage.removeItem('conduit.showReplySpeedInComposer')
   })
