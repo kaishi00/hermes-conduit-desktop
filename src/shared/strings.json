@@ -48553,5 +48553,35 @@
     "tr": "Bu Hermes'e gönderilsin mi?",
     "zh-Hans": "将此发送给 Hermes？",
     "zh-Hant": "將此傳送給 Hermes？"
+  },
+  "Subagents working: {count}": {
+    "de": "Subagenten bei der Arbeit: {count}",
+    "es": "Subagentes trabajando: {count}",
+    "fr": "Sous-agents au travail : {count}",
+    "id": "Subagen bekerja: {count}",
+    "it": "Subagenti al lavoro: {count}",
+    "ja": "作業中のサブエージェント: {count}",
+    "ko": "작업 중인 서브에이전트: {count}",
+    "pl": "Pracujące podagenty: {count}",
+    "pt-BR": "Subagentes trabalhando: {count}",
+    "ru": "Работающие субагенты: {count}",
+    "tr": "Çalışan alt ajanlar: {count}",
+    "zh-Hans": "正在工作的子代理：{count}",
+    "zh-Hant": "正在工作的子代理：{count}"
+  },
+  "Messages after it wait until it’s discarded in the Webapp or Hermes Desktop.": {
+    "de": "Nachrichten danach warten, bis sie in der Webapp oder in Hermes Desktop verworfen wird.",
+    "es": "Los mensajes posteriores esperan hasta que se descarte en la Webapp o en Hermes Desktop.",
+    "fr": "Les messages suivants attendent qu’il soit abandonné dans la Webapp ou dans Hermes Desktop.",
+    "id": "Pesan setelahnya menunggu sampai ini dibuang di Webapp atau Hermes Desktop.",
+    "it": "I messaggi successivi attendono finché non viene scartato nella Webapp o in Hermes Desktop.",
+    "ja": "後のメッセージは、Webapp または Hermes Desktop でこれが破棄されるまで待機します。",
+    "ko": "이후 메시지는 Webapp 또는 Hermes Desktop에서 이것을 버릴 때까지 기다립니다.",
+    "pl": "Kolejne wiadomości czekają, aż zostanie odrzucona w Webapp lub Hermes Desktop.",
+    "pt-BR": "As mensagens seguintes esperam até que ela seja descartada no Webapp ou no Hermes Desktop.",
+    "ru": "Следующие сообщения ждут, пока его не отменят в Webapp или Hermes Desktop.",
+    "tr": "Sonraki mesajlar, bu Webapp'te veya Hermes Desktop'ta silinene kadar bekler.",
+    "zh-Hans": "之后的消息会等待，直到在 Webapp 或 Hermes Desktop 中将其丢弃。",
+    "zh-Hant": "之後的訊息會等待，直到在 Webapp 或 Hermes Desktop 中將其捨棄。"
   }
 }

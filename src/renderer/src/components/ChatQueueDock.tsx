@@ -7,7 +7,9 @@ import { lostRows, queueRefusal, resendWords, waitingRows, type QueuedPrompt } f
  * The open chat's queue on the Webapp, above the composer, after the
  * phone's AuthorityQueueDock: each message waiting its turn with Send now,
  * Edit and Remove from queue, and a turn a restart cut off with Resend and
- * Discard. `hermes dashboard` keeps no queue, so it never shows there.
+ * Discard. `hermes dashboard` keeps no queue: there the rows are the
+ * gateway's queue as the plugin reads it (liveWork.ts), without buttons,
+ * since the dashboard serves none of the queue's verbs.
  */
 export function ChatQueueDock({
   rows,
@@ -66,8 +68,14 @@ export function ChatQueueDock({
           <div key={row.admissionId} className="queue-lost" role="group">
             <strong>{t('Hermes restarted before it finished this.')}</strong>
             {row.text ? <p className="queue-text">{withoutMentionNote(row.text)}</p> : null}
-            <p className="meta">{t('Messages after it wait until you choose.')}</p>
-            {words ? <p className="meta">{t('Resend sends the words only, without any files.')}</p> : null}
+            {row.readOnly ? (
+              // `hermes dashboard` can't discard it: the gateway's own apps can.
+              <p className="meta">{t('Messages after it wait until it’s discarded in the Webapp or Hermes Desktop.')}</p>
+            ) : (
+              <p className="meta">{t('Messages after it wait until you choose.')}</p>
+            )}
+            {words && !row.readOnly ? <p className="meta">{t('Resend sends the words only, without any files.')}</p> : null}
+            {row.readOnly ? null : (
             <div className="queue-actions">
               {words ? (
                 <button
@@ -83,6 +91,7 @@ export function ChatQueueDock({
                 {t('Discard')}
               </button>
             </div>
+            )}
           </div>
         )
       })}
@@ -133,6 +142,7 @@ export function ChatQueueDock({
               <span className="meta">{t('Queued')}</span>
               <span className="queue-text">{withoutMentionNote(row.text)}</span>
             </div>
+            {row.readOnly ? null : (
             <div className="queue-actions">
               {row.canSendNow ? (
                 <button className="link" disabled={busy} onClick={() => void act(row, () => onSendNow(row))}>
@@ -148,6 +158,7 @@ export function ChatQueueDock({
                 {t('Remove from queue')}
               </button>
             </div>
+            )}
           </div>
         )
       })}

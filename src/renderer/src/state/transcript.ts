@@ -631,7 +631,11 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       const items = promotePending(state.items)
       const started = { ...state, running: true, status: undefined, items, turnFrom: items.length }
       const admission = event.admission_id ?? str(payload.admission_id)
-      return admission ? releaseHeld(started, admission) : started
+      if (admission) return releaseHeld(started, admission)
+      // `hermes dashboard` relays a forwarded message's own turn without naming it: the oldest held one
+      // (liveWork.ts). The Webapp names every turn's admission, so this never guesses there.
+      const oldest = state.held?.[0]?.admission
+      return oldest ? releaseHeld(started, oldest) : started
     }
     case 'message.delta': {
       const text = payload.text

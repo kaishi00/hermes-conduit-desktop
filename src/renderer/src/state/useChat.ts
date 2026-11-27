@@ -61,6 +61,7 @@ import type { Attachment } from './text'
 import { helpText, parseSlashCommand, parseSlashResult, wantsDispatch, type SlashCommand, type SlashResult } from './slash'
 import { t } from '../../../shared/i18n'
 import { lostRows, queueFrom, refusalMeansSettled, resendWords, type QueuedPrompt } from './chatQueue'
+import { forwardedRow, type LiveWork } from './liveWork'
 import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 import { readsRepliesAloud } from './readAloud'
 import { dashboardProfilePath } from './dashboardProfile'
@@ -76,7 +77,7 @@ type Action =
   | { type: 'pending'; text: string; attachments?: Attachment[]; key?: string }
   /** The queue took a send behind the running turn, or a dock action settled one. */
   | { type: 'held'; key: string; admission: string }
-  | { type: 'released' | 'dropped'; admission: string }
+  | { type: 'released' | 'dropped' | 'started'; admission: string }
   | { type: 'edited'; admission: string; edited: string; text: string }
   | { type: 'failed'; error: string }
   | { type: 'withdrawn' }
@@ -258,6 +259,9 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
     case 'released':
       // Only Send now releases a message this way: it steers the running turn.
       return releaseHeld(state, action.admission, true)
+    case 'started':
+      // The gateway's queue no longer lists it (liveWork.ts): its turn started there.
+      return releaseHeld(state, action.admission)
     case 'dropped':
       return dropHeld(state, action.admission)
     case 'edited':
@@ -1089,7 +1093,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         reported = params.text as string
         await reportTurnSurface(sid, reported, options.spoken ? 'spoken' : 'typed', readsRepliesAloud())
         const submit = async () => {
-          let receipt: { status?: unknown; admission_id?: unknown } | null
+          let receipt: { status?: unknown; admission_id?: unknown; forwarded?: unknown } | null
           try {
             receipt = await gateway.rpc('prompt.submit', params)
           } catch (e) {
@@ -1099,8 +1103,13 @@ export function useChat(storedId: string | null, profile: string | undefined, se
             receipt = await gateway.rpc('prompt.submit', params)
           }
           // The Webapp's queue took it behind the running turn: it waits in the dock until its turn starts.
-          if (sessionAuthority && joinsRunningTurn && receipt?.status === 'queued' && typeof receipt.admission_id === 'string' && receipt.admission_id) {
-            dispatch({ type: 'held', key, admission: receipt.admission_id })
+          // `hermes dashboard` forwards a send into a turn the gateway runs to the gateway's queue: it waits
+          // there too, where the plugin's reads keep it (liveWork.ts).
+          const forwarded = !sessionAuthority && receipt?.forwarded === true
+          if ((forwarded || (sessionAuthority && joinsRunningTurn)) && receipt?.status === 'queued' && typeof receipt.admission_id === 'string' && receipt.admission_id) {
+            const admission = receipt.admission_id
+            dispatch({ type: 'held', key, admission })
+            if (forwarded) setQueue(rows => (rows.some(row => row.admissionId === admission) ? rows : [...rows, forwardedRow(admission, trimmed, rows)]))
           }
         }
         /** Hermes cleared the chat's runtime: resumed by its stored id, which still finds it, the message goes once more. */
@@ -1663,6 +1672,24 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   // Each page read, and the open itself, moves `older`: the wanted row is looked for again.
   useEffect(() => seekMore(), [older, seekMore])
 
+  /**
+   * A read of the chat's turn in the gateway on `hermes dashboard` (useLiveWork): its queue into the dock,
+   * without buttons; a message of the user's the queue no longer lists back into the chat, since its turn
+   * started there; the history read again once the turn it followed there has ended.
+   */
+  const applyLiveWork = useCallback(
+    (work: LiveWork, was: LiveWork) => {
+      if (sessionAuthority) return
+      setQueue(work.queued)
+      const waiting = new Set(work.queued.map(row => row.admissionId))
+      for (const held of transcriptRef.current.held ?? []) {
+        if (!waiting.has(held.admission)) dispatch({ type: 'started', admission: held.admission })
+      }
+      if (was.running && !work.running && !transcriptRef.current.running) void reloadHistory(true)
+    },
+    [sessionAuthority, transcriptRef, reloadHistory]
+  )
+
   return {
     /**
      * Whether the chat has stored rows before the ones it holds. While it opens, that isn't
@@ -1692,6 +1719,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     reissueConnection,
     wakeConnection,
     queue,
+    applyLiveWork,
     cancelQueued,
     editQueued,
     sendQueuedNow,
