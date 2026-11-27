@@ -638,6 +638,26 @@ describe("model and run settings before a new chat's first message", () => {
     expect(hook.result().chat.yolo).toBe(true)
   })
 
+  it("gives a conduit://new link's title to the chat session.create makes, and none without one", async () => {
+    const created: Record<string, unknown>[] = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const baseRpc = conduit.rpcOutcome
+    conduit.rpcOutcome = (method, params) => {
+      if (method === 'session.create') created.push(params)
+      return baseRpc(method, params)
+    }
+    const titled = mount(() => useChat(null, undefined, false, true, false, undefined, 'h1', 1, 'Lisbon'), {})
+    await act(async () => {
+      await titled.result().send('Plan the trip')
+    })
+    const plain = mount(() => useChat(null, undefined, false, true, false, undefined, 'h1', 2), {})
+    await act(async () => {
+      await plain.result().send('hello')
+    })
+    expect(created[0]?.title).toBe('Lisbon')
+    expect(created[1]?.title).toBeUndefined()
+  })
+
   it('sends a pick made while session.create is out to the session it made (#431)', async () => {
     const sentRpc: { method: string; params: Record<string, unknown> }[] = []
     const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit

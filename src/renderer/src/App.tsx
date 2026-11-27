@@ -242,7 +242,7 @@ import { CallTranscriptSheet } from './components/CallTranscriptSheet'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
 import { ask, askText, tell } from './state/dialogs'
-import { isNewChatUrl, newChatLink, newChatLinkPreview, type NewChatLink } from '@shared/linkUrls'
+import { isNewChatUrl, newChatLink, NEW_CHAT_PREVIEW_MAX, type NewChatLink } from '@shared/linkUrls'
 import { Select } from './components/Select'
 import { KeptPane } from './components/KeptPane'
 import { DockedChatPane, tellDockedShown, type DockedChat, type DockedFrame } from './components/DockedChat'
@@ -605,29 +605,33 @@ function Shell({
   // A new chat link (`conduit://new`, hermes-conduit issue 3389): a new chat with the link's title, its text in the composer.
   // One that sends asks first, showing the text, since any app or web page can open a link (Eric, 2026-11-27); Cancel leaves
   // the text in the composer, unsent.
-  const [linkSend, setLinkSend] = useState<{ draft: number; text: string } | null>(null)
+  const [linkSend, setLinkSend] = useState<{ draft: number; text: string; sends: boolean } | null>(null)
   const openNewChatLink = useCallback(async (request: NewChatLink) => {
     const draft = ++draftCount.current
     setArchivedOpen(false)
     setSection('chats')
     setSelected({ id: null, profile: request.profile ?? chatProfileRef.current ?? undefined, ...(request.title ? { title: request.title } : {}), draft })
     if (!request.text) return
-    if (request.sends && (await ask(`${t('Send this to Hermes?')}\n\n${newChatLinkPreview(request.text)}`, { confirm: t('Send') }))) {
-      setLinkSend({ draft, text: request.text })
-      return
-    }
-    setQuote(quoteRequest({ draft: request.text }))
+    // Asked only about text the dialog shows whole; longer text waits in the composer, where it can all be read.
+    const asks = request.sends && request.text.trim().length <= NEW_CHAT_PREVIEW_MAX
+    const sends = asks && (await ask(`${t('Send this to Hermes?')}\n\n${request.text.trim()}`, { confirm: t('Send') }))
+    setLinkSend({ draft, text: request.text, sends })
   }, [])
   useEffect(() => {
     if (!linkSend) return
     setLinkSend(null)
-    // Another chat opened before the Send: nothing is sent into it, and the text waits in its composer instead.
-    if (selected.id || selected.draft !== linkSend.draft) return setQuote(quoteRequest({ draft: linkSend.text }))
-    // A link's text is literal: "/…" never runs a command.
-    void send(linkSend.text).then(went => {
-      if (went === false) setQuote(quoteRequest({ draft: linkSend.text }))
+    // Another chat opened while the dialog was up: nothing goes into it.
+    if (selected.id || selected.draft !== linkSend.draft) return
+    if (!linkSend.sends) return setQuote(quoteRequest({ draft: linkSend.text }))
+    // A link's text is literal: "/…" never runs a command. The chat it makes becomes the selected one, as a send from the composer's does.
+    void send(linkSend.text).then(created => {
+      if (created === false) setQuote(quoteRequest({ draft: linkSend.text }))
+      else if (created) {
+        setSelected(s => (s.draft === linkSend.draft && !s.id ? { ...s, id: created } : s))
+        void list.refresh()
+      }
     })
-  }, [linkSend, selected.id, selected.draft, send])
+  }, [linkSend, selected.id, selected.draft, send, list])
   // A Link invite opened from another app opens in Settings > Multiplayer, as on the phone.
   const [linkRequest, setLinkRequest] = useState<{ url: string; at: number } | null>(null)
   useEffect(() => {

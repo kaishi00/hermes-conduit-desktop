@@ -84,11 +84,5 @@ export function newChatLink(text: string): NewChatLink | null {
   return link
 }
 
-/** The longest text the Send dialog shows; the rest is cut with an ellipsis. */
-export const NEW_CHAT_PREVIEW_MAX = 600
-
-/** A link's text as its Send dialog shows it. */
-export function newChatLinkPreview(text: string): string {
-  const trimmed = text.trim()
-  return trimmed.length > NEW_CHAT_PREVIEW_MAX ? `${trimmed.slice(0, NEW_CHAT_PREVIEW_MAX)}…` : trimmed
-}
+/** The longest text a link may send: its Send dialog shows it whole. Longer text waits in the composer instead. */
+export const NEW_CHAT_PREVIEW_MAX = 2000
