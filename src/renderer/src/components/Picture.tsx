@@ -31,7 +31,8 @@ export function PictureViewerHost({ children }: { children: ReactNode }) {
         <div className="picture-viewer" role="dialog" aria-label={shown.name} onClick={() => setShown(null)}>
           <img src={shown.src} alt={shown.name} />
           <div className="picture-viewer-actions">
-            <ViewerCopy src={shown.src} />
+            {/* Keyed by the picture: one opened from the keyboard while the viewer shows another starts at Copy. */}
+            <ViewerCopy key={shown.src} src={shown.src} />
             <button
               className="picture-viewer-save"
               onClick={event => {

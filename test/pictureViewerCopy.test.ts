@@ -84,6 +84,34 @@ describe("the picture viewer's Copy", () => {
     expect(view.label()).toBe('Copy')
     view.unmount()
   })
+
+  it('starts at Copy for a picture opened from the keyboard while the viewer shows another', async () => {
+    const { PictureViewerHost, PictureImage } = (await import(/* @vite-ignore */ picture)) as PictureModule
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    act(() =>
+      root.render(
+        createElement(
+          PictureViewerHost,
+          null,
+          createElement(PictureImage, { src: 'data:image/png;base64,AQID', name: 'a' }),
+          createElement(PictureImage, { src: 'data:image/png;base64,BAUG', name: 'b' })
+        )
+      )
+    )
+    const [first, second] = [...host.querySelectorAll<HTMLButtonElement>('.picture-button')]
+    const label = () => [...host.querySelectorAll<HTMLButtonElement>('.picture-viewer-save')].find(b => b.textContent !== 'Download')?.textContent
+    act(() => first!.click())
+    act(() => [...host.querySelectorAll<HTMLButtonElement>('.picture-viewer-save')].find(b => b.textContent === 'Copy')!.click())
+    await act(settle)
+    expect(label()).toBe('Copied')
+    // The pictures under the viewer stay in the tab order, so Enter on another opens it in place.
+    act(() => second!.click())
+    expect(host.querySelector('.picture-viewer img')?.getAttribute('alt')).toBe('b')
+    expect(label()).toBe('Copy')
+    act(() => root.unmount())
+  })
 })
 
 describe('copying a picture the system reads only as the page draws it', () => {
