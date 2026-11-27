@@ -508,7 +508,7 @@ function createWindow(): void {
     }
   })
   mainWindow = window
-  keepWindowPlace(window, 'main', place.maximized)
+  keepWindowPlace(window, 'main', place)
   watchWindowFreezes(window)
   watchDockedChats(window)
   // The sign-in's start stays in the tray (issue 442): the window is made, and shows when asked for.

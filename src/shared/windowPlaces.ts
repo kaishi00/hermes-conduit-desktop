@@ -99,3 +99,20 @@ export function restoreFix(now: Rect, normal: Rect | null): Rect | null {
   if (Math.abs(now.width - normal.width) <= 1 && Math.abs(now.height - normal.height) <= 1) return null
   return normal
 }
+
+/**
+ * What to save for a window opened at `opened`: those bounds again while it
+ * is within a few pixels of them. At fractional scaling (150% on Windows) a
+ * window comes out a pixel or three bigger than asked, which would otherwise
+ * grow it a little on every launch.
+ */
+export function steadyPlace(now: Rect, opened: Rect | null, slack = 4): Rect {
+  if (!opened) return now
+  const near = (a: number, b: number) => Math.abs(a - b) <= slack
+  return {
+    x: near(now.x, opened.x) ? opened.x : now.x,
+    y: near(now.y, opened.y) ? opened.y : now.y,
+    width: near(now.width, opened.width) ? opened.width : now.width,
+    height: near(now.height, opened.height) ? opened.height : now.height
+  }
+}

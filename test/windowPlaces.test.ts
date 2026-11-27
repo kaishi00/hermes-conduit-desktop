@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CASCADE_STEP, cascade, placeOnScreen, readPlace, restoreFix } from '../src/shared/windowPlaces'
+import { CASCADE_STEP, cascade, placeOnScreen, readPlace, restoreFix, steadyPlace } from '../src/shared/windowPlaces'
 
 const primary = { x: 0, y: 0, width: 1920, height: 1040 }
 const right = { x: 1920, y: 0, width: 2560, height: 1400 }
@@ -46,5 +46,13 @@ describe('window places (Eric, 2026-11-27)', () => {
     expect(restoreFix({ x: 320, y: 110, width: 1280, height: 820 }, normal)).toEqual(normal)
     expect(restoreFix({ x: 500, y: 10, width: 1000, height: 700 }, normal)).toBeNull()
     expect(restoreFix({ x: 0, y: 0, width: 1280, height: 820 }, null)).toBeNull()
+  })
+
+  it('keeps the opened place while the window is only a few pixels off it, so 150% scaling does not grow it each launch', () => {
+    const opened = { x: 200, y: 120, width: 1001, height: 651 }
+    expect(steadyPlace({ x: 200, y: 120, width: 1004, height: 652 }, opened)).toEqual(opened)
+    expect(steadyPlace({ x: 200, y: 120, width: 1200, height: 652 }, opened)).toEqual({ ...opened, width: 1200 })
+    expect(steadyPlace({ x: 600, y: 120, width: 1004, height: 651 }, opened)).toEqual({ ...opened, x: 600 })
+    expect(steadyPlace({ x: 1, y: 2, width: 3, height: 4 }, null)).toEqual({ x: 1, y: 2, width: 3, height: 4 })
   })
 })

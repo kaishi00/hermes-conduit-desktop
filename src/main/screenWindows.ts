@@ -28,7 +28,7 @@ export function createScreenWindow(screen: ScreenWindowRequest, onClosed: () => 
       nodeIntegration: false
     }
   })
-  keepWindowPlace(window, 'screen', place.maximized)
+  keepWindowPlace(window, 'screen', place)
   window.on('ready-to-show', () => (place.maximized ? window.maximize() : window.show()))
   window.on('closed', onClosed)
   confineNavigation(window.webContents)

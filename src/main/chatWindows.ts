@@ -29,7 +29,7 @@ export function createChatWindow(chat: ChatWindowRequest, onClosed: () => void):
       nodeIntegration: false
     }
   })
-  keepWindowPlace(window, 'chat', place.maximized)
+  keepWindowPlace(window, 'chat', place)
   window.on('ready-to-show', () => (place.maximized ? window.maximize() : window.show()))
   window.on('closed', onClosed)
   confineNavigation(window.webContents)

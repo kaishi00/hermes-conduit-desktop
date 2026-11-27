@@ -12,7 +12,7 @@ import { app, screen, type BrowserWindow } from 'electron'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { writeFileAtomic } from './atomicWrite'
-import { cascade, placeOnScreen, readPlace, restoreFix, type Rect, type WindowKind, type WindowPlace } from '../shared/windowPlaces'
+import { cascade, placeOnScreen, readPlace, restoreFix, steadyPlace, type Rect, type WindowKind, type WindowPlace } from '../shared/windowPlaces'
 
 const path = () => join(app.getPath('userData'), 'window-places.json')
 
@@ -86,7 +86,11 @@ export function openingPlace(
  * Call before it shows. `maximized` says it will open maximized (its caller
  * maximizes it as it shows: maximize() shows a hidden window).
  */
-export function keepWindowPlace(window: BrowserWindow, kind: WindowKind, maximized = false): void {
+export function keepWindowPlace(window: BrowserWindow, kind: WindowKind, opening: { bounds: Partial<Rect>; maximized: boolean }): void {
+  const { maximized } = opening
+  const b = opening.bounds
+  // The place it was opened at, kept as saved until it really moves (see steadyPlace).
+  const opened: Rect | null = b.x !== undefined && b.y !== undefined && b.width && b.height ? { x: b.x, y: b.y, width: b.width, height: b.height } : null
   let normal: Rect | null = maximized ? window.getBounds() : null
   let settle: ReturnType<typeof setTimeout> | null = null
   let restoring: ReturnType<typeof setTimeout> | null = null
@@ -96,7 +100,7 @@ export function keepWindowPlace(window: BrowserWindow, kind: WindowKind, maximiz
     if (restoring || window.isDestroyed() || window.isMinimized() || window.isFullScreen()) return
     const isMax = window.isMaximized()
     if (!isMax) normal = window.getBounds()
-    load()[kind] = { ...(normal ?? window.getNormalBounds()), maximized: isMax }
+    load()[kind] = { ...steadyPlace(normal ?? window.getNormalBounds(), opened), maximized: isMax }
     saveSoon()
   }
   // Read once a move or resize has settled: mid-maximize, Windows can report the full-screen size before it says maximized.
