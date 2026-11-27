@@ -49,7 +49,7 @@ import {
   showsTabStrip,
   stepTab,
   tabTarget,
-  savedSelection,
+  claimSentSelection,
   type WorkspaceTab,
   type WorkspaceTabs
 } from './state/workspaceTabs'
@@ -634,7 +634,7 @@ function Shell({
       if (created === false) {
         if (!now.id && now.draft === linkSend.draft) setQuote(quoteRequest({ draft: linkSend.text }))
       } else if (created) {
-        setSelected(s => (s.draft === linkSend.draft && !s.id ? savedSelection(s, created) : s))
+        setSelected(s => claimSentSelection(s, linkSend.draft, created))
         void list.refresh()
       }
     })
@@ -1659,6 +1659,8 @@ function Shell({
   const onSend = useCallback(
     async (text: string, attachments: StagedAttachment[] = [], options: { takeOver?: boolean; spoken?: boolean } = {}) => {
       let created: string | null | false
+      // The draft the send started in: if another chat opens before the RPC returns, its id lands there instead.
+      const startedDraft = selected.draft
       // A bot's one chat never resets: /new compacts it, and a compaction carries no attachments.
       const botChat = selected.botChat === true || !!openBotChat
       if (botChat && attachments.length && isResetCommand(text)) {
@@ -1680,13 +1682,13 @@ function Shell({
       }
       if (created) {
         callChat.current = created
-        setSelected(s => savedSelection(s, created))
+        setSelected(s => claimSentSelection(s, startedDraft, created))
         void list.refresh()
       }
       // Hand the created id back to a call: it must not claim a chat that opened meanwhile.
       return created || true
     },
-    [send, command, notice, commands, newChat, list, botTitle, roster.bots, selected.profile, selected.botChat, openBotChat, chat.liveId]
+    [send, command, notice, commands, newChat, list, botTitle, roster.bots, selected.profile, selected.botChat, selected.draft, openBotChat, chat.liveId]
   )
   // The bots a chat can tag, in their order: every shown bot but the chat's own.
   const mentionBots = useMemo(() => mentionCandidates(orderedRoster, '', selected.profile ?? 'default'), [orderedRoster, selected.profile])

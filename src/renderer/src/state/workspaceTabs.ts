@@ -62,6 +62,11 @@ export function tabTarget(tab: WorkspaceTab): ChatTabTarget {
   return { id, profile, title, ...(folder ? { folder } : {}), ...(draft !== undefined && id === null ? { draft } : {}) }
 }
 
+/** Apply a created id only while the send's own draft is still on screen (desktop#661). */
+export function claimSentSelection<T extends { id: string | null; draft?: number; folder?: string }>(selected: T, draft: number | undefined, id: string): T {
+  return selected.draft === draft && !selected.id ? savedSelection(selected, id) as T : selected
+}
+
 /**
  * A New Chat's draft number and folder belong to the draft tab only. Once the
  * session has an id, keeping them would make `sameTarget` report a difference

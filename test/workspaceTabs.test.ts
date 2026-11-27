@@ -8,6 +8,7 @@ import {
   openInNewTab,
   showsTabStrip,
   stepTab,
+  claimSentSelection,
   savedSelection,
   tabTarget,
   type WorkspaceTabs
@@ -146,7 +147,6 @@ describe('a New Chat’s tab (#656 review)', () => {
   })
 })
 
-
 describe('savedSelection', () => {
   it('clears the draft number and folder once the chat has an id', () => {
     expect(savedSelection({ id: null, profile: 'work', draft: 7, folder: '/tmp/project' }, 's1'))
@@ -156,5 +156,20 @@ describe('savedSelection', () => {
   it('leaves the other target fields alone', () => {
     expect(savedSelection({ id: null, title: 'Draft', botChat: true, draft: 2 }, 's2'))
       .toEqual({ id: 's2', title: 'Draft', botChat: true })
+  })
+})
+
+
+describe('claimSentSelection', () => {
+  it('stamps the id on the draft the send started in', () => {
+    expect(claimSentSelection({ id: null, profile: 'work', draft: 3, folder: '/tmp/p' }, 3, 's1'))
+      .toEqual({ id: 's1', profile: 'work' })
+  })
+
+  it('leaves a different draft or an already saved chat alone', () => {
+    const other = { id: null, profile: 'work', draft: 4, folder: '/tmp/q' }
+    expect(claimSentSelection(other, 3, 's1')).toBe(other)
+    const saved = { ...other, draft: 3, id: 's0' }
+    expect(claimSentSelection(saved, 3, 's1')).toBe(saved)
   })
 })
