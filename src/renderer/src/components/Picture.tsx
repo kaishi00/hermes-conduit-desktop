@@ -10,19 +10,34 @@ export const PictureProfile = createContext<string | undefined>(undefined)
 /** Opens a picture over the window; Esc or a click closes it. */
 const ViewerContext = createContext<(src: string, name: string) => void>(() => undefined)
 
+/** Closes the open viewer; null while none shows. */
+let closeViewer: (() => void) | null = null
+
+// Listened for as this module loads, before any sheet or file viewer listens: an
+// Escape with the viewer open closes the viewer alone, never the sheet under it.
+if (typeof window !== 'undefined') {
+  window.addEventListener(
+    'keydown',
+    event => {
+      if (event.key === 'Escape' && closeViewer && !inSelectMenu(event)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        closeViewer()
+      }
+    },
+    true
+  )
+}
+
 export function PictureViewerHost({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState<{ src: string; name: string } | null>(null)
   useEffect(() => {
     if (!shown) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !inSelectMenu(event)) {
-        event.preventDefault()
-        event.stopPropagation()
-        setShown(null)
-      }
+    const close = () => setShown(null)
+    closeViewer = close
+    return () => {
+      if (closeViewer === close) closeViewer = null
     }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
   }, [shown])
   return (
     <ViewerContext.Provider value={(src, name) => setShown({ src, name })}>
@@ -79,10 +94,10 @@ function ViewerCopy({ src }: { src: string }) {
 }
 
 /** A picture drawn in place that opens larger when clicked. */
-export function PictureImage({ src, name, className = 'sent-picture' }: { src: string; name: string; className?: string }) {
+export function PictureImage({ src, name, title, className = 'sent-picture' }: { src: string; name: string; title?: string; className?: string }) {
   const open = useContext(ViewerContext)
   return (
-    <button className={`picture-button ${className}`} title={name} onClick={() => open(src, name)}>
+    <button className={`picture-button ${className}`} title={title || name} onClick={() => open(src, name)}>
       <img src={src} alt={name} />
     </button>
   )

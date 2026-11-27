@@ -34,3 +34,15 @@ describe('a Markdown picture in a reply', () => {
     expect(css).toMatch(/\.reply-picture img \{[^}]*max-width: min\(420px, 100%\);[^}]*max-height: 360px;/)
   })
 })
+
+describe('a Markdown picture inside a link', () => {
+  it('stays the link’s: no viewer button inside the anchor, the same size caps', () => {
+    const html = draw('[![Build](https://example.com/badge.png)](https://example.com/build)')
+    expect(html).not.toContain('<button')
+    expect(html).toMatch(/<a href="https:\/\/example.com\/build"[^>]*>.*<span class="reply-picture linked-picture"><img src="https:\/\/example.com\/badge.png" alt="Build"\/><\/span><\/a>/)
+  })
+
+  it('keeps a picture’s own title as its tooltip', () => {
+    expect(draw('![A seedling](https://example.com/plant.png "Grown today")')).toContain('title="Grown today"')
+  })
+})
