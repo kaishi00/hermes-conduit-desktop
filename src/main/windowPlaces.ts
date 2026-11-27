@@ -47,7 +47,7 @@ export function saveWindowPlaces(): void {
     writeFileAtomic(path(), JSON.stringify(places, null, 2))
     dirty = false
   } catch {
-    // Not saved: the next move tries again.
+    // Not saved: the next move tries again (at quit, the change is lost).
   }
 }
 
@@ -107,7 +107,11 @@ export function keepWindowPlace(window: BrowserWindow, kind: WindowKind, opening
   const remember = () => {
     if (!shown || restoring || window.isDestroyed() || window.isMinimized() || window.isFullScreen()) return
     const isMax = window.isMaximized()
-    if (!isMax) normal = window.getBounds()
+    if (!isMax) {
+      normal = window.getBounds()
+      // A settled normal size counts even when it fills the screen, which moved() leaves out as a possible mid-maximize.
+      seen = normal
+    }
     const next: WindowPlace = { ...steadyPlace(normal ?? window.getNormalBounds(), opened), maximized: isMax }
     const store = load()
     const was = store[kind]
