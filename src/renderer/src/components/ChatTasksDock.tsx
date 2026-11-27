@@ -8,8 +8,7 @@ import { TaskPanel } from './KanbanBoard'
 import { Icon } from './icons'
 import { everyWhileVisible } from '../state/visibility'
 
-/** Hermes says the task isn't there (any more): a 404. Every gateway HTTP error carries its status, so a 500 that says "not found" doesn't count. */
-const gone = (error: unknown) => (error as { code?: unknown } | null)?.code === 404
+import { taskGone } from '../state/taskGone'
 
 /** The open panel reads its task again this often while the window shows. */
 export const CHAT_TASK_PANEL_READ_MS = 15_000
@@ -106,7 +105,7 @@ export function ChatTasksDock({ tasks, chatKey, onOpen, bots, onChanged }: Props
           key={shownKey!}
           task={shownTask}
           bots={bots ?? null}
-          onClose={() => setShownKey(key => (key === shownKey ? null : key))}
+          onClose={() => setShownKey(null)}
           onChanged={onChanged}
           onOpen={
             onOpen
@@ -154,7 +153,7 @@ function ChatTaskPanel({
       return parseTaskDetail(await gateway.http('GET', path('')))
     } catch (e) {
       // Deleted or gone from its board meanwhile: the panel closes and the line reads again, so it drops the task.
-      if (live.current && gone(e)) {
+      if (live.current && taskGone(e)) {
         onClose()
         onChanged?.()
       }
