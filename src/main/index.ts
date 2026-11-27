@@ -50,7 +50,7 @@ import { pluginRelease } from './pluginRelease'
 import { cleanHeaders } from './proxyHeaders'
 import { KeptHosts, keptRpcWritable } from './keptHosts'
 import { readServerCertificate } from './serverCertificate'
-import { hostSpellings, isThisComputer, localSpelling } from './localFolders'
+import { hostSpellings, isThisComputer, localSpelling, showOnComputerLabel } from './localFolders'
 import { stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath, copyDown } from './hostFiles'
@@ -1001,7 +1001,7 @@ function registerIpc(): void {
     const owner = BrowserWindow.fromWebContents(event.sender)
     if (!owner) return null
     const here = isThisComputer(connectionOf(event.sender.id)?.current().url)
-    const onComputer = process.platform === 'darwin' ? t('Show in Finder') : process.platform === 'win32' ? t('Show in Explorer') : t('Show in File Manager')
+    const onComputer = showOnComputerLabel(process.platform, t)
     return new Promise(resolve => {
       let chosen: 'folder' | 'computer' | 'copy' | null = null
       const menu = Menu.buildFromTemplate([
