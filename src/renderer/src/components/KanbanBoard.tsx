@@ -466,7 +466,8 @@ export function TaskPanel({
   onClose,
   onPatch,
   onComment,
-  onDelete
+  onDelete,
+  extra
 }: {
   id: string
   task: KanbanTask | null
@@ -481,6 +482,8 @@ export function TaskPanel({
   onPatch: (fields: Record<string, unknown>) => Promise<void>
   onComment: (body: string) => Promise<void>
   onDelete: () => Promise<void>
+  /** More in the header, beside Close: a chat's task (desktop#593) offers Open in Tasks there. */
+  extra?: ReactNode
 }) {
   const [detail, setDetail] = useState<KanbanTaskDetail | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
@@ -567,6 +570,8 @@ export function TaskPanel({
       <aside className="task-panel" aria-label={t('Task')}>
         <div className="task-panel-head">
           <span className="meta">{failure ? t('Couldn’t load this task: {reason}', { reason: failure }) : t('Loading…')}</span>
+          <span className="spacer" />
+          {extra}
           <button className="staged-remove" aria-label={t('Close')} onClick={onClose}>
             <Icon name="close" />
           </button>
@@ -585,6 +590,7 @@ export function TaskPanel({
           {columnTitle(shown.status)} · {shown.id}
         </span>
         <span className="spacer" />
+        {extra}
         <button className="staged-remove" aria-label={t('Close')} onClick={onClose}>
           <Icon name="close" />
         </button>

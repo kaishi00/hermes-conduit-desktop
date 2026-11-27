@@ -7265,9 +7265,45 @@ button.cap-row-text {
 .chat-task-error {
   color: var(--danger);
 }
-.chat-task .link {
-  margin-top: 4px;
+/* A row opens its task in a panel over the chat (desktop#593): the whole row is the button, and its lane never cuts to "Runn…". */
+.agent-card.chat-task {
   padding: 0;
+}
+.chat-task-open {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-task-open:hover,
+.chat-task-open.active {
+  background: var(--line);
+}
+.chat-task-open .agent-head {
+  align-items: center;
+}
+.chat-task-open .agent-head strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chat-task-open .lane-dot {
+  flex: none;
+}
+.chat-task-status {
+  flex: none;
+  white-space: nowrap;
+}
+.chat-task-open .ico {
+  flex: none;
+  transform: rotate(-90deg);
+  opacity: 0.6;
 }
 .agent-card {
   padding: 8px 10px;
