@@ -25,6 +25,17 @@ export function linkUrl(text: string): string | null {
   return newChatLink(trimmed) ? trimmed : null
 }
 
+/** Whether the text is shaped as a new chat link, read or refused: never a Link invite. */
+export const isNewChatUrl = (text: string) => /^conduit:\/\/new(?:[/?]|$)/i.test(text.trim())
+
+/** `text` cut to `max` UTF-16 units, never leaving half an emoji at the end. */
+function cut(text: string, max: number): string {
+  if (text.length <= max) return text
+  const kept = text.slice(0, max)
+  const last = kept.charCodeAt(kept.length - 1)
+  return last >= 0xd800 && last <= 0xdbff ? kept.slice(0, -1) : kept
+}
+
 /** What a `conduit://new` link asks for. */
 export interface NewChatLink {
   /** The composer's text; empty for none. */
@@ -54,10 +65,8 @@ export function newChatLink(text: string): NewChatLink | null {
   } catch {
     return null
   }
-  const read = (name: string) => {
-    for (const [key, value] of params) if (key.toLowerCase() === name) return value
-    return undefined
-  }
+  // Names exactly as written, as the phone reads them.
+  const read = (name: string) => params.get(name) ?? undefined
   const cleaned = (value: string | undefined) => {
     const one = value?.replace(/\s+/g, ' ').trim()
     return one ? one : undefined
@@ -67,11 +76,11 @@ export function newChatLink(text: string): NewChatLink | null {
   if (profile && !PLAIN_TOKEN.test(profile)) return null
   const title = cleaned(read('title'))
   const link: NewChatLink = {
-    text: rawText.trim() ? rawText.slice(0, NEW_CHAT_TEXT_MAX) : '',
-    sends: ['1', 'true', 'yes'].includes((read('send') ?? '').trim().toLowerCase())
+    text: rawText.trim() ? cut(rawText, NEW_CHAT_TEXT_MAX) : '',
+    sends: (read('send') ?? '').trim() === '1'
   }
   if (profile) link.profile = profile
-  if (title) link.title = title.slice(0, NEW_CHAT_TITLE_MAX)
+  if (title) link.title = cut(title, NEW_CHAT_TITLE_MAX)
   return link
 }
 

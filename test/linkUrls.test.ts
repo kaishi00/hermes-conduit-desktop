@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { linkUrl, linkUrlFromArgs, newChatLink, NEW_CHAT_TITLE_MAX } from '../src/shared/linkUrls'
+import { isNewChatUrl, linkUrl, linkUrlFromArgs, newChatLink, NEW_CHAT_TITLE_MAX } from '../src/shared/linkUrls'
 
 describe('Link invites from other apps', () => {
   it('finds the invite among a launch’s arguments', () => {
@@ -18,6 +18,7 @@ describe('New chat links (hermes-conduit issue 3389)', () => {
     expect(newChatLink('conduit://new')).toEqual({ text: '', sends: false })
     expect(newChatLink('CONDUIT://new/?text=hi&send=0')).toEqual({ text: 'hi', sends: false })
     expect(newChatLink('conduit://new?text=%20%20&title=&profile=')).toEqual({ text: '', sends: false })
+    expect(newChatLink('conduit://new?text=hi&send=true')?.sends).toBe(false)
   })
 
   it('refuses an odd profile or path, and cuts a long title', () => {
@@ -25,5 +26,15 @@ describe('New chat links (hermes-conduit issue 3389)', () => {
     expect(newChatLink('conduit://new/extra?text=hi')).toBeNull()
     expect(linkUrl('conduit://newer?text=hi')).toBeNull()
     expect(newChatLink(`conduit://new?title=${'t'.repeat(200)}`)?.title).toHaveLength(NEW_CHAT_TITLE_MAX)
+    // A cut never leaves half an emoji.
+    const emoji = encodeURIComponent(`${'t'.repeat(NEW_CHAT_TITLE_MAX - 1)}😀`)
+    expect(newChatLink(`conduit://new?title=${emoji}`)?.title).toBe('t'.repeat(NEW_CHAT_TITLE_MAX - 1))
+  })
+
+  it('tells a refused new chat link from an invite', () => {
+    expect(isNewChatUrl('conduit://new?profile=a%20b')).toBe(true)
+    expect(isNewChatUrl('conduit://new')).toBe(true)
+    expect(isNewChatUrl('conduit://newer')).toBe(false)
+    expect(isNewChatUrl('conduit://link/abc')).toBe(false)
   })
 })

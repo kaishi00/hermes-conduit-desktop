@@ -242,7 +242,7 @@ import { CallTranscriptSheet } from './components/CallTranscriptSheet'
 import { loadChatCalls, type CallTranscript, type ChatCall } from './state/voiceCalls'
 import { LANGUAGES, LANGUAGE_NAMES, t } from '@shared/i18n'
 import { ask, askText, tell } from './state/dialogs'
-import { newChatLink, newChatLinkPreview, type NewChatLink } from '@shared/linkUrls'
+import { isNewChatUrl, newChatLink, newChatLinkPreview, type NewChatLink } from '@shared/linkUrls'
 import { Select } from './components/Select'
 import { KeptPane } from './components/KeptPane'
 import { DockedChatPane, tellDockedShown, type DockedChat, type DockedFrame } from './components/DockedChat'
@@ -620,9 +620,9 @@ function Shell({
   }, [])
   useEffect(() => {
     if (!linkSend) return
-    // Another chat opened before the Send: nothing is sent into it.
-    if (selected.id || selected.draft !== linkSend.draft) return setLinkSend(null)
     setLinkSend(null)
+    // Another chat opened before the Send: nothing is sent into it, and the text waits in its composer instead.
+    if (selected.id || selected.draft !== linkSend.draft) return setQuote(quoteRequest({ draft: linkSend.text }))
     // A link's text is literal: "/…" never runs a command.
     void send(linkSend.text).then(went => {
       if (went === false) setQuote(quoteRequest({ draft: linkSend.text }))
@@ -633,8 +633,12 @@ function Shell({
   useEffect(() => {
     const open = (url: string | null) => {
       if (!url) return
-      const newChat = newChatLink(url)
-      if (newChat) return void openNewChatLink(newChat)
+      // A new chat link opens a chat; one refused (an odd profile) opens nothing, never the invite page.
+      if (isNewChatUrl(url)) {
+        const newChat = newChatLink(url)
+        if (newChat) void openNewChatLink(newChat)
+        return
+      }
       setLinkRequest({ url, at: Date.now() })
       setSection('settings')
     }
