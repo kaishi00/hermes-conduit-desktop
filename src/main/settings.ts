@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { writeFileAtomic } from './atomicWrite'
 import { join } from 'node:path'
 import { LANGUAGES, pickLanguage, setLanguage, type Language } from '../shared/i18n'
-import type { AppIconChoice, HotkeyName, LanguageChoice, ThemeChoice } from '../shared/ipc'
+import type { AppIconChoice, HotkeyName, LanguageChoice, PcControlSettings, ThemeChoice } from '../shared/ipc'
 import { DEFAULT_HOTKEYS, validAccelerator } from '../shared/accelerator'
 
 const path = () => join(app.getPath('userData'), 'settings.json')
@@ -22,6 +22,7 @@ interface StoredSettings {
   quickAsk?: unknown
   liveCall?: unknown
   hideDock?: unknown
+  pcControl?: unknown
 }
 
 function read(): StoredSettings {
@@ -137,6 +138,30 @@ export function hotkeyAccelerator(which: HotkeyName): string | null {
 export function chooseHotkeyAccelerator(which: HotkeyName, accelerator: string | null): boolean {
   try {
     writeFileAtomic(path(), JSON.stringify({ ...read(), [which]: accelerator ?? false }, null, 2))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Control from Hermes (main/pcControl.ts): off until turned on, the name the
+ * bots see, the bots allowed (profile ids), and this computer's id, made once.
+ */
+export function pcControlSettings(): PcControlSettings & { id: string } {
+  const stored = (read().pcControl ?? {}) as Record<string, unknown>
+  const id = typeof stored.id === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(stored.id) ? stored.id : ''
+  return {
+    on: stored.on === true,
+    name: typeof stored.name === 'string' ? stored.name.slice(0, 64) : '',
+    bots: Array.isArray(stored.bots) ? stored.bots.filter((b): b is string => typeof b === 'string').slice(0, 64) : [],
+    id
+  }
+}
+
+export function choosePcControl(change: Partial<PcControlSettings> & { id?: string }): boolean {
+  try {
+    writeFileAtomic(path(), JSON.stringify({ ...read(), pcControl: { ...pcControlSettings(), ...change } }, null, 2))
     return true
   } catch {
     return false

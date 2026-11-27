@@ -99,6 +99,16 @@ const api: ConduitApi = {
     set: on => ipcRenderer.invoke(IPC.setLoginItem, on),
     openSystemSettings: () => ipcRenderer.send(IPC.openStartupSettings)
   },
+  pcControl: {
+    state: () => ipcRenderer.invoke(IPC.pcControlState),
+    set: change => ipcRenderer.invoke(IPC.pcControlSet, change),
+    install: () => ipcRenderer.invoke(IPC.pcControlInstall),
+    deleteDriver: () => ipcRenderer.invoke(IPC.pcControlDelete),
+    run: request => ipcRenderer.invoke(IPC.pcControlRun, request),
+    stop: () => ipcRenderer.send(IPC.pcControlStop),
+    onState: listener => listen(IPC.pcControlChanged, listener),
+    onStopped: listener => listen<void>(IPC.pcControlStopped, () => listener())
+  },
   unlock: () => ipcRenderer.invoke(IPC.unlock),
   probe: (url, headers) => ipcRenderer.invoke(IPC.probe, url, headers),
   checkCertificate: url => ipcRenderer.invoke(IPC.checkCertificate, url),

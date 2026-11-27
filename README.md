@@ -26,6 +26,14 @@ notifications. Settings > App > Open at Sign-In starts it there with your
 computer, with no window (the Microsoft Store's copy is turned on in Windows'
 Startup apps). It speaks the iPhone app's thirteen languages.
 
+Settings > Control from Hermes lets bots you pick drive this computer
+(see the screen, click and type) from wherever their Hermes runs, through
+the plugin's `conduit_user_computer` tool. It's off until you turn it on,
+which downloads trycua's cua-driver (the driver Hermes' own computer use runs)
+into Conduit's data folder; each chat asks you first, and while a bot is in
+control a bar on top of your screen says so, with Stop (Ctrl+Alt+Shift+S, or
+⌘⌥⇧S on the Mac). Windows and the Mac; plugin 0.203 or later.
+
 Right-click a chat to archive it; open **Filter > Archived** to search,
 restore or permanently delete archived chats.
 
