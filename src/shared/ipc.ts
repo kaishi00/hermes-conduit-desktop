@@ -279,8 +279,14 @@ export interface ConduitApi {
     install(): Promise<PcControlState>
     /** Deletes the downloaded driver. */
     deleteDriver(): Promise<PcControlState>
-    /** Runs one action the plugin handed over: asks first when `needs_ok`. */
+    /** Asks whether the request's chat may drive this computer: 'closed' when closeAsk took the dialog away. */
+    ask(request: PcRequest): Promise<'allowed' | 'denied' | 'closed'>
+    /** Takes a chat's dialog away: the phone answered it first. */
+    closeAsk(session: string): void
+    /** Runs one action the plugin handed over, once its chat is allowed. */
     run(request: PcRequest): Promise<Record<string, unknown>>
+    /** Stop was pressed elsewhere (the phone): the bar goes, and no plugin needs telling. */
+    stoppedElsewhere(): void
     /** Stop, from Settings or the control bar. */
     stop(): void
     onState(listener: (state: PcControlState) => void): () => void
@@ -677,6 +683,9 @@ export const IPC = {
   pcControlInstall: 'conduit:pc-control-install',
   pcControlDelete: 'conduit:pc-control-delete',
   pcControlRun: 'conduit:pc-control-run',
+  pcControlAsk: 'conduit:pc-control-ask',
+  pcControlCloseAsk: 'conduit:pc-control-close-ask',
+  pcControlStoppedElsewhere: 'conduit:pc-control-stopped-elsewhere',
   pcControlStop: 'conduit:pc-control-stop',
   pcControlChanged: 'conduit:pc-control-changed',
   pcControlStopped: 'conduit:pc-control-stopped',
@@ -779,6 +788,8 @@ export interface PcRequest {
   args: Record<string, unknown>
   needs_ok: boolean
   takes_over?: string
+  /** The phone's copy of the ask (plugin 0.204+): the dialog follows it, and the first answer counts. */
+  ask?: string
   bot: string
   profile: string
 }

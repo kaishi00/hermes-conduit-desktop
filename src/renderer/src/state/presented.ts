@@ -3,9 +3,10 @@
  * plugin's `present/exchange` route takes this Conduit's answers and gives
  * back what still waits, per profile. Besides Hermes' own confirmations,
  * these are a room's asks (Ask me first: Share, Say instead or Don't share),
- * a linked person's Hermes' asks (Share only when there's an answer), and a
+ * a linked person's Hermes' asks (Share only when there's an answer), a
  * room's ask to start work for it (Run work: Start, Change it or Don't
- * start).
+ * start), and a computer's ask (Control from Hermes: Allow or Don't Allow),
+ * shown here only for another computer: this one asks in its own dialog.
  *
  * The desktop reports only the ask features: it draws no cards from the
  * exchange, so it never counts among the Conduits whose features decide
@@ -16,7 +17,7 @@ import { t } from '../../../shared/i18n'
 
 export const PRESENT_CAPABILITY = 'present-v1'
 export const PRESENT_PATH = '/api/plugins/conduit_push/present/exchange'
-export const PRESENT_FEATURES = ['room-asks', 'link-asks', 'room-work']
+export const PRESENT_FEATURES = ['room-asks', 'link-asks', 'room-work', 'pc-asks']
 /** The longest Say instead the host keeps. */
 export const MAX_EDIT_TEXT = 2000
 export const RESULTS_KEY = 'conduit.presentedScreens.results.v1'
@@ -36,6 +37,13 @@ export interface PresentedLink {
   share: boolean
 }
 
+export interface PresentedComputer {
+  /** The computer's id: this one's own asks stay in its dialog. */
+  computer: string
+  name: string
+  bot: string
+}
+
 export interface PresentedConfirm {
   id: string
   title: string
@@ -49,6 +57,8 @@ export interface PresentedConfirm {
   expiresAt: number | null
   room: PresentedRoom | null
   link: PresentedLink | null
+  /** A computer's ask: may a chat control that computer? */
+  pc: PresentedComputer | null
 }
 
 export type ConfirmOutcome = 'confirmed' | 'declined' | 'edit'
@@ -66,6 +76,7 @@ export function parsePrompt(value: unknown): PresentedConfirm | null {
   const room = obj(row.room)
   // Any Link the host names makes it a Link's ask, even one that can't be read.
   const link = row.link !== undefined && row.link !== null ? (obj(row.link) ?? {}) : null
+  const pc = obj(row.pc)
   return {
     id,
     title: title.slice(0, 120),
@@ -74,18 +85,22 @@ export function parsePrompt(value: unknown): PresentedConfirm | null {
     sessionId: typeof row.session_id === 'string' && row.session_id ? row.session_id : null,
     expiresAt: typeof row.expires_at === 'number' ? row.expires_at : null,
     room: room ? { id: trimmed(room.id), name: trimmed(room.name).slice(0, 80), work: room.work === true } : null,
-    link: link ? { id: trimmed(link.id), name: trimmed(link.name).slice(0, 80), share: link.share === true } : null
+    link: link ? { id: trimmed(link.id), name: trimmed(link.name).slice(0, 80), share: link.share === true } : null,
+    pc: pc ? { computer: trimmed(pc.computer), name: trimmed(pc.name).slice(0, 80), bot: trimmed(pc.bot).slice(0, 80) } : null
   }
 }
 
 export const isExpired = (prompt: PresentedConfirm, now = Date.now() / 1000) => prompt.expiresAt !== null && prompt.expiresAt <= now
 /** A room's or a Link's ask: answered with Share, Say instead or Don't share. */
 export const isAsk = (prompt: PresentedConfirm) => !!prompt.room || !!prompt.link
+/** A computer's ask: Allow or Don't Allow, nothing to edit or say instead. */
+export const isComputerAsk = (prompt: PresentedConfirm) => !!prompt.pc
 /** Whether it has something to confirm: a Link's question doesn't. */
 export const canConfirm = (prompt: PresentedConfirm) => prompt.link?.share ?? true
 
 /** Who asks: a room's agent, a linked person's Hermes, or Hermes. */
 export function askerLine(prompt: PresentedConfirm): string {
+  if (prompt.pc) return t('Control from Hermes')
   if (prompt.room?.name) return t('Asked in {name}', { name: prompt.room.name })
   if (prompt.link) return prompt.link.name ? t("{name}'s Hermes asks", { name: prompt.link.name }) : t("A linked person's Hermes asks")
   return t('Hermes asks')
@@ -93,6 +108,7 @@ export function askerLine(prompt: PresentedConfirm): string {
 
 export function declineLabel(prompt: PresentedConfirm): string {
   if (!canConfirm(prompt)) return t("Don't answer")
+  if (prompt.pc) return t('Don’t Allow')
   // A send to running work isn't a start.
   if (prompt.room?.work) return prompt.actionLabel === 'Send' ? t('Not now') : t("Don't start")
   return isAsk(prompt) ? t("Don't share") : t('Not now')
