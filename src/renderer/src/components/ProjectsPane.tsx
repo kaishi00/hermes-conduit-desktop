@@ -3,8 +3,10 @@ import { KeptScroll } from '../state/keptScroll'
 import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { timeLabel } from '../state/chats'
-import { createParams, gatherProjects, parseProjectChats, parseProjects, type Project, type ProjectChat, type ProjectDetail } from '../state/projects'
+import { gatherProjects, parseProjectChats, parseProjects, type Project, type ProjectChat, type ProjectDetail } from '../state/projects'
 import { HideListButton } from './HideListButton'
+import { ProjectForm } from './NewProjectForm'
+import { folderStart } from '../state/projectFolders'
 import { Icon } from './icons'
 import { ask, tell } from '../state/dialogs'
 import { includedInAll, readLeftOut } from '../state/profileGroups'
@@ -136,6 +138,8 @@ export function ProjectsPane({ profile, profiles, connected, selectedId, onSelec
       {creating ? (
         <ProjectForm
           withProfile={withProfile}
+          profile={scope}
+          start={folderStart(undefined, projects)}
           onDone={project => {
             setCreating(false)
             if (project) {
@@ -180,59 +184,6 @@ export function ProjectsPane({ profile, profiles, connected, selectedId, onSelec
         })}
       </div>
     </section>
-  )
-}
-
-function ProjectForm({
-  withProfile,
-  onDone
-}: {
-  withProfile: (p: Record<string, unknown>) => Record<string, unknown>
-  onDone: (project: Project | null) => void
-}) {
-  const [name, setName] = useState('')
-  const [folder, setFolder] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const ready = !!name.trim() && !!folder.trim() && !busy
-  async function create() {
-    if (!ready) return
-    setBusy(true)
-    setError(null)
-    try {
-      const response = (await gateway.rpc('projects.create', withProfile(createParams(name, folder)))) as { project?: Record<string, unknown> }
-      const made = parseProjects(response?.project ? [response.project] : [])[0]
-      onDone(made ?? null)
-    } catch (e) {
-      setError(reason(e))
-      setBusy(false)
-    }
-  }
-  return (
-    <form
-      className="project-form"
-      onSubmit={e => {
-        e.preventDefault()
-        void create()
-      }}
-    >
-      <input autoFocus aria-label={t('Project name')} placeholder={t('Project name')} value={name} onChange={e => setName(e.target.value)} />
-      <input
-        aria-label={t('Folder on the Hermes host')}
-        placeholder={t('Folder on the Hermes host')}
-        value={folder}
-        onChange={e => setFolder(e.target.value)}
-      />
-      {error ? <div className="meta project-error">{error}</div> : null}
-      <div className="project-form-actions">
-        <button type="button" className="secondary" onClick={() => onDone(null)}>
-          {t('Cancel')}
-        </button>
-        <button type="submit" className="primary" disabled={!ready}>
-          {busy ? t('Creating…') : t('Create')}
-        </button>
-      </div>
-    </form>
   )
 }
 

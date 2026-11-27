@@ -9103,6 +9103,82 @@ button.cap-row-text {
   height: 34px;
   padding: 0 14px;
 }
+.project-folder-row {
+  display: flex;
+  gap: 8px;
+}
+.project-folder-row input {
+  flex: 1;
+  min-width: 0;
+}
+.project-folder-row button {
+  height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+/* New Project's Browse on another host: Hermes' own folders, as the phone's picker lists them (desktop#605). */
+.host-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+}
+.host-folders-path {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.host-folders-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.host-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  text-align: left;
+  background: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.host-folder:hover {
+  background: var(--surface-hover);
+}
+.host-folder svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.new-project-sheet .project-form {
+  padding: 4px 0 0;
+}
+.project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-chip svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
 .row-menu .menu-note {
   padding: 8px 12px;
   color: var(--text-3);

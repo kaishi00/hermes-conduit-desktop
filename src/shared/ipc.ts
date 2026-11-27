@@ -279,6 +279,15 @@ export interface ConduitApi {
    * or what went wrong.
    */
   saveHostFile(path: string, profile?: string): Promise<string>
+  /** Whether this window's dashboard runs on this computer, so a folder picked here is one Hermes can open (desktop#605). */
+  hostIsThisComputer(): Promise<boolean>
+  /**
+   * Finder's or Explorer's folder picker, only while this window's dashboard
+   * runs on this computer: the spellings Hermes may know the folder by (a
+   * Windows path's /mnt/<drive> form too, for WSL), or null when cancelled
+   * or the dashboard is elsewhere (desktop#605).
+   */
+  pickLocalFolder(): Promise<string[] | null>
   /**
    * Copies a picture, sound, video or PDF on the Hermes host down for the
    * viewer a chat's file card opens, and gives the copy's address on the
@@ -569,6 +578,8 @@ export const IPC = {
   checkCertificate: 'conduit:check-certificate',
   saveCertificate: 'conduit:save-certificate',
   saveHostFile: 'conduit:save-host-file',
+  hostIsThisComputer: 'conduit:host-is-this-computer',
+  pickLocalFolder: 'conduit:pick-local-folder',
   viewHostFile: 'conduit:view-host-file',
   cancelViewHostFile: 'conduit:cancel-view-host-file',
   viewStagedFile: 'conduit:view-staged-file',
