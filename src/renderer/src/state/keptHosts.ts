@@ -565,6 +565,9 @@ export interface OtherBot {
  */
 const botsOf = (url: string): OtherBot[] => (keptRosters.get(url)?.bots ?? []).map(bot => ({ host: url, bot }))
 
+/** Sent after a write to another dashboard's bot: useKeptBots reads the kept hosts' bots again. */
+export const KEPT_BOTS_CHANGED = 'conduit:kept-bots-changed'
+
 export function useKeptBots(kept: readonly KeptHost[], on: boolean): OtherBot[] {
   // Drawn while live or reconnecting (the host a switch left is dialed again, which over the internet takes most
   // of a second); read only while live.
@@ -601,9 +604,13 @@ export function useKeptBots(kept: readonly KeptHost[], on: boolean): OtherBot[] 
     }
     void read()
     const timer = setInterval(() => void read(), KEPT_CHATS_POLL_MS)
+    // A write to one of their bots (a category filed there) reads them again at once.
+    const again = () => void read()
+    window.addEventListener(KEPT_BOTS_CHANGED, again)
     return () => {
       stopped = true
       clearInterval(timer)
+      window.removeEventListener(KEPT_BOTS_CHANGED, again)
     }
   }, [shown, live, on])
 

@@ -1,5 +1,5 @@
 import { WorkRing } from "./WorkRing";
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction } from "react";
+import { Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction } from "react";
 import type { BotWork } from "../state/useWork";
 import { timeLabel } from "../state/chats";
 import { keptColor, type Bot } from "../state/bots";
@@ -28,6 +28,8 @@ import { canAddFar, mixedBotKey, mixedTiles, neighbour, type MixedTile } from ".
 import type { OwnHermesBot } from "../state/roomDrafts";
 import { HostBadgeMark } from "./CombinedDashboards";
 import { botSideScroll } from "../state/keptScroll";
+import { categorySections, movingCategory, renamingCategory, sameCategory, cleanName, useFoldedCategories, type CategorySection } from "../state/botCategories";
+import { ask, askText } from "../state/dialogs";
 
 const BOT_DRAG = "application/x-conduit-bot";
 /** A portrait carried to another place: its tile key (the bot's name, or the mixed grid's key). */
@@ -231,6 +233,19 @@ interface Props {
    */
   draft?: BotsDraft | null;
   onDraft?: Dispatch<SetStateAction<BotsDraft | null>>;
+  /**
+   * Bot categories (state/botCategories.ts): the headings' order (synced as `bots.categories`), and a write
+   * that files bots, this host's or another dashboard's on its own Hermes, under a name (null: none). Without
+   * it, no headings and no Category in a bot's menu.
+   */
+  categories?: BotCategories;
+}
+
+export interface BotCategories {
+  order: string[];
+  setOrder: (next: string[]) => void;
+  /** Files each tile's bot under `name` (null: out of its category); what to tell the person, or null. */
+  file: (tiles: MixedTile[], name: string | null) => Promise<string | null>;
 }
 
 /** A bot's pill: what needs you first, then what's working, else nothing. */
@@ -313,6 +328,7 @@ export function BotsHome({
   onHide,
   draft: keptDraft,
   onDraft,
+  categories,
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -326,23 +342,29 @@ export function BotsHome({
       .then(setActionError)
       .finally(() => setBusy(false));
   };
-  const [menu, setMenu] = useState<{ bot: Bot; x: number; y: number } | null>(
+  const [menu, setMenu] = useState<{ bot: Bot; tile?: MixedTile; x: number; y: number } | null>(
     null,
   );
+  /** A heading's menu: Rename…, Move Earlier and Later, Delete Category. */
+  const [headingMenu, setHeadingMenu] = useState<{ name: string; x: number; y: number } | null>(null);
   useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
+    if (!menu && !headingMenu) return;
+    const close = () => {
+      setMenu(null);
+      setHeadingMenu(null);
+    };
     window.addEventListener("click", close);
     window.addEventListener("blur", close);
     return () => {
       window.removeEventListener("click", close);
       window.removeEventListener("blur", close);
     };
-  }, [menu]);
+  }, [menu, headingMenu]);
   const openMenu = onEdit
-    ? (bot: Bot) => (e: MouseEvent) => {
+    ? (bot: Bot, tile?: MixedTile) => (e: MouseEvent) => {
         e.preventDefault();
-        setMenu({ bot, x: e.clientX, y: e.clientY });
+        setHeadingMenu(null);
+        setMenu({ bot, tile, x: e.clientX, y: e.clientY });
       }
     : undefined;
   // One grid: this host's bots in their order, or in a combined group every
@@ -603,6 +625,139 @@ export function BotsHome({
     else join(bot.name);
   };
 
+  // Categories: a heading over each one's bots, Other last (the phone's Bots Home, option A).
+  const { folded, toggle: toggleFold } = useFoldedCategories();
+  const sections = categories ? categorySections(tiles, categories.order, (tile) => tile.bot.category?.name) : null;
+  const categoryNames = (sections ?? []).flatMap((section) => (section.name ? [section.name] : []));
+  const [headingTarget, setHeadingTarget] = useState<string | null>(null);
+  const fileTiles = (chosen: MixedTile[], name: string | null) => {
+    if (!categories || !chosen.length) return;
+    setMenu(null);
+    setHeadingMenu(null);
+    setBusy(true);
+    setActionError(null);
+    void categories
+      .file(chosen, name)
+      .then(setActionError)
+      .finally(() => setBusy(false));
+  };
+  const newCategory = async (tile: MixedTile) => {
+    setMenu(null);
+    const name = cleanName(await askText(t("New Category"), "", { confirm: t("Create"), maxLength: 40 }));
+    if (name) fileTiles([tile], name);
+  };
+  const renameCategory = async (old: string) => {
+    setHeadingMenu(null);
+    const name = cleanName(await askText(t("Rename Category"), old, { confirm: t("Save"), maxLength: 40 }));
+    if (!name || name === old || !categories) return;
+    categories.setOrder(renamingCategory(categories.order, old, name));
+    fileTiles(tiles.filter((tile) => sameCategory(tile.bot.category?.name, old)), name);
+  };
+  const deleteCategory = async (name: string) => {
+    setHeadingMenu(null);
+    if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots move to Other.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
+    fileTiles(tiles.filter((tile) => sameCategory(tile.bot.category?.name, name)), null);
+  };
+  const moveCategory = (name: string, by: -1 | 1) => {
+    setHeadingMenu(null);
+    categories?.setOrder(movingCategory(categories.order, name, by, categoryNames));
+  };
+  const categoryItems = (tile: MixedTile) => (
+    <>
+      <div className="menu-note bot-category-label" role="presentation">{t("Category")}</div>
+      {categoryNames.map((name) => (
+        <button key={name} role="menuitemradio" aria-checked={sameCategory(tile.bot.category?.name, name)} disabled={busy} onClick={() => fileTiles([tile], name)}>
+          {sameCategory(tile.bot.category?.name, name) ? "✓ " : ""}{name}
+        </button>
+      ))}
+      <button role="menuitem" disabled={busy} onClick={() => void newCategory(tile)}>
+        {t("New Category…")}
+      </button>
+      {tile.bot.category ? (
+        <button role="menuitem" disabled={busy} onClick={() => fileTiles([tile], null)}>
+          {t("Remove from Category")}
+        </button>
+      ) : null}
+    </>
+  );
+  const headingMenuEl = headingMenu ? (() => {
+    const at = categoryNames.findIndex((name) => sameCategory(name, headingMenu.name));
+    return (
+      <div className="host-menu row-menu" role="menu" style={{ left: Math.min(headingMenu.x, window.innerWidth - 200), top: Math.min(headingMenu.y, window.innerHeight - 160) }}>
+        <button role="menuitem" disabled={busy} onClick={() => void renameCategory(headingMenu.name)}>
+          {t("Rename…")}
+        </button>
+        <button role="menuitem" disabled={at <= 0} onClick={() => moveCategory(headingMenu.name, -1)}>
+          {t("Move Earlier")}
+        </button>
+        <button role="menuitem" disabled={at < 0 || at >= categoryNames.length - 1} onClick={() => moveCategory(headingMenu.name, 1)}>
+          {t("Move Later")}
+        </button>
+        <button role="menuitem" className="danger" disabled={busy} onClick={() => void deleteCategory(headingMenu.name)}>
+          {t("Delete Category")}
+        </button>
+      </div>
+    );
+  })() : null;
+  /** A category's heading: a click folds it; folded, its faces small and what its bots wait on you for. A bot dropped on it files there. */
+  const heading = (section: CategorySection<MixedTile>) => {
+    const isFolded = folded.includes(section.key);
+    const waiting = isFolded
+      ? section.items.reduce((sum, tile) => sum + ((tile.own ? work?.get(tile.bot.name) : otherWork?.get(keptWorkKey(tile.host, tile.bot.name)))?.needsYou ?? 0), 0)
+      : 0;
+    const title = section.name ?? t("Other");
+    return (
+      <div
+        className={`bot-side-section-head bot-category-head${headingTarget === section.key ? " drop-target" : ""}`}
+        onDragOver={(e) => {
+          if (!onEdit || !categories || !e.dataTransfer.types.includes(BOT_MOVE)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "move";
+          if (headingTarget !== section.key) setHeadingTarget(section.key);
+        }}
+        onDragLeave={() => setHeadingTarget((key) => (key === section.key ? null : key))}
+        onDrop={(e) => {
+          const moved = e.dataTransfer.getData(BOT_MOVE) || dragging;
+          setHeadingTarget(null);
+          const tile = tileOf(moved);
+          if (!tile) return;
+          e.preventDefault();
+          e.stopPropagation();
+          endDrag();
+          if (!sameCategory(tile.bot.category?.name, section.name)) fileTiles([tile], section.name);
+        }}
+      >
+        <button
+          className="bot-category-toggle"
+          aria-expanded={!isFolded}
+          onClick={() => toggleFold(section.key)}
+          onContextMenu={
+            section.name && onEdit && categories
+              ? (e) => {
+                  e.preventDefault();
+                  setMenu(null);
+                  setHeadingMenu({ name: section.name!, x: e.clientX, y: e.clientY });
+                }
+              : undefined
+          }
+        >
+          <Icon name={isFolded ? "chevron" : "chevronDown"} />
+          <h2>{title}</h2>
+          <span className="bot-category-count">{section.items.length}</span>
+        </button>
+        {isFolded ? (
+          <span className="bot-category-faces" aria-hidden="true">
+            {section.items.slice(0, 4).map((tile) => (
+              <BotAvatar key={tile.key} bot={tile.bot} size={16} host={tile.own ? undefined : tile.host} />
+            ))}
+          </span>
+        ) : null}
+        {waiting ? <span className="bot-category-waiting" title={t("Needs you")}>{waiting}</span> : null}
+      </div>
+    );
+  };
+
   const draftForm = draft ? (
         <form
           className="room-draft"
@@ -693,15 +848,18 @@ export function BotsHome({
           </div>
         </form>
       ) : null;
+  const menuOwn = !menu?.tile || menu.tile.own;
   const menuEl = menu && onEdit ? (
         <div
           className="host-menu row-menu"
           role="menu"
           style={{
             left: Math.min(menu.x, window.innerWidth - 200),
-            top: Math.min(menu.y, window.innerHeight - (onAction ? 220 : 80) - (canMove ? 72 : 0)),
+            top: Math.max(8, Math.min(menu.y, window.innerHeight - (menuOwn ? (onAction ? 220 : 80) + (canMove ? 72 : 0) : 0) - (categories ? 36 * (categoryNames.length + 3) : 0))),
           }}
         >
+          {menuOwn ? (
+          <>
           <button role="menuitem" onClick={() => onEdit(menu.bot)}>
             {t("Edit Bot")}
           </button>
@@ -733,8 +891,11 @@ export function BotsHome({
               ) : null}
             </>
           ) : null}
+          </>
+          ) : null}
+          {categories && menu.tile ? categoryItems(menu.tile) : null}
         </div>
-      ) : null;
+      ) : headingMenuEl;
 
   const roomRow = (key: string, faces: ReactNode, name: string, line: string | null, onClick: () => void, extra?: { className?: string; current?: boolean; waiting?: boolean; drag?: object }) => (
     <button
@@ -773,6 +934,77 @@ export function BotsHome({
       { className: other.kind === "copy" && isOver(other.copy) ? "over" : undefined, current: side.openHost === other.host && side.openRoomId === room.roomId },
     );
   };
+  const botRow = (tile: MixedTile) => {
+    const { bot } = tile;
+
+    const open =
+      (side.openHost ? !tile.own && tile.host === side.openHost : tile.own) &&
+      !side.openRoomId &&
+      !!side.openProfile &&
+      side.openProfile.toLowerCase() === bot.name.toLowerCase();
+    const picked = tile.own ? (draft?.members.includes(bot.name) ?? false) : draftFar.some((m) => m.key === tile.key);
+    const pill = workPill(tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name)));
+    const badge = tile.own ? ownBadge : (badgeFor?.(tile.host) ?? null);
+    // At work: a ring on the face, and its last line shimmering under the name (Eric, 2026-11-26). Needs you keeps its words.
+    const botWork = tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name));
+    const needs = pill?.needs ? botWork!.needsYou : 0;
+    const busy = !needs && (!!pill || (tile.own && runningProfiles.has(bot.name)));
+    const status = pill?.text ?? (busy ? t("Working") : null);
+    // The step it's on: the open chat's live step, else another chat's (the plugin's live steps), else its workstream's; never the chat's last message (Eric, 2026-11-26).
+    const doingNow =
+      (tile.own && liveDoing?.bot.toLowerCase() === bot.name.toLowerCase() ? liveDoing.text : null) || (tile.own ? otherChatsDoing?.get(bot.name) : null) || botWork?.doing || null;
+    return (
+      <button
+        key={tile.key}
+        className={`row bot-side-bot${open ? " open" : ""}${picked ? " picked" : ""}${dropTarget === tile.key ? " drop-target" : ""}${moveTarget === tile.key ? " move-target" : ""}`}
+        aria-current={open ? "true" : undefined}
+        aria-pressed={picked || undefined}
+        title={status ? `${bot.title} · ${status}` : undefined}
+        onClick={() => {
+          if (tile.own) return openOrPick(bot);
+          const far = draft ? farOf(tile) : null;
+          if (!far) return onOpenOther?.({ host: tile.host, bot });
+          if (draftFar.some((m) => m.key === tile.key)) leaveFar(tile.key);
+          else joinMixed([], [far]);
+        }}
+        onContextMenu={tile.own || categories ? openMenu?.(bot, tile) : undefined}
+        {...tileDrag(tile)}
+      >
+        <span className="bot-side-face bot-tile-face">
+          <BotAvatar bot={bot} size={30} moving host={tile.own ? undefined : tile.host} />
+          {needs || busy ? <WorkRing needs={needs} /> : null}
+          {dropTarget === tile.key ? (
+            <span className="drop-plus" aria-hidden="true">
+              <Icon name="plus" />
+            </span>
+          ) : null}
+          {badge ? <span className="bot-tile-badge">{<HostBadgeMark badge={badge} />}</span> : null}
+        </span>
+        <span className="bot-side-text">
+          <span className="row-title">
+            {bot.pinned ? (
+              <span className="pin" aria-label={t("Pinned")}>
+                •{" "}
+              </span>
+            ) : null}
+            {bot.title}
+          </span>
+          {needs ? (
+            <span className="meta bot-side-pill needs">{pill!.text}</span>
+          ) : busy ? (
+            <>
+              {/* What it's doing now, else Working, shimmering while it works. */}
+              <span className="meta bot-side-working">{doingNow || t("Working")}</span>
+              {doingNow ? <span className="sr-only">{status}</span> : null}
+            </>
+          ) : bot.lastLine ? (
+            <span className="meta">{bot.lastLine}</span>
+          ) : null}
+        </span>
+      </button>
+    );
+  };
+
   const otherRooms = [...otherRoomsBefore, ...otherRoomsAfter];
   // A tap on another dashboard's group chat draws the window afresh: the list opens where it was.
   const scroller = useRef<HTMLDivElement>(null);
@@ -819,75 +1051,14 @@ export function BotsHome({
       >
         {bots === null && !error ? <div className="empty">{t("Loading your bots…")}</div> : null}
         {error ? <div className="empty">{t("Couldn’t load your bots: {error}", { error })}</div> : null}
-        {tiles.map((tile) => {
-          const { bot } = tile;
-          const open =
-            (side.openHost ? !tile.own && tile.host === side.openHost : tile.own) &&
-            !side.openRoomId &&
-            !!side.openProfile &&
-            side.openProfile.toLowerCase() === bot.name.toLowerCase();
-          const picked = tile.own ? (draft?.members.includes(bot.name) ?? false) : draftFar.some((m) => m.key === tile.key);
-          const pill = workPill(tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name)));
-          const badge = tile.own ? ownBadge : (badgeFor?.(tile.host) ?? null);
-          // At work: a ring on the face, and its last line shimmering under the name (Eric, 2026-11-26). Needs you keeps its words.
-          const botWork = tile.own ? work?.get(bot.name) : otherWork?.get(keptWorkKey(tile.host, bot.name));
-          const needs = pill?.needs ? botWork!.needsYou : 0;
-          const busy = !needs && (!!pill || (tile.own && runningProfiles.has(bot.name)));
-          const status = pill?.text ?? (busy ? t("Working") : null);
-          // The step it's on: the open chat's live step, else another chat's (the plugin's live steps), else its workstream's; never the chat's last message (Eric, 2026-11-26).
-          const doingNow =
-            (tile.own && liveDoing?.bot.toLowerCase() === bot.name.toLowerCase() ? liveDoing.text : null) || (tile.own ? otherChatsDoing?.get(bot.name) : null) || botWork?.doing || null;
-          return (
-            <button
-              key={tile.key}
-              className={`row bot-side-bot${open ? " open" : ""}${picked ? " picked" : ""}${dropTarget === tile.key ? " drop-target" : ""}${moveTarget === tile.key ? " move-target" : ""}`}
-              aria-current={open ? "true" : undefined}
-              aria-pressed={picked || undefined}
-              title={status ? `${bot.title} · ${status}` : undefined}
-              onClick={() => {
-                if (tile.own) return openOrPick(bot);
-                const far = draft ? farOf(tile) : null;
-                if (!far) return onOpenOther?.({ host: tile.host, bot });
-                if (draftFar.some((m) => m.key === tile.key)) leaveFar(tile.key);
-                else joinMixed([], [far]);
-              }}
-              onContextMenu={tile.own ? openMenu?.(bot) : undefined}
-              {...tileDrag(tile)}
-            >
-              <span className="bot-side-face bot-tile-face">
-                <BotAvatar bot={bot} size={30} moving host={tile.own ? undefined : tile.host} />
-                {needs || busy ? <WorkRing needs={needs} /> : null}
-                {dropTarget === tile.key ? (
-                  <span className="drop-plus" aria-hidden="true">
-                    <Icon name="plus" />
-                  </span>
-                ) : null}
-                {badge ? <span className="bot-tile-badge">{<HostBadgeMark badge={badge} />}</span> : null}
-              </span>
-              <span className="bot-side-text">
-                <span className="row-title">
-                  {bot.pinned ? (
-                    <span className="pin" aria-label={t("Pinned")}>
-                      •{" "}
-                    </span>
-                  ) : null}
-                  {bot.title}
-                </span>
-                {needs ? (
-                  <span className="meta bot-side-pill needs">{pill!.text}</span>
-                ) : busy ? (
-                  <>
-                    {/* What it's doing now, else Working, shimmering while it works. */}
-                    <span className="meta bot-side-working">{doingNow || t("Working")}</span>
-                    {doingNow ? <span className="sr-only">{status}</span> : null}
-                  </>
-                ) : bot.lastLine ? (
-                  <span className="meta">{bot.lastLine}</span>
-                ) : null}
-              </span>
-            </button>
-          );
-        })}
+        {sections
+          ? sections.map((section) => (
+              <Fragment key={section.key}>
+                {heading(section)}
+                {folded.includes(section.key) ? null : section.items.map(botRow)}
+              </Fragment>
+            ))
+          : tiles.map(botRow)}
         {showRooms ? (
           <div className="bot-side-section" role="group" aria-label={t("Group chats")} {...roomsGridDrop}>
             <div className="bot-side-section-head">
