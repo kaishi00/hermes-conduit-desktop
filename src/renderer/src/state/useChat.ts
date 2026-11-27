@@ -478,6 +478,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   chatRef.current = chat
   /** The new chat last opened (profile, host, connection), so a folder change alone keeps its picks. */
   const openedDraft = useRef<string | null>(null)
+  /** A New Chat's picks while another shows (its tab, desktop#656's review): back in it, they're there again. */
+  const keptDrafts = useRef(new Map<string, Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>>())
   /** True only for a connected, unsaved new chat (never while an existing chat is still resuming). */
   const isDraft = useCallback(() => connected && !liveId.current && !chatRef.current.storedId, [connected])
   const pickDraft = useCallback((patch: Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>) => {
@@ -517,11 +519,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // reasoning, speed and approval picks stay with it. Another New Chat names another `draft` and starts clean.
     const draftKey = storedId ? null : `${draft ?? ''}\n${botChat}\n${profile ?? ''}\n${host}\n${connected}\n${sessionAuthority}`
     const sameDraft = draftKey !== null && openedDraft.current === draftKey
+    if (!sameDraft) keepDraft(keptDrafts.current, openedDraft.current, draftOverrides.current)
     openedDraft.current = draftKey
     const ticket = ++request.current
     liveId.current = null
     openingChat.current = null
-    if (!sameDraft) draftOverrides.current = {}
+    if (!sameDraft) draftOverrides.current = takeDraft(keptDrafts.current, draft === undefined ? null : draftKey)
     drawnTip.current = null
     followedLive.current = false
     reloadedAt.current = 0
@@ -538,7 +541,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     wanted.current = null
     olderLoading.current = null
     setLoadingOlder(false)
-    setChat({ storedId, liveId: null, ...(!storedId && folder ? { cwd: folder } : {}), ...(sameDraft ? draftOverrides.current : {}) })
+    setChat({ storedId, liveId: null, ...(!storedId && folder ? { cwd: folder } : {}), ...(draftKey !== null ? draftOverrides.current : {}) })
     setError(null)
     if (!storedId) {
       drawn.current = null
@@ -699,6 +702,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // Another chat opened meanwhile: this chat isn't on screen any more, so nothing goes in it.
     if (request.current !== opening) throw new ChatMovedOn()
     draftOverrides.current = {}
+    if (openedDraft.current) keptDrafts.current.delete(openedDraft.current)
     const sid = made.session_id
     const storedId = made.stored_session_id ?? null
     liveId.current = sid
@@ -1634,4 +1638,24 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     loadOlder,
     loadingOlder
   }
+}
+
+type DraftPicks = Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>
+/** Past this many kept New Chats, the oldest goes: as many as the tab strip holds. */
+const KEPT_DRAFTS = 12
+
+/** Keeps a numbered New Chat's picks as it leaves the screen; one without picks, or unnumbered, keeps none. */
+function keepDraft(kept: Map<string, DraftPicks>, key: string | null, picks: DraftPicks) {
+  if (!key || key.startsWith('\n') || !Object.keys(picks).length) return
+  kept.delete(key)
+  kept.set(key, picks)
+  while (kept.size > KEPT_DRAFTS) kept.delete(kept.keys().next().value!)
+}
+
+/** The picks a numbered New Chat left with, taken back as it shows again; none for one never seen. */
+function takeDraft(kept: Map<string, DraftPicks>, key: string | null): DraftPicks {
+  if (!key) return {}
+  const picks = kept.get(key)
+  kept.delete(key)
+  return picks ? { ...picks } : {}
 }
