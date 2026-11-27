@@ -3,13 +3,14 @@
  * in Main Window. It loads the app's page with the chat in its hash, so it
  * opens the chat over its own gateway calls and stays live. A call window
  * (the Live call shortcut's) is the same page, smaller and on top, starting
- * a call as it opens. The page sets
- * the window's title as the chat's and the bot's names change.
+ * a call as it opens. The page sets the window's title as the chat's and the
+ * bot's names change, and its pin keeps the window on top (issue 608).
  */
 import { BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'node:path'
 import type { ChatWindowRequest } from '../shared/ipc'
-import { chatWindowTitle } from '../shared/chatWindows'
+import { chatWindowTitle, onTopKey } from '../shared/chatWindows'
+import { keptOnTop } from './chatWindowsOnTop'
 import { confineNavigation } from './navigation'
 import { keepWindowPlace, openingPlace } from './windowPlaces'
 
@@ -38,6 +39,8 @@ export function createChatWindow(chat: ChatWindowRequest, onClosed: () => void):
     }
   })
   keepWindowPlace(window, kind, place)
+  // A chat whose window was kept on top opens kept on top again (issue 608). The call window is always on top.
+  if (!call && keptOnTop(onTopKey(chat))) window.setAlwaysOnTop(true)
   window.on('ready-to-show', () => {
     if (place.maximized) window.maximize()
     else window.show()

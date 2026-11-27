@@ -178,4 +178,28 @@ describe('the chat header’s menu', () => {
     await settle()
     expect(host.querySelector('.menu-note')?.textContent).toBe('No Projects')
   })
+
+  it('draws a window’s pin pressed while it is kept on top (issue 608)', async () => {
+    const onClick = vi.fn()
+    await renderHeader({ pin: { label: 'Keep on Top', on: true, onClick } })
+    const pin = host.querySelector<HTMLButtonElement>('button[aria-label="Keep on Top"]')!
+    expect(pin.getAttribute('aria-pressed')).toBe('true')
+    expect(pin.classList.contains('on')).toBe(true)
+    act(() => pin.click())
+    expect(onClick).toHaveBeenCalledOnce()
+  })
+
+  it('holds the pin until the window says whether it is kept on top', async () => {
+    const onClick = vi.fn()
+    await renderHeader({ pin: { label: 'Keep on Top', on: false, disabled: true, onClick } })
+    const pin = host.querySelector<HTMLButtonElement>('button[aria-label="Keep on Top"]')!
+    expect(pin.disabled).toBe(true)
+    act(() => pin.click())
+    expect(onClick).not.toHaveBeenCalled()
+  })
+
+    it('draws no pin where the header has none', async () => {
+    await renderHeader({})
+    expect(host.querySelector('button[aria-label="Keep on Top"]')).toBeNull()
+  })
 })

@@ -407,6 +407,10 @@ export interface ConduitApi {
    * Chats is on screen, 'calling' and 'call-ended' as a call starts and ends in its chat.
    */
   dockedToPane(message: 'moved' | 'closed' | 'ask' | 'calling' | 'call-ended'): void
+  /** Whether this chat window is kept on top of every other window (issue 608); null outside a chat window. */
+  chatWindowOnTop(): Promise<boolean | null>
+  /** Keeps this chat window on top or not, remembered for its chat; what it is now, null outside a chat window. */
+  setChatWindowOnTop(on: boolean): Promise<boolean | null>
   /** Closes these chats' windows, or every chat window. */
   closeChatWindows(ids?: string[]): void
   /** The chats that have a window of their own, now and whenever that changes. */
@@ -557,6 +561,8 @@ export const IPC = {
   openChatWindow: 'conduit:open-chat-window',
   closeChatWindows: 'conduit:close-chat-windows',
   chatWindows: 'conduit:chat-windows',
+  chatWindowOnTop: 'conduit:chat-window-on-top',
+  setChatWindowOnTop: 'conduit:set-chat-window-on-top',
   chatWindowOf: 'conduit:chat-window-of',
   pageWatched: 'conduit:page-watched',
   dockedShown: 'conduit:docked-shown',

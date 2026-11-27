@@ -59,7 +59,8 @@ import { CallWindowClose } from './callWindowClose'
 import { validAccelerator } from '../shared/accelerator'
 import { ChatWindowSet, chatWindowFor } from './chatWindowSet'
 import { createChatWindow } from './chatWindows'
-import { LIVE_CALL_WINDOW_ID, dockedFrameHost } from '../shared/chatWindows'
+import { LIVE_CALL_WINDOW_ID, dockedFrameHost, onTopKey } from '../shared/chatWindows'
+import { keepOnTop } from './chatWindowsOnTop'
 import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
 import { keepWindowPlace, openingPlace, saveWindowPlaces } from './windowPlaces'
@@ -346,10 +347,13 @@ let callBrowser: BrowserWindow | null = null
 let callWindowId = LIVE_CALL_WINDOW_ID
 /** The call window's close, waiting on its call to end when it's closed mid-call (main/callWindowClose.ts). */
 let callClosing: CallWindowClose | null = null
+/** What each chat window's pin is remembered by (issue 608). The call window's pin isn't remembered: it opens on top. */
+const chatOnTopKeys = new WeakMap<BrowserWindow, string>()
 const chatWindows = new ChatWindowSet(
   (chat, onClosed) => {
     const window = createChatWindow(chat, onClosed)
     chatBrowserWindows.add(window)
+    if (!chat.call) chatOnTopKeys.set(window, onTopKey(chat))
     chatBrowserById.set(chat.id, window)
     window.on('closed', () => {
       if (chatBrowserById.get(chat.id) === window) chatBrowserById.delete(chat.id)
@@ -709,6 +713,22 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pageWatched, event => {
     const owner = BrowserWindow.fromWebContents(event.sender.hostWebContents ?? event.sender)
     return !!owner && !owner.isDestroyed() && owner.isVisible() && !owner.isMinimized() && owner.isFocused()
+  })
+  // A chat window's pin (issue 608): kept in front of every other window, other apps' too, and remembered for its chat.
+  const ownChatWindow = (sender: Electron.WebContents) => {
+    const window = BrowserWindow.fromWebContents(sender)
+    return window && !window.isDestroyed() && chatBrowserWindows.has(window) ? window : null
+  }
+  ipcMain.handle(IPC.chatWindowOnTop, event => ownChatWindow(event.sender)?.isAlwaysOnTop() ?? null)
+  ipcMain.handle(IPC.setChatWindowOnTop, (event, on: unknown) => {
+    const window = ownChatWindow(event.sender)
+    if (!window || typeof on !== 'boolean') return null
+    window.setAlwaysOnTop(on)
+    // What the window took, not what was asked, so the remembered choice never disagrees with it.
+    const now = window.isAlwaysOnTop()
+    const key = chatOnTopKeys.get(window)
+    if (key) keepOnTop(key, now)
+    return now
   })
   ipcMain.on(IPC.closeChatWindows, (_event, ids: unknown) => chatWindows.close(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : undefined))
   ipcMain.handle(IPC.chatWindows, () => chatWindows.ids())

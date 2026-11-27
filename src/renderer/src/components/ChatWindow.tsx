@@ -43,6 +43,7 @@ import { useReplyFace } from './BotsHome'
 import { AskedQuestionBar, WorkPanel } from './WorkPanel'
 import { useChatCall } from './ChatCall'
 import { ChatHeader } from './ChatHeader'
+import { Icon } from './icons'
 import { chatMenuItems } from '../state/chatMenu'
 import { loadPins, savePins, withoutChat } from '../state/pinnedReplies'
 import { mutateSession } from '../state/chatActions'
@@ -532,6 +533,23 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
       'error'
     )
   }, [windowId, profile, title, botTitle, host, botChat, notice, docked])
+  // A window's pin keeps it in front of every other window, other apps' too, remembered for its chat (issue 608).
+  // Null until the window says, so a click before then (a window that opened kept on top) can't ask for what it already is.
+  const [onTop, setOnTop] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (docked) return
+    let live = true
+    void window.conduit.chatWindowOnTop().then(on => live && setOnTop(on === true))
+    return () => {
+      live = false
+    }
+  }, [docked])
+  const toggleOnTop = useCallback(() => {
+    if (onTop === null) return
+    void window.conduit.setChatWindowOnTop(!onTop).then(on => {
+      if (on !== null) setOnTop(on)
+    })
+  }, [onTop])
   const openInMain = useCallback(() => {
     window.conduit.openChat({ storedId: chat.storedId ?? request.id, profile, title, fromWindow: true, ...(botChat ? { botChat: true } : {}), ...(host ? { host } : {}) })
     window.close()
@@ -646,17 +664,31 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 }
               : undefined
           }
+          pin={
+            docked
+              ? undefined
+              : {
+                  label: t('Keep on Top'),
+                  title: onTop ? t('This window stays in front of other windows. Click to stop.') : `${t('Keep on Top')}: ${t('Keeps this window in front of other windows, other apps’ too.')}`,
+                  on: onTop === true,
+                  disabled: onTop === null,
+                  onClick: toggleOnTop
+                }
+          }
           menu={headerMenu}
           trailing={
             docked ? null : (
+              // A narrow window shows its icon instead, so the title keeps its room (app.css, .open-main).
               <button
-                className="link"
+                className="link open-main"
                 onClick={openInMain}
                 // The call window's chat is made by its call's first request: until then there's no chat to open.
                 disabled={calling || (callWindow && !chat.storedId)}
+                aria-label={t('Open in Main Window')}
                 title={calling ? t('End the call to open this chat in the main window') : t('Opens this chat in the main window and closes this one.')}
               >
-                {t('Open in Main Window')}
+                <span className="open-main-label">{t('Open in Main Window')}</span>
+                <Icon name="mainWindow" />
               </button>
             )
           }

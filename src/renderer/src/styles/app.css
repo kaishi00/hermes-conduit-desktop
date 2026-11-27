@@ -12407,6 +12407,46 @@ button.ghost:disabled {
   }
 }
 
+/*
+ * A chat window's Open in Main Window: its words where there's room, its
+ * icon in a narrower window, so the chat's title isn't squeezed to a word.
+ */
+.open-main > svg {
+  display: none;
+}
+
+@container chat (max-width: 720px) {
+  /* The size and shape of the header's other buttons, in the link's color. */
+  .open-main {
+    width: 38px;
+    height: 38px;
+    flex: none;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+  }
+
+  .open-main > .open-main-label {
+    display: none;
+  }
+
+  .open-main > svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+  }
+
+  .open-main:hover {
+    background: var(--surface);
+  }
+
+  .chat-head.soft .chat-title {
+    min-width: 6em;
+  }
+}
+
 @container chat (max-width: 500px) {
   .call-pill-line,
   .call-pill-mode,

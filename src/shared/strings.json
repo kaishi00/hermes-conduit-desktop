@@ -48493,5 +48493,50 @@
     "tr": "Bu sohbeti ana pencerede açmak için aramayı bitirin",
     "zh-Hans": "结束通话后才能在主窗口中打开此聊天",
     "zh-Hant": "結束通話後才能在主視窗中開啟此聊天"
+  },
+  "Keep on Top": {
+    "de": "Im Vordergrund halten",
+    "es": "Mantener encima",
+    "fr": "Garder au premier plan",
+    "id": "Tetap di atas",
+    "it": "Mantieni in primo piano",
+    "ja": "常に手前に表示",
+    "ko": "항상 위에 표시",
+    "pl": "Zawsze na wierzchu",
+    "pt-BR": "Manter na frente",
+    "ru": "Поверх других окон",
+    "tr": "Üstte tut",
+    "zh-Hans": "保持置顶",
+    "zh-Hant": "保持置頂"
+  },
+  "Keeps this window in front of other windows, other apps’ too.": {
+    "de": "Hält dieses Fenster vor anderen Fenstern, auch vor denen anderer Apps.",
+    "es": "Mantiene esta ventana delante de las demás, también de las de otras apps.",
+    "fr": "Garde cette fenêtre devant les autres fenêtres, y compris celles des autres apps.",
+    "id": "Menjaga jendela ini di depan jendela lain, termasuk jendela aplikasi lain.",
+    "it": "Mantiene questa finestra davanti alle altre, anche a quelle di altre app.",
+    "ja": "このウインドウを、他のアプリのものも含め、他のウインドウより手前に表示します。",
+    "ko": "이 창을 다른 앱의 창을 포함한 다른 창보다 앞에 표시합니다.",
+    "pl": "Utrzymuje to okno przed innymi oknami, także innych aplikacji.",
+    "pt-BR": "Mantém esta janela na frente das outras, inclusive das de outros apps.",
+    "ru": "Держит это окно поверх других окон, в том числе окон других приложений.",
+    "tr": "Bu pencereyi, diğer uygulamalarınkiler dahil, diğer pencerelerin önünde tutar.",
+    "zh-Hans": "让此窗口保持在其他窗口前面，包括其他应用的窗口。",
+    "zh-Hant": "讓此視窗保持在其他視窗前面，包括其他 App 的視窗。"
+  },
+  "This window stays in front of other windows. Click to stop.": {
+    "de": "Dieses Fenster bleibt vor anderen Fenstern. Zum Beenden klicken.",
+    "es": "Esta ventana se queda delante de las demás. Haz clic para dejar de hacerlo.",
+    "fr": "Cette fenêtre reste devant les autres. Cliquez pour arrêter.",
+    "id": "Jendela ini tetap di depan jendela lain. Klik untuk berhenti.",
+    "it": "Questa finestra resta davanti alle altre. Fai clic per smettere.",
+    "ja": "このウインドウは他のウインドウより手前に表示されています。クリックで解除します。",
+    "ko": "이 창은 다른 창보다 앞에 표시됩니다. 해제하려면 클릭하세요.",
+    "pl": "To okno pozostaje przed innymi oknami. Kliknij, aby wyłączyć.",
+    "pt-BR": "Esta janela fica na frente das outras. Clique para parar.",
+    "ru": "Это окно остаётся поверх других окон. Нажмите, чтобы отключить.",
+    "tr": "Bu pencere diğer pencerelerin önünde kalır. Durdurmak için tıklayın.",
+    "zh-Hans": "此窗口保持在其他窗口前面。点按以停止。",
+    "zh-Hant": "此視窗保持在其他視窗前面。按一下以停止。"
   }
 }

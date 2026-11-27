@@ -32,7 +32,8 @@ export interface HeaderButton {
  * window of its own. Its title with a workstream's status chip, a line under
  * it (a workstream's way back to its bot, or the bot a window's chat is
  * with), then the Call pill with its voice mode, Open in New Window, the
- * bot's screen, the workbench's and the side panel's toggles, each where the chat offers it,
+ * bot's screen, the workbench's and the side panel's toggles, a chat window's pin
+ * (issue 608), each where the chat offers it,
  * and last the chat's own menu (issue 448), which a right-click on the title
  * opens too.
  */
@@ -46,6 +47,7 @@ export function ChatHeader({
   screen,
   bench,
   panel,
+  pin,
   menu,
   trailing
 }: {
@@ -63,6 +65,8 @@ export function ChatHeader({
   bench?: HeaderButton
   /** The side panel's toggle, with its work dot. */
   panel?: HeaderButton & { dot?: { tone: string; label: string } | null }
+  /** A chat window's pin: kept on top of every other window (issue 608). */
+  pin?: HeaderButton
   /** The chat's own menu: what its row in the chat list offers. Left out or empty, no button is drawn. */
   menu?: HeaderMenuItem[]
   /** Anything after the buttons (a window's Open in Main Window). */
@@ -156,6 +160,11 @@ export function ChatHeader({
           <button className={`chat-head-toggle${panel.on ? ' on' : ''}`} aria-label={panel.label} aria-pressed={!!panel.on} title={panel.title ?? panel.label} onClick={panel.onClick}>
             <Icon name="sidePanel" />
             {panel.dot ? <span className={`chat-head-dot ${panel.dot.tone}`} aria-label={panel.dot.label} /> : null}
+          </button>
+        ) : null}
+        {pin ? (
+          <button className={`chat-head-toggle${pin.on ? ' on' : ''}`} aria-label={pin.label} aria-pressed={!!pin.on} title={pin.title ?? pin.label} disabled={pin.disabled} onClick={pin.onClick}>
+            <Icon name="pin" />
           </button>
         ) : null}
         {items ? <HeaderMenuButton menu={more} /> : null}

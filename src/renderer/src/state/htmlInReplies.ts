@@ -262,8 +262,13 @@ const FOLD_LINE = /^ {0,3}(?:<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summar
 const FOLD_FENCE = /^ {0,3}(`{3,}|~{3,})/
 const FOLD_OPENING_START = /^ {0,3}(<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summary>.*?<\/summary>)?)(.*)$/i
 const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
-/** A line without its code spans and comments: a `</details>` in one closes nothing. */
-const withoutCode = (line: string) => line.replace(/(`+)(?:(?!\1).)*?\1/g, '').replace(/<!--.*?-->/g, '')
+/**
+ * A line without its code spans and comments, an unfinished comment running to the end of the line included: a
+ * `</details>` in one closes nothing. Each is replaced by a character no tag holds, so the text either side never
+ * joins into a tag (`</det` and `ails>` around a span, hermes-conduit#3379's review).
+ */
+const withoutCode = (line: string) =>
+  line.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001').replace(/<!--.*?-->/g, '\u0001').replace(/<!--.*$/, '\u0001')
 
 /**
  * A fold's own lines (`<details>`, its `<summary>`, `</details>`) set apart by blank lines, so Markdown reads
