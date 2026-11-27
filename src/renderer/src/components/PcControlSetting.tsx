@@ -10,8 +10,8 @@ import type { PcControlState } from '@shared/ipc'
  */
 export function PcControlSetting({ state, bots }: { state: PcControlState | null; bots: readonly { name: string; title: string }[] }) {
   if (!state || state.driver === 'unsupported') return null
-  const set = (change: Partial<PcControlState>) => void window.conduit.pcControl.set(change).catch(() => undefined)
-  const toggleBot = (name: string, on: boolean) => set({ bots: on ? [...new Set([...state.bots, name])] : state.bots.filter(b => b !== name) })
+  const set = (change: Partial<PcControlState> & { bot?: { name: string; on: boolean } }) => void window.conduit.pcControl.set(change).catch(() => undefined)
+  const toggleBot = (name: string, on: boolean) => set({ bot: { name, on } })
   return (
     <section className="settings-group">
       <h2>{t('Control from Hermes')}</h2>

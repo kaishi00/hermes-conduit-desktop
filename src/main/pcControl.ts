@@ -72,8 +72,13 @@ export function initPcControl(listeners: { notify: Notify; stopped: () => void }
   onStopped = listeners.stopped
 }
 
-export function setPcControl(change: Partial<PcControlSettings>): PcControlState {
+export function setPcControl(change: Partial<PcControlSettings> & { bot?: unknown }): PcControlState {
   const clean: Partial<PcControlSettings> = {}
+  const bot = change.bot as { name?: unknown; on?: unknown } | undefined
+  if (bot && typeof bot.name === 'string' && typeof bot.on === 'boolean') {
+    const now = pcControlSettings().bots
+    clean.bots = bot.on ? [...new Set([...now, bot.name])] : now.filter(name => name !== bot.name)
+  }
   if (typeof change.on === 'boolean') clean.on = change.on
   if (typeof change.name === 'string') clean.name = change.name.slice(0, 64)
   if (Array.isArray(change.bots)) clean.bots = change.bots.filter(b => typeof b === 'string').slice(0, 64)
@@ -186,7 +191,7 @@ export function stopControl(tell = true) {
   changed()
 }
 
-function barPage(botName: string, chat: string): string {
+function barPage(botName: string, chat: string, hotkey: boolean): string {
   const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
   const line = esc(t('{bot} is controlling this computer', { bot: botName }))
   return `<!doctype html><meta charset="utf-8"><title>${OWN_TITLES[0]}</title><style>
@@ -194,7 +199,7 @@ html,body{margin:0;height:100%;background:transparent;font:13px system-ui,-apple
 div{display:flex;align-items:center;gap:10px;height:100%;box-sizing:border-box;padding:0 6px 0 14px;border-radius:12px;background:#b3261e;color:#fff}
 span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}small{opacity:.8}
 a{color:#b3261e;background:#fff;border-radius:8px;padding:5px 12px;font-weight:600;text-decoration:none}
-</style><div><span>${line}${chat ? ` <small>· ${esc(chat)}</small>` : ''}</span><a href="${STOP_URL}">${esc(t('Stop'))} <small>${esc(stopLabel())}</small></a></div>`
+</style><div><span>${line}${chat ? ` <small>· ${esc(chat)}</small>` : ''}</span><a href="${STOP_URL}">${esc(t('Stop'))}${hotkey ? ` <small>${esc(stopLabel())}</small>` : ''}</a></div>`
 }
 
 function showBar(botName: string, chat: string) {
@@ -230,9 +235,11 @@ function showBar(botName: string, chat: string) {
       if (url.startsWith(STOP_URL)) stopControl()
     })
     bar.on('closed', () => (bar = null))
-    if (!globalShortcut.isRegistered(STOP_KEYS)) globalShortcut.register(STOP_KEYS, () => stopControl())
   }
-  void bar.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(barPage(botName, chat)))
+  // Tried at every action, since another app may hold the keys for a while; the bar
+  // shows them only while they're ours.
+  const hotkey = globalShortcut.isRegistered(STOP_KEYS) || globalShortcut.register(STOP_KEYS, () => stopControl())
+  void bar.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(barPage(botName, chat, hotkey))).catch(() => undefined)
   bar.showInactive()
   changed()
 }

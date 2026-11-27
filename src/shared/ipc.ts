@@ -273,7 +273,8 @@ export interface ConduitApi {
   /** Control from Hermes (main/pcControl.ts): bots drive this computer. */
   pcControl: {
     state(): Promise<PcControlState>
-    set(change: Partial<PcControlSettings>): Promise<PcControlState>
+    /** `bot` ticks or unticks one bot against the list main holds, so two quick ticks both count. */
+    set(change: Partial<PcControlSettings> & { bot?: { name: string; on: boolean } }): Promise<PcControlState>
     /** Downloads the driver; resolves with the state once it's there (or failed). */
     install(): Promise<PcControlState>
     /** Deletes the downloaded driver. */
