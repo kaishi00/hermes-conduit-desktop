@@ -16,6 +16,8 @@ import type { Bot } from '../state/bots'
 import { carriesReply, excerpt, insertQuote, replyEnvelope, type QuoteRequest, type ReplyReference } from '../state/quote'
 import { ask } from '../state/dialogs'
 import { FileViewer } from './FileViewer'
+import { replySpeedLabel, replySpeedSpoken } from '../state/replySpeeds'
+import type { ComposerReplySpeed } from '../state/useReplySpeeds'
 
 /** The last folder of a path, the way the phone's chip shows it. */
 function folderName(path: string): string {
@@ -74,6 +76,8 @@ interface Props {
   /** How full the chat's context window is; the ring opens the Context panel. */
   context?: ContextWindow
   onContext?: () => void
+  /** The newest reply's speed while Show reply speed in the composer is on (desktop#718); it opens Settings > Chat. */
+  speed?: ComposerReplySpeed
   /** The slash commands this chat takes, suggested as a `/` is typed. None in a room. */
   commands?: SlashCommand[]
   /** The draft's words as they go, before any reply wraps them (a room's To row puts its picks' tags in front). */
@@ -122,6 +126,7 @@ export function Composer({
   onModel,
   context,
   onContext,
+  speed,
   voice,
   mentionBots
 }: Props) {
@@ -943,6 +948,17 @@ export function Composer({
             >
               <ContextRing percent={context.percent} />
               {Math.round(context.percent)}%
+            </button>
+          ) : null}
+          {speed ? (
+            <button
+              className={`chip chip-button reply-speed-chip${speed.stale ? ' stale' : ''}`}
+              title={replySpeedSpoken(speed.rate)}
+              aria-label={replySpeedSpoken(speed.rate)}
+              onClick={() => window.conduit.openChatSettings()}
+            >
+              <Icon name="bolt" />
+              {replySpeedLabel(speed.rate)}
             </button>
           ) : null}
           {project ? (

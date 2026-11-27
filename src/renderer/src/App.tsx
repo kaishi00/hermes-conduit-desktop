@@ -597,6 +597,8 @@ function Shell({
   const [appsRequest, setAppsRequest] = useState<AppsRequest | null>(null)
   // The rail brand's Your Picture: Settings opens on Appearance, where it's chosen.
   const [appearanceRequest, setAppearanceRequest] = useState<number | null>(null)
+  // A composer's reply speed chip, in this window or a chat's own: Settings opens on Chat (desktop#718).
+  const [chatSettingsRequest, setChatSettingsRequest] = useState<number | null>(null)
   useEffect(
     () =>
       onAppsDirectory(request => {
@@ -673,6 +675,10 @@ function Shell({
     if (action === 'new-chat') newChat()
     else if (action === 'needs-you') setSection('needs')
     else if (action === 'settings') setSection('settings')
+    else if (action === 'chat-settings') {
+      setChatSettingsRequest(Date.now())
+      setSection('settings')
+    }
     else if (action === 'shortcuts') setShortcutsOpen(open => !open)
     else if (action === 'text-bigger') setChatScale(s => nextScale(s, 1))
     else if (action === 'text-smaller') setChatScale(s => nextScale(s, -1))
@@ -3142,7 +3148,7 @@ function Shell({
                       calls={chatCallList}
                       onOpenCall={setOpenCall}
                       followedUp={followedUp}
-                      replySpeeds={replySpeeds}
+                      replySpeeds={replySpeeds.rows}
                       pins={pinControls}
                       onReact={chat.liveId ? reactTo : undefined}
                       onBranch={chat.liveId && !running ? branchFrom : undefined}
@@ -3260,6 +3266,7 @@ function Shell({
                     : undefined
                 }
                 context={chat.context}
+                speed={replySpeeds.composer}
                 onContext={
                   chat.liveId
                     ? () => {
@@ -3582,6 +3589,8 @@ function Shell({
             personPicture={personPicture}
             appearanceRequest={appearanceRequest}
             onAppearanceRequestTaken={() => setAppearanceRequest(null)}
+            chatSettingsRequest={chatSettingsRequest}
+            onChatSettingsRequestTaken={() => setChatSettingsRequest(null)}
             onNewChatWith={
               connected
                 ? draft => {
@@ -3733,6 +3742,8 @@ function Settings({
   personPicture,
   appearanceRequest,
   onAppearanceRequestTaken,
+  chatSettingsRequest,
+  onChatSettingsRequestTaken,
   onNewChatWith,
   onOpensOn,
   opensHere
@@ -3770,6 +3781,8 @@ function Settings({
   /** The rail brand's Your Picture asked for Appearance. */
   appearanceRequest: number | null
   onAppearanceRequestTaken: () => void
+  chatSettingsRequest: number | null
+  onChatSettingsRequestTaken: () => void
   /** A new chat with `draft` in its composer, for the user to send (Try a test call, Have Hermes watch for this). */
   onNewChatWith?: (draft: string) => void
 }) {
@@ -3815,6 +3828,11 @@ function Settings({
     setPage('appearance')
     onAppearanceRequestTaken()
   }, [appearanceRequest, onAppearanceRequestTaken])
+  useEffect(() => {
+    if (chatSettingsRequest === null) return
+    setPage('chat')
+    onChatSettingsRequestTaken()
+  }, [chatSettingsRequest, onChatSettingsRequestTaken])
   // A link into Models, taken once: it opens on that profile.
   const [modelsProfile, setModelsProfile] = useState<{ profile: string; n: number } | null>(null)
   useEffect(() => {

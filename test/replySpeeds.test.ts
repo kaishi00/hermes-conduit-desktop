@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseReplySpeeds, replySpeedFor, replySpeedLabel, replySpeedsPath } from '../src/renderer/src/state/replySpeeds'
+import { newestReplySpeed, parseReplySpeeds, replySpeedFor, replySpeedLabel, replySpeedsPath } from '../src/renderer/src/state/replySpeeds'
 
 describe('reply speeds', () => {
   it('keeps saved replies by row and the newest unsaved turn apart', () => {
@@ -25,6 +25,13 @@ describe('reply speeds', () => {
     expect(replySpeedFor(speeds, { key: 'live' }, 'live', true)).toBeUndefined()
     expect(replySpeedFor(speeds, { key: 'old' }, 'live', false)).toBeUndefined()
     expect(replySpeedFor(undefined, { key: 'row-7', rowId: 7 }, 'live', false)).toBeUndefined()
+  })
+
+  it('takes the newest reply’s speed: the unsaved turn’s, else the newest saved row’s', () => {
+    expect(newestReplySpeed({ byRow: new Map([[7, 42], [12, 30], [9, 50]]) })).toBe(30)
+    expect(newestReplySpeed({ byRow: new Map([[7, 42]]), unsaved: 55 })).toBe(55)
+    expect(newestReplySpeed({ byRow: new Map() })).toBeUndefined()
+    expect(newestReplySpeed(undefined)).toBeUndefined()
   })
 
   it('keeps a decimal only under ten', () => {

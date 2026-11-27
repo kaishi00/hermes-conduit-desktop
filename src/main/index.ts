@@ -759,6 +759,10 @@ function registerIpc(): void {
     const window = BrowserWindow.fromWebContents(sender)
     return window && !window.isDestroyed() && chatBrowserWindows.has(window) ? window : null
   }
+  ipcMain.on(IPC.openChatSettings, () => {
+    showWindow()
+    sendCommand('chat-settings')
+  })
   ipcMain.handle(IPC.chatWindowOnTop, event => ownChatWindow(event.sender)?.isAlwaysOnTop() ?? null)
   ipcMain.handle(IPC.setChatWindowOnTop, (event, on: unknown) => {
     const window = ownChatWindow(event.sender)
