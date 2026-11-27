@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_WINDOW_LIMIT, ChatWindowSet } from '../src/main/chatWindowSet'
-import { chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, dockedRoomUrl, pulseFrameRequest, roomFrameRequest } from '../src/shared/chatWindows'
+import { LIVE_CALL_WINDOW_ID, chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, dockedRoomUrl, pulseFrameRequest, roomFrameRequest } from '../src/shared/chatWindows'
 
 function harness() {
   const made: { id: string; focused: number; closed: boolean; onClosed: () => void }[] = []
@@ -84,6 +84,12 @@ describe('chat windows of their own', () => {
     const botChat = { id: 'b1', profile: 'ops', botChat: true, host: 'https://b.example' }
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify(botChat))}`)).toEqual(botChat)
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify({ id: 'b1', botChat: 'yes' }))}`)).toEqual({ id: 'b1' })
+  })
+
+  it('reads the Live call window, a new chat that starts its call as it opens', () => {
+    const call = { id: LIVE_CALL_WINDOW_ID, profile: 'ops', author: 'Nahida', host: 'https://a.example', fresh: true, call: true }
+    expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify(call))}`)).toEqual(call)
+    expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify({ id: 's1', call: 1 }))}`)).toEqual({ id: 's1' })
   })
 
   it('docks another dashboard’s chat at the main window’s own page, and lets in nothing else', () => {

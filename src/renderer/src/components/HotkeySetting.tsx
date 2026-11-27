@@ -1,25 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
-import type { QuickAskShortcut } from '@shared/ipc'
-import { DEFAULT_QUICK_ASK_ACCELERATOR, acceleratorFromEvent, acceleratorLabel } from '@shared/accelerator'
+import type { HotkeyName, HotkeyState } from '@shared/ipc'
+import { DEFAULT_HOTKEYS, acceleratorFromEvent, acceleratorLabel } from '@shared/accelerator'
 import { t } from '@shared/i18n'
 
+/** Each global shortcut's row: its name and what its keys do. */
+const ROWS: Record<HotkeyName, { label: () => string; caption: () => string }> = {
+  quickAsk: { label: () => t('Quick Ask'), caption: () => t('Opens a small window to ask Hermes from anywhere.') },
+  liveCall: {
+    label: () => t('Live Call'),
+    caption: () => t('Starts a live call with the bot open in Conduit, in a small window over other apps. The tray menu has it too.')
+  }
+}
+
 /**
- * Settings > Quick Ask: the keys that open it from anywhere (desktop issue
- * 406). Change listens for the next key press, Esc or Cancel keeps the keys
- * as they were, Turn Off leaves Quick Ask to the tray's menu, and keys
- * another app already has are refused with a line saying so.
+ * A global shortcut's row in Settings: the keys that open Quick Ask from
+ * anywhere (desktop issue 406), or that start a Live call in a small window
+ * (Eric, 2026-11-27). Change listens for the next key press, Esc or Cancel
+ * keeps the keys as they were, Turn Off leaves it to the tray's menu, and
+ * keys another app (or the other shortcut) already has are refused with a
+ * line saying so.
  */
-export function QuickAskShortcutSetting() {
-  const [shortcut, setShortcut] = useState<QuickAskShortcut | null>(null)
+export function HotkeySetting({ which }: { which: HotkeyName }) {
+  const fallback = DEFAULT_HOTKEYS[which]
+  const row = ROWS[which]
+  const [shortcut, setShortcut] = useState<HotkeyState | null>(null)
   const [recording, setRecording] = useState(false)
   const [refused, setRefused] = useState<string | null>(null)
+  // The other shortcut, when it's the one that has the keys just refused.
+  const [refusedBy, setRefusedBy] = useState<HotkeyName | null>(null)
   const platform = window.conduit.platform
   // Settings left mid-pick: the read made as listening ends lands after the row is gone.
   const mounted = useRef(true)
   useEffect(() => {
     let live = true
     mounted.current = true
-    const read = () => void window.conduit.quickAskShortcut().then(next => live && setShortcut(next))
+    const read = () => void window.conduit.hotkey(which).then(next => live && setShortcut(next))
     read()
     // Back from another app, which may have let go of the keys it held: the line about them is
     // read again rather than kept until the next Change (desktop#520).
@@ -33,12 +48,13 @@ export function QuickAskShortcutSetting() {
       mounted.current = false
       window.removeEventListener('focus', onFocus)
     }
-  }, [])
+  }, [which])
   const choose = async (accelerator: string | null) => {
     setRecording(false)
-    const { changed, ...next } = await window.conduit.setQuickAskShortcut(accelerator)
+    const { changed, takenBy, ...next } = await window.conduit.setHotkey(which, accelerator)
     setShortcut(next)
     setRefused(changed || !accelerator ? null : accelerator)
+    setRefusedBy(changed ? null : (takenBy ?? null))
   }
   useEffect(() => {
     if (!recording) return
@@ -53,27 +69,27 @@ export function QuickAskShortcutSetting() {
       const accelerator = acceleratorFromEvent(event, platform === 'darwin')
       if (accelerator) void choose(accelerator)
     }
-    // The window hidden, minimized or left for another app stops listening, so Quick Ask's keys and the Mac's menu don't stay aside behind it.
+    // The window hidden, minimized or left for another app stops listening, so the shortcuts' keys and the Mac's menu don't stay aside behind it.
     const onBlur = () => setRecording(false)
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('blur', onBlur)
-    window.conduit.setQuickAskRecording(true)
+    window.conduit.setHotkeyRecording(true)
     return () => {
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('blur', onBlur)
-      window.conduit.setQuickAskRecording(false)
+      window.conduit.setHotkeyRecording(false)
       // The keys were asked for again as listening ended: another app may have let go of them since, or taken them.
-      void window.conduit.quickAskShortcut().then(next => mounted.current && setShortcut(next))
+      void window.conduit.hotkey(which).then(next => mounted.current && setShortcut(next))
     }
-  }, [recording, platform])
+  }, [recording, platform, which])
   if (!shortcut) return null
   const { accelerator, registered } = shortcut
   // The keys just refused, or the saved ones another app had first at launch.
   const taken = refused ?? (accelerator && !registered ? accelerator : null)
   return (
     <>
-      <dt>{t('Quick Ask')}</dt>
-      <dd className="quick-ask-shortcut">
+      <dt>{row.label()}</dt>
+      <dd className="hotkey-setting">
         {recording ? (
           <>
             <span className="meta" role="status">
@@ -100,18 +116,25 @@ export function QuickAskShortcutSetting() {
             >
               {t('Change')}
             </button>
-            {/* Also with the default keys another app had first: Reset asks for them again. */}
-            {accelerator !== DEFAULT_QUICK_ASK_ACCELERATOR || !registered ? (
-              <button className="link" onClick={() => void choose(DEFAULT_QUICK_ASK_ACCELERATOR)}>
+            {/* Also with the default keys another app had first: Reset asks for them again. A shortcut off
+                by default has Turn Off instead. */}
+            {fallback && (accelerator !== fallback || !registered) ? (
+              <button className="link" onClick={() => void choose(fallback)}>
                 {t('Reset')}
+              </button>
+            ) : !fallback && accelerator ? (
+              <button className="link" onClick={() => void choose(null)}>
+                {t('Turn Off')}
               </button>
             ) : null}
           </>
         )}
-        <p className="meta">{t('Opens a small window to ask Hermes from anywhere.')}</p>
+        <p className="meta">{row.caption()}</p>
         {taken ? (
-          <p className="meta quick-ask-taken" role="alert">
-            {t('Another app is using {shortcut}. Pick a different one.', { shortcut: acceleratorLabel(taken, platform) })}
+          <p className="meta hotkey-taken" role="alert">
+            {refused && refusedBy
+              ? t('{name} already uses {shortcut}. Pick a different one.', { name: ROWS[refusedBy].label(), shortcut: acceleratorLabel(taken, platform) })
+              : t('Another app is using {shortcut}. Pick a different one.', { shortcut: acceleratorLabel(taken, platform) })}
           </p>
         ) : null}
       </dd>

@@ -52,7 +52,7 @@ import {
   type WorkspaceTab,
   type WorkspaceTabs
 } from './state/workspaceTabs'
-import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
+import { CHAT_WINDOW_LIMIT, LIVE_CALL_WINDOW_ID } from '@shared/chatWindows'
 import { absolutePath, baseName, pathForDraft } from './state/workspace'
 import { HeaderMenu, useHeaderMenu, type HeaderMenuItem } from './components/HeaderMenu'
 import { Workbench } from './components/Workbench'
@@ -231,7 +231,7 @@ import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
 import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor, wheelSteps } from './state/shortcuts'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
-import { QuickAskShortcutSetting } from './components/QuickAskShortcut'
+import { HotkeySetting } from './components/HotkeySetting'
 import { LoginItemSetting } from './components/LoginItemSetting'
 import { HideDockSetting } from './components/HideDockSetting'
 import { AttachmentLimitSetting } from './components/AttachmentLimitSetting'
@@ -629,7 +629,7 @@ function Shell({
     } else if (action.startsWith('go-')) {
       const target = pinnedRailRef.current[Number(action.slice(3)) - 1]
       if (target) selectRailSection(target)
-    }
+    } else if (action === 'live-call') startWindowCall()
   }
   useEffect(() => {
     const offMenu = window.conduit.onMenu(action => runShortcut.current(action))
@@ -789,6 +789,35 @@ function Shell({
   })
   const calling = chatCall.calling
   const endCall = chatCall.end
+  // The Live call shortcut's call, in a small window of its own (Eric, 2026-11-27): a new chat for the bot open here.
+  // A call already running here, or no dashboard to call, brings this window forward instead.
+  const [windowCalling, setWindowCalling] = useState(false)
+  useEffect(() => window.conduit.onWindowCall(setWindowCalling), [])
+  const startWindowCall = () => {
+    if (!connected || calling || dockedCalling) {
+      window.conduit.window.show()
+      return
+    }
+    void window.conduit.openChatWindow({ id: LIVE_CALL_WINDOW_ID, profile: selected.profile, author: botTitle, call: true, fresh: true }).then(opened => {
+      if (opened) return
+      window.conduit.window.show()
+      void tell(t('Up to {count} chats can have windows of their own. Close one to open another.', { count: CHAT_WINDOW_LIMIT }))
+    })
+  }
+  // The microphone is the newest call's: one started here ends the call window's, and one started there ends this one.
+  const windowCallingRef = useRef(windowCalling)
+  windowCallingRef.current = windowCalling
+  useEffect(() => {
+    if ((calling || dockedCalling) && windowCallingRef.current) window.conduit.endWindowCall()
+  }, [calling, dockedCalling])
+  const mainCalls = useRef({ calling, dockedCalling })
+  mainCalls.current = { calling, dockedCalling }
+  useEffect(() => {
+    if (!windowCalling) return
+    if (mainCalls.current.calling) endCall()
+    if (mainCalls.current.dockedCalling) closeDocked()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowCalling])
   // A dashboard switch ends the call, so a pick asks first (state/callSwitch.ts); the docked chat's ends as its pane closes.
   useEffect(() => {
     if (!calling && !dockedCalling) return
@@ -889,7 +918,7 @@ function Shell({
     if (readTurn.current === turnsDone) return
     readTurn.current = turnsDone
     const reply = lastReplyOf(transcriptStore.get().items)
-    if (!calling && !dockedCalling && readsRepliesAloud() && reply && document.hasFocus()) void readAloud(`turn-${turnsDone}`, reply, selected.profile).catch(() => undefined)
+    if (!calling && !dockedCalling && !windowCalling && readsRepliesAloud() && reply && document.hasFocus()) void readAloud(`turn-${turnsDone}`, reply, selected.profile).catch(() => undefined)
   }, [turnsDone])
   const wasRunning = useRef(false)
   useEffect(() => {
@@ -2468,7 +2497,7 @@ function Shell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [status.url, glowBots, wakeRevision]
   )
-  const wakePhrases = connected && showing && !calling && !dockedCalling && !ring && wakeList.length ? JSON.stringify(wakeList.map(b => b.phrase)) : ''
+  const wakePhrases = connected && showing && !calling && !dockedCalling && !windowCalling && !ring && wakeList.length ? JSON.stringify(wakeList.map(b => b.phrase)) : ''
   useEffect(() => window.conduit.wake.listen(wakePhrases ? (JSON.parse(wakePhrases) as string[]) : null), [wakePhrases])
   useEffect(() => () => window.conduit.wake.listen(null), [])
   // A phrase heard: voice on its profile, in a new chat or the one it continues, once that chat is open.
@@ -2482,7 +2511,7 @@ function Shell({
   }, [selected.id, selected.profile, section])
   const heardWake = useRef<(binding: WakeBinding) => void>(() => undefined)
   heardWake.current = binding => {
-    if (calling || dockedCalling) return
+    if (calling || dockedCalling || windowCalling) return
     const id = binding.fresh ? null : wakeChat(binding.profile, selected, list.rows)
     if (section === 'chats' && selected.id === id && sameProfile(selected.profile, binding.profile)) {
       chatCall.start()
@@ -4034,7 +4063,8 @@ function Settings({
             </Select>
           </dd>
           <SettingsLink label={t('Keyboard')} detail={t('Keyboard Shortcuts')} onOpen={onShortcuts} />
-          <QuickAskShortcutSetting />
+          <HotkeySetting which="quickAsk" />
+          <HotkeySetting which="liveCall" />
           <AppLockSetting />
           <AskDashboardSetting hosts={status.hosts?.length ?? 0} />
           <CombineDashboardsSetting hosts={status.hosts ?? []} />

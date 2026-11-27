@@ -2,17 +2,19 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { QuickAskShortcut } from '../src/shared/ipc'
+import type { HotkeyName, HotkeyState } from '../src/shared/ipc'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-/** Settings > Quick Ask's row over a stubbed main process (desktop#484). */
-describe("Settings' Quick Ask keys while they are picked", () => {
+/** Settings' global shortcut rows over a stubbed main process (desktop#484). */
+describe("Settings' global shortcut keys while they are picked", () => {
   let host: HTMLElement
   let root: Root
-  let state: QuickAskShortcut
+  let state: HotkeyState
+  let asked: HotkeyName = 'quickAsk'
+  let render: (which: HotkeyName) => void = () => undefined
   const recording = vi.fn<(on: boolean) => void>()
-  const set = vi.fn<(accelerator: string | null) => Promise<QuickAskShortcut & { changed: boolean }>>()
+  const set = vi.fn<(accelerator: string | null) => Promise<HotkeyState & { changed: boolean; takenBy?: HotkeyName }>>()
 
   const settle = () =>
     act(async () => {
@@ -23,21 +25,23 @@ describe("Settings' Quick Ask keys while they are picked", () => {
 
   beforeEach(async () => {
     // A .tsx module: imported by a path the node type check doesn't follow, as the other component tests do.
-    const path = '../src/renderer/src/components/QuickAskShortcut'
-    const { QuickAskShortcutSetting } = (await import(/* @vite-ignore */ path)) as { QuickAskShortcutSetting: () => unknown }
+    const path = '../src/renderer/src/components/HotkeySetting'
+    const { HotkeySetting } = (await import(/* @vite-ignore */ path)) as { HotkeySetting: (props: { which: HotkeyName }) => unknown }
+    render = which => act(() => root.render(createElement('dl', null, createElement(HotkeySetting as never, { which }))))
     state = { accelerator: 'CommandOrControl+Shift+Space', registered: true }
     recording.mockClear()
     set.mockReset()
     ;(window as unknown as { conduit: unknown }).conduit = {
       platform: 'win32',
-      quickAskShortcut: async () => state,
-      setQuickAskShortcut: set,
-      setQuickAskRecording: recording
+      hotkey: async (which: HotkeyName) => (which === asked ? state : { accelerator: null, registered: false }),
+      setHotkey: (_which: HotkeyName, accelerator: string | null) => set(accelerator),
+      setHotkeyRecording: recording
     }
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
-    act(() => root.render(createElement('dl', null, createElement(QuickAskShortcutSetting as never))))
+    asked = 'quickAsk'
+    render('quickAsk')
     await settle()
   })
   afterEach(() => {
@@ -96,5 +100,43 @@ describe("Settings' Quick Ask keys while they are picked", () => {
     act(() => void window.dispatchEvent(new Event('focus')))
     await settle()
     expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it("has Turn Off rather than Reset for the Live call's keys, which are off until picked", async () => {
+    state = { accelerator: null, registered: false }
+    asked = 'liveCall'
+    render('liveCall')
+    await settle()
+    expect(host.querySelector('dt')?.textContent).toBe('Live Call')
+    expect(host.textContent).toContain('Off')
+    expect(button('Reset')).toBeUndefined()
+    expect(button('Turn Off')).toBeUndefined()
+
+    set.mockImplementation(async accelerator => {
+      state = { accelerator, registered: !!accelerator }
+      return { ...state, changed: true }
+    })
+    click('Change')
+    act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', code: 'KeyL', ctrlKey: true, altKey: true, cancelable: true })))
+    await settle()
+    expect(set).toHaveBeenLastCalledWith('Ctrl+Alt+L')
+    expect(host.querySelector('kbd')?.textContent).toBe('Ctrl+Alt+L')
+    expect(button('Reset')).toBeUndefined()
+    click('Turn Off')
+    await settle()
+    expect(set).toHaveBeenLastCalledWith(null)
+    expect(host.querySelector('kbd')).toBeNull()
+  })
+
+  it("names Quick Ask when the keys picked for the Live call are Quick Ask's", async () => {
+    state = { accelerator: null, registered: false }
+    asked = 'liveCall'
+    render('liveCall')
+    await settle()
+    set.mockResolvedValue({ ...state, changed: false, takenBy: 'quickAsk' })
+    click('Change')
+    act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', altKey: true, cancelable: true })))
+    await settle()
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Quick Ask already uses Alt+Space. Pick a different one.')
   })
 })

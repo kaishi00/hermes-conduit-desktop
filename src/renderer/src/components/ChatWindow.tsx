@@ -69,7 +69,11 @@ const muteHttp = (method: 'GET' | 'PUT', path: string, body?: unknown) => gatewa
  * rows with their cards, approvals and questions, the composer with
  * attachments, slash commands, the model and context panels, Stop, the
  * queue, the agents and the plan. A window's chat has no call: calls stay in
- * the main window, which owns the microphone. Open in Main Window opens the chat there and closes this
+ * the main window, which owns the microphone, except in the Live call
+ * shortcut's window (`call`, Eric 2026-11-27): small and over other apps, a
+ * new chat for the bot open in the main window, whose call starts as it
+ * opens and ends when it closes; the main window hears it start and end, and
+ * a call started there ends it. Open in Main Window opens the chat there and closes this
  * window. The window's title follows the chat's and the bot's names as they
  * change. Its chat can be on another combined dashboard, which its calls go
  * to (the main process routes them), and a switch between combined
@@ -312,9 +316,41 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
     onCorrected: noteCorrection,
     tell: message => notice(message, 'error')
   })
-  const calling = docked && chatCall.calling
+  // Calls run docked, and in the Live call shortcut's small window (Eric, 2026-11-27); any other chat window leaves
+  // them to the main window.
+  const callWindow = !docked && request.call === true
+  const calls = docked || callWindow
+  const calling = calls && chatCall.calling
   const endCall = chatCall.end
   endCallRef.current = endCall
+  // The call window starts its call as it first connects, and again when its shortcut is pressed with none running;
+  // the main window starting a call of its own ends this one, as the microphone is the newest call's.
+  const startCall = useRef(chatCall.start)
+  startCall.current = chatCall.start
+  const callAsked = useRef(callWindow)
+  const [callAskedTick, setCallAskedTick] = useState(0)
+  const callingNow = useRef(calling)
+  callingNow.current = calling
+  useEffect(() => {
+    if (!callWindow) return
+    return window.conduit.onMenu(action => {
+      if (action === 'live-call') {
+        if (callingNow.current) return
+        callAsked.current = true
+        setCallAskedTick(n => n + 1)
+      } else if (action === 'end-call') endCallRef.current()
+    })
+  }, [callWindow])
+  useEffect(() => {
+    if (!callAsked.current || !connected) return
+    callAsked.current = false
+    startCall.current()
+  }, [connected, callAskedTick])
+  useEffect(() => {
+    if (!callWindow || !calling) return
+    window.conduit.noteWindowCall(true)
+    return () => window.conduit.noteWindowCall(false)
+  }, [callWindow, calling])
   // Replies predicted for the box wait while a call speaks.
   const predictions = usePredictions(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined)
   // The main window hears the call start and end.
@@ -577,7 +613,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 ? undefined
                 : { text: botTitle }
           }
-          call={docked ? chatCall.header : undefined}
+          call={calls ? chatCall.header : undefined}
           newWindow={
             docked && windowId
               ? {
@@ -606,7 +642,12 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           menu={headerMenu}
           trailing={
             docked ? null : (
-              <button className="link" onClick={openInMain} title={t('Opens this chat in the main window and closes this one.')}>
+              <button
+                className="link"
+                onClick={openInMain}
+                disabled={calling}
+                title={calling ? t('End the call to open this chat in the main window') : t('Opens this chat in the main window and closes this one.')}
+              >
                 {t('Open in Main Window')}
               </button>
             )
@@ -659,7 +700,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
             setYolo={setYolo}
           />
         ) : null}
-        {docked ? chatCall.view({ requests: openRequests, onSend }) : null}
+        {calls ? chatCall.view({ requests: openRequests, onSend }) : null}
         <ControlDock liveId={chat.liveId} profile={profile} connected={connected} pulse={turnsDone + outputs} />
         <AgentsDock
           agents={delegates.agents}

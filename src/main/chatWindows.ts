@@ -1,7 +1,9 @@
 /**
  * A chat in a window of its own: the whole chat for its own bot, with Open
  * in Main Window. It loads the app's page with the chat in its hash, so it
- * opens the chat over its own gateway calls and stays live. The page sets
+ * opens the chat over its own gateway calls and stays live. A call window
+ * (the Live call shortcut's) is the same page, smaller and on top, starting
+ * a call as it opens. The page sets
  * the window's title as the chat's and the bot's names change.
  */
 import { BrowserWindow, nativeTheme } from 'electron'
@@ -12,12 +14,18 @@ import { confineNavigation } from './navigation'
 import { keepWindowPlace, openingPlace } from './windowPlaces'
 
 export function createChatWindow(chat: ChatWindowRequest, onClosed: () => void): BrowserWindow {
-  // Where this kind of window was last, beside any already open.
-  const place = openingPlace('chat', { width: 640, height: 780 }, { width: 360, height: 400 })
+  // Where this kind of window was last, beside any already open. The Live call shortcut's window is small,
+  // and stays over other apps so the call can be watched while working in them.
+  const call = chat.call === true
+  const kind = call ? 'call' : 'chat'
+  const place = call
+    ? openingPlace('call', { width: 400, height: 560 }, { width: 340, height: 360 })
+    : openingPlace('chat', { width: 640, height: 780 }, { width: 360, height: 400 })
   const window = new BrowserWindow({
     ...place.bounds,
-    minWidth: 360,
-    minHeight: 400,
+    minWidth: call ? 340 : 360,
+    minHeight: call ? 360 : 400,
+    ...(call ? { alwaysOnTop: true } : {}),
     show: false,
     title: chatWindowTitle(chat.title ?? '', chat.botChat ? undefined : chat.author),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d12' : '#f5f5f7',
@@ -29,7 +37,7 @@ export function createChatWindow(chat: ChatWindowRequest, onClosed: () => void):
       nodeIntegration: false
     }
   })
-  keepWindowPlace(window, 'chat', place)
+  keepWindowPlace(window, kind, place)
   window.on('ready-to-show', () => (place.maximized ? window.maximize() : window.show()))
   window.on('closed', onClosed)
   confineNavigation(window.webContents)

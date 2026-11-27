@@ -4,8 +4,14 @@
  * shown the way each system writes its keys.
  */
 
-/** Quick Ask's shortcut until another is picked: Option+Space on the Mac. */
-export const DEFAULT_QUICK_ASK_ACCELERATOR = 'Alt+Space'
+import type { HotkeyName } from './ipc'
+
+/**
+ * Each global shortcut until another is picked: Quick Ask's is Option+Space
+ * on the Mac; the Live call one is off until the user picks keys, as no keys
+ * are free on every computer.
+ */
+export const DEFAULT_HOTKEYS: Record<HotkeyName, string | null> = { quickAsk: 'Alt+Space', liveCall: null }
 
 const MODIFIERS = ['Ctrl', 'Alt', 'Shift', 'Cmd', 'Super'] as const
 

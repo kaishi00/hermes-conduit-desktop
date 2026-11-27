@@ -14,6 +14,8 @@ export interface TrayDeps {
   command: (action: MenuAction) => void
   quit: () => void
   quickAsk: () => void
+  /** A Live call in a small window of its own, as its shortcut starts one. */
+  liveCall: () => void
   installUpdate: () => void
 }
 
@@ -36,8 +38,9 @@ export class ConduitTray {
   private waiting = 0
   /** A downloaded update's version: the menu offers Restart to Update. */
   private update: string | null = null
-  /** Quick Ask's shortcut, shown beside its item. */
+  /** Quick Ask's and the Live call's shortcuts, shown beside their items. */
   private quickAsk: string | null = null
+  private liveCall: string | null = null
 
   constructor(private readonly deps: TrayDeps) {}
 
@@ -67,9 +70,10 @@ export class ConduitTray {
     this.tray.setImage(nativeImage.createFromPath(trayIconPath(trayFile(icon))))
   }
 
-  setQuickAsk(accelerator: string | null): void {
-    if (accelerator === this.quickAsk) return
-    this.quickAsk = accelerator
+  setHotkeys(quickAsk: string | null, liveCall: string | null): void {
+    if (quickAsk === this.quickAsk && liveCall === this.liveCall) return
+    this.quickAsk = quickAsk
+    this.liveCall = liveCall
     this.render()
   }
 
@@ -106,6 +110,7 @@ export class ConduitTray {
           }
         },
         { label: t('Quick Ask'), ...(this.quickAsk ? { accelerator: this.quickAsk } : {}), click: () => this.deps.quickAsk() },
+        { label: t('Start Live Call'), ...(this.liveCall ? { accelerator: this.liveCall } : {}), click: () => this.deps.liveCall() },
         {
           label: t('Needs You'),
           enabled: this.waiting > 0,

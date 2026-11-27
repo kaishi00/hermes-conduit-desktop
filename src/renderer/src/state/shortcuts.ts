@@ -80,7 +80,12 @@ export interface ShortcutRow {
 }
 
 /** The list ⌘/ opens, grouped as the phone's sheet is, with Go to following the pinned rail order. */
-export function shortcutGroups(mac: boolean, sections: readonly GoTo[] = GO_TO, quickAsk?: string | null): { title: string; rows: ShortcutRow[] }[] {
+export function shortcutGroups(
+  mac: boolean,
+  sections: readonly GoTo[] = GO_TO,
+  quickAsk?: string | null,
+  liveCall?: string | null
+): { title: string; rows: ShortcutRow[] }[] {
   const row = (title: string, action: MenuAction): ShortcutRow => ({ title, keys: [glyphs(action, mac)] })
   return [
     {
@@ -97,8 +102,9 @@ export function shortcutGroups(mac: boolean, sections: readonly GoTo[] = GO_TO, 
         // The tabs over the chat column (issue 423): Ctrl on a Mac too, as its browsers take it.
         { title: t('Next Tab'), keys: [mac ? '⌃⇥' : 'Ctrl+Tab'] },
         { title: t('Previous Tab'), keys: [mac ? '⌃⇧⇥' : 'Ctrl+Shift+Tab'] },
-        // From anywhere, with the keys Settings > Quick Ask holds; left out while it's off or another app has them.
-        ...(quickAsk ? [{ title: t('Quick Ask'), keys: [quickAsk] }] : [])
+        // From anywhere, with the keys Settings holds; each left out while it's off or another app has its keys.
+        ...(quickAsk ? [{ title: t('Quick Ask'), keys: [quickAsk] }] : []),
+        ...(liveCall ? [{ title: t('Start Live Call'), keys: [liveCall] }] : [])
       ]
     },
     {

@@ -7,6 +7,9 @@ import type { ChatWindowRequest } from './ipc'
  */
 export const CHAT_WINDOW_LIMIT = 6
 
+/** The Live call shortcut's window: one at a time, a new chat until its call's first request makes one. */
+export const LIVE_CALL_WINDOW_ID = 'live-call'
+
 /** A chat window's title: the chat, then its bot when that isn't already the chat's name. */
 export function chatWindowTitle(chat: string, bot?: string): string {
   const name = chat.trim()
@@ -31,7 +34,8 @@ export function chatWindowRequest(hash: string): ChatWindowRequest | null {
       ...(typeof raw.host === 'string' && raw.host ? { host: raw.host } : {}),
       ...(raw.docked === true ? { docked: true } : {}),
       ...(typeof raw.draft === 'string' && raw.draft ? { draft: raw.draft } : {}),
-      ...(raw.fresh === true ? { fresh: true } : {})
+      ...(raw.fresh === true ? { fresh: true } : {}),
+      ...(raw.call === true ? { call: true } : {})
     }
   } catch {
     return null
