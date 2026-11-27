@@ -63,4 +63,10 @@ describe('a new chat’s project, spelled otherwise (desktop#652 review)', () =>
     const list = [{ id: 'Site', title: 'Site', path: 'C:\\Dev\\Site', isHome: false, isAuto: false, count: 0, previews: [] }]
     expect(projectFor('c:\\dev\\site', list)?.id).toBe('Site')
   })
+
+  it('prefers the exact spelling when two folders differ only by case', () => {
+    const list = ['/srv/Site', '/srv/site'].map(path => ({ id: path, title: path, path, isHome: false, isAuto: false, count: 0, previews: [] }))
+    expect(projectFor('/srv/site', list)?.id).toBe('/srv/site')
+    expect(projectFor('/srv/Site', list)?.id).toBe('/srv/Site')
+  })
 })

@@ -472,7 +472,7 @@ function Shell({
   /** The dashboard on screen, for a chat coming back from a window of its own. */
   const statusUrlRef = useRef(status.url)
   statusUrlRef.current = status.url
-  const [selected, setSelected] = useState<{ id: string | null; profile?: string; title?: string; botChat?: boolean; folder?: string }>({ id: null })
+  const [selected, setSelected] = useState<{ id: string | null; profile?: string; title?: string; botChat?: boolean; folder?: string; draft?: number }>({ id: null })
   /**
    * Another combined dashboard's chat opened in place, in the chat pane (the
    * phone's no-switch open, stage 2). It shows over the chat it was opened
@@ -531,7 +531,7 @@ function Shell({
     olderRows,
     seekRow,
     react: reactTo
-  } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '')
+  } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '', selected.draft)
   // What this window shows of the transcript; the transcript itself is drawn by LiveTranscript, so a streaming
   // reply runs that, not App, once a frame (desktop#212).
   const running = useTranscriptValue(transcriptStore, state => state.running)
@@ -546,10 +546,12 @@ function Shell({
   const chatPane = useRef<HTMLElement>(null)
   chatProfileRef.current = chatProfile
   // `profile`: the one New Chat under All was asked for; else the profile chosen in the column.
+  const draftCount = useRef(0)
   const newChat = useCallback((profile?: string) => {
     setArchivedOpen(false)
     setSection('chats')
-    setSelected({ id: null, profile: profile ?? chatProfileRef.current ?? undefined })
+    // Each New Chat is a draft of its own: the picks of the one before don't carry into it (only the Project chip keeps them).
+    setSelected({ id: null, profile: profile ?? chatProfileRef.current ?? undefined, draft: ++draftCount.current })
   }, [])
 
   // The Mac's menu bar sends its shortcuts; elsewhere the window reads Ctrl and the same key.

@@ -54,10 +54,10 @@ afterEach(() => {
 })
 
 const words = (state: { items: { kind: string; text?: string }[] }) => state.items.map(i => i.text ?? i.kind)
-type Props = { storedId: string | null; connected: boolean; url?: string; profile?: string; sessionAuthority?: boolean; folder?: string }
+type Props = { storedId: string | null; connected: boolean; url?: string; profile?: string; sessionAuthority?: boolean; folder?: string; draft?: number }
 // As App calls it: each dashboard keeps its own transcripts (desktop#233).
-const chatInApp = ({ storedId, connected, url, profile, sessionAuthority, folder }: Props) => {
-  const chat = useChat(storedId, profile, sessionAuthority ?? false, connected, false, folder, url)
+const chatInApp = ({ storedId, connected, url, profile, sessionAuthority, folder, draft }: Props) => {
+  const chat = useChat(storedId, profile, sessionAuthority ?? false, connected, false, folder, url, draft)
   return { ...chat, transcript: useTranscript(chat.transcriptStore) }
 }
 const mount: typeof renderHook = (hook, props) => {
@@ -814,6 +814,18 @@ describe("model and run settings before a new chat's first message", () => {
 
     const createCall = sentRpc.find(c => c.method === 'session.create')
     expect(createCall?.params).toMatchObject({ model: 'claude-opus-4-6', provider: 'anthropic', cwd: '/srv/site' })
+  })
+
+  it('starts another New Chat clean, even from a project draft (#654 review)', async () => {
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', profile: 'work', folder: '/srv/site', draft: 1 })
+    await act(async () => {
+      await hook.result().setModel('claude-opus-4-6', 'anthropic')
+      await hook.result().setYolo(true)
+    })
+    hook.rerender({ storedId: null, connected: true, url: 'h1', profile: 'work', draft: 2 })
+    expect(hook.result().chat.model).toBeUndefined()
+    expect(hook.result().chat.yolo).toBeUndefined()
+    expect(hook.result().chat.cwd).toBeUndefined()
   })
 
   it('does not treat a stored chat still resuming as a draft in setModel', async () => {
