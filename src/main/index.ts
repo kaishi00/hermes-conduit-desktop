@@ -661,9 +661,11 @@ function registerIpc(): void {
     const window = ownChatWindow(event.sender)
     if (!window || typeof on !== 'boolean') return null
     window.setAlwaysOnTop(on)
+    // What the window took, not what was asked, so the remembered choice never disagrees with it.
+    const now = window.isAlwaysOnTop()
     const key = chatOnTopKeys.get(window)
-    if (key) keepOnTop(key, on)
-    return window.isAlwaysOnTop()
+    if (key) keepOnTop(key, now)
+    return now
   })
   ipcMain.on(IPC.closeChatWindows, (_event, ids: unknown) => chatWindows.close(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : undefined))
   ipcMain.handle(IPC.chatWindows, () => chatWindows.ids())
