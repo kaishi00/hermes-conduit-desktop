@@ -72,7 +72,7 @@ describe("the picture viewer's Copy", () => {
     view.unmount()
   })
 
-  it('keeps its note for the picture it copied, not one shown in its place', async () => {
+  it('starts at Copy again when the viewer opens another picture', async () => {
     const view = await mount('data:image/png;base64,AQID')
     view.open()
     act(() => view.copy()!.click())
@@ -83,6 +83,34 @@ describe("the picture viewer's Copy", () => {
     view.open()
     expect(view.label()).toBe('Copy')
     view.unmount()
+  })
+
+  it('starts at Copy for a picture opened from the keyboard while the viewer shows another', async () => {
+    const { PictureViewerHost, PictureImage } = (await import(/* @vite-ignore */ picture)) as PictureModule
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    act(() =>
+      root.render(
+        createElement(
+          PictureViewerHost,
+          null,
+          createElement(PictureImage, { src: 'data:image/png;base64,AQID', name: 'a' }),
+          createElement(PictureImage, { src: 'data:image/png;base64,BAUG', name: 'b' })
+        )
+      )
+    )
+    const [first, second] = [...host.querySelectorAll<HTMLButtonElement>('.picture-button')]
+    const label = () => [...host.querySelectorAll<HTMLButtonElement>('.picture-viewer-save')].find(b => b.textContent !== 'Download')?.textContent
+    act(() => first!.click())
+    act(() => [...host.querySelectorAll<HTMLButtonElement>('.picture-viewer-save')].find(b => b.textContent === 'Copy')!.click())
+    await act(settle)
+    expect(label()).toBe('Copied')
+    // The pictures under the viewer stay in the tab order, so Enter on another opens it in place.
+    act(() => second!.click())
+    expect(host.querySelector('.picture-viewer img')?.getAttribute('alt')).toBe('b')
+    expect(label()).toBe('Copy')
+    act(() => root.unmount())
   })
 })
 

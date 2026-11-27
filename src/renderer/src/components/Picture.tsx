@@ -31,7 +31,8 @@ export function PictureViewerHost({ children }: { children: ReactNode }) {
         <div className="picture-viewer" role="dialog" aria-label={shown.name} onClick={() => setShown(null)}>
           <img src={shown.src} alt={shown.name} />
           <div className="picture-viewer-actions">
-            <ViewerCopy src={shown.src} />
+            {/* Keyed by the picture: one opened from the keyboard while the viewer shows another starts at Copy. */}
+            <ViewerCopy key={shown.src} src={shown.src} />
             <button
               className="picture-viewer-save"
               onClick={event => {
@@ -57,24 +58,22 @@ export function PictureViewerHost({ children }: { children: ReactNode }) {
  * right-click on any picture has Copy Image too (src/main/editMenu.ts).
  */
 function ViewerCopy({ src }: { src: string }) {
-  const [note, setNote] = useState<{ src: string; copied: boolean } | null>(null)
+  const [note, setNote] = useState<{ copied: boolean } | null>(null)
   useEffect(() => {
     if (!note) return
     const timer = setTimeout(() => setNote(null), 1500)
     return () => clearTimeout(timer)
   }, [note])
-  // The note is for the picture it copied: another one shown in its place hasn't been.
-  const shown = note && note.src === src ? note : null
   return (
     <button
       className="picture-viewer-save"
       aria-live="polite"
       onClick={event => {
         event.stopPropagation()
-        void copyPicture(src).then(copied => setNote({ src, copied }))
+        void copyPicture(src).then(copied => setNote({ copied }))
       }}
     >
-      {shown ? (shown.copied ? t('Copied') : t("Couldn't copy")) : t('Copy')}
+      {note ? (note.copied ? t('Copied') : t("Couldn't copy")) : t('Copy')}
     </button>
   )
 }
