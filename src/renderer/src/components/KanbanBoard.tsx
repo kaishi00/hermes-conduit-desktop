@@ -668,6 +668,8 @@ export function TaskPanel({
           </label>
         </div>
         {error ? <div className="error-text">{error}</div> : null}
+        {/* A read again that failed keeps what was read last on screen, and says so. */}
+        {failure ? <div className="error-text">{t('Couldn’t load this task: {reason}', { reason: failure })}</div> : null}
         {shown.lastFailureError ? (
           <section className="job-section">
             <h3>{t('Last error')}</h3>

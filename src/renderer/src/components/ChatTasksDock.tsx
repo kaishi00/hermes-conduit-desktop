@@ -8,6 +8,9 @@ import { TaskPanel } from './KanbanBoard'
 import { Icon } from './icons'
 import { everyWhileVisible } from '../state/visibility'
 
+/** Hermes says the task isn't there (any more): a 404. */
+const gone = (error: unknown) => (error as { code?: unknown } | null)?.code === 404 || /\b404\b|not found/i.test(error instanceof Error ? error.message : String(error))
+
 /** The open panel reads its task again this often while the window shows. */
 export const CHAT_TASK_PANEL_READ_MS = 15_000
 
@@ -138,7 +141,18 @@ function ChatTaskPanel({
   onOpen?: () => void
 }) {
   const path = useCallback((rest: string) => boardPath(`/tasks/${encodeURIComponent(task.id)}${rest}`, task.board), [task.id, task.board])
-  const load = useCallback(async () => parseTaskDetail(await gateway.http('GET', path(''))), [path])
+  const load = useCallback(async () => {
+    try {
+      return parseTaskDetail(await gateway.http('GET', path('')))
+    } catch (e) {
+      // Deleted or gone from its board meanwhile: the panel closes and the line reads again, so it drops the task.
+      if (gone(e)) {
+        onClose()
+        onChanged?.()
+      }
+      throw e
+    }
+  }, [path, onClose, onChanged])
   const botTitle = (name?: string) => (name ? (bots?.find(b => b.name === name)?.title ?? name) : t('Unassigned'))
   const assignees = useMemo(
     () => (bots ?? []).map(b => b.name).sort((a, b) => (bots?.find(x => x.name === a)?.title ?? a).localeCompare(bots?.find(x => x.name === b)?.title ?? b)),
