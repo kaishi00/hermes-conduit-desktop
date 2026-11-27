@@ -21494,6 +21494,21 @@
     "zh-Hans": "不回答，从列表中移除",
     "zh-Hant": "不回答，從清單中移除"
   },
+  "The newest reply's speed, beside the context ring. It dims while the next reply is written.": {
+    "de": "Die Geschwindigkeit der neuesten Antwort, neben dem Kontextring. Sie wird abgeblendet, während die nächste Antwort geschrieben wird.",
+    "es": "La velocidad de la respuesta más reciente, junto al anillo de contexto. Se atenúa mientras se escribe la siguiente respuesta.",
+    "fr": "La vitesse de la réponse la plus récente, à côté de l’anneau de contexte. Elle s’estompe pendant l’écriture de la réponse suivante.",
+    "id": "Kecepatan balasan terbaru, di samping cincin konteks. Meredup saat balasan berikutnya sedang ditulis.",
+    "it": "La velocità della risposta più recente, accanto all’anello del contesto. Si attenua mentre viene scritta la risposta successiva.",
+    "ja": "最新の返信の速度を、コンテキストリングの横に表示します。次の返信を書いている間は薄く表示されます。",
+    "ko": "최신 답장의 속도를 컨텍스트 링 옆에 표시합니다. 다음 답장을 쓰는 동안에는 흐리게 표시됩니다.",
+    "pl": "Szybkość najnowszej odpowiedzi, obok pierścienia kontekstu. Przygasa, gdy pisana jest kolejna odpowiedź.",
+    "pt-BR": "A velocidade da resposta mais recente, ao lado do anel de contexto. Ela esmaece enquanto a próxima resposta é escrita.",
+    "ru": "Скорость последнего ответа рядом с кольцом контекста. Она тускнеет, пока пишется следующий ответ.",
+    "tr": "En yeni yanıtın hızı, bağlam halkasının yanında. Sonraki yanıt yazılırken soluklaşır.",
+    "zh-Hans": "最新回复的速度，显示在上下文环旁边。下一条回复生成时会变暗。",
+    "zh-Hant": "最新回覆的速度，顯示在上下文環旁邊。下一則回覆生成時會變暗。"
+  },
   "The update may have stopped. If Hermes stays away, start it on the host.": {
     "de": "Das Update wurde womöglich abgebrochen. Bleibt Hermes weg, starte es auf dem Host.",
     "es": "Puede que la actualización se haya detenido. Si Hermes no vuelve, inícialo en el host.",
@@ -48898,6 +48913,21 @@
     "tr": "Yanıt hızını göster",
     "zh-Hans": "显示回复速度",
     "zh-Hant": "顯示回覆速度"
+  },
+  "Show reply speed in the composer": {
+    "de": "Antwortgeschwindigkeit im Eingabefeld anzeigen",
+    "es": "Mostrar velocidad de respuesta en el redactor",
+    "fr": "Afficher la vitesse des réponses dans la zone de saisie",
+    "id": "Tampilkan kecepatan balasan di kotak tulis",
+    "it": "Mostra la velocità delle risposte nel campo di scrittura",
+    "ja": "返信の速度を入力欄に表示",
+    "ko": "입력창에 답장 속도 표시",
+    "pl": "Pokazuj szybkość odpowiedzi w polu wiadomości",
+    "pt-BR": "Mostrar velocidade da resposta no campo de mensagem",
+    "ru": "Показывать скорость ответа в поле ввода",
+    "tr": "Yanıt hızını yazma alanında göster",
+    "zh-Hans": "在输入框中显示回复速度",
+    "zh-Hant": "在輸入框中顯示回覆速度"
   },
   "{speed} tok/s": {
     "de": "{speed} tok/s",

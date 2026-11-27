@@ -176,6 +176,7 @@ const api: ConduitApi = {
   dismissRequest: id => ipcRenderer.invoke(IPC.dismissRequest, id),
   setWaiting: count => ipcRenderer.send(IPC.setWaiting, count),
   openChat: chat => ipcRenderer.send(IPC.openChat, chat),
+  openChatSettings: () => ipcRenderer.send(IPC.openChatSettings),
   onOpenChat: listener => listen<OpenChatRequest>(IPC.openChat, listener),
   openChatWindow: chat => ipcRenderer.invoke(IPC.openChatWindow, chat),
   pageWatched: () => ipcRenderer.invoke(IPC.pageWatched),

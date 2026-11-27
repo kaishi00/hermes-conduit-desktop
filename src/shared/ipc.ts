@@ -414,6 +414,8 @@ export interface ConduitApi {
   /** Shows a chat in the main window (quick ask's Open in Conduit). */
   openChat(chat: OpenChatRequest): void
   onOpenChat(listener: (chat: OpenChatRequest) => void): () => void
+  /** Opens Settings > Chat in the main window, from any window (the composer's reply speed chip, desktop#718). */
+  openChatSettings(): void
   /** Moves a chat to a window of its own, or brings its window to the front; false when the limit is open. */
   openChatWindow(chat: ChatWindowRequest): Promise<boolean>
   /**
@@ -519,6 +521,8 @@ export type MenuAction =
   | 'live-call'
   /** To a call window: the main window started a call, which takes the microphone. */
   | 'end-call'
+  /** To the main window: Settings > Chat, asked from a composer's reply speed chip in any window. */
+  | 'chat-settings'
 
 export interface OpenChatRequest {
   storedId: string
@@ -583,6 +587,7 @@ export const IPC = {
   dismissRequest: 'conduit:dismiss-request',
   setWaiting: 'conduit:set-waiting',
   openChat: 'conduit:open-chat',
+  openChatSettings: 'conduit:open-chat-settings',
   openChatWindow: 'conduit:open-chat-window',
   closeChatWindows: 'conduit:close-chat-windows',
   chatWindows: 'conduit:chat-windows',

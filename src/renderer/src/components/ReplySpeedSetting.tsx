@@ -1,10 +1,14 @@
 import { t } from '@shared/i18n'
-import { setReplySpeedShown } from '../state/replySpeeds'
-import { useReplySpeedShown } from '../state/useReplySpeeds'
+import { setReplySpeedInComposer, setReplySpeedShown } from '../state/replySpeeds'
+import { useReplySpeedInComposer, useReplySpeedShown } from '../state/useReplySpeeds'
 
-/** Settings > Chat > Reply speed, after the phone's: kept on this computer and off by default. */
+/**
+ * Settings > Chat > Reply speed, after the phone's: kept on this computer and off by default. The composer's
+ * chip is its own switch (desktop#718, Eric 2026-11-27); either one can be on without the other.
+ */
 export function ReplySpeedSetting() {
   const shown = useReplySpeedShown()
+  const inComposer = useReplySpeedInComposer()
   return (
     <section className="pset-section">
       <h2>{t('Reply speed')}</h2>
@@ -19,6 +23,18 @@ export function ReplySpeedSetting() {
           <input type="checkbox" checked={shown} aria-label={t('Show reply speed')} onChange={e => setReplySpeedShown(e.target.checked)} />
         </label>
       </div>
+      <div className="pset-row">
+        <span>{t('Show reply speed in the composer')}</span>
+        <label className="switch-inline">
+          <input
+            type="checkbox"
+            checked={inComposer}
+            aria-label={t('Show reply speed in the composer')}
+            onChange={e => setReplySpeedInComposer(e.target.checked)}
+          />
+        </label>
+      </div>
+      <p className="meta">{t("The newest reply's speed, beside the context ring. It dims while the next reply is written.")}</p>
     </section>
   )
 }

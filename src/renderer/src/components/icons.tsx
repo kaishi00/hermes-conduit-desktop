@@ -10,6 +10,8 @@ const paths = {
   ),
   tasks: <path d="M4 7l2 2 3-3M4 16l2 2 3-3M12 8h8M12 17h8" />,
   pulse: <path d="M3 12h4l2-5 4 10 2-5h6" />,
+  /** The composer's reply speed chip (desktop#718). */
+  bolt: <path d="M13 3L5 14h6l-1 7 8-11h-6z" />,
   settings: (
     <>
       <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />

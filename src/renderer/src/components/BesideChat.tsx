@@ -54,7 +54,7 @@ export function BesideChatPane({
 }) {
   const { transcriptStore, chat: open, loading, error, send } = useChat(chat.id, chat.profile, sessionAuthority, connected, false, undefined, host)
   const transcript = useTranscript(transcriptStore)
-  const replySpeeds = useReplySpeeds(open.storedId ?? open.liveId, chat.profile, connected, transcript.running)
+  const replySpeeds = useReplySpeeds(open.storedId ?? open.liveId, chat.profile, connected, transcript.running, false)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const box = useRef<HTMLTextAreaElement>(null)
@@ -108,7 +108,7 @@ export function BesideChatPane({
           face={face}
           display={display}
           sessionId={open.liveId ?? undefined}
-          replySpeeds={replySpeeds}
+          replySpeeds={replySpeeds.rows}
         />
       </div>
       <form

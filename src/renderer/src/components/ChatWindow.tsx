@@ -720,7 +720,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 display={display}
                 sessionId={chat.liveId ?? undefined}
                 onReact={chat.liveId ? react : undefined}
-                replySpeeds={replySpeeds}
+                replySpeeds={replySpeeds.rows}
                 onLoadOlder={loadOlder}
                 onSeekRow={seekRow}
                 loadingOlder={loadingOlder}
@@ -804,6 +804,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
               : undefined
           }
           context={chat.context}
+          speed={replySpeeds.composer}
           onContext={
             chat.liveId
               ? () => {

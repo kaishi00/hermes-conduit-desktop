@@ -13,6 +13,8 @@ import { dashboardProfilePath } from './dashboardProfile'
 
 export const REPLY_SPEEDS_PATH = '/api/plugins/conduit_push/sessions/reply-speeds'
 const SHOWN_KEY = 'conduit.showReplySpeed'
+/** Show reply speed in the composer (desktop#718): its own switch, beside the one for each reply. */
+const COMPOSER_KEY = 'conduit.showReplySpeedInComposer'
 
 export interface ReplySpeeds {
   /** Each saved reply's speed, by Hermes' row id. */
@@ -53,6 +55,21 @@ export function replySpeedFor(
   return !running && item.key === newestReply ? speeds.unsaved : undefined
 }
 
+/** The newest reply's speed: the newest turn's while its reply isn't saved yet, else the newest saved row's. */
+export function newestReplySpeed(speeds: ReplySpeeds | undefined): number | undefined {
+  if (!speeds) return undefined
+  if (speeds.unsaved != null) return speeds.unsaved
+  let newest = 0
+  let rate: number | undefined
+  for (const [row, speed] of speeds.byRow) {
+    if (row > newest) {
+      newest = row
+      rate = speed
+    }
+  }
+  return rate
+}
+
 const number = (rate: number) => (Math.round(rate * 10) < 100 ? rate.toFixed(1) : String(Math.round(rate)))
 
 /** "42 tok/s"; one decimal under 10. */
@@ -61,29 +78,36 @@ export const replySpeedSpoken = (rate: number) => t('Written at {speed} tokens p
 
 const listeners = new Set<() => void>()
 
-export function replySpeedShown(): boolean {
+function flag(key: string): boolean {
   try {
-    return localStorage.getItem(SHOWN_KEY) === 'true'
+    return localStorage.getItem(key) === 'true'
   } catch {
     return false
   }
 }
 
-export function setReplySpeedShown(on: boolean): void {
+function setFlag(key: string, on: boolean): void {
   try {
-    if (on) localStorage.setItem(SHOWN_KEY, 'true')
-    else localStorage.removeItem(SHOWN_KEY)
+    if (on) localStorage.setItem(key, 'true')
+    else localStorage.removeItem(key)
   } catch {
     // Off next time.
   }
   for (const listener of listeners) listener()
 }
 
-/** For useSyncExternalStore: this window's switch, and another window's through the storage event. */
+/** Show reply speed: beside each reply's time. */
+export const replySpeedShown = () => flag(SHOWN_KEY)
+export const setReplySpeedShown = (on: boolean) => setFlag(SHOWN_KEY, on)
+/** Show reply speed in the composer: the newest reply's, as a chip after the context ring. */
+export const replySpeedInComposer = () => flag(COMPOSER_KEY)
+export const setReplySpeedInComposer = (on: boolean) => setFlag(COMPOSER_KEY, on)
+
+/** For useSyncExternalStore: either switch, in this window or another (through the storage event). */
 export function subscribeReplySpeedShown(listener: () => void): () => void {
   listeners.add(listener)
   const onStorage = (event: StorageEvent) => {
-    if (event.key === SHOWN_KEY || event.key === null) listener()
+    if (event.key === SHOWN_KEY || event.key === COMPOSER_KEY || event.key === null) listener()
   }
   window.addEventListener('storage', onStorage)
   return () => {
