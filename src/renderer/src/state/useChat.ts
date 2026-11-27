@@ -690,10 +690,15 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       window.conduit.onEvent(event => {
         if (!event.session_id) return
         if (event.session_id !== liveId.current) {
-          // A /btw or /background answer for a chat this pane left while it ran: kept for that chat (issue 3394).
+          // A /btw or /background answer under the live session its command ran on (issue 3394): drawn when
+          // that chat is on screen again under another live session (dispatching keeps it for the chat too),
+          // kept for it while another chat shows.
           const owner = sideAgents.current.get(event.session_id)
           const answer = owner ? sideAgentAnswer(event) : null
-          if (owner && answer) addChatNote(owner, { text: answer, format: 'markdown' })
+          if (!owner || !answer) return
+          sideAgents.current.delete(event.session_id)
+          if (owner === notesKey.current) dispatch({ type: 'output', text: answer, format: 'markdown' })
+          else addChatNote(owner, { text: answer, format: 'markdown' })
           return
         }
         if (event.type === 'session.info') {

@@ -13,6 +13,8 @@ type Event = { type: string; session_id?: string; payload?: unknown }
 let listeners: ((event: Event) => void)[] = []
 let resumes: Record<string, unknown[]> = {}
 let heldBtw: (() => void) | null = null
+/** Added to the live session a resume hands back, so a chat can come back under another one. */
+let liveSuffix = ''
 
 beforeEach(() => {
   forgetTranscripts()
@@ -21,11 +23,12 @@ beforeEach(() => {
   listeners = []
   resumes = {}
   heldBtw = null
+  liveSuffix = ''
   ;(window as unknown as { conduit: unknown }).conduit = {
     rpcOutcome: (method: string, params: Record<string, unknown>) => {
       if (method === 'session.resume') {
         const id = String(params.session_id)
-        return Promise.resolve({ ok: true, result: { session_id: `live-${id}`, stored_session_id: id, messages: resumes[id] ?? [] } })
+        return Promise.resolve({ ok: true, result: { session_id: `live-${id}${liveSuffix}`, stored_session_id: id, messages: resumes[id] ?? [] } })
       }
       if (method === 'prompt.btw') return new Promise(resolve => (heldBtw = () => resolve({ ok: true, result: {} })))
       return Promise.resolve({ ok: true, result: {} })
@@ -159,6 +162,26 @@ describe("a chat's own notes (issue 3394)", () => {
     await settle()
     expect(hook.result().transcript.items.map(item => item.kind)).toEqual(['user', 'assistant', 'output', 'output'])
     expect(words(hook.result().transcript)[3]).toContain('Ship on Friday.')
+  })
+
+  it('from a /btw whose answer comes under an earlier live session are drawn while its chat is on screen', async () => {
+    resumes.a = rows(1, 'one')
+    resumes.b = rows(1, 'other')
+    const hook = mount({ storedId: 'a' })
+    await settle()
+    await act(async () => {
+      const running = hook.result().command('/btw what did we decide?', [])
+      heldBtw?.()
+      await running
+    })
+    // Back in the chat under another live session (a reaped runtime, say) before the answer comes.
+    liveSuffix = '-2'
+    hook.rerender({ storedId: 'b' })
+    await settle()
+    hook.rerender({ storedId: 'a' })
+    await settle()
+    emit({ type: 'btw.complete', session_id: 'live-a', payload: { task_id: 'btw_2', text: 'Never.' } })
+    expect(words(hook.result().transcript).at(-1)).toContain('Never.')
   })
 })
 
