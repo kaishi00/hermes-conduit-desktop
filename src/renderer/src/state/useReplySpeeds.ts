@@ -63,7 +63,8 @@ export function useReplySpeeds(
   const [read, setRead] = useState<Read>({ scope, fresh: false })
   const scopeRef = useRef(scope)
   scopeRef.current = scope
-  // Bumped as each turn starts: a read asked before it answers for the turn before, so it can't mark this one's speed fresh.
+  // Bumped as each turn starts: a read asked before then answers for an earlier turn, so it's dropped, success or failure;
+  // the read as this turn ends brings its rows and its speed.
   const turnRef = useRef(0)
   // Another chat's read never shows here, not even for the render before the effects below run.
   const current = read.scope === scope ? read : { scope, fresh: false }
@@ -72,14 +73,15 @@ export function useReplySpeeds(
   const load = useCallback(async () => {
     const asked = scopeRef.current
     const turn = turnRef.current
+    const stillAsked = () => scopeRef.current === asked && turnRef.current === turn
     if (!sessionId) return
     try {
       const answer = parseReplySpeeds(await gateway.http('GET', replySpeedsPath(sessionId, profile)))
-      if (scopeRef.current === asked) setRead({ scope: asked, speeds: answer, fresh: turnRef.current === turn })
+      if (stillAsked()) setRead({ scope: asked, speeds: answer, fresh: true })
     } catch {
       // An older plugin (404), a chat Hermes has no row for yet, or a failed read: the saved rows' speeds
       // stay; the newest turn's, which may be an earlier turn's, goes, and the composer's chip stays dimmed.
-      if (scopeRef.current === asked) setRead(was => (was.scope === asked ? { ...dropUnsaved(was), fresh: false } : was))
+      if (stillAsked()) setRead(was => (was.scope === asked ? { ...dropUnsaved(was), fresh: false } : was))
     }
   }, [sessionId, profile])
 
