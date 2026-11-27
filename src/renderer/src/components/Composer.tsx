@@ -955,6 +955,7 @@ export function Composer({
               className={`chip chip-button reply-speed-chip${speed.stale ? ' stale' : ''}`}
               title={replySpeedSpoken(speed.rate)}
               aria-label={replySpeedSpoken(speed.rate)}
+              disabled={disabled}
               onClick={() => window.conduit.openChatSettings()}
             >
               <Icon name="bolt" />
