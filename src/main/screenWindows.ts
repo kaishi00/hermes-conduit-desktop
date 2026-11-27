@@ -8,11 +8,13 @@ import { join } from 'node:path'
 import type { ScreenWindowRequest } from '../shared/ipc'
 import { screenWindowHash } from '../shared/screenWindows'
 import { confineNavigation } from './navigation'
+import { keepWindowPlace, openingPlace } from './windowPlaces'
 
 export function createScreenWindow(screen: ScreenWindowRequest, onClosed: () => void): BrowserWindow {
+  // Where this kind of window was last, beside any already open.
+  const place = openingPlace('screen', { width: 1040, height: 720 }, { width: 480, height: 360 })
   const window = new BrowserWindow({
-    width: 1040,
-    height: 720,
+    ...place.bounds,
     minWidth: 480,
     minHeight: 360,
     show: false,
@@ -26,7 +28,8 @@ export function createScreenWindow(screen: ScreenWindowRequest, onClosed: () => 
       nodeIntegration: false
     }
   })
-  window.on('ready-to-show', () => window.show())
+  keepWindowPlace(window, 'screen', place)
+  window.on('ready-to-show', () => (place.maximized ? window.maximize() : window.show()))
   window.on('closed', onClosed)
   confineNavigation(window.webContents)
   const hash = screenWindowHash(screen).slice(1)

@@ -59,6 +59,7 @@ import { createChatWindow } from './chatWindows'
 import { dockedFrameHost } from '../shared/chatWindows'
 import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
+import { keepWindowPlace, openingPlace, saveWindowPlaces } from './windowPlaces'
 import { parseScreenKey, releaseScreen } from '../shared/screenWindows'
 import { ConduitTray } from './tray'
 import { DockPresence } from './dockPresence'
@@ -109,8 +110,18 @@ function showWindow(): void {
   const window = mainWindow
   if (!window) return
   if (window.isMinimized()) window.restore()
-  window.show()
+  reveal(window)
   window.focus()
+}
+
+/** The main window was maximized when Conduit last closed: it maximizes as it first shows (maximize() shows a hidden window). */
+let maximizeOnShow = false
+
+function reveal(window: BrowserWindow): void {
+  if (maximizeOnShow) {
+    maximizeOnShow = false
+    window.maximize()
+  } else window.show()
 }
 
 /** A Link invite opened from another app that the window hasn't taken yet. */
@@ -475,9 +486,11 @@ let startInTray: boolean | null = null
 
 function createWindow(): void {
   if (startInTray === null) startInTray = launchedAtLogin()
+  // Where it was last time (Eric, 2026-11-27), on a screen that's still there.
+  const place = openingPlace('main', { width: 1280, height: 820 }, { width: 760, height: 520 })
+  maximizeOnShow = place.maximized
   const window = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    ...place.bounds,
     minWidth: 760,
     minHeight: 520,
     show: false,
@@ -496,11 +509,12 @@ function createWindow(): void {
     }
   })
   mainWindow = window
+  keepWindowPlace(window, 'main', place)
   watchWindowFreezes(window)
   watchDockedChats(window)
   // The sign-in's start stays in the tray (issue 442): the window is made, and shows when asked for.
   window.on('ready-to-show', () => {
-    if (!startInTray) window.show()
+    if (!startInTray) reveal(window)
     startInTray = false
     // Hide from the Dock takes over once the window has shown, or stayed in the tray, so a launch doesn't flicker the icon.
     dockPresence?.setEnabled(hideDockWhenClosed())
@@ -1165,6 +1179,7 @@ if (!app.requestSingleInstanceLock()) {
   else app.setAsDefaultProtocolClient(LINK_SCHEME)
   app.on('before-quit', () => {
     quitting = true
+    saveWindowPlaces()
     quickAsk.destroy()
   })
   app.on('will-quit', () => globalShortcut.unregisterAll())
