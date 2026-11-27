@@ -194,6 +194,10 @@ describe('text tags in a reply', () => {
     expect(draw('<details><summary>S</summary>Wrap it in `</details>` to close.\nMore.\n</details>')).toContain('<details class="reply-fold"><summary>S</summary>')
   })
 
+  it('never joins the text either side of a code span into a close (hermes-conduit#3379)', () => {
+    expect(draw('<details><summary>S</summary>Use </det`x`ails> as text.\nMore.\n</details>')).toContain('<details class="reply-fold"><summary>S</summary>')
+  })
+
   it('folds a one-line fold while its </details> is still being written', () => {
     expect(draw('<details><summary>S</summary>Body so far')).toBe('<details class="reply-fold"><summary>S</summary><p>Body so far</p></details>')
     expect(draw('<details><summary>S</summary>Click <b>here</b>')).toContain('<details class="reply-fold"><summary>S</summary>')
