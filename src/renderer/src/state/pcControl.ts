@@ -127,7 +127,15 @@ export function usePcControlState(): PcControlState | null {
 const askSide = (profile: string, computer: string): AskSide => ({
   local: request => window.conduit.pcControl.ask(request),
   close: session => window.conduit.pcControl.closeAsk(session),
-  read: async request => askAnswer(await gateway.http('GET', pcPath('/ask', profile, { computer, id: request.ask ?? '' }), undefined, 10_000)),
+  read: async request => {
+    try {
+      return askAnswer(await gateway.http('GET', pcPath('/ask', profile, { computer, id: request.ask ?? '' }), undefined, 10_000))
+    } catch (error) {
+      // A plugin without the route: the dialog alone decides, with no more reads.
+      if ((error as { code?: unknown })?.code === 404) return 'gone'
+      throw error
+    }
+  },
   settle: async (request, answer) => askAnswer(await gateway.http('POST', pcPath('/ask', profile), { computer, id: request.ask, answer }, 10_000)),
   wait: ms => new Promise(resolve => setTimeout(resolve, ms))
 })

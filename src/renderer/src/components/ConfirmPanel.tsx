@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
-import { MAX_EDIT_TEXT, askerLine, canConfirm, declineLabel, insteadLabel, insteadPlaceholder, isAsk, type ConfirmOutcome } from '../state/presented'
+import { MAX_EDIT_TEXT, askerLine, canConfirm, declineLabel, insteadLabel, insteadPlaceholder, isAsk, isComputerAsk, type ConfirmOutcome } from '../state/presented'
 import type { WaitingConfirm } from '../state/usePresented'
 import { Icon } from './icons'
 import { Reply } from './Transcript'
@@ -28,6 +28,8 @@ export function ConfirmPanel({
   const [instead, setInstead] = useState<string | null>(null)
   const field = useRef<HTMLTextAreaElement>(null)
   const ask = isAsk(prompt)
+  // Another computer's ask (Control from Hermes): Allow or Don’t Allow, nothing to rework.
+  const computer = isComputerAsk(prompt)
 
   useEffect(() => {
     setInstead(null)
@@ -39,7 +41,7 @@ export function ConfirmPanel({
   return (
     <section className="confirm-panel" role="alertdialog" aria-label={`${askerLine(prompt)}. ${prompt.title}`}>
       <div className="confirm-asker">
-        <Icon name={prompt.link ? 'link' : prompt.room ? 'linked' : 'check'} />
+        <Icon name={computer ? 'screen' : prompt.link ? 'link' : prompt.room ? 'linked' : 'check'} />
         <span>{askerLine(prompt)}</span>
         {more ? <span className="confirm-more">{t('{count} more', { count: more })}</span> : null}
       </div>
@@ -83,7 +85,7 @@ export function ConfirmPanel({
             <button className="secondary" onClick={() => setInstead('')}>
               {insteadLabel(prompt)}
             </button>
-          ) : onEdit ? (
+          ) : onEdit && !computer ? (
             <button className="secondary" onClick={onEdit}>
               {t('Edit')}
             </button>
