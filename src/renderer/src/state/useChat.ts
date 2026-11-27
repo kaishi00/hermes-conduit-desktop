@@ -476,6 +476,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const gapPending = useRef(false)
   const chatRef = useRef(chat)
   chatRef.current = chat
+  /** The new chat last opened (profile, host, connection), so a folder change alone keeps its picks. */
+  const openedDraft = useRef<string | null>(null)
   /** True only for a connected, unsaved new chat (never while an existing chat is still resuming). */
   const isDraft = useCallback(() => connected && !liveId.current && !chatRef.current.storedId, [connected])
   const pickDraft = useCallback((patch: Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>) => {
@@ -511,10 +513,15 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       return () => keepTranscript(storedId, profile, transcriptRef.current, host, olderNow.current)
     }
     created.current = null
+    // A new chat whose folder alone changed (its Project chip, desktop#605) is the same draft: its model,
+    // reasoning, speed and approval picks stay with it.
+    const draftKey = storedId ? null : `${botChat}\n${profile ?? ''}\n${host}\n${connected}\n${sessionAuthority}`
+    const sameDraft = draftKey !== null && openedDraft.current === draftKey
+    openedDraft.current = draftKey
     const ticket = ++request.current
     liveId.current = null
     openingChat.current = null
-    draftOverrides.current = {}
+    if (!sameDraft) draftOverrides.current = {}
     drawnTip.current = null
     followedLive.current = false
     reloadedAt.current = 0
@@ -531,7 +538,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     wanted.current = null
     olderLoading.current = null
     setLoadingOlder(false)
-    setChat(storedId || !folder ? { storedId, liveId: null } : { storedId, liveId: null, cwd: folder })
+    setChat({ storedId, liveId: null, ...(!storedId && folder ? { cwd: folder } : {}), ...(sameDraft ? draftOverrides.current : {}) })
     setError(null)
     if (!storedId) {
       drawn.current = null

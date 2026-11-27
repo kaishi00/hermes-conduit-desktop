@@ -54,10 +54,10 @@ afterEach(() => {
 })
 
 const words = (state: { items: { kind: string; text?: string }[] }) => state.items.map(i => i.text ?? i.kind)
-type Props = { storedId: string | null; connected: boolean; url?: string; profile?: string; sessionAuthority?: boolean }
+type Props = { storedId: string | null; connected: boolean; url?: string; profile?: string; sessionAuthority?: boolean; folder?: string }
 // As App calls it: each dashboard keeps its own transcripts (desktop#233).
-const chatInApp = ({ storedId, connected, url, profile, sessionAuthority }: Props) => {
-  const chat = useChat(storedId, profile, sessionAuthority ?? false, connected, false, undefined, url)
+const chatInApp = ({ storedId, connected, url, profile, sessionAuthority, folder }: Props) => {
+  const chat = useChat(storedId, profile, sessionAuthority ?? false, connected, false, folder, url)
   return { ...chat, transcript: useTranscript(chat.transcriptStore) }
 }
 const mount: typeof renderHook = (hook, props) => {
@@ -790,6 +790,30 @@ describe("model and run settings before a new chat's first message", () => {
     expect(createCall?.params.model).toBeUndefined()
     expect(createCall?.params.provider).toBeUndefined()
     expect(createCall?.params.yolo).toBeUndefined()
+  })
+
+  it('keeps a new chat’s picks when only its folder changes (Project chip, desktop#605)', async () => {
+    const sentRpc: { method: string; params: Record<string, unknown> }[] = []
+    const conduit = (window as unknown as { conduit: { rpcOutcome: (m: string, p: Record<string, unknown>) => Promise<unknown> } }).conduit
+    const baseRpc = conduit.rpcOutcome
+    conduit.rpcOutcome = (method, params) => {
+      sentRpc.push({ method, params })
+      return baseRpc(method, params)
+    }
+
+    const hook = mount(chatInApp, { storedId: null, connected: true, url: 'h1', profile: 'work' })
+    await act(async () => {
+      await hook.result().setModel('claude-opus-4-6', 'anthropic')
+      await hook.result().setYolo(true)
+    })
+    hook.rerender({ storedId: null, connected: true, url: 'h1', profile: 'work', folder: '/srv/site' })
+    expect(hook.result().chat).toMatchObject({ model: 'claude-opus-4-6', yolo: true, cwd: '/srv/site' })
+    await act(async () => {
+      await hook.result().send('hello')
+    })
+
+    const createCall = sentRpc.find(c => c.method === 'session.create')
+    expect(createCall?.params).toMatchObject({ model: 'claude-opus-4-6', provider: 'anthropic', cwd: '/srv/site' })
   })
 
   it('does not treat a stored chat still resuming as a draft in setModel', async () => {

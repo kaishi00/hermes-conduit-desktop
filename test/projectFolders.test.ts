@@ -57,3 +57,10 @@ describe('a new chat’s project (desktop#605)', () => {
     expect(folderStart(undefined, null)).toBe('')
   })
 })
+
+describe('a new chat’s project, spelled otherwise (desktop#652 review)', () => {
+  it('names the project whatever the folder’s case', () => {
+    const list = [{ id: 'Site', title: 'Site', path: 'C:\\Dev\\Site', isHome: false, isAuto: false, count: 0, previews: [] }]
+    expect(projectFor('c:\\dev\\site', list)?.id).toBe('Site')
+  })
+})

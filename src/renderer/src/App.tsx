@@ -1473,6 +1473,13 @@ function Shell({
   const newChatProjectList = newChatTree?.key === newChatTreeKey ? newChatTree.list : null
   const projectMenu = useHeaderMenu()
   const [newProjectOpen, setNewProjectOpen] = useState(false)
+  // A chat opened meanwhile (a notification, Quick Ask) takes the sheet and the menu away; the next new chat doesn't bring them back.
+  useEffect(() => {
+    if (pickingProject) return
+    setNewProjectOpen(false)
+    projectMenu.setOpen(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setOpen is a state setter
+  }, [pickingProject])
   const startIn = useCallback((folder: string | undefined) => setSelected(current => (current.id ? current : { ...current, folder })), [])
   const shownProject = projectFor(selected.folder, newChatProjectList)
   const projectChip = pickingProject
