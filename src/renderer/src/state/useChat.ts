@@ -77,6 +77,7 @@ type Action =
   | { type: 'pending'; text: string; attachments?: Attachment[]; key?: string }
   /** The queue took a send behind the running turn, or a dock action settled one. */
   | { type: 'held'; key: string; admission: string }
+  | { type: 'liveIdle' }
   | { type: 'released' | 'dropped' | 'started'; admission: string }
   | { type: 'edited'; admission: string; edited: string; text: string }
   | { type: 'failed'; error: string }
@@ -260,8 +261,13 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
       // Only Send now releases a message this way: it steers the running turn.
       return releaseHeld(state, action.admission, true)
     case 'started':
-      // The gateway's queue no longer lists it (liveWork.ts): its turn started there.
-      return releaseHeld(state, action.admission)
+      // A live-work read names its turn as running there (liveWork.ts); the unnamed start still to come is its own.
+      return state.held?.some(h => h.admission === action.admission)
+        ? { ...releaseHeld(state, action.admission), readStarted: [...(state.readStarted ?? []).slice(-7), action.admission] }
+        : state
+    case 'liveIdle':
+      // No turn runs there: no unnamed start is still to come.
+      return state.readStarted ? { ...state, readStarted: undefined } : state
     case 'dropped':
       return dropHeld(state, action.admission)
     case 'edited':
@@ -656,7 +662,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         drawnTip.current = tipOf(rows ?? result.messages)
         // A turn still running is followed from here, and stores its rows as it goes.
         followedLive.current = result.running === true
-        setQueue(queueFrom(result.pending) ?? [])
+        // `hermes dashboard` sends no `pending`: the gateway's queue the live-work read gave stays (liveWork.ts).
+        setQueue(kept => queueFrom(result.pending) ?? kept.filter(row => row.readOnly))
         if (!rows) {
           const key = result.stored_session_id ?? storedId
           void loadBoards(state, key, profile, () => ticket === request.current, dispatch, skippedIds(key), ids => rememberRead(key, ids))
@@ -842,7 +849,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       if (result.running === true) gapPending.current = true
       drawnTip.current = tipOf(rows ?? result.messages)
       followedLive.current = result.running === true
-      setQueue(queueFrom(result.pending) ?? [])
+      // `hermes dashboard` sends no `pending`: the gateway's queue the live-work read gave stays (liveWork.ts).
+      setQueue(kept => queueFrom(result.pending) ?? kept.filter(row => row.readOnly))
       if (!rows) {
         const key = result.stored_session_id ?? stored
         void loadBoards(state, key, profile, () => ticket === request.current, dispatch, skippedIds(key), ids => rememberRead(key, ids))
@@ -1706,6 +1714,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       }
       // Holds the read could know of are settled now (released, dropped, or started by an unnamed message.start).
       for (const admission of [...heldAt.current.keys()]) if (!newer(admission) && !waiting.has(admission)) heldAt.current.delete(admission)
+      if (!work.running) dispatch({ type: 'liveIdle' })
       if (((was.running && !work.running) || settled) && !transcriptRef.current.running) void reloadHistory(true)
     },
     [sessionAuthority, transcriptRef, reloadHistory]

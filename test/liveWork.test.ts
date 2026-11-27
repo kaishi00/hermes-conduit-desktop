@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addPendingUser, applyEvent, emptyTranscript, holdSent } from '../src/renderer/src/state/transcript'
+import { addPendingUser, applyEvent, emptyTranscript, holdSent, releaseHeld } from '../src/renderer/src/state/transcript'
 import { forwardedRow, liveWorkActive, liveWorkPath, noLiveWork, parseLiveWork } from '../src/renderer/src/state/liveWork'
 
 describe('a chat’s turn running in the gateway, on hermes dashboard', () => {
@@ -49,5 +49,15 @@ describe('a chat’s turn running in the gateway, on hermes dashboard', () => {
     state = applyEvent(state, { type: 'message.start', payload: {} })
     expect(state.items).toMatchObject([{ kind: 'user', text: 'first' }])
     expect(state.held?.map(h => h.admission)).toEqual(['adm-2'])
+  })
+
+  it("leaves the next held one waiting when a read already started the turn an unnamed start is for", () => {
+    let state = holdSent(addPendingUser({ ...emptyTranscript }, 'first', [], 'u-1'), 'u-1', 'adm-1')
+    state = holdSent(addPendingUser(state, 'second', [], 'u-2'), 'u-2', 'adm-2')
+    // useChat's 'started' (a read names adm-1's turn): released, its start still to come.
+    state = { ...releaseHeld(state, 'adm-1'), readStarted: ['adm-1'] }
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    expect(state.held?.map(h => h.admission)).toEqual(['adm-2'])
+    expect(state.readStarted).toEqual([])
   })
 })

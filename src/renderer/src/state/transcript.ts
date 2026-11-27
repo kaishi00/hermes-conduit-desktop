@@ -365,6 +365,11 @@ export interface TranscriptState {
    */
   held?: { admission: string; item: UserItem }[]
   /**
+   * Forwarded sends a live-work read saw start before their unnamed `message.start` came (useChat's applyLiveWork):
+   * that start is theirs, never the next held one's.
+   */
+  readStarted?: string[]
+  /**
    * Where the running turn's rows begin, from its `message.start`. A turn
    * with no row of the user's (a hidden one) has nothing else to say which
    * replies are its own.
@@ -634,6 +639,7 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       if (admission) return releaseHeld(started, admission)
       // `hermes dashboard` relays a forwarded message's own turn without naming it: the oldest held one
       // (liveWork.ts). The Webapp names every turn's admission, so this never guesses there.
+      if (state.readStarted?.length) return { ...started, readStarted: state.readStarted.slice(1) }
       const oldest = state.held?.[0]?.admission
       return oldest ? releaseHeld(started, oldest) : started
     }
