@@ -192,6 +192,8 @@ interface Props {
   otherBots?: OtherBot[];
   /** Saved Dashboards' order, by address: the mixed grid's until it's arranged. */
   savedHosts?: string[];
+  /** The combined dashboards kept live beside this one: a category rename or delete re-files their hidden bots too. */
+  keptHostUrls?: string[];
   /** The mixed grid's order (botOrder.ts mixedBotKey), kept on this computer. */
   mixedOrder?: string[];
   /** A mixed grid's portrait dropped on another's place (null: at the end), by their keys. */
@@ -324,6 +326,7 @@ export function BotsHome({
   onOpenOther,
   hostUrl,
   savedHosts = [],
+  keptHostUrls = [],
   mixedOrder = [],
   onMoveMixed,
   onMoveBot,
@@ -658,8 +661,12 @@ export function BotsHome({
   /** Every bot a rename or delete re-files: the shown ones and every host's hidden ones, so none keeps the old name. */
   const fileable: MixedTile[] = [
     ...tiles,
-    ...(hidden ?? []).map((bot) => ({ key: bot.name, host: hostUrl ?? "", bot, own: true })),
-    ...(mixed ? [...new Set(otherBots.map((o) => o.host))].flatMap(keptHiddenBots).map((o) => ({ key: `${o.host}\u0000${o.bot.name}`, host: o.host, bot: o.bot, own: false })) : []),
+    ...(hidden ?? []).map((bot) => ({ key: mixed ? mixedBotKey(hostUrl!, bot.name) : bot.name, host: hostUrl ?? "", bot, own: true })),
+    // Every live combined host, not just those with a shown bot, so a host whose bots are all hidden is re-filed too.
+    ...[...new Set([...keptHostUrls, ...otherBots.map((o) => o.host)])]
+      .filter((url) => url !== hostUrl)
+      .flatMap(keptHiddenBots)
+      .map((o) => ({ key: mixedBotKey(o.host, o.bot.name), host: o.host, bot: o.bot, own: false })),
   ];
   const newCategory = async (tile: MixedTile) => {
     setMenu(null);
@@ -676,7 +683,7 @@ export function BotsHome({
   };
   const deleteCategory = async (name: string) => {
     setHeadingMenu(null);
-    if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots move to Other.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
+    if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots move to Other, and its group chats back to Group chats.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
     categories?.refileRooms?.(name, null);
     fileTiles(fileable.filter((tile) => sameCategory(tile.bot.category?.name, name)), null);
   };

@@ -55,6 +55,8 @@ describe('bot categories', () => {
     expect(movingCategory([], 'Home', -1, shown)).toEqual([])
     expect(renamingCategory(shown, 'business', 'Work')).toEqual(['Home', 'Work', 'Clients'])
     expect(renamingCategory(['Business', 'Home'], 'Personal', 'business')).toEqual(['Business', 'Home'])
+    // Both ordered: the merged heading takes the renamed one's place, and the target's own place goes.
+    expect(renamingCategory(shown, 'Home', 'clients')).toEqual(['clients', 'Business'])
   })
 
   it("writes Edit Bot's Category only when it changed, keeping a host's id", () => {
