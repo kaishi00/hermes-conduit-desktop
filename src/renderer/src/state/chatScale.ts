@@ -75,13 +75,30 @@ export function rescaledTop(top: number, from: number | undefined, to: number): 
  */
 const owed = new Map<HTMLElement, number>()
 let shown: ResizeObserver | undefined
+/**
+ * Whether each scroller was at its end when last seen: once shown again its
+ * rows are already drawn at the new size, so its old scrollTop no longer
+ * reads as the end (#649's review).
+ */
+const endWhenSeen = new WeakMap<HTMLElement, boolean>()
+
+/** Notes where a scroller on show is, for when it hides. */
+export function noteSeen(el: HTMLElement): void {
+  if (el.clientHeight > 0) endWhenSeen.set(el, atEnd(el))
+}
 
 /** Puts a scroller that shows again where its missed size changes take it. */
 export function settleOwed(el: HTMLElement): void {
   const ratio = owed.get(el)
-  if (ratio === undefined || el.clientHeight === 0) return
+  if (ratio === undefined || el.clientHeight === 0) {
+    noteSeen(el)
+    return
+  }
   owed.delete(el)
-  if (!atEnd(el)) el.scrollTop = el.scrollTop * ratio
+  // A reader at the end stays there, following the chat.
+  if (endWhenSeen.get(el) ?? atEnd(el)) el.scrollTop = el.scrollHeight
+  else el.scrollTop = el.scrollTop * ratio
+  noteSeen(el)
 }
 
 /** Keeps a transcript's scroller on its rows as the text size changes; call the answer when it goes away. */
@@ -91,10 +108,14 @@ export function keepPlaceOnScale(el: HTMLElement): () => void {
     shown ??= new ResizeObserver(entries => entries.forEach(entry => settleOwed(entry.target as HTMLElement)))
     shown.observe(el)
   }
+  const seen = () => noteSeen(el)
+  el.addEventListener('scroll', seen, { passive: true })
+  noteSeen(el)
   return () => {
     scrollers.delete(el)
     owed.delete(el)
     shown?.unobserve(el)
+    el.removeEventListener('scroll', seen)
   }
 }
 

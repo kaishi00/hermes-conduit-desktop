@@ -33,13 +33,32 @@ describe('a text size change a hidden or parked chat missed (#641)', () => {
     off()
   })
 
-  it('leaves a covered pane at its end to follow the chat', () => {
-    const { el, size } = scroller(0, 4000, 3500)
+  it('keeps a covered pane that was at its end at its end', () => {
+    // Seen at the end, then covered.
+    const { el, size } = scroller(500, 4000, 3500)
     const off = keepPlaceOnScale(el)
-    drawChatScale(1.25)
-    size.view = 500
+    size.view = 0
     settleOwed(el)
-    expect(size.top).toBe(3500)
+    drawChatScale(1.25)
+    // Shown again: its rows are already drawn bigger, its scrollTop the old end (#649's review).
+    size.view = 500
+    size.height = 5000
+    settleOwed(el)
+    expect(size.top).toBe(5000)
+    off()
+  })
+
+  it('reads where a pane was from its last scroll on show', () => {
+    const { el, size } = scroller(500, 4000, 3500)
+    const off = keepPlaceOnScale(el)
+    size.top = 1000
+    el.dispatchEvent(new Event('scroll'))
+    size.view = 0
+    drawChatScale(2)
+    size.view = 500
+    size.height = 8000
+    settleOwed(el)
+    expect(size.top).toBe(2000)
     off()
   })
 

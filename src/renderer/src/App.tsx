@@ -1184,7 +1184,9 @@ function Shell({
   }
   /** Open in New Tab, from a row's menu or a middle or ⌘/Ctrl click on it: the chat in a tab of its own beside the shown one. */
   const openRowInTab = (row: ChatRow) => {
-    if (chatWindowIds.includes(row.id)) {
+    // An ask waiting for this chat opens it in a tab, which can take it, as selectRow does (#621, #649's review).
+    const waits = pendingAsks.current.some(a => sameAsk(a, row.id, row.profile))
+    if (chatWindowIds.includes(row.id) && !waits) {
       void window.conduit.openChatWindow({ id: row.id, profile: row.profile, title: row.title })
       return
     }
