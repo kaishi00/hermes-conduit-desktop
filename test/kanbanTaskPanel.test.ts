@@ -54,4 +54,47 @@ describe("a Kanban task's attachments", () => {
     expect(saves).toEqual([])
     act(() => root.unmount())
   })
+
+  it('keeps the task on screen and says so when a read again fails, until one succeeds', async () => {
+    Object.assign(window, { conduit: {} })
+    const path = '../src/renderer/src/components/KanbanBoard.tsx'
+    const { TaskPanel } = (await import(/* @vite-ignore */ path)) as { TaskPanel: (p: Record<string, unknown>) => null }
+    const host = document.createElement('div')
+    const root = createRoot(host)
+    let fail = false
+    const props = (revision: number) => ({
+      id: 't1',
+      task: null,
+      assignees: [],
+      botTitle: (name?: string) => name ?? '',
+      load: async () => {
+        if (fail) throw new Error('offline')
+        return detail
+      },
+      board: null,
+      pinned: true,
+      touched: { revision, ids: new Set(['t1']) },
+      onClose: () => {},
+      onPatch: async () => {},
+      onComment: async () => {},
+      onDelete: async () => {}
+    })
+    act(() => root.render(createElement(TaskPanel, props(0))))
+    await settle()
+    expect(host.textContent).toContain('Write the report')
+    expect(host.querySelector('.error-text')).toBeNull()
+
+    fail = true
+    act(() => root.render(createElement(TaskPanel, props(1))))
+    await settle()
+    expect(host.textContent).toContain('Write the report')
+    expect(host.querySelector('.error-text')?.textContent).toBe('Couldn’t load this task: offline')
+
+    fail = false
+    act(() => root.render(createElement(TaskPanel, props(2))))
+    await settle()
+    expect(host.textContent).toContain('Write the report')
+    expect(host.querySelector('.error-text')).toBeNull()
+    act(() => root.unmount())
+  })
 })
