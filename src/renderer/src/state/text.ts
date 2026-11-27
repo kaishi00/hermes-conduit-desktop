@@ -46,6 +46,59 @@ export function plainReferences(text: string, short = false): string {
   })
 }
 
+/**
+ * A chat's summary after a compaction, written for the model, never anybody's
+ * message (the phone's MessageNormalizer.visibleContentRemovingCompaction).
+ *
+ * Hermes' own handoff opens with `[CONTEXT COMPACTION` or `[CONTEXT SUMMARY]:`,
+ * or carries the `_compressed_summary` flag. When no role alternates, its
+ * compaction folds the summary into the first row it keeps, a user row or a
+ * reply (agent/context_compressor.py `_merge_summary_into_tail_row`): the
+ * row's own words between `[PRIOR CONTEXT …]` and `[END OF PRIOR CONTEXT …]`
+ * with the summary after, or the summary, an end marker and the row's words.
+ * Hermes' projection doesn't unwrap a reply's, so Nahida's chat drew one in
+ * full (2026-11-27).
+ *
+ * A context engine can write the summary in Hermes' place: LCM-X stores its
+ * frontier as a user row of parts headed `[Session Arc Summary (d1, node 22)]`
+ * (Recent, Session Arc, Durable or Depth-N; its engine.py
+ * `_LCM_SUMMARY_PART_HEADER_RE`), with no flag or display kind, and a
+ * compaction carries it forward as a fresh row. A row it merged with keeps its
+ * own copy, so the whole carrier is nobody's message.
+ */
+const CONTEXT_ENGINE_SUMMARY = /^\[(?:recent|session arc|durable|depth-\d+) summary \(d\d+, node \d+\)\]/i
+const HERMES_SUMMARY = /^\[(?:context compaction|context summary\]:)/i
+export const PRIOR_CONTEXT_HEADER = '[PRIOR CONTEXT \u2014 for reference only; not a new message]'
+const SUMMARY_DELIMITER = '[END OF PRIOR CONTEXT \u2014 COMPACTION SUMMARY BELOW]'
+const SUMMARY_END_MARKER = '--- END OF CONTEXT SUMMARY \u2014 respond to the message below, not the summary above ---'
+
+export function isContextEngineSummary(raw: string): boolean {
+  return CONTEXT_ENGINE_SUMMARY.test(raw.slice(0, 200).trimStart())
+}
+
+/** Whether the text opens as a summary does; only its head is read. */
+function opensAsSummary(raw: string): boolean {
+  const head = raw.slice(0, 200).trimStart()
+  return CONTEXT_ENGINE_SUMMARY.test(head) || HERMES_SUMMARY.test(head)
+}
+
+/** A user row's or a reply's text without a compaction's summary; null when nothing of its own is left. */
+export function withoutCompaction(raw: string, flagged = false): string | null {
+  const delimiter = raw.indexOf(SUMMARY_DELIMITER)
+  if (delimiter >= 0 && !opensAsSummary(raw)) {
+    let own = raw.slice(0, delimiter).trim()
+    if (own.startsWith(PRIOR_CONTEXT_HEADER)) own = own.slice(PRIOR_CONTEXT_HEADER.length).trim()
+    return own && !opensAsSummary(own) ? own : null
+  }
+  if (isContextEngineSummary(raw)) return null
+  if (HERMES_SUMMARY.test(raw.slice(0, 200).trimStart())) {
+    const end = raw.indexOf(SUMMARY_END_MARKER)
+    const own = end >= 0 ? raw.slice(end + SUMMARY_END_MARKER.length).trim() : ''
+    return own || null
+  }
+  return flagged ? null : raw
+}
+
 /** Hermes' fence around recalled memory (agent/memory_context.py), to the end when its closing tag was cut off. */
 const MEMORY_CONTEXT = /<\s*memory-context\s*>[\s\S]*?(?:<\s*\/\s*memory-context\s*>|$)/gi
 
@@ -69,9 +122,16 @@ export function removeTurnContext(text: string): string {
   lines.forEach((line, index) => {
     if (PICTURE_LINE.test(line.trim())) last = index
   })
-  if (last >= 0) lines = lines.slice(0, last + 1).filter(line => !PICTURE_LINE.test(line.trim()))
-  const visible = lines.join('\n').replace(MEMORY_CONTEXT, '')
-  return visible === text ? text : visible.trim()
+  if (last >= 0) lines = lines.slice(0, last + 1)
+  const pictures = lines.filter(line => PICTURE_LINE.test(line.trim()))
+  const visible = lines
+    .filter(line => !PICTURE_LINE.test(line.trim()))
+    .join('\n')
+    .replace(MEMORY_CONTEXT, '')
+    .trim()
+  // A picture sent with no words keeps its stand-in, so the turn still draws.
+  if (!visible && pictures.length) return pictures.map(line => line.trim()).join('\n')
+  return visible
 }
 
 /** Cuts the expanded context Hermes stores after a message that named `@file:` and the like. */
@@ -190,7 +250,11 @@ const FOLDED_REFERENCE = /^@(file|url|folder|image):(?:`([^`\r\n]*)(?:`|$)|"([^"
 
 /** One line for the chat list: the words, else the first attachment's name. */
 export function previewText(raw: string): string {
-  const cleaned = stripStored(raw)
+  // A compaction's summary is nobody's last line; a preview can be cut off before its delimiter.
+  let own = withoutCompaction(raw)
+  if (own === null) return ''
+  if (own.trimStart().startsWith(PRIOR_CONTEXT_HEADER)) own = own.trimStart().slice(PRIOR_CONTEXT_HEADER.length)
+  const cleaned = stripStored(own)
   const pictures = splitImageReferences(cleaned.text)
   const attachments = [...cleaned.attachments, ...pictures.images]
   let text = pictures.text

@@ -14,6 +14,17 @@ describe('cleanUserText', () => {
     expect(cleanUserText(stored).text).toBe('new reference sheet for conduit chan. also did i give you the one for nori chan?')
     expect(cleanUserText('Before\n<memory-context>\nrecalled, cut off').text).toBe('Before')
     expect(cleanUserText('[screenshot] is what Hermes writes').text).toBe('[screenshot] is what Hermes writes')
+    // A picture sent with no words still draws its turn.
+    expect(cleanUserText('[screenshot]\n<memory-context>\nrecalled\n</memory-context>').text).toBe('[screenshot]')
+  })
+
+  it("previews a chat's last row without a compaction's summary", () => {
+    const prior = '[PRIOR CONTEXT \u2014 for reference only; not a new message]'
+    const delimiter = '[END OF PRIOR CONTEXT \u2014 COMPACTION SUMMARY BELOW]'
+    expect(previewText(`${prior}\nWiring all three now.\n\n${delimiter}\n\n[CONTEXT COMPACTION] Earlier.`)).toBe('Wiring all three now.')
+    expect(previewText(`${prior}\nWiring all three now. And then`)).toBe('Wiring all three now. And then')
+    expect(previewText('[CONTEXT COMPACTION \u2014 REFERENCE ONLY] Earlier turns were compacted.')).toBe('')
+    expect(previewText('new sheet\n\n[screenshot]\n<memory-context>\nrecalled')).toBe('new sheet')
   })
 
   it('keeps a picture Hermes 0.23 noted below the attached context', () => {
