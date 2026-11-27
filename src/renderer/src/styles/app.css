@@ -2811,6 +2811,8 @@ html[data-window='quick'] body {
   background: none;
   cursor: zoom-in;
   display: block;
+  /* Never wider than the column it's in, however wide the picture (a Markdown image in a reply, Eric 2026-11-27). */
+  max-width: 100%;
   border-radius: 14px;
   overflow: hidden;
 }

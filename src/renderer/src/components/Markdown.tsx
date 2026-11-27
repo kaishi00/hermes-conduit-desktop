@@ -8,6 +8,7 @@ import { remarkDesktopCards } from '../state/desktopCards'
 import { remarkHtmlTags, withFoldsApart } from '../state/htmlInReplies'
 import { markdownBlocks } from '../state/markdownBlocks'
 import { DesktopCard } from './DesktopCard'
+import { PictureImage } from './Picture'
 import { Icon } from './icons'
 import { SESSION_LINK, sessionInLink } from '../state/workLinks'
 import { WorkLinks } from './WorkLinkCard'
@@ -188,6 +189,9 @@ const components: Components = {
     ),
   pre: ({ children }) => <Pre>{children}</Pre>,
   code: ({ className, children }) => <Code className={className}>{children}</Code>,
+  // A Markdown picture draws as a reply's picture: never wider than its column, a click opens it larger.
+  img: ({ src, alt }) =>
+    typeof src === 'string' && src ? <PictureImage src={src} name={alt || t('Image')} className="reply-picture" /> : alt ? <>{alt}</> : null,
   // A directive only Hermes Desktop draws: its card (remarkDesktopCards).
   ...({
     'desktop-card': ({ node }: { node?: { properties?: Record<string, unknown> } }) => {
