@@ -65,6 +65,13 @@ const paths = {
       <path d="M18 3v6M15 6h6" />
     </>
   ),
+  /** Back to the main window: a window with an arrow into it (a chat window's Open in Main Window when narrow). */
+  mainWindow: (
+    <>
+      <path d="M11 5H5.5A1.5 1.5 0 004 6.5v11A1.5 1.5 0 005.5 19h13a1.5 1.5 0 001.5-1.5V13M4 9h7" />
+      <path d="M20 4l-6 6M14 6v4h4" />
+    </>
+  ),
   back: <path d="M15 5l-7 7 7 7" />,
   phone: <path d="M6.5 4h3l1.5 4-2 1.5a11 11 0 005.5 5.5L16 13l4 1.5v3a2 2 0 01-2 2A15 15 0 014.5 6a2 2 0 012-2z" />,
   phoneDown: <path d="M3 13.5c5-4.5 13-4.5 18 0l-2 3-3.5-1.2v-2.6a10 10 0 00-7 0v2.6L5 16.5z" />,
