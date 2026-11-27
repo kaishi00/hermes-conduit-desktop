@@ -1,14 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
+import { gateway } from '../gateway'
+import type { Bot } from '../state/bots'
 import { chatTasksLabel, isBlockedTask, isOpenTask, type ChatTask } from '../state/chatTasks'
-import { columnTitle } from '../state/kanban'
+import { boardPath, columnTitle, parseTaskDetail } from '../state/kanban'
+import { TaskPanel } from './KanbanBoard'
 import { Icon } from './icons'
+import { everyWhileVisible } from '../state/visibility'
+
+/** The open panel reads its task again this often while the window shows. */
+export const CHAT_TASK_PANEL_READ_MS = 15_000
 
 interface Props {
   tasks: ChatTask[]
   chatKey: string
   /** Opens the task in Tasks > Board; left out where the window has no Tasks (a chat in a window of its own). */
   onOpen?: (task: ChatTask) => void
+  /** The dashboard's profiles, for the task's Assigned to and its names. */
+  bots?: Bot[] | null
+  /** A task changed or went from the panel: the line reads the chat's tasks again. */
+  onChanged?: () => void
 }
 
 /**
@@ -18,21 +29,34 @@ interface Props {
  * its lane, who has it, its board and, while it's blocked, why. Red while
  * one is blocked; "Kanban tasks finished" once none is open, until the chat
  * changes or the × hides it.
+ *
+ * A row opens its task in a panel over the chat, on its own board, so it can
+ * be read and acted on without leaving the conversation; the panel's Open in
+ * Tasks goes on to the full board (desktop#593).
  */
-export function ChatTasksDock({ tasks, chatKey, onOpen }: Props) {
+export function ChatTasksDock({ tasks, chatKey, onOpen, bots, onChanged }: Props) {
   const [open, setOpen] = useState(false)
   const [hidden, setHidden] = useState(false)
+  const [shownKey, setShownKey] = useState<string | null>(null)
   const going = tasks.filter(isOpenTask).length
   const blocked = tasks.some(isBlockedTask)
 
   useEffect(() => {
     setOpen(false)
     setHidden(false)
+    setShownKey(null)
   }, [chatKey])
   // A task that opens again (or a new one) shows the line again.
   useEffect(() => {
     if (going) setHidden(false)
   }, [going])
+
+  const keyOf = (task: ChatTask) => `${task.board}\n${task.id}`
+  const shownTask = shownKey ? (tasks.find(task => keyOf(task) === shownKey) ?? null) : null
+  // A task the chat no longer lists (another chat, or deleted) closes its panel.
+  useEffect(() => {
+    if (shownKey && !shownTask) setShownKey(null)
+  }, [shownKey, shownTask])
 
   if (!tasks.length || hidden) return null
   const boards = new Set(tasks.map(task => task.board))
@@ -43,21 +67,19 @@ export function ChatTasksDock({ tasks, chatKey, onOpen }: Props) {
         <ul className="plan-items agent-cards" aria-label={t('Kanban tasks')}>
           <li className="meta agent-caption">{t('Cards this chat put on the Kanban board. Hermes’ workers run them in the background.')}</li>
           {tasks.map(task => (
-            <li key={`${task.board}\n${task.id}`} className={`agent-card chat-task status-${isOpenTask(task) ? (isBlockedTask(task) ? 'failed' : 'running') : 'completed'}`}>
-              <div className="agent-head">
-                <strong>{task.title}</strong>
-                <span className="spacer" />
-                <span className="meta">{columnTitle(task.status)}</span>
-              </div>
-              <div className="meta">
-                {[task.assignee ?? t('Unassigned'), boards.size > 1 || task.board !== 'default' ? task.boardName : null].filter(Boolean).join(' · ')}
-              </div>
-              {task.error ? <div className="agent-line chat-task-error">{task.error}</div> : null}
-              {onOpen ? (
-                <button className="link" onClick={() => onOpen(task)}>
-                  {t('Open in Tasks')}
-                </button>
-              ) : null}
+            <li key={keyOf(task)} className={`agent-card chat-task status-${isOpenTask(task) ? (isBlockedTask(task) ? 'failed' : 'running') : 'completed'}`}>
+              <button className={`chat-task-open${shownKey === keyOf(task) ? ' active' : ''}`} aria-haspopup="dialog" onClick={() => setShownKey(keyOf(task))}>
+                <div className="agent-head">
+                  <span className={`lane-dot ${task.status}`} aria-hidden="true" />
+                  <strong>{task.title}</strong>
+                  <span className="meta chat-task-status">{columnTitle(task.status)}</span>
+                  <Icon name="chevron" />
+                </div>
+                <div className="meta">
+                  {[task.assignee ?? t('Unassigned'), boards.size > 1 || task.board !== 'default' ? task.boardName : null].filter(Boolean).join(' · ')}
+                </div>
+                {task.error ? <div className="agent-line chat-task-error">{task.error}</div> : null}
+              </button>
             </li>
           ))}
         </ul>
@@ -76,6 +98,95 @@ export function ChatTasksDock({ tasks, chatKey, onOpen }: Props) {
           </button>
         ) : null}
       </div>
+      {shownTask ? (
+        <ChatTaskPanel
+          key={shownKey!}
+          task={shownTask}
+          bots={bots ?? null}
+          onClose={() => setShownKey(null)}
+          onChanged={onChanged}
+          onOpen={
+            onOpen
+              ? () => {
+                  setShownKey(null)
+                  onOpen(shownTask)
+                }
+              : undefined
+          }
+        />
+      ) : null}
     </div>
+  )
+}
+
+/**
+ * One of the chat's tasks, in the board's task panel over the chat: read and
+ * changed on its own board through the chat's dashboard, as the line reads
+ * them, so nothing on Tasks changes (its board pick included).
+ */
+function ChatTaskPanel({
+  task,
+  bots,
+  onClose,
+  onChanged,
+  onOpen
+}: {
+  task: ChatTask
+  bots: Bot[] | null
+  onClose: () => void
+  onChanged?: () => void
+  onOpen?: () => void
+}) {
+  const path = useCallback((rest: string) => boardPath(`/tasks/${encodeURIComponent(task.id)}${rest}`, task.board), [task.id, task.board])
+  const load = useCallback(async () => parseTaskDetail(await gateway.http('GET', path(''))), [path])
+  const botTitle = (name?: string) => (name ? (bots?.find(b => b.name === name)?.title ?? name) : t('Unassigned'))
+  const assignees = useMemo(
+    () => (bots ?? []).map(b => b.name).sort((a, b) => (bots?.find(x => x.name === a)?.title ?? a).localeCompare(bots?.find(x => x.name === b)?.title ?? b)),
+    [bots]
+  )
+  // No live stream here: the panel reads its task again when the line's reads (every 15 s while one is open) see it
+  // move on, and every 15 s on its own while it shows, so a worker's new summary, comment or result shows too.
+  const [tick, setTick] = useState(0)
+  useEffect(() => everyWhileVisible(() => setTick(n => n + 1), CHAT_TASK_PANEL_READ_MS), [])
+  const revision = useRef(0)
+  const seen = useRef('')
+  const moved = `${task.status}\n${task.assignee ?? ''}\n${task.error ?? ''}\n${tick}`
+  if (seen.current !== moved) {
+    seen.current = moved
+    revision.current += 1
+  }
+  const touched = useMemo(() => ({ revision: revision.current, ids: new Set([task.id]) as ReadonlySet<string> }), [moved, task.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <TaskPanel
+      id={task.id}
+      task={null}
+      assignees={assignees}
+      botTitle={botTitle}
+      load={load}
+      board={task.board}
+      pinned
+      touched={touched}
+      onClose={onClose}
+      onPatch={async fields => {
+        await gateway.http('PATCH', path(''), fields)
+        onChanged?.()
+      }}
+      onComment={async body => {
+        await gateway.http('POST', path('/comments'), { body })
+      }}
+      onDelete={async () => {
+        await gateway.http('DELETE', path(''))
+        onClose()
+        onChanged?.()
+      }}
+      extra={
+        onOpen ? (
+          <button className="link" onClick={onOpen}>
+            {t('Open in Tasks')}
+          </button>
+        ) : null
+      }
+    />
   )
 }

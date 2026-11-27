@@ -671,7 +671,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           processes={delegates.processes}
           kill={delegates.kill}
         />
-        <ChatTasksDock tasks={chatTasks.tasks} chatKey={request.id} />
+        <ChatTasksDock tasks={chatTasks.tasks} chatKey={request.id} bots={roster.bots} onChanged={() => void chatTasks.refresh()} />
         <PlanDock plan={plan} running={running} chatKey={request.id} />
         {takeover ? (
           <div className="takeover-offer" role="status">

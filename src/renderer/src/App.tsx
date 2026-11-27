@@ -3050,6 +3050,8 @@ function Shell({
               <ChatTasksDock
                 tasks={chatTasks.tasks}
                 chatKey={selected.id ?? 'new'}
+                bots={roster.bots}
+                onChanged={() => void chatTasks.refresh()}
                 onOpen={task => {
                   setTaskFocus(focus => ({ slug: task.board, id: task.id, n: (focus?.n ?? 0) + 1 }))
                   setSection('tasks')
