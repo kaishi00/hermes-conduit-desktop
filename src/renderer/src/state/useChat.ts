@@ -52,7 +52,8 @@ import {
   type Reaction,
   type HistoryRow,
   type TranscriptItem,
-  type TranscriptState
+  type TranscriptState,
+  sideAgentAnswer
 } from './transcript'
 import type { GatewayEventMessage } from '../../../shared/ipc'
 import { promptText, releaseHeldImages, titlePreview, uploadAttachments, type StagedAttachment } from './attachments'
@@ -498,6 +499,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   notesKey.current = chat.storedId ? keyOf(chat.storedId, profile, host) : null
   /** Counts the chats this pane has shown: a command's note that comes after the chat was left is kept for it, not drawn here. */
   const shownChat = useRef(0)
+  /** The chats (transcriptCache keys) whose live sessions ran a /btw or /background here, so an answer that comes after leaving is kept. */
+  const sideAgents = useRef(new Map<string, string>())
   /** The new chat last opened (profile, host, connection), so a folder change alone keeps its picks. */
   const openedDraft = useRef<string | null>(null)
   /** A New Chat's picks while another shows (its tab, desktop#656's review): back in it, they're there again. */
@@ -685,7 +688,14 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   useEffect(
     () =>
       window.conduit.onEvent(event => {
-        if (!event.session_id || event.session_id !== liveId.current) return
+        if (!event.session_id) return
+        if (event.session_id !== liveId.current) {
+          // A /btw or /background answer for a chat this pane left while it ran: kept for that chat (issue 3394).
+          const owner = sideAgents.current.get(event.session_id)
+          const answer = owner ? sideAgentAnswer(event) : null
+          if (owner && answer) addChatNote(owner, { text: answer, format: 'markdown' })
+          return
+        }
         if (event.type === 'session.info') {
           const settings = chatSettings(event.payload as ChatInfo | undefined)
           setChat(c => ({ ...c, ...settings }))
@@ -1174,9 +1184,11 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       let owner = chatRef.current.storedId
       const shownAtStart = shownChat.current
       const note = (command: string, text: string, format: 'plain' | 'markdown') => {
-        if (shownChat.current === shownAtStart) dispatch({ type: 'output', command, text, format })
-        // The chat was left while the command ran: kept for it, drawn when it opens (issue 3394).
-        else if (owner) addChatNote(keyOf(owner, profile, host), { command, text, format })
+        const ownKey = owner ? keyOf(owner, profile, host) : null
+        // Drawn while its chat is on screen, also after leaving it and coming back (dispatching keeps it for the chat too).
+        if (shownChat.current === shownAtStart || (ownKey && notesKey.current === ownKey)) dispatch({ type: 'output', command, text, format })
+        // Another chat is on screen: kept for its own, drawn when that opens (issue 3394).
+        else if (ownKey) addChatNote(ownKey, { command, text, format })
       }
       const showCompactNote = () => compactNote && note(asTyped, compactNote, 'plain')
       const output = (body: string, format: 'plain' | 'markdown' = 'plain') => note(typed, body, format)
@@ -1243,6 +1255,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       if ((name === 'btw' || name === 'background' || name === 'bg') && arg) {
         try {
           await gateway.rpc(name === 'btw' ? 'prompt.btw' : 'prompt.background', scoped({ session_id: sid, text: arg }))
+          if (owner) sideAgents.current.set(sid, keyOf(owner, profile, host))
           output(
             name === 'btw'
               ? t('Answering from a snapshot of this chat. The answer will appear here.')

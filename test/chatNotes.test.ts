@@ -119,6 +119,47 @@ describe("a chat's own notes (issue 3394)", () => {
     await settle()
     expect(hook.result().transcript.items.map(item => item.kind)).toEqual(['user', 'assistant', 'output'])
   })
+
+  it('from a command that ends after its chat was left and opened again are drawn there', async () => {
+    resumes.a = rows(1, 'one')
+    resumes.b = rows(1, 'other')
+    const hook = mount({ storedId: 'a' })
+    await settle()
+    let running: Promise<unknown> = Promise.resolve()
+    act(() => {
+      running = hook.result().command('/btw what did we decide?', [])
+    })
+    await settle()
+    hook.rerender({ storedId: 'b' })
+    await settle()
+    hook.rerender({ storedId: 'a' })
+    await settle()
+    await act(async () => {
+      heldBtw?.()
+      await running
+    })
+    expect(hook.result().transcript.items.map(item => item.kind)).toEqual(['user', 'assistant', 'output'])
+  })
+
+  it("from a /btw whose answer comes after its chat was left are kept for that chat", async () => {
+    resumes.a = rows(1, 'one')
+    resumes.b = rows(1, 'other')
+    const hook = mount({ storedId: 'a' })
+    await settle()
+    await act(async () => {
+      const running = hook.result().command('/btw what did we decide?', [])
+      heldBtw?.()
+      await running
+    })
+    hook.rerender({ storedId: 'b' })
+    await settle()
+    emit({ type: 'btw.complete', session_id: 'live-a', payload: { task_id: 'btw_1', text: 'Ship on Friday.' } })
+    expect(hook.result().transcript.items.some(item => item.kind === 'output')).toBe(false)
+    hook.rerender({ storedId: 'a' })
+    await settle()
+    expect(hook.result().transcript.items.map(item => item.kind)).toEqual(['user', 'assistant', 'output', 'output'])
+    expect(words(hook.result().transcript)[3]).toContain('Ship on Friday.')
+  })
 })
 
 describe('withChatNotes', () => {
@@ -168,5 +209,21 @@ describe('withChatNotes', () => {
   it('skips a kept note that is missing what it draws', () => {
     localStorage.setItem('conduit.chatNotes.v1', JSON.stringify([['f', [{ key: 'note-f' }, { key: 'note-g', text: 'g', format: 'plain' }]]]))
     expect(chatNotes('f').map(n => n.key)).toEqual(['note-g'])
+    localStorage.setItem('conduit.chatNotes.v1', JSON.stringify([['h', [{ key: 'note-h', after: 7, text: 'h', format: 'plain' }]]]))
+    expect(chatNotes('h')).toEqual([])
+  })
+
+  it("keeps a note for this launch when storage can't take it", () => {
+    addChatNote('i', { text: 'first', format: 'plain' })
+    const setItem = Storage.prototype.setItem
+    Storage.prototype.setItem = () => {
+      throw new Error('quota')
+    }
+    try {
+      addChatNote('i', { text: 'second', format: 'plain' })
+      expect(chatNotes('i').map(n => n.text)).toEqual(['first', 'second'])
+    } finally {
+      Storage.prototype.setItem = setItem
+    }
   })
 })

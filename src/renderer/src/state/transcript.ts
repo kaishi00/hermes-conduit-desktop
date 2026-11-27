@@ -740,11 +740,8 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
     }
     case 'btw.complete':
     case 'background.complete': {
-      const text = str(payload.text)
-      // A step summary's question, from here or the phone: its answer labels a run, never a note.
-      if (!text || (event.type === 'btw.complete' && isQuestion(str(payload.question)))) return state
-      const note = sideAgentNote(event.type === 'btw.complete' ? 'btw' : 'background', str(payload.task_id) ?? '', text, str(payload.question))
-      return addOutput(state, { text: note, format: 'markdown' })
+      const note = sideAgentAnswer(event)
+      return note ? addOutput(state, { text: note, format: 'markdown' }) : state
     }
     case 'message.interrupted':
     case 'session.interrupted':
@@ -1084,4 +1081,16 @@ function joinAround(items: TranscriptItem[], index: number): TranscriptItem[] {
   if (before?.kind !== 'assistant' || after?.kind !== 'assistant') return rest
   const joined: AssistantItem = { ...before, text: before.text + after.text, streaming: after.streaming }
   return [...rest.slice(0, index - 1), joined, ...rest.slice(index + 1)]
+}
+
+/**
+ * A `/btw` or `/background` answer's note, or null when the event isn't one
+ * (a step summary's question, from here or the phone, labels a run instead).
+ */
+export function sideAgentAnswer(event: { type: string; payload?: unknown }): string | null {
+  if (event.type !== 'btw.complete' && event.type !== 'background.complete') return null
+  const payload = payloadOf(event)
+  const text = str(payload.text)
+  if (!text || (event.type === 'btw.complete' && isQuestion(str(payload.question)))) return null
+  return sideAgentNote(event.type === 'btw.complete' ? 'btw' : 'background', str(payload.task_id) ?? '', text, str(payload.question))
 }

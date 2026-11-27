@@ -33,22 +33,32 @@ interface Kept {
 
 /** What was last saved, for when storage can't be read: kept for this launch only. */
 let memory: [string, ChatNote[]][] = []
+/** Whether the last save couldn't be written: storage then holds less than `memory`. */
+let unsaved = false
 
 const isNote = (note: unknown): note is ChatNote => {
   const n = note as Partial<ChatNote> | null
-  return !!n && typeof n.key === 'string' && typeof n.text === 'string' && (n.format === 'plain' || n.format === 'markdown')
+  return (
+    !!n &&
+    typeof n.key === 'string' &&
+    typeof n.text === 'string' &&
+    (n.format === 'plain' || n.format === 'markdown') &&
+    (n.after === undefined || n.after === null || typeof n.after === 'string')
+  )
 }
 
 /**
  * Read afresh each time: every chat window is a renderer of its own sharing
  * this storage, so a copy held here would write over the notes another
- * window kept since.
+ * window kept since. Two windows saving in the same instant can still lose
+ * one's note (localStorage has no transaction); notes are small and rare
+ * enough that this is the accepted limit.
  */
 function load(): Kept {
   let parsed: unknown = memory
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    parsed = raw ? JSON.parse(raw) : []
+    if (!unsaved) parsed = raw ? JSON.parse(raw) : []
   } catch {
     // The copy this launch last saved.
   }
@@ -81,8 +91,10 @@ function save(kept: Kept, chat: string): void {
   memory = [...grouped.entries()]
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(memory))
+    unsaved = false
   } catch {
     // Kept for this launch only.
+    unsaved = true
   }
 }
 
@@ -171,6 +183,7 @@ export function withChatNotes(state: TranscriptState, kept: readonly ChatNote[])
 /** Forgets every kept note (tests). */
 export function forgetChatNotes(): void {
   memory = []
+  unsaved = false
   try {
     localStorage.removeItem(STORAGE_KEY)
   } catch {
