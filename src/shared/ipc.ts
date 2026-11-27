@@ -316,9 +316,9 @@ export interface ConduitApi {
   pickLocalFolder(): Promise<string[] | null>
   /**
    * A path link's right-click menu (desktop issue 686): Show in Folder, Show in Finder or Explorer while this
-   * window's dashboard runs on this computer, and Copy Path. The choice, or null when none was picked.
+   * window's dashboard runs on this computer, and Copy Path; `at` places it for the keyboard. The choice, or null when none was picked.
    */
-  pathLinkMenu(): Promise<'folder' | 'computer' | 'copy' | null>
+  pathLinkMenu(at?: { x: number; y: number }): Promise<'folder' | 'computer' | 'copy' | null>
   /** Shows a host path in Finder or Explorer, while the dashboard runs on this computer and the path is here; false otherwise. */
   showOnComputer(path: string): Promise<boolean>
   /**

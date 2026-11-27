@@ -997,11 +997,11 @@ function registerIpc(): void {
   // A path link's right-click (desktop issue 686): open it in the Folder, show it in Finder or Explorer while the
   // dashboard runs on this computer (Eric, 2026-11-27), or copy it. The choice goes back to the page, which looks the
   // path up; null when the menu closed without one.
-  ipcMain.handle(IPC.pathLinkMenu, async (event): Promise<'folder' | 'computer' | 'copy' | null> => {
+  ipcMain.handle(IPC.pathLinkMenu, async (event, at: unknown): Promise<'folder' | 'computer' | 'copy' | null> => {
     const owner = BrowserWindow.fromWebContents(event.sender)
     if (!owner) return null
     const here = isThisComputer(connectionOf(event.sender.id)?.current().url)
-    const onComputer = process.platform === 'darwin' ? t('Show in Finder') : process.platform === 'win32' ? t('Show in Explorer') : t('Show in Files')
+    const onComputer = process.platform === 'darwin' ? t('Show in Finder') : process.platform === 'win32' ? t('Show in Explorer') : t('Show in File Manager')
     return new Promise(resolve => {
       let chosen: 'folder' | 'computer' | 'copy' | null = null
       const menu = Menu.buildFromTemplate([
@@ -1011,7 +1011,10 @@ function registerIpc(): void {
         { label: t('Copy Path'), click: () => (chosen = 'copy') }
       ])
       // The callback comes once the menu closes, after a click's handler ran.
-      menu.popup({ window: owner, callback: () => resolve(chosen) })
+      // From the keyboard, at the link rather than wherever the pointer is.
+      const point = at as { x?: unknown; y?: unknown } | null
+      const place = point && typeof point.x === 'number' && typeof point.y === 'number' ? { x: Math.round(point.x), y: Math.round(point.y) } : {}
+      menu.popup({ window: owner, ...place, callback: () => resolve(chosen) })
     })
   })
   // Shows a path the Hermes host named in Finder or Explorer: only while the dashboard runs on this computer, and
@@ -1019,7 +1022,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.showOnComputer, async (event, path: unknown): Promise<boolean> => {
     if (typeof path !== 'string' || !path.trim() || !isThisComputer(connectionOf(event.sender.id)?.current().url)) return false
     const local = localSpelling(path, { home: homedir(), windows: process.platform === 'win32' })
-    if (!(await stat(local).then(() => true, () => false))) return false
+    if (!local || !(await stat(local).then(() => true, () => false))) return false
     shell.showItemInFolder(local)
     return true
   })

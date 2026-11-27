@@ -49139,21 +49139,6 @@
     "zh-Hans": "在资源管理器中显示",
     "zh-Hant": "在檔案總管中顯示"
   },
-  "Show in Files": {
-    "de": "In Dateien zeigen",
-    "es": "Mostrar en Archivos",
-    "fr": "Afficher dans Fichiers",
-    "id": "Tampilkan di File",
-    "it": "Mostra in File",
-    "ja": "ファイルで表示",
-    "ko": "파일에서 보기",
-    "pl": "Pokaż w Plikach",
-    "pt-BR": "Mostrar em Arquivos",
-    "ru": "Показать в Файлах",
-    "tr": "Dosyalar’da Göster",
-    "zh-Hans": "在文件中显示",
-    "zh-Hant": "在檔案中顯示"
-  },
   "{name} isn’t on this computer.": {
     "de": "{name} ist nicht auf diesem Computer.",
     "es": "{name} no está en este ordenador.",
@@ -49168,5 +49153,20 @@
     "tr": "{name} bu bilgisayarda yok.",
     "zh-Hans": "这台电脑上没有 {name}。",
     "zh-Hant": "這台電腦上沒有 {name}。"
+  },
+  "Show in File Manager": {
+    "de": "Im Dateimanager zeigen",
+    "es": "Mostrar en el gestor de archivos",
+    "fr": "Afficher dans le gestionnaire de fichiers",
+    "id": "Tampilkan di Pengelola File",
+    "it": "Mostra nel gestore file",
+    "ja": "ファイルマネージャで表示",
+    "ko": "파일 관리자에서 보기",
+    "pl": "Pokaż w menedżerze plików",
+    "pt-BR": "Mostrar no gerenciador de arquivos",
+    "ru": "Показать в файловом менеджере",
+    "tr": "Dosya Yöneticisinde Göster",
+    "zh-Hans": "在文件管理器中显示",
+    "zh-Hant": "在檔案管理員中顯示"
   }
 }
