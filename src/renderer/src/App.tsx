@@ -194,8 +194,10 @@ import {
   writeLastHost,
   type KeptWaitingRow,
   type OtherBot,
-  type OtherChatRow
+  type OtherChatRow,
+  KEPT_BOTS_CHANGED
 } from './state/keptHosts'
+import { categoryNamed, categoryPatch, refilingRooms, useCategoryOrder, useRoomCategories, type BotCategory } from './state/botCategories'
 import { StepSummarySettings } from './components/StepSummarySettings'
 import { ReplySpeedSetting } from './components/ReplySpeedSetting'
 import { PredictiveSettings } from './components/PredictiveSettings'
@@ -766,6 +768,9 @@ function Shell({
   }, [connected, status.url])
   // The bots in the person's order (synced as bots.order), which every list of bots follows.
   const botOrder = useBotOrder(status.url ?? '', connected, prefsHttp)
+  // Bot categories' order, synced as bots.categories (state/botCategories.ts).
+  const categoryOrder = useCategoryOrder(status.url ?? '', connected, prefsHttp)
+  const roomCategories = useRoomCategories(status.url ?? '', connected, prefsHttp)
   const roomOrder = useSyncedOrder(status.url ?? '', connected, prefsHttp, 'rooms')
   const orderedRoster = useMemo(() => (roster.bots ? orderedBots(roster.bots, botOrder.order) : null), [roster.bots, botOrder.order])
   const glowBots = useMemo(() => [...(roster.bots ?? []), ...roster.hidden], [roster.bots, roster.hidden])
@@ -1888,6 +1893,43 @@ function Shell({
     },
     [roster]
   )
+  /**
+   * Files bots under a category (null: out of theirs), each on its own Hermes: this host's over the gateway,
+   * another combined dashboard's through its kept connection. One write at a time, so each reads the last.
+   */
+  const fileBots = useCallback(
+    async (tiles: MixedTile[], name: string | null): Promise<string | null> => {
+      const own = [...(roster.bots ?? []), ...roster.hidden]
+      let problem: string | null = null
+      let far = false
+      // What this call filed already, per host: a rename's later bots take the id its first one got, so the
+      // host keeps one id for the name (Hermes Desktop draws one section).
+      const filed = new Map<string, { category?: BotCategory }[]>()
+      for (const tile of tiles) {
+        const rpc = tile.own
+          ? (method: string, params?: Record<string, unknown>) => gateway.rpc(method, params)
+          : async (method: string, params?: Record<string, unknown>) => {
+              const outcome = await window.conduit.keptRpc(tile.host, method, params)
+              if (!outcome.ok) throw new Error(outcome.error)
+              return outcome.result
+            }
+        const hostKey = tile.own ? '' : tile.host
+        const among = [...(filed.get(hostKey) ?? []), ...(tile.own ? own : otherBots.filter(o => o.host === tile.host).map(o => o.bot))]
+        const category = name ? categoryNamed(name, among, tile.bot.category) : null
+        if (category) filed.set(hostKey, [...(filed.get(hostKey) ?? []), { category }])
+        try {
+          if (!(await writeMeta(rpc, tile.bot, categoryPatch(category)))) problem ??= t('Couldn’t save that change. Try again.')
+        } catch (e) {
+          problem ??= t('Couldn’t save that change: {error}', { error: e instanceof Error ? e.message : String(e) })
+        }
+        if (!tile.own) far = true
+      }
+      void roster.refresh()
+      if (far) window.dispatchEvent(new Event(KEPT_BOTS_CHANGED))
+      return problem
+    },
+    [roster, otherBots]
+  )
   // Asks waiting for their chat to open, one per chat: a bot's introduce and a room chat's Wrap Up no longer
   // take each other's place (#621).
   const pendingAsks = useRef<PendingAsk[]>([])
@@ -2816,6 +2858,16 @@ function Shell({
               setSection('room')
             },
     work: workByBot,
+    // Headings always; filing only while connected (the menus and drops need Edit Bot, which needs the host).
+    categories: {
+      order: categoryOrder.order,
+      setOrder: categoryOrder.set,
+      file: fileBots,
+      rooms: roomCategories.rooms,
+      // Filed while connected only, as bots are: the host's copy is read on each connection and wins.
+      fileRoom: connected ? roomCategories.file : undefined,
+      refileRooms: connected ? (old: string, to: string | null) => roomCategories.set(refilingRooms(roomCategories.rooms, old, to)) : undefined
+    },
   }
 
   return (
@@ -3347,7 +3399,7 @@ function Shell({
             }}
           />
         ) : section === 'bots' && editingBot ? (
-          <BotEditor key={editingBot.name} bot={editingBot} onClose={closeBotEditor} onSaved={() => void roster.refresh()} />
+          <BotEditor key={editingBot.name} bot={editingBot} among={glowBots} onClose={closeBotEditor} onSaved={() => void roster.refresh()} />
         ) : section === 'bots' ? null : section === 'tasks' ? (
           <Tasks
             bots={orderedRoster}

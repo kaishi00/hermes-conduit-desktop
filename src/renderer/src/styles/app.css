@@ -11772,6 +11772,73 @@ button.secondary.danger {
 .bot-side-hint {
   margin: 2px 16px 6px;
 }
+/* Bot categories: a heading over each one's bots, folded with a click (state/botCategories.ts). */
+.bot-category-head {
+  justify-content: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  border-radius: 8px;
+}
+.bot-category-head.drop-target {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.bot-category-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+}
+.bot-category-toggle .ico {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  color: var(--text-3);
+}
+.bot-category-toggle h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bot-category-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.bot-category-faces {
+  display: flex;
+  flex: none;
+}
+.bot-category-faces .bot-avatar {
+  margin-left: -5px;
+  box-shadow: 0 0 0 1.5px var(--backdrop);
+}
+.bot-category-waiting {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--warning);
+  color: #1a1000;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-grid;
+  place-items: center;
+}
+.bot-category-label {
+  padding-bottom: 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 .bot-side-glyph {
   width: 30px;
   height: 30px;

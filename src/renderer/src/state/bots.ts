@@ -1,13 +1,14 @@
 /**
  * Bots: every Hermes profile, as the gateway's `profiles.list` lists them,
  * with the look Hermes Desktop and the phone keep in `ui_meta['hermes-bots']`
- * (title, color, pinned, hidden) and the picture in the profile's asset store
+ * (title, color, pinned, hidden, category) and the picture in the profile's asset store
  * (`profiles.get_asset`, asset `avatar`).
  */
 import { cleanTitle, plainLine, previewText } from './text'
 import { silenceShown } from './silence'
 import { toMillis } from './chats'
 import { assignFaces, faceColor, starterFace } from './starterFaces'
+import { categoryOf, type BotCategory } from './botCategories'
 
 export const BOTS_META_KEY = 'hermes-bots'
 
@@ -32,6 +33,8 @@ export interface Bot {
   meta: Record<string, unknown>
   /** That key's revision, for the write's compare-and-swap. */
   metaRevision?: number
+  /** Its category: Hermes Desktop's section (`sectionId`, `sectionName`), see botCategories.ts. */
+  category?: BotCategory
 }
 
 function str(value: unknown): string | undefined {
@@ -103,6 +106,7 @@ export function rosterFromProfiles(body: unknown): Roster {
       lastLine: lastLineOf(str(canonical?.preview)) ?? lastLineOf(str(last?.preview)),
       lastActive: toMillis(source?.last_active) ?? toMillis(last?.last_active),
       meta,
+      category: categoryOf(meta),
       metaRevision: typeof revision === 'number' && Number.isInteger(revision) ? revision : undefined
     })
   }
