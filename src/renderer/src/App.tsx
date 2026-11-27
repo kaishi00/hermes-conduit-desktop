@@ -49,6 +49,7 @@ import {
   showsTabStrip,
   stepTab,
   tabTarget,
+  claimSentSelection,
   type WorkspaceTab,
   type WorkspaceTabs
 } from './state/workspaceTabs'
@@ -235,6 +236,8 @@ import { SCALES, applyScale, nextScale, readScale, scaleFromStorage, shortcutFor
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { HotkeySetting } from './components/HotkeySetting'
 import { LoginItemSetting } from './components/LoginItemSetting'
+import { PcControlSetting } from './components/PcControlSetting'
+import { usePcControl, usePcControlState } from './state/pcControl'
 import { HideDockSetting } from './components/HideDockSetting'
 import { AttachmentLimitSetting } from './components/AttachmentLimitSetting'
 import { TerminalSettings } from './components/TerminalSettings'
@@ -638,7 +641,7 @@ function Shell({
       if (created === false) {
         if (!now.id && now.draft === linkSend.draft) setQuote(quoteRequest({ draft: linkSend.text }))
       } else if (created) {
-        setSelected(s => (s.draft === linkSend.draft && !s.id ? { ...s, id: created } : s))
+        setSelected(s => claimSentSelection(s, linkSend.draft, created))
         void list.refresh()
       }
     })
@@ -1663,6 +1666,8 @@ function Shell({
   const onSend = useCallback(
     async (text: string, attachments: StagedAttachment[] = [], options: { takeOver?: boolean; spoken?: boolean } = {}) => {
       let created: string | null | false
+      // The draft the send started in: if another chat opens before the RPC returns, its id lands there instead.
+      const startedDraft = selected.draft
       // A bot's one chat never resets: /new compacts it, and a compaction carries no attachments.
       const botChat = selected.botChat === true || !!openBotChat
       if (botChat && attachments.length && isResetCommand(text)) {
@@ -1684,13 +1689,13 @@ function Shell({
       }
       if (created) {
         callChat.current = created
-        setSelected(s => ({ ...s, id: created }))
+        setSelected(s => claimSentSelection(s, startedDraft, created))
         void list.refresh()
       }
       // Hand the created id back to a call: it must not claim a chat that opened meanwhile.
       return created || true
     },
-    [send, command, notice, commands, newChat, list, botTitle, roster.bots, selected.profile, selected.botChat, openBotChat, chat.liveId]
+    [send, command, notice, commands, newChat, list, botTitle, roster.bots, selected.profile, selected.botChat, selected.draft, openBotChat, chat.liveId]
   )
   // The bots a chat can tag, in their order: every shown bot but the chat's own.
   const mentionBots = useMemo(() => mentionCandidates(orderedRoster, '', selected.profile ?? 'default'), [orderedRoster, selected.profile])
@@ -2537,6 +2542,9 @@ function Shell({
 
   // Calls from Hermes ring here too.
   const rings = useRings(connected, profiles)
+  // Control from Hermes: allowed bots' actions run on this computer.
+  const pcState = usePcControlState()
+  usePcControl(connected, roster.bots ?? [], pcState)
   const ring = rings.ringing.at(-1)
   // The wake phrase: heard offline while Conduit is connected and showing, never during a call or a ring.
   const [wakeRevision, setWakeRevision] = useState(0)
@@ -3709,6 +3717,7 @@ function Settings({
   /** A new chat with `draft` in its composer, for the user to send (Try a test call, Have Hermes watch for this). */
   onNewChatWith?: (draft: string) => void
 }) {
+  const pcControlState = usePcControlState()
   const kept = useKeptHosts()
   const keptState = (url: string) => kept.find(h => h.url === url)?.state ?? null
   const [notifications, setNotifications] = useState(notificationsEnabled)
@@ -4135,6 +4144,7 @@ function Settings({
           <UpdatesSetting />
         </dl>
       </section>
+      <PcControlSetting state={pcControlState} bots={bots} />
       <section className="settings-group">
         <h2>{t('Support')}</h2>
         <dl className="settings-card">

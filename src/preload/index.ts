@@ -99,6 +99,16 @@ const api: ConduitApi = {
     set: on => ipcRenderer.invoke(IPC.setLoginItem, on),
     openSystemSettings: () => ipcRenderer.send(IPC.openStartupSettings)
   },
+  pcControl: {
+    state: () => ipcRenderer.invoke(IPC.pcControlState),
+    set: change => ipcRenderer.invoke(IPC.pcControlSet, change),
+    install: () => ipcRenderer.invoke(IPC.pcControlInstall),
+    deleteDriver: () => ipcRenderer.invoke(IPC.pcControlDelete),
+    run: request => ipcRenderer.invoke(IPC.pcControlRun, request),
+    stop: () => ipcRenderer.send(IPC.pcControlStop),
+    onState: listener => listen(IPC.pcControlChanged, listener),
+    onStopped: listener => listen<void>(IPC.pcControlStopped, () => listener())
+  },
   unlock: () => ipcRenderer.invoke(IPC.unlock),
   probe: (url, headers) => ipcRenderer.invoke(IPC.probe, url, headers),
   checkCertificate: url => ipcRenderer.invoke(IPC.checkCertificate, url),
@@ -111,6 +121,7 @@ const api: ConduitApi = {
   viewStagedFile: (name, mime, base64) => ipcRenderer.invoke(IPC.viewStagedFile, name, mime, base64),
   openHostPageInBrowser: (path, profile) => ipcRenderer.invoke(IPC.openHostPageInBrowser, path, profile),
   saveBytes: (name, bytes) => ipcRenderer.invoke(IPC.saveBytes, name, bytes),
+  copyImage: bytes => ipcRenderer.invoke(IPC.copyImage, bytes),
   saveKanbanAttachment: (id, board, filename) => ipcRenderer.invoke(IPC.saveKanbanAttachment, id, board, filename),
   signIn: request => ipcRenderer.invoke(IPC.signIn, request),
   cancelSignIn: () => ipcRenderer.invoke(IPC.cancelSignIn),

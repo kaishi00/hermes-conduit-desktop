@@ -2855,10 +2855,18 @@ html[data-window='quick'] body {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
-.picture-viewer-save {
+.picture-viewer-actions {
   position: absolute;
   top: 44px;
   right: 64px;
+  display: flex;
+  gap: 8px;
+}
+
+.picture-viewer-save {
+  /* Copy keeps one line and about its width as Copied or Couldn't copy comes and goes. */
+  min-width: 96px;
+  white-space: nowrap;
   height: 36px;
   padding: 0 14px;
   border-radius: 18px;

@@ -270,6 +270,22 @@ export interface ConduitApi {
     /** Windows' Startup apps page, for the Microsoft Store's copy. */
     openSystemSettings(): void
   }
+  /** Control from Hermes (main/pcControl.ts): bots drive this computer. */
+  pcControl: {
+    state(): Promise<PcControlState>
+    set(change: Partial<PcControlSettings>): Promise<PcControlState>
+    /** Downloads the driver; resolves with the state once it's there (or failed). */
+    install(): Promise<PcControlState>
+    /** Deletes the downloaded driver. */
+    deleteDriver(): Promise<PcControlState>
+    /** Runs one action the plugin handed over: asks first when `needs_ok`. */
+    run(request: PcRequest): Promise<Record<string, unknown>>
+    /** Stop, from Settings or the control bar. */
+    stop(): void
+    onState(listener: (state: PcControlState) => void): () => void
+    /** Stop was pressed (the bar, the hotkey): tell each allowed bot's plugin. */
+    onStopped(listener: () => void): () => void
+  }
   /** `headers` are for a proxy in front of the dashboard (Cloudflare Access and the like). */
   probe(url: string, headers?: Record<string, string>): Promise<HostProbe>
   /** Reads the root certificate the server at `url` sends, trusting it for nothing. */
@@ -310,6 +326,8 @@ export interface ConduitApi {
   openHostPageInBrowser(path: string, profile?: string): Promise<string | null>
   /** Saves bytes already on hand (a picture's data) where the person picks; false when they didn't. */
   saveBytes(name: string, bytes: ArrayBuffer): Promise<boolean>
+  /** Puts a picture's bytes (PNG or JPEG) on the system clipboard as a picture; false when they aren't one the system reads. */
+  copyImage(bytes: ArrayBuffer): Promise<boolean>
   /**
    * Saves a Kanban task's attachment where the person picks, streamed from
    * the board's /attachments/{id}. 'saved', 'cancelled', or what went wrong.
@@ -611,6 +629,7 @@ export const IPC = {
   viewStagedFile: 'conduit:view-staged-file',
   openHostPageInBrowser: 'conduit:open-host-page-in-browser',
   saveBytes: 'conduit:save-bytes',
+  copyImage: 'conduit:copy-image',
   saveKanbanAttachment: 'conduit:save-kanban-attachment',
   keptRpc: 'conduit:kept-rpc',
   reconnect: 'conduit:reconnect',
@@ -652,6 +671,14 @@ export const IPC = {
   deviceReportsChanged: 'conduit:device-reports-changed',
   updateState: 'conduit:update-state',
   loginItem: 'conduit:login-item',
+  pcControlState: 'conduit:pc-control-state',
+  pcControlSet: 'conduit:pc-control-set',
+  pcControlInstall: 'conduit:pc-control-install',
+  pcControlDelete: 'conduit:pc-control-delete',
+  pcControlRun: 'conduit:pc-control-run',
+  pcControlStop: 'conduit:pc-control-stop',
+  pcControlChanged: 'conduit:pc-control-changed',
+  pcControlStopped: 'conduit:pc-control-stopped',
   setLoginItem: 'conduit:set-login-item',
   openStartupSettings: 'conduit:open-startup-settings',
   checkForUpdates: 'conduit:check-for-updates',
@@ -717,6 +744,42 @@ export function mintedSocket(response: unknown): MintedSocket {
   }
   if (!url.searchParams.has('access_token')) url.searchParams.set('access_token', token)
   return { ok: true, url: url.toString(), model: text(r.model), voice: text(r.voice) }
+}
+
+/** Control from Hermes, as Settings keeps it. */
+export interface PcControlSettings {
+  on: boolean
+  /** The name bots know this computer by. Empty: the computer's own. */
+  name: string
+  /** The bots (profile ids) allowed to ask. */
+  bots: string[]
+}
+
+export interface PcControlState extends PcControlSettings {
+  /** This computer's id for the plugin. */
+  id: string
+  /** The name in use (the computer's own when `name` is empty). */
+  shownName: string
+  platform: 'windows' | 'mac' | 'linux'
+  /** `missing` until downloaded; `unsupported` where cua-driver has no build. */
+  driver: 'ready' | 'missing' | 'downloading' | 'failed' | 'unsupported'
+  progress: number
+  /** A bot is driving now: its name and chat. */
+  active: { bot: string; chat: string } | null
+  stopKeys: string
+}
+
+/** One action from GET /pc/next, with the bot's name for the ask and the bar. */
+export interface PcRequest {
+  id: string
+  session: string
+  chat: string
+  action: string
+  args: Record<string, unknown>
+  needs_ok: boolean
+  takes_over?: string
+  bot: string
+  profile: string
 }
 
 /**

@@ -14,7 +14,7 @@ const params = (over: Partial<Parameters<typeof editMenuTemplate>[0]> = {}) => (
   linkURL: '',
   ...over
 })
-const actions = () => ({ replaceMisspelling: vi.fn(), addToDictionary: vi.fn(), copyText: vi.fn() })
+const actions = () => ({ replaceMisspelling: vi.fn(), addToDictionary: vi.fn(), copyText: vi.fn(), copyImage: vi.fn() })
 const labels = (items: ReturnType<typeof editMenuTemplate>) => items.map(i => (i.type === 'separator' ? '—' : i.label))
 
 describe('the right-click menu on text', () => {
@@ -64,5 +64,22 @@ describe('the right-click menu on text', () => {
     expect(run.copyText).toHaveBeenLastCalledWith('+15551234')
     expect(editMenuTemplate(params({ linkURL: 'mailto:?subject=Share' }), run)).toEqual([])
     expect(editMenuTemplate(params({ linkURL: 'conduit-page://x' }), run)).toEqual([])
+  })
+
+  it('gives a picture Copy Image, which copies the picture itself, beside a selection and a link', () => {
+    const run = actions()
+    const picture = editMenuTemplate(params({ mediaType: 'image', hasImageContents: true }), run)
+    expect(labels(picture)).toEqual(['Copy Image'])
+    picture[0].click?.({} as never, undefined, {} as never)
+    expect(run.copyImage).toHaveBeenCalledOnce()
+    expect(labels(editMenuTemplate(params({ mediaType: 'image', hasImageContents: true, selectionText: 'hi', linkURL: 'https://x.dev' }), run))).toEqual([
+      'Copy',
+      '—',
+      'Copy Image',
+      '—',
+      'Copy Link'
+    ])
+    // A picture that hasn't loaded has nothing to copy.
+    expect(editMenuTemplate(params({ mediaType: 'image', hasImageContents: false }), run)).toEqual([])
   })
 })

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { keptPicture, pictureHost, readGatewayPicture } from '../state/gatewayPictures'
 import { t } from '@shared/i18n'
-import { pictureFileName, saveFromUrl } from '../state/saveMedia'
+import { copyPicture, pictureFileName, saveFromUrl } from '../state/saveMedia'
 import { inSelectMenu } from './Select'
 
 /** The profile whose files a transcript's pictures are read from. */
@@ -30,21 +30,51 @@ export function PictureViewerHost({ children }: { children: ReactNode }) {
       {shown ? (
         <div className="picture-viewer" role="dialog" aria-label={shown.name} onClick={() => setShown(null)}>
           <img src={shown.src} alt={shown.name} />
-          <button
-            className="picture-viewer-save"
-            onClick={event => {
-              event.stopPropagation()
-              void saveFromUrl(shown.src, pictureFileName(shown.name, shown.src))
-            }}
-          >
-            {t('Download')}
-          </button>
+          <div className="picture-viewer-actions">
+            {/* Keyed by the picture: one opened from the keyboard while the viewer shows another starts at Copy. */}
+            <ViewerCopy key={shown.src} src={shown.src} />
+            <button
+              className="picture-viewer-save"
+              onClick={event => {
+                event.stopPropagation()
+                void saveFromUrl(shown.src, pictureFileName(shown.name, shown.src))
+              }}
+            >
+              {t('Download')}
+            </button>
+          </div>
           <button className="picture-viewer-close" aria-label={t('Close')} onClick={() => setShown(null)}>
             ×
           </button>
         </div>
       ) : null}
     </ViewerContext.Provider>
+  )
+}
+
+/**
+ * The viewer's Copy, beside Download: the picture itself goes on the
+ * clipboard, and the button says Copied (or Couldn't copy) for a moment. A
+ * right-click on any picture has Copy Image too (src/main/editMenu.ts).
+ */
+function ViewerCopy({ src }: { src: string }) {
+  const [note, setNote] = useState<{ copied: boolean } | null>(null)
+  useEffect(() => {
+    if (!note) return
+    const timer = setTimeout(() => setNote(null), 1500)
+    return () => clearTimeout(timer)
+  }, [note])
+  return (
+    <button
+      className="picture-viewer-save"
+      aria-live="polite"
+      onClick={event => {
+        event.stopPropagation()
+        void copyPicture(src).then(copied => setNote({ copied }))
+      }}
+    >
+      {note ? (note.copied ? t('Copied') : t("Couldn't copy")) : t('Copy')}
+    </button>
   )
 }
 

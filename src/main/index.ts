@@ -1,5 +1,6 @@
 import {
   BrowserWindow,
+  ClipboardItem,
   Menu,
   app,
   clipboard,
@@ -7,6 +8,7 @@ import {
   desktopCapturer,
   globalShortcut,
   ipcMain,
+  nativeImage,
   nativeTheme,
   screen,
   shell,
@@ -33,7 +35,8 @@ import {
   type SignInRequest,
   type ThemeChoice,
   type AppIconChoice,
-  type HotkeyName
+  type HotkeyName,
+  type PcRequest
 } from '../shared/ipc'
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
@@ -71,6 +74,7 @@ import { applyAppIcon, watchNewWindows } from './appIcon'
 import { rebuildMenu } from './menuGate'
 import { watchEditMenu } from './editMenu'
 import { launchedAtLogin, loginItemState, openStartupSettings, setLoginItem } from './loginItem'
+import { deletePcDriver, initPcControl, installPcDriver, pcControlState, resumePcDriverInstall, runPcRequest, setPcControl, stopControl } from './pcControl'
 import {
   appIconChoice,
   askHostAtLaunch,
@@ -633,6 +637,22 @@ function registerIpc(): void {
   ipcMain.handle(IPC.deviceReports, () => deviceReports())
   ipcMain.handle(IPC.updateState, () => updateState())
   ipcMain.handle(IPC.loginItem, () => loginItemState())
+  initPcControl({
+    notify: state => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlChanged, state),
+    stopped: () => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlStopped)
+  })
+  // Only the main window runs the poll loop and Settings. A docked chat shows another
+  // dashboard's pages, so it must never hand over an action or change the setting.
+  const fromMain = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => !!mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents
+  const refused = { ok: false, code: 'refused', message: 'Only Conduit’s main window can do that.' }
+  ipcMain.handle(IPC.pcControlState, event => (fromMain(event) ? pcControlState() : null))
+  ipcMain.handle(IPC.pcControlSet, (event, change: unknown) => (fromMain(event) ? setPcControl(change && typeof change === 'object' ? change : {}) : null))
+  ipcMain.handle(IPC.pcControlInstall, event => (fromMain(event) ? installPcDriver() : null))
+  ipcMain.handle(IPC.pcControlDelete, event => (fromMain(event) ? deletePcDriver() : null))
+  ipcMain.handle(IPC.pcControlRun, (event, request: PcRequest) => (fromMain(event) ? runPcRequest(request) : refused))
+  // Stop stays open to every window: stopping is always safe.
+  ipcMain.on(IPC.pcControlStop, () => stopControl())
+  resumePcDriverInstall()
   ipcMain.handle(IPC.setLoginItem, (_event, on: unknown) => setLoginItem(on === true))
   ipcMain.on(IPC.openStartupSettings, () => openStartupSettings())
   ipcMain.handle(IPC.checkForUpdates, () => checkForUpdates())
@@ -791,6 +811,15 @@ function registerIpc(): void {
     return url
   })
   ipcMain.on(IPC.hideQuickAsk, () => quickAsk.hide())
+  // A picture's Copy (the viewer's button): the picture itself, as a PNG every app pastes.
+  ipcMain.handle(IPC.copyImage, async (_event, bytes: unknown) => {
+    if (!(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return false
+    const data = bytes instanceof ArrayBuffer ? Buffer.from(bytes) : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    const image = nativeImage.createFromBuffer(data)
+    if (image.isEmpty()) return false
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }) })])
+    return true
+  })
   ipcMain.on(IPC.copyText, (_event, text: unknown) => {
     if (typeof text === 'string') clipboard.writeText(text)
   })
