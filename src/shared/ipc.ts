@@ -310,6 +310,8 @@ export interface ConduitApi {
   openHostPageInBrowser(path: string, profile?: string): Promise<string | null>
   /** Saves bytes already on hand (a picture's data) where the person picks; false when they didn't. */
   saveBytes(name: string, bytes: ArrayBuffer): Promise<boolean>
+  /** Puts a picture's bytes (PNG or JPEG) on the system clipboard as a picture; false when they aren't one the system reads. */
+  copyImage(bytes: ArrayBuffer): Promise<boolean>
   /**
    * Saves a Kanban task's attachment where the person picks, streamed from
    * the board's /attachments/{id}. 'saved', 'cancelled', or what went wrong.
@@ -611,6 +613,7 @@ export const IPC = {
   viewStagedFile: 'conduit:view-staged-file',
   openHostPageInBrowser: 'conduit:open-host-page-in-browser',
   saveBytes: 'conduit:save-bytes',
+  copyImage: 'conduit:copy-image',
   saveKanbanAttachment: 'conduit:save-kanban-attachment',
   keptRpc: 'conduit:kept-rpc',
   reconnect: 'conduit:reconnect',
