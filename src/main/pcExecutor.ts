@@ -217,7 +217,13 @@ export class Executor {
         break
       }
       case 'scroll': {
-        const at = typeof a.element === 'number' && target.snapshot ? { element_token: `${target.snapshot}:${a.element}` } : where(target)
+        const point = xy(a.coordinate)
+        const at =
+          typeof a.element === 'number' && target.snapshot
+            ? { element_token: `${target.snapshot}:${a.element}` }
+            : target.screen
+              ? { scope: 'desktop', ...(point ? { x: point[0], y: point[1] } : {}) }
+              : { ...where(target), ...(point ? { x: point[0], y: point[1] } : {}) }
         result = await this.client.callTool('scroll', { ...at, direction: str(a.direction), amount: Math.max(1, Math.min(50, num(a.amount) ?? 3)) })
         break
       }

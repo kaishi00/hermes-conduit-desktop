@@ -92,6 +92,8 @@ describe('pcExecutor', () => {
     expect(fake.calls[0]).toEqual({ name: 'get_desktop_state', args: { max_image_dimension: 1456 } })
     await run.run('chat-1', { action: 'right_click', args: { coordinate: [100, 200] } })
     expect(fake.calls.at(-1)).toEqual({ name: 'click', args: { scope: 'desktop', x: 100, y: 200, button: 'right' } })
+    await run.run('chat-1', { action: 'scroll', args: { direction: 'down', coordinate: [5, 6] } })
+    expect(fake.calls.at(-1)).toEqual({ name: 'scroll', args: { scope: 'desktop', x: 5, y: 6, direction: 'down', amount: 3 } })
   })
 
   it('captures again after an action when asked', async () => {
