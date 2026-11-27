@@ -101,6 +101,10 @@ describe('New Project’s Browse (desktop#605)', () => {
     expect(folder()).toBe('')
     expect(host.querySelector('.project-error')?.textContent).toContain('Hermes can’t see that folder')
     expect(host.querySelector('.host-folders')).not.toBeNull()
+    act(() => button('Use This Folder').click())
+    await settle()
+    expect(folder()).toBe('/home/eric')
+    expect(host.querySelector('.project-error')).toBeNull()
   })
 
   it('makes the project in the profile, with the folder chosen', async () => {
