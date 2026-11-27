@@ -179,7 +179,7 @@ const InLink = createContext(false)
 function MarkdownPicture({ src, name, title }: { src: string; name: string; title?: string }) {
   return useContext(InLink) ? (
     <span className="reply-picture linked-picture">
-      <img src={src} alt={name} title={title} />
+      <img src={src} alt={name} title={title || name} />
     </span>
   ) : (
     <PictureImage src={src} name={name} title={title} className="reply-picture" />
@@ -194,7 +194,9 @@ const urlTransform = (url: string) => (url.startsWith(SESSION_LINK) ? url : defa
 const components: Components = {
   a: ({ href, children }) =>
     href?.startsWith(SESSION_LINK) ? (
-      <ChatLink href={href}>{children}</ChatLink>
+      <ChatLink href={href}>
+        <InLink.Provider value>{children}</InLink.Provider>
+      </ChatLink>
     ) : (
       <a href={href} target="_blank" rel="noreferrer">
         <Favicon href={href} />
