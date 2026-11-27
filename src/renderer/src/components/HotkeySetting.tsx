@@ -90,7 +90,7 @@ export function HotkeySetting({ which }: { which: HotkeyName }) {
       window.removeEventListener('blur', onBlur)
       window.removeEventListener(LISTEN_EVENT, onOther)
       // Another row's Change took the listening: both shortcuts stay aside for it, so asking now would read this
-      // row's keys as another app's. It's asked again when that row stops, or the window comes back.
+      // row's keys as another app's. It's asked again when the window comes back.
       if (listening !== which) return
       listening = null
       window.conduit.setHotkeyRecording(false)

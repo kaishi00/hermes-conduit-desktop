@@ -35,8 +35,10 @@ function mount() {
     return null
   }
   act(() => root.render(createElement(Probe)))
-  return { call: () => call, unmount: () => act(() => root.unmount()) }
+  mounted = root
+  return { call: () => call }
 }
+let mounted: ReturnType<typeof createRoot> | null = null
 
 /** Another window's mode pick (the Live call window's capsule, a chat window) arrives as a storage change (desktop#663). */
 function storedElsewhere(key: string | null, mode: string | null) {
@@ -47,7 +49,12 @@ function storedElsewhere(key: string | null, mode: string | null) {
   act(() => void window.dispatchEvent(new StorageEvent('storage', { key })))
 }
 
-afterEach(() => localStorage.clear())
+afterEach(() => {
+  // Unmounted here, so a failed case doesn't leave its storage listener behind.
+  if (mounted) act(() => mounted!.unmount())
+  mounted = null
+  localStorage.clear()
+})
 
 describe('the next call’s mode follows a mode picked in another window', () => {
   it('takes the mode another window stored', () => {
@@ -55,7 +62,6 @@ describe('the next call’s mode follows a mode picked in another window', () =>
     expect(view.call().nextMode).toBe('classic')
     storedElsewhere(VOICE_MODE_STORAGE_KEY, 'gemini')
     expect(view.call().nextMode).toBe('gemini')
-    view.unmount()
   })
 
   it('reads the mode again when another window clears its storage', () => {
@@ -64,7 +70,6 @@ describe('the next call’s mode follows a mode picked in another window', () =>
     expect(view.call().nextMode).toBe('gpt')
     storedElsewhere(null, null)
     expect(view.call().nextMode).toBe('classic')
-    view.unmount()
   })
 
   it('leaves the mode be for another key', () => {
@@ -72,6 +77,5 @@ describe('the next call’s mode follows a mode picked in another window', () =>
     localStorage.setItem(VOICE_MODE_STORAGE_KEY, 'grok')
     storedElsewhere('conduit.somethingElse', null)
     expect(view.call().nextMode).toBe('classic')
-    view.unmount()
   })
 })

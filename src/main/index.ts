@@ -347,9 +347,15 @@ let callBrowser: BrowserWindow | null = null
 let callWindowId = LIVE_CALL_WINDOW_ID
 /** The call window's close, waiting on its call to end when it's closed mid-call (main/callWindowClose.ts). */
 let callClosing: CallWindowClose | null = null
-/** The call window brought forward while it closes (its chat's row, a notification, the shortcut) stays open. */
-function keepClosingCallWindow(window: BrowserWindow): void {
-  if (window === callBrowser) callClosing?.cancel()
+/**
+ * The call window brought forward while it closes (its chat's row, a notification, the shortcut) stays open, while
+ * it's still the set's (its own close button). One a sign-out or a lock dropped from the set finishes closing.
+ */
+function keepClosingCallWindow(window: BrowserWindow): boolean {
+  if (window !== callBrowser || !callClosing?.closing) return true
+  if (!chatWindows.ids().includes(callWindowId)) return false
+  callClosing.cancel()
+  return true
 }
 /** What each chat window's pin is remembered by (issue 608). The call window's pin isn't remembered: it opens on top. */
 const chatOnTopKeys = new WeakMap<BrowserWindow, string>()
@@ -757,8 +763,7 @@ function registerIpc(): void {
     const window = found?.window.window
     if (!found || !window) return null
     const watching = window.isVisible() && !window.isMinimized() && window.isFocused()
-    if (show === true) {
-      keepClosingCallWindow(window)
+    if (show === true && keepClosingCallWindow(window)) {
       if (window.isMinimized()) window.restore()
       window.show()
       window.focus()
