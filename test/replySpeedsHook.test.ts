@@ -129,6 +129,24 @@ describe('the reply speeds hook', () => {
     localStorage.removeItem('conduit.showReplySpeedInComposer')
   })
 
+  it('dims the chip from the first render of a running turn', async () => {
+    localStorage.setItem('conduit.showReplySpeedInComposer', 'true')
+    const seen: { running: boolean; stale?: boolean }[] = []
+    const hook = renderHook(({ running }: Props) => {
+      const shown = useReplySpeeds('a', undefined, true, running)
+      seen.push({ running, stale: shown.composer?.stale })
+      return shown
+    }, { running: false })
+    await settle()
+    expect(hook.result().composer).toEqual({ rate: 55, stale: false })
+    seen.length = 0
+    hook.rerender({ running: true })
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.every(render => render.stale === true)).toBe(true)
+    hook.unmount()
+    localStorage.removeItem('conduit.showReplySpeedInComposer')
+  })
+
   it('starts another chat with no composer speed', async () => {
     localStorage.setItem('conduit.showReplySpeedInComposer', 'true')
     const hook = renderHook(({ id }: { id: string }) => useReplySpeeds(id, undefined, true, false), { id: 'a' })
