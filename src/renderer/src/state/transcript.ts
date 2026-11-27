@@ -714,12 +714,13 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
         items = [...items, { kind: 'assistant', key: nextKey('a'), text: finalText.trim(), at: Date.now(), streaming: false }]
       }
       // The reply's stored row, when the gateway names it: reply speeds and reactions find it by that.
+      // Only a reply this turn drew: a hidden turn that drew none leaves an earlier turn's reply alone.
       const persisted = payload.persisted_turn as { final_assistant_row_id?: unknown } | null | undefined
       const finalRow = persisted?.final_assistant_row_id
       if (typeof finalRow === 'number' && Number.isInteger(finalRow) && finalRow > 0 && !items.some(i => i.kind === 'assistant' && i.rowId === finalRow)) {
         const at = items.map(i => i.kind === 'assistant').lastIndexOf(true)
         const last = items[at]
-        if (at > lastUser && last?.kind === 'assistant' && !last.rowId) items = items.map((item, i) => (i === at ? { ...last, rowId: finalRow } : item))
+        if (at > lastUser && at >= (state.turnFrom ?? 0) && last?.kind === 'assistant' && !last.rowId) items = items.map((item, i) => (i === at ? { ...last, rowId: finalRow } : item))
       }
       // Tools the turn ended without finishing (a stop) aren't running any more.
       items = items.map(item => (item.kind === 'tool' && item.status === 'running' ? { ...item, status: 'done' as const } : item))
