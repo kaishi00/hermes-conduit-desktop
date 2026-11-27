@@ -27,13 +27,19 @@ export function useReplySpeeds(sessionId: string | null, profile: string | undef
       const answer = parseReplySpeeds(await gateway.http('GET', replySpeedsPath(sessionId, profile)))
       if (scopeRef.current === asked) setSpeeds(answer)
     } catch {
-      // An older plugin (404), a chat Hermes has no row for yet, or a failed read: the speeds stay as they were.
+      // An older plugin (404), a chat Hermes has no row for yet, or a failed read: the saved rows' speeds
+      // stay; the newest turn's, which may be an earlier turn's, goes.
+      if (scopeRef.current === asked) setSpeeds(was => (was?.unsaved != null ? { ...was, unsaved: undefined } : was))
     }
   }, [sessionId, profile])
 
   useEffect(() => {
     setSpeeds(undefined)
   }, [scope])
+  useEffect(() => {
+    // A new turn's reply isn't the one the last read's newest turn wrote.
+    if (running) setSpeeds(was => (was?.unsaved != null ? { ...was, unsaved: undefined } : was))
+  }, [running])
   useEffect(() => {
     if (shown && sessionId && connected && !running) void read()
   }, [shown, scope, sessionId, connected, running, read])

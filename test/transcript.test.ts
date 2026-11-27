@@ -159,6 +159,22 @@ describe('a live turn', () => {
     expect(state.items).toMatchObject([{ kind: 'assistant', text: 'Done.' }])
   })
 
+  it('gives a streamed reply the stored row the turn names', () => {
+    const stored: TranscriptState = { items: fromHistory([{ role: 'user', text: 'Hi', row_id: 1 }, { role: 'assistant', text: 'Hello.', row_id: 2 }]), running: false }
+    const state = play(
+      [
+        { type: 'message.start' },
+        { type: 'message.delta', payload: { text: 'Ready.' } },
+        { type: 'message.complete', payload: { text: 'Ready.', persisted_turn: { row_ids: [5, 6], complete: true, final_assistant_row_id: 6 } } }
+      ],
+      stored
+    )
+    expect(state.items.filter(i => i.kind === 'assistant').map(i => (i as { rowId?: number }).rowId)).toEqual([2, 6])
+    // A row some reply already holds isn't given twice.
+    const again = play([{ type: 'message.start' }, { type: 'message.complete', payload: { text: 'Hm.', persisted_turn: { row_ids: [6], complete: false, final_assistant_row_id: 6 } } }], state)
+    expect(again.items.filter(i => i.kind === 'assistant').map(i => (i as { rowId?: number }).rowId)).toEqual([2, 6, undefined])
+  })
+
   it('says why a turn failed, and that a stopped one stopped', () => {
     const failed = play([{ type: 'message.start' }, { type: 'message.complete', payload: { status: 'error', error: 'Rate limited' } }])
     expect(failed.items).toMatchObject([{ kind: 'notice', tone: 'error', text: 'Rate limited' }])

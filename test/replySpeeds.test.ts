@@ -30,6 +30,7 @@ describe('reply speeds', () => {
   it('keeps a decimal only under ten', () => {
     expect(replySpeedLabel(41.6)).toBe('42 tok/s')
     expect(replySpeedLabel(4.46)).toBe('4.5 tok/s')
+    expect(replySpeedLabel(9.97)).toBe('10 tok/s')
   })
 
   it('names the chat and its profile', () => {

@@ -53,7 +53,7 @@ export function replySpeedFor(
   return !running && item.key === newestReply ? speeds.unsaved : undefined
 }
 
-const number = (rate: number) => (rate < 10 ? rate.toFixed(1) : String(Math.round(rate)))
+const number = (rate: number) => (Math.round(rate * 10) < 100 ? rate.toFixed(1) : String(Math.round(rate)))
 
 /** "42 tok/s"; one decimal under 10. */
 export const replySpeedLabel = (rate: number) => t('{speed} tok/s', { speed: number(rate) })
