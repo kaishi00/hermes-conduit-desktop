@@ -100,6 +100,37 @@ export function answeringIds(response: unknown): string[] {
   })
 }
 
+/**
+ * A session.active_list answer from the legacy sidecar: rows with no `source`, every profile's
+ * the same. An answer with no rows can't tell (#647).
+ */
+export function unscopedAnswer(response: unknown): boolean {
+  const rows = ((response ?? {}) as Raw).sessions
+  return Array.isArray(rows) && rows.some(raw => !raw || typeof raw !== 'object' || !('source' in raw))
+}
+
+/** A session.active_list answer a session authority gave: rows that each name their `source`. */
+const scopedAnswer = (response: unknown) => {
+  const rows = ((response ?? {}) as Raw).sessions
+  return Array.isArray(rows) && rows.length > 0 && !unscopedAnswer(response)
+}
+
+/**
+ * Which profiles' registries a poll reads: every one, or on a legacy dashboard only the first, at
+ * the idle pace, to notice the dashboard becoming a session authority (#647). Its answers would
+ * all be left out anyway.
+ */
+export function registriesToRead(profiles: readonly string[], legacy: boolean): readonly string[] {
+  return legacy ? profiles.slice(0, 1) : profiles
+}
+
+/** Whether the dashboard reads as legacy after a poll's answers: unscoped rows make it so, scoped ones undo it, none keep it. */
+export function stillLegacy(legacy: boolean, answers: readonly unknown[]): boolean {
+  if (answers.some(unscopedAnswer)) return true
+  if (answers.some(scopedAnswer)) return false
+  return legacy
+}
+
 export const LIVE_STEPS_PATH = '/api/plugins/conduit_push/live-steps'
 export const liveStepsPath = (profile: string) => (profile && profile !== 'default' ? `${LIVE_STEPS_PATH}?profile=${encodeURIComponent(profile)}` : LIVE_STEPS_PATH)
 
@@ -157,12 +188,16 @@ export function useAnsweringBots(
     }
     let live = true
     let timer: number | undefined
+    // A legacy dashboard answers every profile with the same unscoped rows: one read is enough (#647).
+    let legacy = false
     const read = async () => {
       if (!document.hidden) {
-        const all = profileKey.split('\n')
+        const all = registriesToRead(profileKey.split('\n'), legacy)
         const answers = await Promise.all(
           all.map(name => gateway.rpc('session.active_list', name !== 'default' ? { profile: name } : {}).then(r => r, () => null))
         )
+        if (!live) return
+        legacy = stillLegacy(legacy, answers)
         const busy = all.flatMap((name, i) => {
           const ids = answeringIds(answers[i])
           return ids.length ? [{ name, ids }] : []
@@ -177,7 +212,7 @@ export function useAnsweringBots(
         setBots(current => (sameSteps(current, next) ? current : next))
         step.current = nextStep(step.current, next.size > 0)
       }
-      timer = window.setTimeout(() => void read(), POLL_STEPS_MS[step.current])
+      timer = window.setTimeout(() => void read(), legacy ? POLL_STEPS_MS[POLL_STEPS_MS.length - 1] : POLL_STEPS_MS[step.current])
     }
     void read()
     return () => {

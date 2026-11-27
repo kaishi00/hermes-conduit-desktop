@@ -13,7 +13,7 @@
 import { gateway } from '../gateway'
 import { noteChatLength } from './chatLength'
 import { LONG_CHAT_PAGE, newestPages, rowsStandIn } from './longChat'
-import { hasKeptTranscript, keepReadAhead } from './transcriptCache'
+import { hasKeptTranscript, keepReadAhead, keyOf } from './transcriptCache'
 
 /** How long a read ahead stands before pointing at the card again reads the chat again. */
 export const READ_AHEAD_AGAIN_MS = 30_000
@@ -23,7 +23,7 @@ const started = new Map<string, number>()
 /** Reads the chat's newest page ahead of its open, on the dashboard on screen. */
 export function readChatAhead(storedId: string, profile: string | undefined, host = ''): void {
   if (!storedId || hasKeptTranscript(storedId, profile, host)) return
-  const key = `${host}\n${profile || 'default'}\n${storedId}`
+  const key = keyOf(storedId, profile, host)
   const now = Date.now()
   const at = started.get(key)
   if (at !== undefined && now - at < READ_AHEAD_AGAIN_MS) return

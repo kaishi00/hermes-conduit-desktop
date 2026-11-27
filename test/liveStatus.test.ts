@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { liveStates, nextStep, POLL_STEPS_MS } from '../src/renderer/src/state/liveStatus'
+import { liveStates, nextStep, POLL_STEPS_MS, registriesToRead, stillLegacy, unscopedAnswer } from '../src/renderer/src/state/liveStatus'
 import { filterRows, type ChatMarks } from '../src/renderer/src/state/chatMarks'
 
 describe('Running and Needs approval on the rows', () => {
@@ -37,5 +37,24 @@ describe('Running and Needs approval on the rows', () => {
     const waiting = new Set(['b'])
     expect(filterRows(rows, 'running', marks, running, waiting).map(r => r.id)).toEqual(['a'])
     expect(filterRows(rows, 'waiting', marks, running, waiting).map(r => r.id)).toEqual(['b'])
+  })
+})
+
+describe('a legacy dashboard reads one registry (#647)', () => {
+  const legacyRows = { sessions: [{ id: 's1', status: 'working' }] }
+  const scopedRows = { sessions: [{ id: 's1', status: 'working', source: 'conduit' }] }
+  it('tells unscoped rows from scoped ones, and no rows from either', () => {
+    expect(unscopedAnswer(legacyRows)).toBe(true)
+    expect(unscopedAnswer(scopedRows)).toBe(false)
+    expect(unscopedAnswer({ sessions: [] })).toBe(false)
+    expect(unscopedAnswer(null)).toBe(false)
+  })
+  it('stays legacy until a scoped answer, and reads only the first profile meanwhile', () => {
+    expect(stillLegacy(false, [legacyRows, null])).toBe(true)
+    expect(stillLegacy(true, [{ sessions: [] }])).toBe(true)
+    expect(stillLegacy(true, [scopedRows])).toBe(false)
+    expect(stillLegacy(false, [{ sessions: [] }])).toBe(false)
+    expect(registriesToRead(['default', 'coder', 'writer'], true)).toEqual(['default'])
+    expect(registriesToRead(['default', 'coder'], false)).toEqual(['default', 'coder'])
   })
 })

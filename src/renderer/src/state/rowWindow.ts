@@ -116,15 +116,16 @@ export function startAt(index: number, count: number): number {
 /** A windowed transcript's way to draw a row it left out, answering whether the chat has that row at all. */
 export type RowOpener = (key: string) => boolean
 
-const openers: { scroller: HTMLElement; open: RowOpener; latest: () => void }[] = []
+const openers: { scroller: HTMLElement; open: RowOpener; latest: () => void; jumped?: () => void }[] = []
 
 /**
  * Registers a windowed transcript's scroller, so a jump to a row it left out
  * can widen its window first, and a way back to its newest rows that follows
- * the chat again. Call the answer when it goes away.
+ * the chat again. `jumped` hears of a jump to a row the window already draws,
+ * which needs no opening (#648). Call the answer when it goes away.
  */
-export function registerRowOpener(scroller: HTMLElement, open: RowOpener, latest: () => void): () => void {
-  const entry = { scroller, open, latest }
+export function registerRowOpener(scroller: HTMLElement, open: RowOpener, latest: () => void, jumped?: () => void): () => void {
+  const entry = { scroller, open, latest, jumped }
   openers.push(entry)
   return () => {
     const at = openers.indexOf(entry)
@@ -162,9 +163,13 @@ export function rowElement(container: HTMLElement, key: string): HTMLElement | n
       ?? [...container.querySelectorAll<HTMLElement>('[data-step-keys]')]
         .find(row => row.getAttribute('data-step-keys')?.split(/\s+/).includes(key)) ?? null
   }
-  const drawn = find()
-  if (drawn) return drawn
   const opener = openers.find(o => o.scroller === container) ?? openers.find(o => container.contains(o.scroller))
+  const drawn = find()
+  if (drawn) {
+    // Still a jump the reader asked for, as one that opens the window is.
+    opener?.jumped?.()
+    return drawn
+  }
   if (!opener || !opener.open(key)) return null
   return find()
 }

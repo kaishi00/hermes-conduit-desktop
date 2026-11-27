@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { BENCH_COLUMN, CHAT_BESIDE_BENCH, benchPlace, DRAWER_DEFAULT, readBenchOpen, readDrawer, shownBenchWidth, shownView, writeBenchOpen, writeDrawer } from '../src/renderer/src/state/workbench'
+import { BENCH_COLUMN, CHAT_BESIDE_BENCH, benchHold, benchPlace, DRAWER_DEFAULT, readBenchOpen, readDrawer, shownBenchWidth, shownView, writeBenchOpen, writeDrawer } from '../src/renderer/src/state/workbench'
 import { RAIL_WIDTH } from '../src/renderer/src/state/columnWidths'
 
 const store = new Map<string, string>()
@@ -52,5 +52,17 @@ describe('the folder the workbench shows while another chat opens', () => {
     expect(benchPlace(undefined, true, '/srv/a')).toEqual({ root: '/srv/a', waiting: true })
     expect(benchPlace(undefined, false, '/srv/a')).toEqual({ root: null, waiting: false })
     expect(benchPlace(undefined, true, null)).toEqual({ root: null, waiting: false })
+  })
+})
+
+describe('the bench place held through an open (#648)', () => {
+  it('holds the shown folder, keeps it through an open off screen, and lets go once nothing opens', () => {
+    expect(benchHold('/srv/a', true, false, null)).toBe('/srv/a')
+    // Off the Chats screen mid-open: still held.
+    expect(benchHold(null, false, true, '/srv/a')).toBe('/srv/a')
+    expect(benchHold(null, false, false, '/srv/a')).toBeNull()
+    // The next open waits in that place, then takes its own folder.
+    const held = benchHold('/srv/a', true, false, null)
+    expect(benchPlace(undefined, true, held)).toEqual({ root: '/srv/a', waiting: true })
   })
 })

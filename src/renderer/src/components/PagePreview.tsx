@@ -124,7 +124,13 @@ export function ReplyPage({ html, ready }: { html: string; ready: boolean }) {
   useEffect(() => {
     if (!ready) return
     let live = true
-    void window.conduit.pageUrl(html).then(address => live && setUrl(address))
+    // Not the last page's address while this one's is asked for.
+    setUrl(undefined)
+    // A failed ask shows the HTML, as a page too large to keep does (#628).
+    window.conduit.pageUrl(html).then(
+      address => live && setUrl(address),
+      () => live && setUrl(null),
+    )
     return () => {
       live = false
     }

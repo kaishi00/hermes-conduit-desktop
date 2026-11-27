@@ -53,11 +53,48 @@ export function placeOf(scroller: ScaleScroller): Place {
 
 const scrollers = new Set<HTMLElement>()
 
+/** The chat's text size drawn now (1 before any is set). */
+export function chatScaleNow(): number {
+  const value = parseFloat(document.documentElement.style.getPropertyValue('--chat-scale'))
+  return value > 0 ? value : 1
+}
+
+/**
+ * A scroll kept at one text size, read at another: the rows zoom with the
+ * text, so the distance down them does too (a parked tab's place, #641).
+ */
+export function rescaledTop(top: number, from: number | undefined, to: number): number {
+  return from && from > 0 ? (top * to) / from : top
+}
+
+/**
+ * Size changes a hidden scroller missed (a chat pane covered by a docked
+ * chat is `display: none`, so it has no rows on show to keep), as the ratio
+ * its scroll owes once it shows again (#641). A reader at the end follows
+ * the chat anyway, so only a scroll short of it is moved.
+ */
+const owed = new Map<HTMLElement, number>()
+let shown: ResizeObserver | undefined
+
+/** Puts a scroller that shows again where its missed size changes take it. */
+export function settleOwed(el: HTMLElement): void {
+  const ratio = owed.get(el)
+  if (ratio === undefined || el.clientHeight === 0) return
+  owed.delete(el)
+  if (!atEnd(el)) el.scrollTop = el.scrollTop * ratio
+}
+
 /** Keeps a transcript's scroller on its rows as the text size changes; call the answer when it goes away. */
 export function keepPlaceOnScale(el: HTMLElement): () => void {
   scrollers.add(el)
+  if (typeof ResizeObserver !== 'undefined') {
+    shown ??= new ResizeObserver(entries => entries.forEach(entry => settleOwed(entry.target as HTMLElement)))
+    shown.observe(el)
+  }
   return () => {
     scrollers.delete(el)
+    owed.delete(el)
+    shown?.unobserve(el)
   }
 }
 
@@ -89,6 +126,8 @@ function asScaleScroller(el: HTMLElement): ScaleScroller {
 export function drawChatScale(scale: number): void {
   const root = document.documentElement
   if (root.style.getPropertyValue('--chat-scale') === String(scale)) return
+  const was = chatScaleNow()
+  for (const el of scrollers) if (el.clientHeight === 0) owed.set(el, ((owed.get(el) ?? 1) * scale) / was)
   const places = [...scrollers].map(el => placeOf(asScaleScroller(el)))
   root.style.setProperty('--chat-scale', String(scale))
   // Reading the rows after the change lays them out at the new size, before the window paints.

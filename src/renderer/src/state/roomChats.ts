@@ -126,3 +126,18 @@ export const askLine = (name: string) => t('Ask {name} about this room', { name 
 export const wrapUpLine = (name: string) => t('Wrap Up with {name}', { name })
 export const wrapUpPrompt = () =>
   t('Wrap up this room for me: what was decided, what I said I’d do, what I might have missed, and anything waiting on my answer.')
+
+/** An ask that goes once its chat opens: a bot's introduce, a room chat's Wrap Up (#621). */
+export interface PendingAsk {
+  text: string
+  /** The chat it goes to; null for a bot whose Bot Chat isn't made yet. */
+  storedId: string | null
+  profile: string
+  resumed?: boolean
+}
+
+/** Whether `ask` is for this chat: the profile matched as rows name it, the default one left out or in another case. */
+export function sameAsk(ask: PendingAsk, storedId: string | null | undefined, profile: string | undefined): boolean {
+  const name = (value?: string) => (value || 'default').toLowerCase()
+  return ask.storedId === storedId && name(ask.profile) === name(profile)
+}

@@ -50,7 +50,7 @@ import {
 } from '../state/gptLive'
 import { newCallId, saveCall, type CallResume, type CallTurn } from '../state/voiceSave'
 import type { PendingRequest } from '@shared/ipc'
-import { answerApproval, answerQuestion, answerWords, delegatedAnswer, isApprove, isDeny, requestUpdate } from '../state/liveRequests'
+import { answerApproval, answerQuestion, answerWords, delegatedAnswer, isApprove, isDeny, requestUpdate, unmarkedAnswer } from '../state/liveRequests'
 import { chatFinder, delegatedRead, delegatedSearch, findChatMarker, readChatMarker } from '../state/chatFinder'
 import { JOB_STARTED, VoiceJobs, asksForBackground, jobFollowUpMarker, type VoiceJob } from '../state/voiceJobs'
 import { CallCards } from './CallCards'
@@ -390,8 +390,10 @@ export function GptLiveCall({
     // Marked nothing answered here: while the chat waits on a question, the user's answer to it. A request
     // held for the user's OK settles first: their yes, or "Send:", is about it, not the question. The work in
     // "Call me:" and work the model sends to the background stay requests.
-    const unmarked =
-      askFirst.current.draft || !answers || asksForBackground(text) ? null : delegatedAnswer(text, said, live.current.requests, true)
+    const unmarked = unmarkedAnswer(
+      { text, said, held: !!askFirst.current.draft, answers, background: asksForBackground(text) },
+      live.current.requests
+    )
     if (unmarked !== null) {
       void answerQuestion(live.current.requests, unmarked).then(result => !ended.current && append(result.next_question ?? result.message ?? result.error ?? '', 'speakable', id))
       return

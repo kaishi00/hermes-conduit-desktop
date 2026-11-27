@@ -18,6 +18,7 @@ import {
   roomUploadKind,
   typedPicture,
   withPictureExtension,
+  pictureExtension,
   roomUploadProblem,
   uploadAttachments,
   uploadRoomAttachments,
@@ -232,6 +233,10 @@ describe('a picture sent as it is', () => {
     expect(typedPicture('photo.heic', b64(png))).toEqual({ name: 'photo.png', mime: 'image/png' })
     expect(typedPicture('Apple.', b64(png))).toEqual({ name: 'Apple.png', mime: 'image/png' })
     expect(withPictureExtension('Event 8.30', 'jpg')).toBe('Event 8.30.jpg')
+    // A nameless picture is named as the phone names it (#3366).
+    expect(pictureExtension('image/jpeg')).toBe('jpg')
+    expect(pictureExtension('image/svg+xml')).toBe('svg')
+    expect(pictureExtension('image/heic')).toBe('heic')
     expect(withPictureExtension('IMG_1.HEIC', 'jpg')).toBe('IMG_1.jpg')
     expect(withPictureExtension('', 'png')).toBe('image.png')
   })

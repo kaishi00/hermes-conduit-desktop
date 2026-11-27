@@ -281,6 +281,14 @@ const PICTURE_EXTENSIONS: Record<string, string[]> = {
 }
 const OTHER_PICTURE_EXTENSIONS = ['heic', 'heif', 'avif', 'bmp', 'tif', 'tiff', 'svg', 'jxl']
 
+/** The extension a picture of this type is named with: "jpg" for a JPEG, as the phone names it, never "jpeg" (#3366). */
+export function pictureExtension(mime: string): string {
+  const known = PICTURE_EXTENSIONS[mime]?.[0]
+  if (known) return known
+  const subtype = (mime.split('/')[1] ?? '').split('+')[0]
+  return subtype || 'png'
+}
+
 /**
  * `name` with the picture extension `ext`: a picture extension it already has
  * is replaced, any other ending ("Event 8.30", a domain) stays part of the
@@ -290,8 +298,8 @@ export function withPictureExtension(name: string, ext: string): string {
   const trimmed = name.replace(/\.+$/, '')
   const dot = trimmed.lastIndexOf('.')
   const current = dot > 0 ? trimmed.slice(dot + 1).toLowerCase() : ''
-  const isPicture = Object.values(PICTURE_EXTENSIONS).flat().includes(current) || OTHER_PICTURE_EXTENSIONS.includes(current)
-  const stem = isPicture ? trimmed.slice(0, dot) : trimmed
+  const pictureEnding = Object.values(PICTURE_EXTENSIONS).flat().includes(current) || OTHER_PICTURE_EXTENSIONS.includes(current)
+  const stem = pictureEnding ? trimmed.slice(0, dot) : trimmed
   return `${stem || 'image'}.${ext}`
 }
 

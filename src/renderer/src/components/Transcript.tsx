@@ -1,5 +1,5 @@
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
-import { keepPlaceOnScale } from '../state/chatScale'
+import { chatScaleNow, keepPlaceOnScale, rescaledTop } from '../state/chatScale'
 import { flushSync } from 'react-dom'
 import { mediaKind, splitReply, withoutBoardLines } from '../state/media'
 import { PagePreview, ReplyPage } from './PagePreview'
@@ -572,8 +572,7 @@ interface ItemProps {
   item: TranscriptItem
   /** Who answers in this chat, for "Replying to". */
   author: string
-  /** The answering bot's picture, heading each reply with its name and time, as on the phone. */
-  /** The bot's face on a reply, moving on the newest one. */
+  /** The answering bot's face heading each reply with its name and time, as on the phone, moving on the newest one. */
   face?: (moving: boolean) => React.ReactNode
   onQuote?: (request: QuoteRequest) => void
   /** The card's click for a quote, when the quoted reply is loaded. */
@@ -1246,7 +1245,7 @@ export function Transcript({
     const was = liveRows.current
     if (keepsPlace?.(left, true)) {
       const first = was.chat === left ? was.rows[was.start] : undefined
-      chatPlaces.keep(left, el && first && !pinned.current ? { start: was.start, anchor: rowKey(first), top: el.scrollTop } : null)
+      chatPlaces.keep(left, el && first && !pinned.current ? { start: was.start, anchor: rowKey(first), top: el.scrollTop, scale: chatScaleNow() } : null)
     }
     pinnedChat.current = chatKey
     const back = keepsPlace?.(chatKey, false) ? chatPlaces.take(chatKey) : undefined
@@ -1336,6 +1335,9 @@ export function Transcript({
       pinned.current = true
       flushSync(() => setWindowed(windowAt(null)))
       el.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+    }, () => {
+      // A jump to a row already drawn (a quote, Show in Chat, a timeline step in the window) gives way too (#648).
+      dropReveals.current()
     })
   }, [])
 
@@ -1457,7 +1459,8 @@ export function Transcript({
     }
     restoring.current = null
     pinned.current = false
-    el.scrollTop = back.top
+    // Left at another text size: the rows above the place grew or shrank with it (#641).
+    el.scrollTop = rescaledTop(back.top, back.scale, chatScaleNow())
   })
 
   // Rows drawn above the reader keep their place, whether the window took them on or a

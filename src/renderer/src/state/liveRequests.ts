@@ -85,6 +85,24 @@ export function delegatedAnswer(text: string, said: string, requests: PendingReq
   return unmarked && said.trim() && questionOpen(requests) ? said.trim() : null
 }
 
+/**
+ * What a GPT-Live delegation that marks nothing answered here (no "Answer:", "Call me:", job or read marker)
+ * answers the chat's open question with, or null when it is work instead (#609, #602):
+ * - A request held for the user's OK (`held`) settles first: their "yes", or "Send:", is about it, so it goes
+ *   to Hermes and the question stays open, as on the phone (`draft == nil`, hermes-conduit#3328).
+ * - The work in "Call me:" (`answers` false) stays a request.
+ * - Work the model sends to the background ("in the background" in its text) stays a request. The user's own
+ *   words don't decide it: an answer may well mention the background ("the job in the background failed"), and
+ *   the phone doesn't read them for this either.
+ */
+export function unmarkedAnswer(
+  delegation: { text: string; said: string; held: boolean; answers: boolean; background: boolean },
+  requests: PendingRequest[]
+): string | null {
+  if (delegation.held || !delegation.answers || delegation.background) return null
+  return delegatedAnswer(delegation.text, delegation.said, requests, true)
+}
+
 function questionText(question: ClarifyQuestion): string {
   const choices = question.choices.map((choice, i) => `${i + 1}. ${choice}`).join('; ')
   return `Hermes asks the user: ${clip(question.question)}${choices ? ` Choices: ${choices}.` : ''}${question.multiSelect ? ' They may pick several.' : ''} Ask them, then answer with what they say.`

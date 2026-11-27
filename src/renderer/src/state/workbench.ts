@@ -134,3 +134,13 @@ export function benchPlace(folder: string | undefined, loading: boolean, shown: 
   if (loading && shown) return { root: shown, waiting: true }
   return { root: null, waiting: false }
 }
+
+/**
+ * The folder held for the next benchPlace: the one shown while the bench shows, kept through an
+ * open even off the Chats screen (so coming back mid-open still finds its place), and let go once
+ * nothing opens (#648, App.tsx's hold).
+ */
+export function benchHold(shownRoot: string | null, shown: boolean, loading: boolean, held: string | null): string | null {
+  if (shown) return shownRoot
+  return loading ? held : null
+}

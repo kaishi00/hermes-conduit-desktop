@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PendingRequest } from '../src/shared/ipc'
-import { answerApproval, answerQuestion, answerWords, delegatedAnswer, isApprove, isDeny, pickedChoices, questionOpen, requestUpdate } from '../src/renderer/src/state/liveRequests'
+import { answerApproval, answerQuestion, answerWords, delegatedAnswer, isApprove, isDeny, pickedChoices, questionOpen, requestUpdate, unmarkedAnswer } from '../src/renderer/src/state/liveRequests'
 
 const approval = (id = 'a1'): PendingRequest => ({
   id,
@@ -104,5 +104,23 @@ describe('answering the chat by voice', () => {
     const other = clarify('q3')
     await answerQuestion([other], 'skip')
     expect(locks.at(-1)).toEqual({ request_id: 'q3', question_id: 'one', answer: null })
+  })
+})
+
+describe('a delegation that marks nothing while a question waits (#602, #609)', () => {
+  const base = { text: '', said: 'yes', held: false, answers: true, background: false }
+  it('answers the question with the user’s words', () => {
+    expect(unmarkedAnswer(base, [clarify()])).toBe('yes')
+    expect(unmarkedAnswer(base, [approval()])).toBeNull()
+  })
+  it('leaves the question open while a request waits for the user’s OK: their yes is about the request', () => {
+    expect(unmarkedAnswer({ ...base, held: true }, [clarify()])).toBeNull()
+    expect(unmarkedAnswer({ ...base, held: true, text: 'Send:' }, [clarify()])).toBeNull()
+  })
+  it('keeps Call me work and work sent to the background as requests', () => {
+    expect(unmarkedAnswer({ ...base, answers: false }, [clarify()])).toBeNull()
+    expect(unmarkedAnswer({ ...base, text: 'check the logs in the background', background: true }, [clarify()])).toBeNull()
+    // The user's words mentioning the background are still an answer.
+    expect(unmarkedAnswer({ ...base, said: 'the job in the background failed' }, [clarify()])).toBe('the job in the background failed')
   })
 })
