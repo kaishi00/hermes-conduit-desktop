@@ -818,7 +818,9 @@ export function prependOlder(state: TranscriptState, items: TranscriptItem[]): T
   if (!fresh.length) return state
   let at = 0
   while (at < state.items.length && state.items[at]!.key === 'long-chat') at++
-  return { ...state, items: [...state.items.slice(0, at), ...fresh, ...state.items.slice(at)] }
+  // The turn boundary is an index: rows read above it move it down by just the new rows.
+  const turnFrom = state.turnFrom === undefined ? undefined : state.turnFrom + fresh.length
+  return { ...state, items: [...state.items.slice(0, at), ...fresh, ...state.items.slice(at)], turnFrom }
 }
 
 /**
@@ -888,7 +890,9 @@ export function addPendingUser(state: TranscriptState, text: string, attachments
 export function withdrawPendingUser(state: TranscriptState): TranscriptState {
   const index = state.items.map(i => i.kind === 'user' && i.pending).lastIndexOf(true)
   if (index < 0) return state
-  return { ...state, items: state.items.filter((_, i) => i !== index) }
+  // A pending row taken back below the turn boundary moves the boundary up with it.
+  const turnFrom = state.turnFrom === undefined || state.turnFrom <= index ? state.turnFrom : state.turnFrom - 1
+  return { ...state, items: state.items.filter((_, i) => i !== index), turnFrom }
 }
 
 /** A send that failed: its bubble goes, with the reason in its place. */
