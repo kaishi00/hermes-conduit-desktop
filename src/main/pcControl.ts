@@ -84,6 +84,11 @@ export function setPcControl(change: Partial<PcControlSettings>): PcControlState
   return pcControlState()
 }
 
+/** At launch: a download cut short by quitting picks up again, so an on toggle never sits without a driver. */
+export function resumePcDriverInstall() {
+  if (pcControlSettings().on && artifactFor() && !driverPath()) void installPcDriver()
+}
+
 export async function installPcDriver(): Promise<PcControlState> {
   if (!artifactFor() || driverPath()) return pcControlState()
   downloading = { progress: 0 }
@@ -105,6 +110,8 @@ export async function installPcDriver(): Promise<PcControlState> {
 export function deletePcDriver(): PcControlState {
   executor = null
   deleteDriver()
+  downloading = null
+  failed = false
   changed()
   return pcControlState()
 }
@@ -170,6 +177,11 @@ export function stopControl(tell = true) {
   active = null
   executor?.forget()
   hideBar()
+  // Turned off: the driver process goes too, and starts again when it's next needed.
+  if (!pcControlSettings().on) {
+    executor = null
+    stopDriver()
+  }
   if (tell) onStopped()
   changed()
 }

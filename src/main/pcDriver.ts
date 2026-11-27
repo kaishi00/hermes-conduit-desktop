@@ -65,12 +65,15 @@ export function driverPath(): string | null {
 export const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
 let installing: Promise<string> | null = null
+/** Bumped by Delete, so a download still running when the user deletes never unpacks. */
+let deleted = 0
 
 /** Downloads, checks and unpacks the driver; the path to its executable. */
 export function installDriver(onProgress?: (fraction: number) => void): Promise<string> {
   const existing = driverPath()
   if (existing) return Promise.resolve(existing)
   installing ??= (async () => {
+    const generation = deleted
     const artifact = artifactFor()
     if (!artifact) throw new Error('unsupported')
     const response = await net.fetch(RELEASE + artifact.file)
@@ -88,6 +91,7 @@ export function installDriver(onProgress?: (fraction: number) => void): Promise<
     }
     const bytes = Buffer.concat(chunks)
     if (sha256(bytes) !== artifact.sha256) throw new Error('checksum')
+    if (generation !== deleted) throw new Error('deleted')
     const target = folder()
     rmSync(target, { recursive: true, force: true })
     mkdirSync(target, { recursive: true })
@@ -106,6 +110,7 @@ export function installDriver(onProgress?: (fraction: number) => void): Promise<
 }
 
 export function deleteDriver(): void {
+  deleted++
   stopDriver()
   rmSync(join(app.getPath('userData'), 'cua-driver'), { recursive: true, force: true })
 }
@@ -130,6 +135,8 @@ export class McpClient {
     child.on('exit', () => this.close(new Error('driver exited')))
     child.on('error', error => this.close(error))
     child.stderr.resume()
+    // A write after the driver died fails here, not as a main-process error; the next action restarts it.
+    child.stdin.on('error', error => this.close(error))
   }
 
   get alive() {
@@ -215,11 +222,16 @@ export function driver(): Promise<McpClient> {
       windowsHide: true
     })
     const started = new McpClient(child)
-    await started.request('initialize', {
-      protocolVersion: '2025-06-18',
-      capabilities: {},
-      clientInfo: { name: 'conduit-desktop', version: app.getVersion() }
-    })
+    try {
+      await started.request('initialize', {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'conduit-desktop', version: app.getVersion() }
+      })
+    } catch (error) {
+      started.kill()
+      throw error
+    }
     started.notify('notifications/initialized', {})
     client = started
     return started

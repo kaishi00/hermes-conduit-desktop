@@ -24,7 +24,7 @@ export function PcControlSetting({ state, bots }: { state: PcControlState | null
           </label>
           <p className="meta">{t('Each chat asks you here first. A bar on top of your screen shows while a bot is in control, with Stop ({keys}).', { keys: state.platform === 'mac' ? '⌘⌥⇧S' : 'Ctrl+Alt+Shift+S' })}</p>
           {state.on && state.driver === 'downloading' && <p className="meta">{t('Downloading the driver… {percent}%', { percent: Math.round(state.progress * 100) })}</p>}
-          {state.on && state.driver === 'failed' && (
+          {state.on && (state.driver === 'failed' || state.driver === 'missing') && (
             <p className="meta">
               {t('The driver couldn’t be downloaded.')} <button onClick={() => void window.conduit.pcControl.install()}>{t('Try Again')}</button>
             </p>

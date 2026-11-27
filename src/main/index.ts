@@ -72,7 +72,7 @@ import { applyAppIcon, watchNewWindows } from './appIcon'
 import { rebuildMenu } from './menuGate'
 import { watchEditMenu } from './editMenu'
 import { launchedAtLogin, loginItemState, openStartupSettings, setLoginItem } from './loginItem'
-import { deletePcDriver, initPcControl, installPcDriver, pcControlState, runPcRequest, setPcControl, stopControl } from './pcControl'
+import { deletePcDriver, initPcControl, installPcDriver, pcControlState, resumePcDriverInstall, runPcRequest, setPcControl, stopControl } from './pcControl'
 import {
   appIconChoice,
   askHostAtLaunch,
@@ -639,12 +639,18 @@ function registerIpc(): void {
     notify: state => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlChanged, state),
     stopped: () => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlStopped)
   })
-  ipcMain.handle(IPC.pcControlState, () => pcControlState())
-  ipcMain.handle(IPC.pcControlSet, (_event, change: unknown) => setPcControl(change && typeof change === 'object' ? change : {}))
-  ipcMain.handle(IPC.pcControlInstall, () => installPcDriver())
-  ipcMain.handle(IPC.pcControlDelete, () => deletePcDriver())
-  ipcMain.handle(IPC.pcControlRun, (_event, request: PcRequest) => runPcRequest(request))
+  // Only the main window runs the poll loop and Settings. A docked chat shows another
+  // dashboard's pages, so it must never hand over an action or change the setting.
+  const fromMain = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => !!mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents
+  const refused = { ok: false, code: 'refused', message: 'Only Conduit’s main window can do that.' }
+  ipcMain.handle(IPC.pcControlState, event => (fromMain(event) ? pcControlState() : null))
+  ipcMain.handle(IPC.pcControlSet, (event, change: unknown) => (fromMain(event) ? setPcControl(change && typeof change === 'object' ? change : {}) : null))
+  ipcMain.handle(IPC.pcControlInstall, event => (fromMain(event) ? installPcDriver() : null))
+  ipcMain.handle(IPC.pcControlDelete, event => (fromMain(event) ? deletePcDriver() : null))
+  ipcMain.handle(IPC.pcControlRun, (event, request: PcRequest) => (fromMain(event) ? runPcRequest(request) : refused))
+  // Stop stays open to every window: stopping is always safe.
   ipcMain.on(IPC.pcControlStop, () => stopControl())
+  resumePcDriverInstall()
   ipcMain.handle(IPC.setLoginItem, (_event, on: unknown) => setLoginItem(on === true))
   ipcMain.on(IPC.openStartupSettings, () => openStartupSettings())
   ipcMain.handle(IPC.checkForUpdates, () => checkForUpdates())

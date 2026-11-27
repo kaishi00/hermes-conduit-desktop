@@ -134,4 +134,18 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
       void gateway.http('DELETE', pcPath('/computer', profile, { computer: state.id }), undefined, 10_000).catch(() => undefined)
     }
   }, [connected, key, state?.id])
+
+  // Leaving this dashboard (a switch or signing out): best effort, its plugin stops
+  // listing this computer now; if the request can't land, it counts it offline after 45 s.
+  const id = useRef(state?.id)
+  id.current = state?.id
+  useEffect(
+    () => () => {
+      const computer = id.current
+      if (!computer) return
+      for (const profile of offered.current) void gateway.http('DELETE', pcPath('/computer', profile, { computer }), undefined, 10_000).catch(() => undefined)
+      offered.current.clear()
+    },
+    []
+  )
 }
