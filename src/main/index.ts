@@ -639,8 +639,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.loginItem, () => loginItemState())
   initPcControl({
     notify: state => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlChanged, state),
-    stopped: () => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlStopped),
-    window: () => mainWindow
+    stopped: () => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlStopped)
   })
   // Only the main window runs the poll loop and Settings. A docked chat shows another
   // dashboard's pages, so it must never hand over an action or change the setting.
