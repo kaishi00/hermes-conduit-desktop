@@ -41,7 +41,9 @@ let barTimer: ReturnType<typeof setTimeout> | null = null
 /** Whether the bar holds the Stop keys, so hiding it never drops another shortcut's. */
 let ownKeys = false
 /** Asks already on screen, by chat, so a burst of actions asks once, and how to take each away. */
-const asking = new Map<string, { shown: Promise<'allowed' | 'denied' | 'closed'>; close: AbortController; profile: string; slot: number }>()
+const asking = new Map<string, { shown: Promise<'allowed' | 'denied' | 'closed'>; close: AbortController; profile: string; pos: number }>()
+/** Bumped by Stop (and turning it off), so an action that waited through one doesn't run after it. */
+let stops = 0
 /** Actions running on the driver now, and who waits for none to be (an ask about to show). */
 let running = 0
 let idleWaiters: (() => void)[] = []
@@ -156,10 +158,7 @@ export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'close
   const open = asking.get(key)
   if (open) return open.shown
   const close = new AbortController()
-  // The lowest cascade step no open ask holds, so a new ask never lands on an open one.
-  const taken = new Set([...asking.values()].map(entry => entry.slot))
-  let slot = 0
-  while (taken.has(slot)) slot++
+  const entry = { shown: Promise.resolve<'allowed' | 'denied' | 'closed'>('closed'), close, profile: request.profile, pos: -1 }
   const shown = new Promise<'allowed' | 'denied' | 'closed'>(resolve => {
     let answered = false
     let win: BrowserWindow | null = null
@@ -172,18 +171,22 @@ export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'close
     close.signal.addEventListener('abort', () => answer('closed'))
     // Shown once no action is mid-way: one already past its wait (runPcRequest) could
     // otherwise click where the ask just opened.
-    void whenIdle().then(() => {
-      if (answered) return
-      win = askWindow(request, slot, answer, close)
-    })
+    void whenIdle()
+      .then(() => {
+        if (answered) return
+        win = askWindow(request, entry, answer, close)
+      })
+      // A window that couldn't be made is a no, so the ask never hangs (nor the actions behind it).
+      .catch(() => answer('denied'))
   }).finally(() => asking.delete(key))
-  asking.set(key, { shown, close, profile: request.profile, slot })
+  entry.shown = shown
+  asking.set(key, entry)
   return shown
 }
 
 function askWindow(
   request: PcRequest,
-  slot: number,
+  entry: { pos: number },
   answer: (value: 'allowed' | 'denied' | 'closed') => void,
   close: AbortController
 ): BrowserWindow {
@@ -192,7 +195,12 @@ function askWindow(
   const left = Math.round(area.x + (area.width - ASK_WIDTH) / 2)
   const top = Math.round(area.y + (area.height - ASK_HEIGHT) / 3)
   const room = Math.max(1, Math.floor(Math.min(area.x + area.width - ASK_WIDTH - left, area.y + area.height - ASK_HEIGHT - top) / ASK_CASCADE) + 1)
-  const cascade = (slot % room) * ASK_CASCADE
+  // The lowest step no open ask is drawn at, so a new ask never lands on an open one while there's room.
+  const used = new Set([...asking.values()].map(open => open.pos))
+  let pos = 0
+  while (pos < room && used.has(pos)) pos++
+  entry.pos = pos % room
+  const cascade = entry.pos * ASK_CASCADE
   const win = new BrowserWindow({
     width: ASK_WIDTH,
     height: ASK_HEIGHT,
@@ -279,17 +287,20 @@ const stopLabel = () => (process.platform === 'darwin' ? '⌘⌥⇧S' : 'Ctrl+Al
 
 /** Runs one action the plugin handed over. The renderer asked first (askPc, and the phone) when it needed asking. */
 export async function runPcRequest(request: PcRequest): Promise<Record<string, unknown>> {
+  const stopsAtStart = stops
   // No action runs while an ask is up: the ask is out of the bot's screenshots, so a
   // click meant for what it saw could land on Allow (desktop#721 review).
   while (asking.size) await Promise.allSettled([...asking.values()].map(open => open.shown))
+  // Stop pressed while it waited: it doesn't run after it.
+  if (stops !== stopsAtStart) return { ok: false, code: 'stopped' }
   const settings = pcControlSettings()
   if (!settings.on || !settings.bots.includes(request.profile)) return { ok: false, code: 'off' }
   if (!driverPath()) return { ok: false, code: 'unavailable', message: 'The driver isn’t downloaded on this computer yet.' }
   const grant: 'allowed' | undefined = request.needs_ok ? 'allowed' : undefined
   // Counted from here, with no wait since the asks were checked, so no ask shows mid-action.
   running++
-  showBar(request.bot, request.chat)
   try {
+    showBar(request.bot, request.chat)
     executor ??= new Executor(await driver())
     const result = await executor.run(request.session, { action: request.action, args: request.args ?? {} })
     return { ...result, ...(grant ? { grant } : {}) }
@@ -311,6 +322,7 @@ export async function runPcRequest(request: PcRequest): Promise<Record<string, u
 
 /** Stop: the bar goes, and each allowed bot's plugin hears it (the renderer posts /pc/stop). */
 export function stopControl(tell = true) {
+  stops++
   // Stop takes away the asks too: a no, as the phone's answer closing one is.
   closeAsks()
   active = null

@@ -50,6 +50,9 @@ const electron = vi.hoisted(() => {
     setAlwaysOnTop = vi.fn()
     setContentProtection = vi.fn()
     show = vi.fn()
+    showInactive = vi.fn()
+    hide = vi.fn()
+    close = vi.fn()
     focus = vi.fn()
     flashFrame = vi.fn()
     isDestroyed() {
@@ -68,19 +71,30 @@ const electron = vi.hoisted(() => {
     BrowserWindow,
     globalShortcut: { register: vi.fn(), isRegistered: vi.fn(() => false), unregister: vi.fn() },
     screen: {
+      getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
       getCursorScreenPoint: () => ({ x: 2500, y: 300 }),
       getDisplayNearestPoint: (point: { x: number }) => ({ workArea: point.x > 1920 ? { x: 1920, y: 0, width: 2560, height: 1440 } : { x: 0, y: 0, width: 1920, height: 1080 } })
     }
   }
 })
 vi.mock('electron', () => electron)
+const drive = vi.hoisted(() => ({ path: null as string | null, runs: [] as { action: string; done: () => void }[] }))
 vi.mock('../src/main/pcDriver', () => ({
   artifactFor: () => null,
   deleteDriver: vi.fn(),
-  driver: vi.fn(),
-  driverPath: () => null,
+  driver: vi.fn(async () => ({})),
+  driverPath: () => drive.path,
   installDriver: vi.fn(),
   stopDriver: vi.fn()
+}))
+vi.mock('../src/main/pcExecutor', () => ({
+  OWN_TITLES: ['Conduit control'],
+  Executor: class {
+    run(_session: string, step: { action: string }) {
+      return new Promise(resolve => drive.runs.push({ action: step.action, done: () => resolve({ ok: true }) }))
+    }
+    forget() {}
+  }
 }))
 vi.mock('../src/main/settings', () => ({
   choosePcControl: vi.fn(() => true),
@@ -88,7 +102,6 @@ vi.mock('../src/main/settings', () => ({
 }))
 
 import { askPage, askPc, closePcAsk, runPcRequest, setPcControl, stopControl } from '../src/main/pcControl'
-import { OWN_TITLES } from '../src/main/pcExecutor'
 import type { PcRequest } from '../src/shared/ipc'
 
 const request = (session: string, extra: Partial<PcRequest> = {}): PcRequest => ({
@@ -107,6 +120,8 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 
 beforeEach(() => {
   windows.length = 0
+  drive.path = null
+  drive.runs.length = 0
 })
 
 describe('askPc', () => {
@@ -114,7 +129,7 @@ describe('askPc', () => {
     const shown = askPc(request('s1'))
     await tick()
     const win = windows[0] as unknown as InstanceType<typeof electron.BrowserWindow>
-    expect(win.options).toMatchObject({ frame: false, alwaysOnTop: true, show: false, title: OWN_TITLES[0] })
+    expect(win.options).toMatchObject({ frame: false, alwaysOnTop: true, show: false, title: 'Conduit control' })
     // Centered on the screen under the cursor.
     expect(win.options.x).toBe(1920 + (2560 - 440) / 2)
     expect(win.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
@@ -226,6 +241,36 @@ describe('more than one ask', () => {
     expect(windows[2].destroyed).toBe(false)
     windows[2].navigate('conduit-ask://deny')
     await c
+  })
+
+  it('an action that waited through Stop doesn’t run after it', async () => {
+    drive.path = '/driver'
+    const ask = askPc(request('s20'))
+    await tick()
+    const run = runPcRequest(request('s21', { needs_ok: false }))
+    await tick()
+    stopControl(false)
+    await expect(ask).resolves.toBe('closed')
+    await expect(run).resolves.toEqual({ ok: false, code: 'stopped' })
+    expect(drive.runs).toHaveLength(0)
+  })
+
+  it('an ask waits for a running action before it shows', async () => {
+    drive.path = '/driver'
+    const run = runPcRequest(request('s22', { needs_ok: false }))
+    await tick()
+    expect(drive.runs).toHaveLength(1)
+    // The control bar is a window too; the ask is the one the ask's size.
+    const asks = () => windows.filter(w => w.options.width === 440)
+    const ask = askPc(request('s23'))
+    await tick()
+    expect(asks()).toHaveLength(0)
+    drive.runs[0].done()
+    await expect(run).resolves.toMatchObject({ ok: true })
+    await tick()
+    expect(asks()).toHaveLength(1)
+    asks()[0].navigate('conduit-ask://deny')
+    await ask
   })
 
   it('runs no action while an ask is up, since a click could land on Allow', async () => {
