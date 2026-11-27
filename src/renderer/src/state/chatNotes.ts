@@ -43,7 +43,8 @@ const isNote = (note: unknown): note is ChatNote => {
     typeof n.key === 'string' &&
     typeof n.text === 'string' &&
     (n.format === 'plain' || n.format === 'markdown') &&
-    (n.after === undefined || n.after === null || typeof n.after === 'string')
+    (n.after === undefined || n.after === null || typeof n.after === 'string') &&
+    (n.command === undefined || typeof n.command === 'string')
   )
 }
 
