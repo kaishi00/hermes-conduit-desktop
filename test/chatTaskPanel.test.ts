@@ -206,6 +206,69 @@ describe('A chat’s Kanban task in the chat', () => {
     expect(changed).toBe(0)
     act(() => root.unmount())
   })
+
+  it('keeps the panel open when a late read fails for a reason other than 404', async () => {
+    const conduit = (window as unknown as { conduit: Record<string, unknown> }).conduit
+    let late: (outcome: unknown) => void = () => undefined
+    conduit.httpOutcome = async (method: string, path: string) => {
+      if (method === 'GET' && path.startsWith('/api/plugins/kanban/tasks/t2')) return new Promise(resolve => (late = resolve))
+      return { ok: true, result: { task: { id: 't2', title: 'Dig in', status: 'running', body: 'Find the cause' }, comments: [], events: [], links: { parents: [], children: [] } } }
+    }
+    const { box, root } = await draw()
+    click(box.querySelector('.plan-toggle'))
+    click(box.querySelector('.chat-task-open'))
+    await settle()
+    late({ ok: false, error: 'task not found', code: 500 })
+    await settle()
+    // The panel stays; the failed read is shown in it rather than closing the task.
+    expect(box.querySelector('.task-panel')?.textContent).toContain("Couldn’t load this task")
+    act(() => root.unmount())
+  })
+
+  it('a 404 arriving after the task was deleted from the panel leaves the chat alone', async () => {
+    const conduit = (window as unknown as { conduit: Record<string, unknown> }).conduit
+    let late: (outcome: unknown) => void = () => undefined
+    let reads = 0
+    conduit.httpOutcome = async (method: string, path: string) => {
+      if (method === 'GET' && path.startsWith('/api/plugins/kanban/tasks/t2') && ++reads > 1) return new Promise(resolve => (late = resolve))
+      if (method === 'GET' && path.startsWith('/api/plugins/kanban/tasks/t2')) {
+        return { ok: true, result: { task: { id: 't2', title: 'Dig in', status: 'running', body: 'Find the cause' }, comments: [], events: [], links: { parents: [], children: [] } } }
+      }
+      return { ok: true, result: {} }
+    }
+    const dockPath = '../src/renderer/src/components/ChatTasksDock.tsx'
+    const dialogPath = '../src/renderer/src/components/Dialogs.tsx'
+    const { ChatTasksDock } = (await import(/* @vite-ignore */ dockPath)) as { ChatTasksDock: unknown }
+    const { DialogHost } = (await import(/* @vite-ignore */ dialogPath)) as { DialogHost: unknown }
+    const box = document.createElement('div')
+    document.body.append(box)
+    const root = createRoot(box)
+    let changed = 0
+    const tasks = [{ id: 't2', title: 'Dig in', status: 'running', board: 'research', boardName: 'Research' }]
+    act(() => root.render(createElement('div', null,
+      createElement(ChatTasksDock as never, { tasks, chatKey: 'c1', bots: [], onChanged: () => changed++ }),
+      createElement(DialogHost as never)
+    )))
+    click(box.querySelector('.plan-toggle'))
+    click(box.querySelector('.chat-task-open'))
+    await settle()
+    const remove = [...box.querySelectorAll('.task-panel .job-actions button')].find(button => button.textContent === 'Delete')
+    expect(remove).not.toBeUndefined()
+    click(remove)
+    await settle()
+    const confirm = [...box.querySelectorAll('button')].find(button => button.textContent === 'Delete' && button !== remove)
+    click(confirm)
+    await settle()
+    expect(box.querySelector('.task-panel')).toBeNull()
+    expect(changed).toBe(1)
+    // The read that was already out when Delete closed the panel answers now.
+    late({ ok: false, error: 'task not found', code: 404 })
+    await settle()
+    expect(box.querySelector('.task-panel')).toBeNull()
+    expect(changed).toBe(1)
+    act(() => root.unmount())
+  })
+
 })
 
 afterEach(() => vi.useRealTimers())
