@@ -1203,6 +1203,7 @@ function Shell({
   const keptHosts = useKeptHosts(status.url ?? '')
   // ...their bots, on Bots Home and in the chat list's profile column (Eric, 2026-11-21: Chats held only this dashboard's).
   // Settings too: its profile dropdown lists every combined dashboard's profiles. So does Scheduled's column (Eric, 2026-11-22).
+  const keptLiveUrls = useMemo(() => keptHosts.filter(h => h.state === 'live').map(h => h.url), [keptHosts])
   const otherBots = useKeptBots(keptHosts, botsListShown || section === 'chats' || section === 'settings' || section === 'tasks')
   // ...with their pills, from their work read there (Eric, 2026-11-21: another host's "needs you" didn't show).
   const otherWork = useKeptWork(otherBots, botsListShown || section === 'chats')
@@ -2832,6 +2833,7 @@ function Shell({
     onOpenOther: openOtherBot,
     hostUrl: statusUrl,
     savedHosts: savedHostUrls,
+    keptHostUrls: keptLiveUrls,
     mixedOrder: mixedBotOrder.order,
     onMoveMixed: mixedBotOrder.drop,
     onMoveBot: botOrder.drop,

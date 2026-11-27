@@ -48,7 +48,7 @@ import { confineNavigation } from './navigation'
 import { endSocket, LiveOwners, PAGE_CLOSED, PAGE_RELOADED, replacesPage, type LiveClose } from './liveOwners'
 import { pluginRelease } from './pluginRelease'
 import { cleanHeaders } from './proxyHeaders'
-import { KeptHosts } from './keptHosts'
+import { KeptHosts, keptRpcWritable } from './keptHosts'
 import { readServerCertificate } from './serverCertificate'
 import { hostSpellings, isThisComputer } from './localFolders'
 import { writeFile } from 'node:fs/promises'
@@ -1151,6 +1151,8 @@ function registerIpc(): void {
     if (typeof url !== 'string' || typeof method !== 'string') return { ok: false, error: 'Bad request.' }
     try {
       const given = params && typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : {}
+      // A change comes only from the main window, as with keptHttp.
+      if (keptRpcWritable(method, given) && _e.sender !== mainWindow?.webContents) return { ok: false, error: 'Only reads can go to another dashboard.' }
       return { ok: true, result: await keptHosts.rpc(url, method, given) }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }

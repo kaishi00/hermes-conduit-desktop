@@ -19,6 +19,18 @@ export const MAX_KEPT = 3
 /** What the window may ask a kept host over its socket. */
 export const KEPT_RPC_METHODS: readonly string[] = ['profiles.list', 'profiles.get_asset', 'groups.list', 'model.options']
 /**
+ * The one change a kept socket takes: a bot's look in Hermes' `ui_meta['hermes-bots']` and nothing
+ * else in that call, so a category filed or renamed on the combined Bots grid reaches another
+ * dashboard's bots without a switch, as the phone writes them.
+ */
+export function keptRpcWritable(method: string, params: Record<string, unknown>): boolean {
+  if (method !== 'profiles.configure' || typeof params.name !== 'string') return false
+  if (!Object.keys(params).every(key => key === 'name' || key === 'ui_meta' || key === 'ui_meta_expected_revisions')) return false
+  const botsOnly = (value: unknown) =>
+    !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0 && Object.keys(value).every(key => key === 'hermes-bots')
+  return botsOnly(params.ui_meta) && (params.ui_meta_expected_revisions === undefined || botsOnly(params.ui_meta_expected_revisions))
+}
+/**
  * What another dashboard takes besides reads: its scheduled jobs and its task board, which Tasks
  * shows and changes in place, with no switch (Eric, 2026-11-22: Scheduled's faces and Board's
  * dropdown reach every combined dashboard).
@@ -134,9 +146,12 @@ export class KeptHosts {
     return method === 'GET' ? kept.connection.http<T>('GET', path, undefined, 6_000) : kept.connection.http<T>(method, path, body)
   }
 
-  /** A read over a kept host's socket: only what lists that host's bots, reads their pictures, lists its group chats and lists its models (a far scheduled job's model picker). */
+  /**
+   * A read over a kept host's socket: only what lists that host's bots, reads their pictures, lists its group chats
+   * and lists its models (a far scheduled job's model picker); and a bot's look (keptRpcWritable).
+   */
   async rpc<T>(url: string, method: string, params: Record<string, unknown> = {}): Promise<T> {
-    if (!KEPT_RPC_METHODS.includes(method)) throw new Error('Only reads can go to another dashboard.')
+    if (!KEPT_RPC_METHODS.includes(method) && !keptRpcWritable(method, params)) throw new Error('Only reads can go to another dashboard.')
     const kept = this.kept.get(url)
     if (!kept || kept.state !== 'live') throw new Error('Not connected to that Hermes.')
     return kept.connection.rpc<T>(method, params)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Fetch } from '../src/main/auth'
 import { createHostList } from '../src/main/hosts'
-import { KEPT_BACKOFF, KEPT_RPC_METHODS, KeptHosts, MAX_KEPT, STOP_GRACE_MS } from '../src/main/keptHosts'
+import { KEPT_BACKOFF, KEPT_RPC_METHODS, KeptHosts, keptRpcWritable, MAX_KEPT, STOP_GRACE_MS } from '../src/main/keptHosts'
 import { Connection, type SavedConnection } from '../src/main/connection'
 import type { ConnectionStatus, KeptHost } from '../src/shared/ipc'
 import type { WebSocketLike } from '../src/vendor/hermes-shared/json-rpc-gateway'
@@ -152,6 +152,9 @@ describe('combined dashboards in the main process', () => {
     // Only reads go over a kept socket.
     await expect(h.kept.rpc('https://b.example', 'prompt.submit', {})).rejects.toThrow(/Only reads/)
     await expect(h.kept.rpc('https://b.example', 'profiles.set_asset', {})).rejects.toThrow(/Only reads/)
+    // A bot's look is the one change: nothing else rides along in that call.
+    await expect(h.kept.rpc('https://b.example', 'profiles.configure', { name: 'x', soul: 'y' })).rejects.toThrow(/Only reads/)
+    await expect(h.kept.rpc('https://b.example', 'profiles.configure', { name: 'x', ui_meta: { other: {} } })).rejects.toThrow(/Only reads/)
     // Its bots' pictures are a read, and so are its list of group chats and its models (a scheduled job's there).
     expect(KEPT_RPC_METHODS).toEqual(['profiles.list', 'profiles.get_asset', 'groups.list', 'model.options'])
     await expect(h.kept.rpc('https://d.example', 'profiles.list')).rejects.toThrow(/Not connected/)
@@ -645,5 +648,18 @@ describe('dropKeptCopy', () => {
     dropKeptCopy(url, 'a')
     expect(keptRoomsByHost.get(url)?.copies.map(c => c.id)).toEqual(['b'])
     keptRoomsByHost.delete(url)
+  })
+})
+
+describe('keptRpcWritable', () => {
+  it("takes only a bot's look in ui_meta['hermes-bots']", () => {
+    expect(keptRpcWritable('profiles.configure', { name: 'a', ui_meta: { 'hermes-bots': { sectionName: 'Home' } } })).toBe(true)
+    expect(keptRpcWritable('profiles.configure', { name: 'a', ui_meta: { 'hermes-bots': {} }, ui_meta_expected_revisions: { 'hermes-bots': 3 } })).toBe(true)
+    expect(keptRpcWritable('profiles.configure', { name: 'a', ui_meta: { 'hermes-bots': {} }, description: 'x' })).toBe(false)
+    expect(keptRpcWritable('profiles.configure', { name: 'a', ui_meta: { 'hermes-bots': {}, other: {} } })).toBe(false)
+    expect(keptRpcWritable('profiles.configure', { name: 'a', ui_meta: { 'hermes-bots': {} }, ui_meta_expected_revisions: { other: 1 } })).toBe(false)
+    expect(keptRpcWritable('profiles.configure', { ui_meta: { 'hermes-bots': {} } })).toBe(false)
+    expect(keptRpcWritable('profiles.configure', { name: 'a', ui_meta: [] })).toBe(false)
+    expect(keptRpcWritable('profiles.create', { name: 'a', ui_meta: { 'hermes-bots': {} } })).toBe(false)
   })
 })
