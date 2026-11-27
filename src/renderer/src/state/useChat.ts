@@ -519,6 +519,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const [takeover, setTakeover] = useState<{ surface?: string; busy: boolean } | null>(null)
   /** The open chat's queue on the Webapp; empty on `hermes dashboard`, which keeps none. */
   const [queue, setQueue] = useState<QueuedPrompt[]>([])
+  /** When each forwarded send was held (ms): a live-work read asked before that can't know it yet. */
+  const heldAt = useRef(new Map<string, number>())
   const queueRef = useRef(queue)
   queueRef.current = queue
   /** The stored rows before the open chat's drawn ones, and whether it has more (longChat.ts). */
@@ -1109,6 +1111,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           if ((forwarded || (sessionAuthority && joinsRunningTurn)) && receipt?.status === 'queued' && typeof receipt.admission_id === 'string' && receipt.admission_id) {
             const admission = receipt.admission_id
             dispatch({ type: 'held', key, admission })
+            if (forwarded) heldAt.current.set(admission, Date.now())
             if (forwarded) setQueue(rows => (rows.some(row => row.admissionId === admission) ? rows : [...rows, forwardedRow(admission, trimmed, rows)]))
           }
         }
@@ -1678,12 +1681,16 @@ export function useChat(storedId: string | null, profile: string | undefined, se
    * started there; the history read again once the turn it followed there has ended.
    */
   const applyLiveWork = useCallback(
-    (work: LiveWork, was: LiveWork) => {
+    (work: LiveWork, was: LiveWork, askedAt: number) => {
       if (sessionAuthority) return
-      setQueue(work.queued)
+      // A send held after the read was asked isn't in it yet: its row stays, and a later read releases it.
+      const newer = (admission: string) => (heldAt.current.get(admission) ?? 0) > askedAt
       const waiting = new Set(work.queued.map(row => row.admissionId))
+      setQueue(rows => [...work.queued, ...rows.filter(row => row.readOnly && !waiting.has(row.admissionId) && newer(row.admissionId))])
       for (const held of transcriptRef.current.held ?? []) {
-        if (!waiting.has(held.admission)) dispatch({ type: 'started', admission: held.admission })
+        if (waiting.has(held.admission) || newer(held.admission)) continue
+        heldAt.current.delete(held.admission)
+        dispatch({ type: 'started', admission: held.admission })
       }
       if (was.running && !work.running && !transcriptRef.current.running) void reloadHistory(true)
     },

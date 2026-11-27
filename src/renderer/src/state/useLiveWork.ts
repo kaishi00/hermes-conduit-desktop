@@ -16,7 +16,7 @@ export function useLiveWork(
   enabled: boolean,
   running: boolean,
   waitsInGateway: boolean,
-  apply: (work: LiveWork, was: LiveWork) => void
+  apply: (work: LiveWork, was: LiveWork, askedAt: number) => void
 ) {
   const [work, setWork] = useState<LiveWork>(noLiveWork)
   const last = useRef<LiveWork>(noLiveWork)
@@ -34,6 +34,7 @@ export function useLiveWork(
   const read = useCallback(async () => {
     const asked = scopeRef.current
     if (!sessionId || !enabled) return
+    const askedAt = Date.now()
     let answer: LiveWork
     try {
       answer = parseLiveWork(await gateway.http('GET', liveWorkPath(sessionId, profile)))
@@ -45,12 +46,19 @@ export function useLiveWork(
     const was = last.current
     last.current = answer
     setWork(answer)
-    applyRef.current(answer, was)
+    applyRef.current(answer, was, askedAt)
   }, [sessionId, profile, enabled])
 
+  // Once as the chat opens or the connection returns (a turn may already be drawn running then: a
+  // reconnect keeps the dropped transcript), and again as this app's own turn ends.
   useEffect(() => {
-    if (!running) void read()
-  }, [scope, running, read])
+    void read()
+  }, [scope, read])
+  const wasRunning = useRef(running)
+  useEffect(() => {
+    if (wasRunning.current && !running) void read()
+    wasRunning.current = running
+  }, [running, read])
 
   const follow = enabled && (liveWorkActive(work) || waitsInGateway)
   useEffect(() => {

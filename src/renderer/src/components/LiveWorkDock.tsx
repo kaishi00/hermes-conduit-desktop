@@ -23,6 +23,8 @@ export function LiveWorkDock({ work, running }: { work: LiveWork; running: boole
     return () => clearInterval(timer)
   }, [counting])
   if (!shows) return null
+  // The clock ticks only while agents run: read it now too, so a new agent never shows the mount's time.
+  const at = Math.max(now, Date.now())
   return (
     <div className="plan-dock agents-dock live-work-dock open" aria-live="polite">
       {work.agents.length ? (
@@ -34,7 +36,7 @@ export function LiveWorkDock({ work, running }: { work: LiveWork; running: boole
                 <span className="spacer" />
                 <span className="meta">
                   {stepTitle(agent.step) ?? t('Working…')}
-                  {agent.started !== undefined ? ` · ${elapsed(now / 1000 - agent.started)}` : ''}
+                  {agent.started !== undefined ? ` · ${elapsed(at / 1000 - agent.started)}` : ''}
                 </span>
               </div>
             </li>
