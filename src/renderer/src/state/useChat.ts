@@ -1692,20 +1692,21 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       const newer = (admission: string) => (heldAt.current.get(admission) ?? 0) > askedAt
       const waiting = new Set(work.queued.map(row => row.admissionId))
       setQueue(rows => [...work.queued, ...rows.filter(row => row.readOnly && !waiting.has(row.admissionId) && newer(row.admissionId))])
-      let ended = false
+      let settled = false
       for (const held of transcriptRef.current.held ?? []) {
         if (waiting.has(held.admission) || newer(held.admission)) continue
-        heldAt.current.delete(held.admission)
-        if (work.started.includes(held.admission) || !work.running) {
-          // Its turn runs now, or ran and ended (the history read tells which).
+        if (work.started.includes(held.admission)) {
+          // Its turn runs there now.
           dispatch({ type: 'started', admission: held.admission })
-          ended ||= !work.started.includes(held.admission)
         } else {
-          // Withdrawn in the Webapp or Hermes Desktop behind a turn still running: it never comes back.
+          // It ran and ended between reads, or was withdrawn in the Webapp or Hermes Desktop: the history tells which.
           dispatch({ type: 'dropped', admission: held.admission })
+          settled = true
         }
       }
-      if (((was.running && !work.running) || ended) && !transcriptRef.current.running) void reloadHistory(true)
+      // Holds the read could know of are settled now (released, dropped, or started by an unnamed message.start).
+      for (const admission of [...heldAt.current.keys()]) if (!newer(admission) && !waiting.has(admission)) heldAt.current.delete(admission)
+      if (((was.running && !work.running) || settled) && !transcriptRef.current.running) void reloadHistory(true)
     },
     [sessionAuthority, transcriptRef, reloadHistory]
   )

@@ -68,16 +68,32 @@ describe("applyLiveWork on hermes dashboard", () => {
     expect(userWords(hook.result().transcript)).toEqual(['later'])
   })
 
-  it('drops a forwarded send withdrawn behind a turn still running, without drawing it', async () => {
+  it('keeps a Beside send forwarded behind a gateway turn in its chat, with no dock row', async () => {
+    const hook = renderHook(chatHook, {})
+    mounted.push(hook)
+    await settle()
+    await act(async () => {
+      await hook.result().send('later', [], undefined, { noDock: true })
+    })
+    expect(hook.result().queue).toEqual([])
+    expect(userWords(hook.result().transcript)).toEqual(['later'])
+  })
+
+  it('lets go of a forwarded send that left the queue without running now, and reads the history', async () => {
     const hook = renderHook(chatHook, {})
     mounted.push(hook)
     await settle()
     await act(async () => {
       await hook.result().send('later')
     })
-    act(() => hook.result().applyLiveWork({ ...noLiveWork, running: true, started: ['someone-else'] }, noLiveWork, Date.now() + 1))
+    const resumes = calls.filter(c => c === 'session.resume').length
+    await act(async () => {
+      hook.result().applyLiveWork({ ...noLiveWork, running: true, started: ['someone-else'] }, noLiveWork, Date.now() + 1)
+      await settle()
+    })
     expect(hook.result().queue).toEqual([])
     expect(userWords(hook.result().transcript)).toEqual([])
+    expect(calls.filter(c => c === 'session.resume').length).toBeGreaterThan(resumes)
   })
 
   it('reads the history again once when the gateway turn it followed ends', async () => {
