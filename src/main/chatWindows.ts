@@ -19,7 +19,7 @@ export function createChatWindow(chat: ChatWindowRequest, onClosed: () => void):
   const call = chat.call === true
   const kind = call ? 'call' : 'chat'
   const place = call
-    ? openingPlace('call', { width: 400, height: 560 }, { width: 340, height: 360 })
+    ? openingPlace('call', { width: 460, height: 600 }, { width: 340, height: 360 })
     : openingPlace('chat', { width: 640, height: 780 }, { width: 360, height: 400 })
   const window = new BrowserWindow({
     ...place.bounds,
@@ -38,7 +38,12 @@ export function createChatWindow(chat: ChatWindowRequest, onClosed: () => void):
     }
   })
   keepWindowPlace(window, kind, place)
-  window.on('ready-to-show', () => (place.maximized ? window.maximize() : window.show()))
+  window.on('ready-to-show', () => {
+    if (place.maximized) window.maximize()
+    else window.show()
+    // Pressed from another app, the call window comes to the front with its keys, not behind the app in use.
+    if (call) window.focus()
+  })
   window.on('closed', onClosed)
   confineNavigation(window.webContents)
   const hash = `chat=${encodeURIComponent(JSON.stringify(chat))}`

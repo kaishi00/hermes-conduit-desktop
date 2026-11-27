@@ -609,6 +609,8 @@ export function setApiLimitMinutes(minutes: number): void {
 }
 
 const MODE_KEY = 'conduit.voiceMode'
+/** Where the voice mode is kept, for windows that hear another window change it. */
+export const VOICE_MODE_STORAGE_KEY = MODE_KEY
 const MEMORY_KEY = 'conduit.gptLiveMemory'
 const PERSONA_KEY = 'conduit.gptLivePersonality'
 
