@@ -34,6 +34,11 @@ interface Props {
   disabled: boolean
   model?: string
   cwd?: string
+  /**
+   * A new chat's Project chip (desktop#605), in the folder chip's place until
+   * the chat is made: `label` names its project, `onPick` opens the menu at the chip.
+   */
+  project?: { label: string; open: boolean; onPick: (chip: DOMRect) => void }
   /** Sends the message. A promise of false means it didn't go: its words, files and reply come back to the draft. */
   onSend: (text: string, attachments: StagedAttachment[]) => void | Promise<boolean | string | void>
   onStop: () => void
@@ -94,6 +99,7 @@ export function Composer({
   disabled,
   model,
   cwd,
+  project,
   onSend,
   onStop,
   focusKey,
@@ -939,7 +945,24 @@ export function Composer({
               {Math.round(context.percent)}%
             </button>
           ) : null}
-          {cwd ? (
+          {project ? (
+            <button
+              className="chip chip-button project-chip"
+              title={cwd ? t('Working folder: {folder}', { folder: cwd }) : t('Project')}
+              aria-label={`${t('Project')}: ${project.label}`}
+              aria-haspopup="menu"
+              aria-expanded={project.open}
+              disabled={disabled}
+              onClick={e => {
+                // The window's click closes the menu; this one opens it.
+                e.stopPropagation()
+                project.onPick(e.currentTarget.getBoundingClientRect())
+              }}
+            >
+              <Icon name="folder" />
+              {project.label} ▾
+            </button>
+          ) : cwd ? (
             <span className="chip" title={t('Working folder: {folder}', { folder: cwd })}>
               {folderName(cwd)}
             </span>

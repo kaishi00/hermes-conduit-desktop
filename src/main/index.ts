@@ -46,6 +46,7 @@ import { pluginRelease } from './pluginRelease'
 import { cleanHeaders } from './proxyHeaders'
 import { KeptHosts } from './keptHosts'
 import { readServerCertificate } from './serverCertificate'
+import { hostSpellings, isThisComputer } from './localFolders'
 import { writeFile } from 'node:fs/promises'
 import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath, copyDown } from './hostFiles'
 import { Connection, DISPLAY_SOCKET_PATH } from './connection'
@@ -772,6 +773,16 @@ function registerIpc(): void {
     await writeFile(picked.filePath, checked.pem)
     shell.showItemInFolder(picked.filePath)
     return true
+  })
+  // A project's folder from Finder or Explorer, only while the dashboard runs on this computer (desktop#605).
+  ipcMain.handle(IPC.hostIsThisComputer, event => isThisComputer(connectionOf(event.sender.id)?.current().url))
+  ipcMain.handle(IPC.pickLocalFolder, async (event): Promise<string[] | null> => {
+    if (!isThisComputer(connectionOf(event.sender.id)?.current().url)) return null
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = { properties: ['openDirectory', 'createDirectory'] }
+    const picked = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options)
+    const path = picked.canceled ? undefined : picked.filePaths[0]
+    return path ? hostSpellings(path) : null
   })
   // Save a file on the Hermes host (a reply's picture, audio or file, a workspace file) where the person picks.
   ipcMain.handle(IPC.saveHostFile, async (event, path: unknown, profile: unknown): Promise<string> => {

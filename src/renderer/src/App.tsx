@@ -53,7 +53,8 @@ import {
   type WorkspaceTabs
 } from './state/workspaceTabs'
 import { CHAT_WINDOW_LIMIT } from '@shared/chatWindows'
-import { absolutePath, pathForDraft } from './state/workspace'
+import { absolutePath, baseName, pathForDraft } from './state/workspace'
+import { HeaderMenu, useHeaderMenu, type HeaderMenuItem } from './components/HeaderMenu'
 import { Workbench } from './components/Workbench'
 import { BENCH_COLUMN, benchHold, benchPlace, readBenchOpen, shownBenchWidth, writeBenchOpen } from './state/workbench'
 import { FileLinks } from './components/Markdown'
@@ -219,6 +220,8 @@ import { openRoomChatHere } from './state/roomChatOpen'
 import { DockedRoomFrame } from './components/DockedRoom'
 import type { DockedRoomRequest } from '@shared/chatWindows'
 import { parseProjects, type Project, type ProjectChat } from './state/projects'
+import { folderStart, newChatProjects, projectFor } from './state/projectFolders'
+import { ProjectForm } from './components/NewProjectForm'
 import { useAnsweringBots, useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
@@ -1447,6 +1450,48 @@ function Shell({
     },
     [status.sessionAuthority]
   )
+  // A new chat's Project chip (desktop#605): until the chat is made, it starts in no project, one of its
+  // profile's projects, or one made here (New Project, Browse included). The profile's projects are read
+  // as the new chat opens, and again once a project is made.
+  const pickingProject = section === 'chats' && !selected.id && !selected.botChat && !dockedChat && !chat.liveId && !chat.storedId
+  const newChatProfile = selected.profile ?? chatProfile ?? undefined
+  const [newChatTree, setNewChatTree] = useState<{ key: string; list: Project[] } | null>(null)
+  const [newChatTreeRead, setNewChatTreeRead] = useState(0)
+  const newChatTreeKey = `${status.url ?? ''}\n${newChatProfile ?? ''}`
+  useEffect(() => {
+    if (!pickingProject || !connected) return
+    let live = true
+    gateway
+      .rpc('projects.tree', newChatProfile ? { preview_limit: 0, profile: newChatProfile } : { preview_limit: 0 })
+      .then(response => live && setNewChatTree({ key: newChatTreeKey, list: parseProjects(response, newChatProfile) }))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key names the host and profile read
+  }, [pickingProject, connected, newChatTreeKey, newChatTreeRead])
+  const newChatProjectList = newChatTree?.key === newChatTreeKey ? newChatTree.list : null
+  const projectMenu = useHeaderMenu()
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
+  const startIn = useCallback((folder: string | undefined) => setSelected(current => (current.id ? current : { ...current, folder })), [])
+  const shownProject = projectFor(selected.folder, newChatProjectList)
+  const projectChip = pickingProject
+    ? {
+        label: shownProject?.title ?? (selected.folder ? baseName(selected.folder) : t('No project')),
+        open: !!projectMenu.open,
+        onPick: (chip: DOMRect) => projectMenu.setOpen(current => (current ? null : { x: chip.left, y: chip.top - 6, above: true }))
+      }
+    : undefined
+  const projectItems: HeaderMenuItem[] = [
+    { key: 'none', label: `${selected.folder ? '' : '✓ '}${t('No project')}`, onClick: () => startIn(undefined) },
+    ...newChatProjects(newChatProjectList ?? []).map(project => ({
+      key: project.id,
+      label: `${shownProject?.id === project.id ? '✓ ' : ''}${project.title}`,
+      title: project.path,
+      onClick: () => startIn(project.path)
+    })),
+    { key: 'new', label: t('New Project…'), onClick: () => setNewProjectOpen(true) }
+  ]
   // Stars and read state: on this computer, per host. Hermes' own unread flag is cleared too.
   const markHost = status.url ?? ''
   // Done chats, kept by the plugin for every Conduit (state/chatDone): read again as the list changes.
@@ -3061,6 +3106,7 @@ function Shell({
                 disabled={!connected}
                 model={chat.model ?? defaultModel}
                 cwd={chat.cwd}
+                project={projectChip}
                 onSend={onSend}
                 replies={predictions.replies}
                 onDraftPause={predictions.askDraft}
@@ -3405,6 +3451,28 @@ function Shell({
           onRefresh={roomInvites.refresh}
           onClose={() => setOpenInvite(null)}
         />
+      ) : null}
+      {pickingProject ? <HeaderMenu menu={projectMenu} title={t('Project')} items={projectItems} /> : null}
+      {newProjectOpen && pickingProject ? (
+        <div className="shortcuts-backdrop" onClick={() => setNewProjectOpen(false)}>
+          <div className="shortcuts-sheet link-sheet new-project-sheet" role="dialog" aria-modal="true" aria-label={t('New Project')} onClick={e => e.stopPropagation()}>
+            <header>
+              <h2>{t('New Project')}</h2>
+            </header>
+            <ProjectForm
+              withProfile={params => (newChatProfile ? { ...params, profile: newChatProfile } : params)}
+              profile={newChatProfile}
+              start={folderStart(undefined, newChatProjectList)}
+              onDone={project => {
+                setNewProjectOpen(false)
+                if (!project) return
+                setNewChatTreeRead(n => n + 1)
+                setProjectsChanged(n => n + 1)
+                if (project.path) startIn(project.path)
+              }}
+            />
+          </div>
+        </div>
       ) : null}
       {newGroupOpen ? (
         <NewGroupChat

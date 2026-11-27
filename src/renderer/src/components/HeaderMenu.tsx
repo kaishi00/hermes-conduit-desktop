@@ -21,6 +21,8 @@ interface Open {
   x: number
   y: number
   fromRight?: boolean
+  /** Opens upward, its bottom edge at `y`: from a control at the window's foot (the composer's Project chip). */
+  above?: boolean
   /** The line whose lines are shown, with them once read. */
   inside?: { item: HeaderMenuItem; items: HeaderMenuItem[] | null }
 }
@@ -81,7 +83,7 @@ export function HeaderMenu({ menu, items, title }: { menu: ReturnType<typeof use
       const { width, height } = box.current.getBoundingClientRect()
       setAt({
         left: Math.max(8, Math.min(open.fromRight ? open.x - width : open.x, window.innerWidth - width - 8)),
-        top: Math.max(8, Math.min(open.y, window.innerHeight - height - 8))
+        top: Math.max(8, Math.min(open.above ? open.y - height : open.y, window.innerHeight - height - 8))
       })
     }
     fit()
