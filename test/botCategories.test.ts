@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryNamed, categoryOf, categoryPatch, categorySections, movingCategory, OTHER_KEY, renamingCategory } from '../src/renderer/src/state/botCategories'
+import { categoryNamed, categoryNamesOf, categoryOf, categoryPatch, categorySections, cleanRoomCategories, editCategoryPatch, movingCategory, OTHER_KEY, refilingRooms, renamingCategory } from '../src/renderer/src/state/botCategories'
 import { rosterFromProfiles } from '../src/renderer/src/state/bots'
 import { mergedMeta } from '../src/renderer/src/state/botEditor'
 
@@ -54,5 +54,27 @@ describe('bot categories', () => {
     expect(movingCategory([], 'Home', 1, shown)).toEqual(['Business', 'Home', 'Clients'])
     expect(movingCategory([], 'Home', -1, shown)).toEqual([])
     expect(renamingCategory(shown, 'business', 'Work')).toEqual(['Home', 'Work', 'Clients'])
+  })
+
+  it("writes Edit Bot's Category only when it changed, keeping a host's id", () => {
+    const home = { id: 'sec-home', name: 'Home' }
+    const among = [{ category: home }, { category: { id: 'sec-biz', name: 'Business' } }]
+    expect(editCategoryPatch(home, ' Home ', among)).toBeNull()
+    expect(editCategoryPatch(undefined, '', among)).toBeNull()
+    expect(editCategoryPatch(home, '', among)).toEqual({ sectionId: undefined, sectionName: undefined })
+    expect(editCategoryPatch(home, 'HOME', among)).toEqual({ sectionId: 'sec-home', sectionName: 'HOME' })
+    expect(editCategoryPatch(home, 'business', among)).toEqual({ sectionId: 'sec-biz', sectionName: 'business' })
+    expect(categoryNamesOf(among, ['business'])).toEqual(['Business', 'Home'])
+  })
+
+  it('files group chats by room id, and a category only rooms are in keeps its heading', () => {
+    expect(cleanRoomCategories({ r1: ' Home ', r2: '  ', r3: 4 })).toEqual({ r1: 'Home' })
+    expect(cleanRoomCategories(['x'])).toEqual({})
+    const rooms = { r1: 'Home', r2: 'business' }
+    expect(refilingRooms(rooms, 'HOME', 'House')).toEqual({ r1: 'House', r2: 'business' })
+    expect(refilingRooms(rooms, 'Business', null)).toEqual({ r1: 'Home' })
+    const sections = categorySections([{ n: 'a', c: undefined as string | undefined }], [], i => i.c, ['Clients'])!
+    expect(sections.map(s => s.name)).toEqual(['Clients', null])
+    expect(sections[0]!.items).toEqual([])
   })
 })

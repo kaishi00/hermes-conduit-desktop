@@ -35,10 +35,13 @@ import { Icon } from './icons'
 import { ModelChooser } from './ModelChooser'
 import { useModelCatalog } from '../state/modelCatalog'
 import { ModelCatalogNote, RefreshModelsButton } from './ModelCatalogNote'
-import { ask } from '../state/dialogs'
+import { ask, askText } from '../state/dialogs'
+import { categoryNamesOf, cleanName, editCategoryPatch, sameCategory } from '../state/botCategories'
 
 interface Props {
   bot: Bot
+  /** This host's bots, for the Category choices and the id a category already has here. */
+  among?: readonly Bot[]
   onClose: () => void
   /** Read the roster again after a save. */
   onSaved: () => void
@@ -90,7 +93,7 @@ function CapabilityList({
  * the name, description and personality, the model, and the skills, tools
  * and MCP servers the bot may use. Save writes only what changed.
  */
-export function BotEditor({ bot, onClose, onSaved }: Props) {
+export function BotEditor({ bot, among = [], onClose, onSaved }: Props) {
   const [draft, setDraft] = useState<Draft>(() => draftFor(bot))
   const [details, setDetails] = useState<BotDetails | null>(null)
   // Shown from the last answer on this dashboard while Hermes answers again, and changed only once it has (Screens that open on their last answer).
@@ -202,6 +205,7 @@ export function BotEditor({ bot, onClose, onSaved }: Props) {
       }
       const removing = !draft.picture && draft.removePicture
       const patch = metaPatch(bot, draft)
+      Object.assign(patch, editCategoryPatch(bot.category, draft.category, among) ?? {})
       const changesLook = Object.keys(patch).length > 0
       if (uploaded) Object.assign(patch, { imageKind: 'photo', custom: true })
       else if (removing) patch.imageKind = 'shape'
@@ -390,6 +394,38 @@ export function BotEditor({ bot, onClose, onSaved }: Props) {
             aria-label={t('Display Name')}
           />
           <p className="meta">{t('Profile ID: {name}', { name: bot.name })}</p>
+        </section>
+
+        <section className="pset-section">
+          <h2>{t('Category')}</h2>
+          {(() => {
+            const names = categoryNamesOf(among, [])
+            const current = cleanName(draft.category)
+            if (current && !names.some(n => sameCategory(n, current))) names.push(current)
+            const value = names.find(n => sameCategory(n, current)) ?? ''
+            return (
+              <select
+                className="pset-note"
+                value={value}
+                aria-label={t('Category')}
+                onChange={async e => {
+                  const picked = e.target.value
+                  if (picked !== '\u0001new') return update({ category: picked })
+                  const name = cleanName(await askText(t('New Category'), '', { confirm: t('Create'), maxLength: 40 }))
+                  if (name) update({ category: name })
+                }}
+              >
+                <option value="">{t('None')}</option>
+                {names.map(n => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+                <option value={'\u0001new'}>{t('New Category…')}</option>
+              </select>
+            )
+          })()}
+          <p className="meta">{t('The Bots list shows the bot under this heading.')}</p>
         </section>
 
         <section className="pset-section">

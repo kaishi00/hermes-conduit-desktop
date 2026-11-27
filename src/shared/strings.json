@@ -49019,6 +49019,21 @@
     "zh-Hans": "重命名类别",
     "zh-Hant": "重新命名類別"
   },
+  "The Bots list shows the bot under this heading.": {
+    "de": "Die Bot-Liste zeigt den Bot unter dieser Überschrift.",
+    "es": "La lista de bots muestra el bot bajo este encabezado.",
+    "fr": "La liste des bots affiche le bot sous ce titre.",
+    "id": "Daftar Bot menampilkan bot di bawah judul ini.",
+    "it": "L’elenco dei bot mostra il bot sotto questa intestazione.",
+    "ja": "ボットの一覧でこの見出しの下に表示されます。",
+    "ko": "봇 목록에서 이 제목 아래에 표시됩니다.",
+    "pl": "Lista botów pokazuje bota pod tym nagłówkiem.",
+    "pt-BR": "A lista de bots mostra o bot sob este título.",
+    "ru": "В списке ботов бот будет под этим заголовком.",
+    "tr": "Bot listesi botu bu başlığın altında gösterir.",
+    "zh-Hans": "机器人列表会把它显示在这个标题下。",
+    "zh-Hant": "機器人列表會把它顯示在這個標題下。"
+  },
   "Its bots move to Other.": {
     "de": "Ihre Bots kommen zu „Andere“.",
     "es": "Sus bots pasan a Otro.",

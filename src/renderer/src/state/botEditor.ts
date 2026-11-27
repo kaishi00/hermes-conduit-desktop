@@ -212,6 +212,8 @@ export interface Draft {
   /** A new picture, as a PNG data URL. */
   picture?: string
   removePicture: boolean
+  /** The category it's filed under (state/botCategories.ts), '' for none. */
+  category: string
 }
 
 export function draftFor(bot: Bot): Draft {
@@ -223,7 +225,8 @@ export function draftFor(bot: Bot): Draft {
     soul: '',
     provider: '',
     model: '',
-    removePicture: false
+    removePicture: false,
+    category: bot.category?.name ?? ''
   }
 }
 

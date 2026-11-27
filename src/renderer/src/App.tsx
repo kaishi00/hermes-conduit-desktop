@@ -197,7 +197,7 @@ import {
   type OtherChatRow,
   KEPT_BOTS_CHANGED
 } from './state/keptHosts'
-import { categoryNamed, categoryPatch, useCategoryOrder } from './state/botCategories'
+import { categoryNamed, categoryPatch, refilingRooms, useCategoryOrder, useRoomCategories } from './state/botCategories'
 import { StepSummarySettings } from './components/StepSummarySettings'
 import { ReplySpeedSetting } from './components/ReplySpeedSetting'
 import { PredictiveSettings } from './components/PredictiveSettings'
@@ -770,6 +770,7 @@ function Shell({
   const botOrder = useBotOrder(status.url ?? '', connected, prefsHttp)
   // Bot categories' order, synced as bots.categories (state/botCategories.ts).
   const categoryOrder = useCategoryOrder(status.url ?? '', connected, prefsHttp)
+  const roomCategories = useRoomCategories(status.url ?? '', connected, prefsHttp)
   const roomOrder = useSyncedOrder(status.url ?? '', connected, prefsHttp, 'rooms')
   const orderedRoster = useMemo(() => (roster.bots ? orderedBots(roster.bots, botOrder.order) : null), [roster.bots, botOrder.order])
   const glowBots = useMemo(() => [...(roster.bots ?? []), ...roster.hidden], [roster.bots, roster.hidden])
@@ -2853,7 +2854,14 @@ function Shell({
             },
     work: workByBot,
     // Headings always; filing only while connected (the menus and drops need Edit Bot, which needs the host).
-    categories: { order: categoryOrder.order, setOrder: categoryOrder.set, file: fileBots },
+    categories: {
+      order: categoryOrder.order,
+      setOrder: categoryOrder.set,
+      file: fileBots,
+      rooms: roomCategories.rooms,
+      fileRoom: roomCategories.file,
+      refileRooms: (old: string, to: string | null) => roomCategories.set(refilingRooms(roomCategories.rooms, old, to))
+    },
   }
 
   return (
@@ -3385,7 +3393,7 @@ function Shell({
             }}
           />
         ) : section === 'bots' && editingBot ? (
-          <BotEditor key={editingBot.name} bot={editingBot} onClose={closeBotEditor} onSaved={() => void roster.refresh()} />
+          <BotEditor key={editingBot.name} bot={editingBot} among={glowBots} onClose={closeBotEditor} onSaved={() => void roster.refresh()} />
         ) : section === 'bots' ? null : section === 'tasks' ? (
           <Tasks
             bots={orderedRoster}

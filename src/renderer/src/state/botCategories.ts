@@ -7,14 +7,17 @@
  * A category is its name: Hermes gives each section a random id, so the same category has another id on each
  * host. Bots group by name in any case; filing into a name a host already has reuses that host's id. A category
  * exists while a bot is in it. Their order is kept per host by name and synced as `bots.categories`, which the
- * phone reads and writes too.
+ * phone reads and writes too. Group chats are filed by room id in `groups.categories`, kept and synced per host too.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cleanOrder, arrange, hostOrder } from './botOrder'
 import { installationId, PREFS_PATH } from './pinnedOrder'
 
 export const CATEGORIES_SYNC_KEY = 'bots.categories'
+/** Group chats filed under a category, room id to name: Hermes keeps no field for it on a room, so it's synced per host, as the phone does. */
+export const ROOM_CATEGORIES_SYNC_KEY = 'groups.categories'
 const STORAGE = 'conduit.botCategoryOrder'
+const ROOM_STORAGE = 'conduit.groupRoomCategories'
 const FOLDED = 'conduit.botCategories.folded'
 /** Other's key among the headings: no category's name can take it. */
 export const OTHER_KEY = '\u0001other'
@@ -58,6 +61,18 @@ export function categoryNamed(name: string, among: readonly { category?: BotCate
   return { id: existing?.id ?? newCategoryId(), name }
 }
 
+/** The ui_meta patch Edit Bot writes for the Category it leaves: null when it's the bot's own already. */
+export function editCategoryPatch(current: BotCategory | undefined, name: string | null | undefined, among: readonly { category?: BotCategory }[]): Record<string, unknown> | null {
+  const clean = cleanName(name)
+  if ((current?.name ?? null) === clean) return null
+  return categoryPatch(clean ? categoryNamed(clean, among, current) : null)
+}
+
+/** Every category a bot in `among` is in, in the headings' `order`. */
+export function categoryNamesOf(among: readonly { category?: BotCategory }[], order: readonly string[]): string[] {
+  return categorySections(among, order, b => b.category?.name)?.flatMap(s => (s.name ? [s.name] : [])) ?? []
+}
+
 export interface CategorySection<T> {
   /** Null for Other. */
   name: string | null
@@ -65,8 +80,8 @@ export interface CategorySection<T> {
   items: T[]
 }
 
-/** The headings for `items` in `order` (then in the order their first bot shows), Other last; null when no bot is in one. */
-export function categorySections<T>(items: readonly T[], order: readonly string[], category: (item: T) => string | null | undefined): CategorySection<T>[] | null {
+/** The headings for `items` in `order` (then in the order their first bot shows), Other last, with `also` (the group chats' categories) though no bot is in them; null when nothing is in one. */
+export function categorySections<T>(items: readonly T[], order: readonly string[], category: (item: T) => string | null | undefined, also: readonly string[] = []): CategorySection<T>[] | null {
   const names: string[] = []
   const buckets = new Map<string, T[]>()
   const other: T[] = []
@@ -82,6 +97,12 @@ export function categorySections<T>(items: readonly T[], order: readonly string[
       buckets.set(key, [])
     }
     buckets.get(key)!.push(item)
+  }
+  for (const raw of also) {
+    const name = cleanName(raw)
+    if (!name || buckets.has(categoryKey(name))) continue
+    names.push(name)
+    buckets.set(categoryKey(name), [])
   }
   if (!names.length) return null
   const sections: CategorySection<T>[] = arrange(names, order, n => n).map(name => ({ name, key: categoryKey(name), items: buckets.get(categoryKey(name)) ?? [] }))
@@ -165,6 +186,99 @@ export function useCategoryOrder(host: string, connected: boolean, http: Http) {
     [order, host, http]
   )
   return { order, set }
+}
+
+/** The group chats' categories from a synced or saved value: names cleaned, blank ones dropped. */
+export function cleanRoomCategories(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const rooms: Record<string, string> = {}
+  for (const [roomId, raw] of Object.entries(value as Record<string, unknown>)) {
+    const name = cleanName(raw)
+    if (roomId && name) rooms[roomId] = name
+  }
+  return rooms
+}
+
+/** The rooms' categories after `old` is renamed (`to`) or deleted (null). */
+export function refilingRooms(rooms: Record<string, string>, old: string, to: string | null): Record<string, string> {
+  const next: Record<string, string> = {}
+  for (const [roomId, name] of Object.entries(rooms)) {
+    if (!sameCategory(name, old)) next[roomId] = name
+    else if (to) next[roomId] = to
+  }
+  return next
+}
+
+function loadRooms(host: string): Record<string, string> {
+  try {
+    return cleanRoomCategories(JSON.parse(localStorage.getItem(`${ROOM_STORAGE}.${host}`) ?? '{}'))
+  } catch {
+    return {}
+  }
+}
+
+function saveRooms(host: string, rooms: Record<string, string>): void {
+  try {
+    if (Object.keys(rooms).length) localStorage.setItem(`${ROOM_STORAGE}.${host}`, JSON.stringify(rooms))
+    else localStorage.removeItem(`${ROOM_STORAGE}.${host}`)
+  } catch {
+    // Kept for this window only.
+  }
+}
+
+const sameRooms = (a: Record<string, string>, b: Record<string, string>) =>
+  Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v)
+
+/** This host's group chats' categories: from this computer, then the host's synced copy once per connection, which wins. */
+export function useRoomCategories(host: string, connected: boolean, http: Http) {
+  const [rooms, setRooms] = useState<Record<string, string>>(() => loadRooms(host))
+  const asked = useRef('')
+  useEffect(() => {
+    setRooms(loadRooms(host))
+    asked.current = ''
+  }, [host])
+  useEffect(() => {
+    if (!host || !connected || asked.current === host) return
+    asked.current = host
+    let live = true
+    http('GET', PREFS_PATH).then(
+      response => {
+        const values = (response as { values?: Record<string, { value?: unknown }> } | null)?.values
+        if (!live || !values || !(ROOM_CATEGORIES_SYNC_KEY in values)) return
+        const synced = cleanRoomCategories(values[ROOM_CATEGORIES_SYNC_KEY]?.value)
+        saveRooms(host, synced)
+        setRooms(synced)
+      },
+      () => undefined
+    )
+    return () => {
+      live = false
+    }
+  }, [host, connected, http])
+  const set = useCallback(
+    (next: Record<string, string>) => {
+      if (sameRooms(next, rooms)) return
+      setRooms(next)
+      saveRooms(host, next)
+      void http('PUT', PREFS_PATH, {
+        installation_id: installationId(),
+        device: 'Conduit for desktop',
+        changes: { [ROOM_CATEGORIES_SYNC_KEY]: Object.keys(next).length ? next : null }
+      }).catch(() => undefined)
+    },
+    [rooms, host, http]
+  )
+  const file = useCallback(
+    (roomId: string, name: string | null) => {
+      const next = { ...rooms }
+      const clean = cleanName(name)
+      if (clean) next[roomId] = clean
+      else delete next[roomId]
+      set(next)
+    },
+    [rooms, set]
+  )
+  return { rooms, set, file }
 }
 
 /** Folded headings, by key, on this computer only. */

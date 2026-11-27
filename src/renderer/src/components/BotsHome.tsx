@@ -246,6 +246,12 @@ export interface BotCategories {
   setOrder: (next: string[]) => void;
   /** Files each tile's bot under `name` (null: out of its category); what to tell the person, or null. */
   file: (tiles: MixedTile[], name: string | null) => Promise<string | null>;
+  /** This host's group chats filed under a category, room id to name (synced as `groups.categories`). */
+  rooms?: Record<string, string>;
+  /** Files a group chat under `name` (null: back to Group chats). */
+  fileRoom?: (roomId: string, name: string | null) => void;
+  /** Every group chat in `old` re-filed under `to` (null: back to Group chats). */
+  refileRooms?: (old: string, to: string | null) => void;
 }
 
 /** A bot's pill: what needs you first, then what's working, else nothing. */
@@ -347,11 +353,14 @@ export function BotsHome({
   );
   /** A heading's menu: Rename…, Move Earlier and Later, Delete Category. */
   const [headingMenu, setHeadingMenu] = useState<{ name: string; x: number; y: number } | null>(null);
+  /** A group chat's menu: its Category. */
+  const [roomMenu, setRoomMenu] = useState<{ roomId: string; x: number; y: number } | null>(null);
   useEffect(() => {
-    if (!menu && !headingMenu) return;
+    if (!menu && !headingMenu && !roomMenu) return;
     const close = () => {
       setMenu(null);
       setHeadingMenu(null);
+      setRoomMenu(null);
     };
     window.addEventListener("click", close);
     window.addEventListener("blur", close);
@@ -359,7 +368,7 @@ export function BotsHome({
       window.removeEventListener("click", close);
       window.removeEventListener("blur", close);
     };
-  }, [menu, headingMenu]);
+  }, [menu, headingMenu, roomMenu]);
   const openMenu = onEdit
     ? (bot: Bot, tile?: MixedTile) => (e: MouseEvent) => {
         e.preventDefault();
@@ -627,7 +636,12 @@ export function BotsHome({
 
   // Categories: a heading over each one's bots, Other last (the phone's Bots Home, option A).
   const { folded, toggle: toggleFold } = useFoldedCategories();
-  const sections = categories ? categorySections(tiles, categories.order, (tile) => tile.bot.category?.name) : null;
+  const filedRooms = categories?.rooms ?? {};
+  const roomCategory = (roomId: string): string | null => filedRooms[roomId] ?? null;
+  const roomsIn = (name: string | null) => (name && categories?.fileRoom ? (rooms ?? []).filter((room) => sameCategory(roomCategory(room.roomId), name)) : []);
+  const sections = categories
+    ? categorySections(tiles, categories.order, (tile) => tile.bot.category?.name, categories.fileRoom ? (rooms ?? []).flatMap((room) => (roomCategory(room.roomId) ? [roomCategory(room.roomId)!] : [])) : [])
+    : null;
   const categoryNames = (sections ?? []).flatMap((section) => (section.name ? [section.name] : []));
   const [headingTarget, setHeadingTarget] = useState<string | null>(null);
   const fileTiles = (chosen: MixedTile[], name: string | null) => {
@@ -651,11 +665,13 @@ export function BotsHome({
     const name = cleanName(await askText(t("Rename Category"), old, { confirm: t("Save"), maxLength: 40 }));
     if (!name || name === old || !categories) return;
     categories.setOrder(renamingCategory(categories.order, old, name));
+    categories.refileRooms?.(old, name);
     fileTiles(tiles.filter((tile) => sameCategory(tile.bot.category?.name, old)), name);
   };
   const deleteCategory = async (name: string) => {
     setHeadingMenu(null);
     if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots move to Other.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
+    categories?.refileRooms?.(name, null);
     fileTiles(tiles.filter((tile) => sameCategory(tile.bot.category?.name, name)), null);
   };
   const moveCategory = (name: string, by: -1 | 1) => {
@@ -680,6 +696,30 @@ export function BotsHome({
       ) : null}
     </>
   );
+  const fileRoom = async (roomId: string, name: string | null | "new") => {
+    setRoomMenu(null);
+    const chosen = name === "new" ? cleanName(await askText(t("New Category"), "", { confirm: t("Create"), maxLength: 40 })) : name;
+    if (name === "new" && !chosen) return;
+    categories?.fileRoom?.(roomId, chosen);
+  };
+  const roomMenuEl = roomMenu ? (
+    <div className="host-menu row-menu" role="menu" style={{ left: Math.min(roomMenu.x, window.innerWidth - 200), top: Math.max(8, Math.min(roomMenu.y, window.innerHeight - 36 * (categoryNames.length + 3))) }}>
+      <div className="menu-note bot-category-label" role="presentation">{t("Category")}</div>
+      {categoryNames.map((name) => (
+        <button key={name} role="menuitemradio" aria-checked={sameCategory(roomCategory(roomMenu.roomId), name)} onClick={() => void fileRoom(roomMenu.roomId, name)}>
+          {sameCategory(roomCategory(roomMenu.roomId), name) ? "✓ " : ""}{name}
+        </button>
+      ))}
+      <button role="menuitem" onClick={() => void fileRoom(roomMenu.roomId, "new")}>
+        {t("New Category…")}
+      </button>
+      {roomCategory(roomMenu.roomId) ? (
+        <button role="menuitem" onClick={() => void fileRoom(roomMenu.roomId, null)}>
+          {t("Remove from Category")}
+        </button>
+      ) : null}
+    </div>
+  ) : null;
   const headingMenuEl = headingMenu ? (() => {
     const at = categoryNames.findIndex((name) => sameCategory(name, headingMenu.name));
     return (
@@ -710,7 +750,8 @@ export function BotsHome({
       <div
         className={`bot-side-section-head bot-category-head${headingTarget === section.key ? " drop-target" : ""}`}
         onDragOver={(e) => {
-          if (!onEdit || !categories || !e.dataTransfer.types.includes(BOT_MOVE)) return;
+          const room = !!categories?.fileRoom && e.dataTransfer.types.includes(ROOM_MOVE);
+          if (!room && (!onEdit || !categories || !e.dataTransfer.types.includes(BOT_MOVE))) return;
           e.preventDefault();
           e.stopPropagation();
           e.dataTransfer.dropEffect = "move";
@@ -718,8 +759,16 @@ export function BotsHome({
         }}
         onDragLeave={() => setHeadingTarget((key) => (key === section.key ? null : key))}
         onDrop={(e) => {
-          const moved = e.dataTransfer.getData(BOT_MOVE) || dragging;
           setHeadingTarget(null);
+          // A group chat's row files that room; on Other it goes back to Group chats.
+          const roomId = categories?.fileRoom ? e.dataTransfer.getData(ROOM_MOVE) : "";
+          if (roomId && (rooms ?? []).some((room) => room.roomId === roomId)) {
+            e.preventDefault();
+            e.stopPropagation();
+            categories!.fileRoom!(roomId, section.name);
+            return;
+          }
+          const moved = e.dataTransfer.getData(BOT_MOVE) || dragging;
           const tile = tileOf(moved);
           if (!tile) return;
           e.preventDefault();
@@ -744,7 +793,7 @@ export function BotsHome({
         >
           <Icon name={isFolded ? "chevron" : "chevronDown"} />
           <h2>{title}</h2>
-          <span className="bot-category-count">{section.items.length}</span>
+          <span className="bot-category-count">{section.items.length + roomsIn(section.name).length}</span>
         </button>
         {isFolded ? (
           <span className="bot-category-faces" aria-hidden="true">
@@ -895,14 +944,15 @@ export function BotsHome({
           ) : null}
           {categories && menu.tile ? categoryItems(menu.tile) : null}
         </div>
-      ) : headingMenuEl;
+      ) : headingMenuEl ?? roomMenuEl;
 
-  const roomRow = (key: string, faces: ReactNode, name: string, line: string | null, onClick: () => void, extra?: { className?: string; current?: boolean; waiting?: boolean; drag?: object }) => (
+  const roomRow = (key: string, faces: ReactNode, name: string, line: string | null, onClick: () => void, extra?: { className?: string; current?: boolean; waiting?: boolean; drag?: object; onContextMenu?: (e: MouseEvent) => void }) => (
     <button
       key={key}
       className={`row bot-side-bot bot-side-room${extra?.className ? ` ${extra.className}` : ""}`}
       aria-current={extra?.current ? "true" : undefined}
       onClick={onClick}
+      onContextMenu={extra?.onContextMenu}
       {...extra?.drag}
     >
       <span className="bot-side-face">{faces}</span>
@@ -912,6 +962,29 @@ export function BotsHome({
       </span>
     </button>
   );
+  /** One of this host's group chats; its right-click menu files it under a category. */
+  const ownRoomRow = (room: Room) =>
+    roomRow(
+      room.roomId,
+      <RoomFaces room={room} bots={bots ?? []} size={22} looks={room.linked ? roomLooks?.[room.roomId] : undefined} />,
+      room.name,
+      room.updatedAt ? timeLabel(room.updatedAt) : null,
+      () => onOpenRoom(room),
+      {
+        className: roomTarget === room.roomId ? "move-target" : undefined,
+        current: !side.openHost && side.openRoomId === room.roomId,
+        drag: roomDrag(room.roomId),
+        onContextMenu: categories?.fileRoom
+          ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setMenu(null);
+              setHeadingMenu(null);
+              setRoomMenu({ roomId: room.roomId, x: e.clientX, y: e.clientY });
+            }
+          : undefined,
+      },
+    );
   const glyph = (name: Parameters<typeof Icon>[0]["name"]) => (
     <span className="invite-glyph bot-side-glyph" aria-hidden="true">
       <Icon name={name} />
@@ -1056,6 +1129,7 @@ export function BotsHome({
               <Fragment key={section.key}>
                 {heading(section)}
                 {folded.includes(section.key) ? null : section.items.map(botRow)}
+                {folded.includes(section.key) ? null : roomsIn(section.name).map(ownRoomRow)}
               </Fragment>
             ))
           : tiles.map(botRow)}
@@ -1094,16 +1168,7 @@ export function BotsHome({
                   { className: `invite-tile ${invite.status}`, waiting: invite.status === "waiting" },
                 ),
               )}
-            {(rooms ?? []).map((room) =>
-              roomRow(
-                room.roomId,
-                <RoomFaces room={room} bots={bots ?? []} size={22} looks={room.linked ? roomLooks?.[room.roomId] : undefined} />,
-                room.name,
-                room.updatedAt ? timeLabel(room.updatedAt) : null,
-                () => onOpenRoom(room),
-                { className: roomTarget === room.roomId ? "move-target" : undefined, current: !side.openHost && side.openRoomId === room.roomId, drag: roomDrag(room.roomId) },
-              ),
-            )}
+            {(rooms ?? []).filter((room) => !sections || !categories?.fileRoom || !roomCategory(room.roomId)).map(ownRoomRow)}
             {otherRoomsAfter.map(otherRoomRow)}
             {draft ? (
               <div className="row bot-side-bot bot-side-room starting" aria-label={t("Group chat being started")}>
