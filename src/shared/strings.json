@@ -49034,20 +49034,20 @@
     "zh-Hans": "机器人列表会把它显示在这个标题下。",
     "zh-Hant": "機器人列表會把它顯示在這個標題下。"
   },
-  "Its bots move to Other.": {
-    "de": "Ihre Bots kommen zu „Andere“.",
-    "es": "Sus bots pasan a Otro.",
-    "fr": "Ses bots passent dans Autre.",
-    "id": "Botnya pindah ke Lainnya.",
-    "it": "I suoi bot passano in Altro.",
-    "ja": "ボットは「その他」に移ります。",
-    "ko": "봇은 기타로 이동합니다.",
-    "pl": "Jej boty trafią do Inne.",
-    "pt-BR": "Os bots dela vão para Outro.",
-    "ru": "Её боты перейдут в «Другое».",
-    "tr": "Botları Diğer'e taşınır.",
-    "zh-Hans": "其中的机器人会移到“其他”。",
-    "zh-Hant": "其中的機器人會移到「其他」。"
+  "Its bots and group chats move to Other.": {
+    "de": "Ihre Bots und Gruppenchats kommen zu „Andere“.",
+    "es": "Sus bots y chats de grupo pasan a Otro.",
+    "fr": "Ses bots et discussions de groupe passent dans Autre.",
+    "id": "Bot dan obrolan grupnya pindah ke Lainnya.",
+    "it": "I suoi bot e le chat di gruppo passano in Altro.",
+    "ja": "ボットとグループチャットは「その他」に移ります。",
+    "ko": "봇과 그룹 채팅은 기타로 이동합니다.",
+    "pl": "Jej boty i czaty grupowe trafią do Inne.",
+    "pt-BR": "Os bots e chats em grupo dela vão para Outro.",
+    "ru": "Её боты и групповые чаты перейдут в «Другое».",
+    "tr": "Botları ve grup sohbetleri Diğer'e taşınır.",
+    "zh-Hans": "其中的机器人和群聊会移到“其他”。",
+    "zh-Hant": "其中的機器人和群聊會移到「其他」。"
   },
   "Rename…": {
     "de": "Umbenennen …",

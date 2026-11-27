@@ -208,6 +208,8 @@ export function BotEditor({ bot, among = [], onClose, onSaved }: Props) {
       const patch = metaPatch(bot, draft)
       Object.assign(patch, editCategoryPatch(bot.category, draft.category, among) ?? {})
       const changesLook = Object.keys(patch).length > 0
+      // Read before the picture's fields join the patch, so a picture plus a Category change still counts.
+      const categoryOnly = changesLook && Object.keys(patch).every(key => key === 'sectionId' || key === 'sectionName')
       if (uploaded) Object.assign(patch, { imageKind: 'photo', custom: true })
       else if (removing) patch.imageKind = 'shape'
 
@@ -240,7 +242,7 @@ export function BotEditor({ bot, among = [], onClose, onSaved }: Props) {
           if (outcome === 'conflict') outcome = await retryMeta(patch)
           metaSaved = outcome === 'persisted' || outcome === 'unsupported'
           if (!metaSaved) {
-            if (changesLook) problems.push(Object.keys(patch).every(key => key === 'sectionId' || key === 'sectionName') ? t('Couldn’t save that change. Try again.') : t('The name or color was not saved.'))
+            if (changesLook) problems.push(categoryOnly ? t('Couldn’t save that change. Try again.') : t('The name or color was not saved.'))
             if (uploaded) problems.push(t('The picture was saved, but its look was not.'))
             if (removing) problems.push(t('The picture was not removed.'))
           }

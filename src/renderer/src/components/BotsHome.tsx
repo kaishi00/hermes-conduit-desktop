@@ -659,7 +659,13 @@ export function BotsHome({
   const fileable: MixedTile[] = [
     ...tiles,
     ...(hidden ?? []).map((bot) => ({ key: bot.name, host: hostUrl ?? "", bot, own: true })),
-    ...(mixed ? [...new Set(otherBots.map((o) => o.host))].flatMap(keptHiddenBots).map((o) => ({ key: `${o.host}\u0000${o.bot.name}`, host: o.host, bot: o.bot, own: false })) : []),
+    // Every kept host, not just those with a shown bot, so a host whose bots are all hidden is re-filed too.
+    ...(mixed
+      ? [...new Set([...savedHosts, ...otherBots.map((o) => o.host)])]
+          .filter((url) => url !== hostUrl)
+          .flatMap(keptHiddenBots)
+          .map((o) => ({ key: mixedBotKey(o.host, o.bot.name), host: o.host, bot: o.bot, own: false }))
+      : []),
   ];
   const newCategory = async (tile: MixedTile) => {
     setMenu(null);
@@ -676,7 +682,7 @@ export function BotsHome({
   };
   const deleteCategory = async (name: string) => {
     setHeadingMenu(null);
-    if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots move to Other.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
+    if (!(await ask(`${t("Delete {name}?", { name })}\n\n${t("Its bots and group chats move to Other.")}`, { confirm: t("Delete Category"), destructive: true }))) return;
     categories?.refileRooms?.(name, null);
     fileTiles(fileable.filter((tile) => sameCategory(tile.bot.category?.name, name)), null);
   };
