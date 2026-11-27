@@ -129,6 +129,7 @@ import { PlanDock } from './components/PlanDock'
 import { AgentsDock } from './components/AgentsDock'
 import { ChatTasksDock } from './components/ChatTasksDock'
 import { useChatTasks } from './state/useChatTasks'
+import { useReplySpeeds } from './state/useReplySpeeds'
 import type { TaskFocus } from './components/KanbanBoard'
 import { ControlDock } from './components/ControlDock'
 import { useAgents } from './state/useAgents'
@@ -196,6 +197,7 @@ import {
   type OtherChatRow
 } from './state/keptHosts'
 import { StepSummarySettings } from './components/StepSummarySettings'
+import { ReplySpeedSetting } from './components/ReplySpeedSetting'
 import { PredictiveSettings } from './components/PredictiveSettings'
 import { advancedSections, chatSections, workspaceSections } from './state/profileConfig'
 import { canDelete, duplicateBot, writeMeta } from './state/botActions'
@@ -1062,6 +1064,7 @@ function Shell({
   const shownPlan = useMemo(() => (workChecklist?.length ? planFromChecklist(workChecklist) : transcriptPlan), [workChecklist, transcriptPlan])
   const delegates = useAgents(chat.liveId, connected, running)
   const chatTasks = useChatTasks(chat.storedId ?? chat.liveId, selected.profile, connected, running)
+  const replySpeeds = useReplySpeeds(chat.storedId ?? chat.liveId, selected.profile, connected, running)
   const [drafting, setDrafting] = useState(false)
   const followedUp = useFollowUps(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined, selected.profile, !drafting)
   const predictions = usePredictions(transcriptStore, connected && !calling ? (chat.liveId ?? undefined) : undefined)
@@ -3087,6 +3090,7 @@ function Shell({
                       calls={chatCallList}
                       onOpenCall={setOpenCall}
                       followedUp={followedUp}
+                      replySpeeds={replySpeeds}
                       pins={pinControls}
                       onReact={chat.liveId ? reactTo : undefined}
                       onBranch={chat.liveId && !running ? branchFrom : undefined}
@@ -3911,6 +3915,7 @@ function Settings({
         >
           <TakeoverSettings />
           <StepSummarySettings />
+          <ReplySpeedSetting />
           <PredictiveSettings />
         </ConfigPage>
       </SettingsPane>

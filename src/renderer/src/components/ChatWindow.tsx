@@ -13,6 +13,7 @@ import { askedInChat } from '../state/needsYou'
 import { useCommands } from '../state/useCommands'
 import { useAgents } from '../state/useAgents'
 import { useChatTasks } from '../state/useChatTasks'
+import { useReplySpeeds } from '../state/useReplySpeeds'
 import { ChatTasksDock } from './ChatTasksDock'
 import { usePredictions } from '../state/usePredictions'
 import { SummaryHost } from '../state/useStepSummaries'
@@ -230,6 +231,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
   const commands = useCommands(profile, connected)
   const delegates = useAgents(chat.liveId, connected, running)
   const chatTasks = useChatTasks(chat.storedId ?? chat.liveId, profile, connected, running)
+  const replySpeeds = useReplySpeeds(chat.storedId ?? chat.liveId, profile, connected, running)
   const mentionBots = useMemo(() => mentionCandidates(roster.bots ?? [], '', profile ?? 'default'), [roster.bots, profile])
   const connectionActions = useMemo(
     () => ({ respond: respondConnection, reissue: reissueConnection, wake: wakeConnection }),
@@ -718,6 +720,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
                 display={display}
                 sessionId={chat.liveId ?? undefined}
                 onReact={chat.liveId ? react : undefined}
+                replySpeeds={replySpeeds}
                 onLoadOlder={loadOlder}
                 onSeekRow={seekRow}
                 loadingOlder={loadingOlder}

@@ -36,6 +36,7 @@ import { foldRuns, isStep, span, spanText, type Row } from '../state/runs'
 import { useStepSummaries, type StepSummaries } from '../state/useStepSummaries'
 import { callLength, firstTime, withCalls, type ChatCall } from '../state/voiceCalls'
 import { followedUpKeys } from '../state/predictive'
+import { replySpeedFor, replySpeedLabel, replySpeedSpoken, type ReplySpeeds } from '../state/replySpeeds'
 import { ConnectionCardView } from './ConnectionCardView'
 import { PinnedReplyBar, type PinControls } from './PinnedReplies'
 import { barOrder, pinFor, pinForPassage, pinnedWhole, refreshed, resolved } from '../state/pinnedReplies'
@@ -567,6 +568,8 @@ export function clock(ms?: number): string {
 
 interface ItemProps {
   newest?: boolean
+  /** Settings > Chat > Show reply speed: this reply's tokens per second, beside its time. */
+  speed?: number
   /** This reply answers a turn Hermes took on its own (Predictive follow-ups). */
   followedUp?: boolean
   item: TranscriptItem
@@ -763,6 +766,7 @@ function sameItemProps(a: ItemProps, b: ItemProps): boolean {
     a.jump === b.jump &&
     a.face === b.face &&
     a.newest === b.newest &&
+    a.speed === b.speed &&
     sameBoards(a.boards, b.boards) &&
     a.followUps === b.followUps &&
     sameTeammates(a.teammates, b.teammates) &&
@@ -800,7 +804,8 @@ const Item = memo(function Item({
   teammates,
   repliedTo,
   onReact,
-  onBranch
+  onBranch,
+  speed
 }: ItemProps) {
   switch (item.kind) {
     case 'user': {
@@ -861,6 +866,11 @@ const Item = memo(function Item({
             )}
             <span className="reply-name">{author}</span>
             {item.at ? <span className="time">{clock(item.at)}</span> : null}
+            {speed ? (
+              <span className="time reply-speed" title={replySpeedSpoken(speed)} aria-label={replySpeedSpoken(speed)}>
+                {replySpeedLabel(speed)}
+              </span>
+            ) : null}
           </div>
           {followedUp ? (
             <span className="followed-up">
@@ -1130,7 +1140,8 @@ export function Transcript({
   loadingOlder = false,
   olderRows = false,
   onSeekRow,
-  keepsPlace
+  keepsPlace,
+  replySpeeds
 }: {
   state: TranscriptState
   loading: boolean
@@ -1181,6 +1192,8 @@ export function Transcript({
   onSeekRow?: (found: (items: readonly TranscriptItem[]) => boolean, missed?: () => void) => (() => void) | void
   /** Whether a chat holds a tab (issue 423): left, it keeps the reader's place, and back, opens there (chatPlaces.ts). */
   keepsPlace?: (chat: string, leaving: boolean) => boolean
+  /** Settings > Chat > Show reply speed: the chat's reply speeds, while it's on. */
+  replySpeeds?: ReplySpeeds
 }) {
   const [thinkingShown, setThinkingShown] = useState(false)
   const showsThinking = display.thinking === 'show' || (display.thinking === 'on_request' && thinkingShown)
@@ -1609,6 +1622,7 @@ export function Transcript({
       onOpenCall={onOpenCall ? stable.openCall : undefined}
       teammates={teammates}
       followedUp={followedUpKeySet.has(item.key)}
+      speed={item.kind === 'assistant' && !item.streaming ? replySpeedFor(replySpeeds, item, newestReply, state.running) : undefined}
       repliedTo={repliesToTeammates.get(item.key)}
       onReact={onReact && reactable(item) ? forItem(item.key).react : undefined}
       onBranch={onBranch && item.kind === 'assistant' && !item.streaming ? forItem(item.key).branch : undefined}

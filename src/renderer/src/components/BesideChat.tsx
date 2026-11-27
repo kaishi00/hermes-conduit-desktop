@@ -4,6 +4,7 @@ import { useChat } from '../state/useChat'
 import { useTranscript } from '../state/transcriptStore'
 import type { ChatDisplay } from '../state/display'
 import { Transcript } from './Transcript'
+import { useReplySpeeds } from '../state/useReplySpeeds'
 import { Icon } from './icons'
 
 /** The chat kept beside the open one. */
@@ -53,6 +54,7 @@ export function BesideChatPane({
 }) {
   const { transcriptStore, chat: open, loading, error, send } = useChat(chat.id, chat.profile, sessionAuthority, connected, false, undefined, host)
   const transcript = useTranscript(transcriptStore)
+  const replySpeeds = useReplySpeeds(open.storedId ?? open.liveId, chat.profile, connected, transcript.running)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const box = useRef<HTMLTextAreaElement>(null)
@@ -106,6 +108,7 @@ export function BesideChatPane({
           face={face}
           display={display}
           sessionId={open.liveId ?? undefined}
+          replySpeeds={replySpeeds}
         />
       </div>
       <form
