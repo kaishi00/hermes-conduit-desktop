@@ -152,7 +152,7 @@ describe("applyLiveWork on hermes dashboard", () => {
     act(() => hook.result().applyLiveWork(listed, noLiveWork, Date.now() + 1))
     const opened = resumes()
     await act(async () => {
-      hook.result().applyLiveWork({ ...noLiveWork, running: true }, listed, Date.now() + 1)
+      hook.result().applyLiveWork(noLiveWork, { ...listed, running: false }, Date.now() + 1)
       await settle()
     })
     expect(resumes()).toBeGreaterThan(opened)

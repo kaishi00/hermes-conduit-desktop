@@ -582,6 +582,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     followedLive.current = false
     reloadedAt.current = 0
     gapPending.current = false
+    wordsDrawn.current = []
     // A create still out belongs to the chat that just left: a pick in this one mustn't wait on it and be dropped.
     creating.current = null
     // A resume this re-run abandons can't clear it any more: its finally is fenced by the ticket.
@@ -1729,8 +1730,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         if (work.started.includes(row.admissionId)) {
           dispatch({ type: 'queuedStarted', admission: row.admissionId, text: row.text })
           wordsDrawn.current = [...wordsDrawn.current.slice(-15), row.admissionId]
-        } else {
-          // It ran and ended between reads, or was withdrawn: the history tells which.
+        } else if (!work.running) {
+          // It ran and ended between reads, or was withdrawn: the history tells which. Not while a turn
+          // runs there: words drawn above may not be stored yet, and the turn's end reads the history anyway.
           settled = true
         }
       }
