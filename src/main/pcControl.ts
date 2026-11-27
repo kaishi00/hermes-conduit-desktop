@@ -71,9 +71,28 @@ export function pcControlState(): PcControlState {
 
 const changed = () => notify(pcControlState())
 
-export function initPcControl(listeners: { notify: Notify; stopped: () => void }) {
+let mainWindow: () => BrowserWindow | null = () => null
+
+export function initPcControl(listeners: { notify: Notify; stopped: () => void; window?: () => BrowserWindow | null }) {
   notify = listeners.notify
   onStopped = listeners.stopped
+  if (listeners.window) mainWindow = listeners.window
+}
+
+/**
+ * The window the ask sits on, brought forward: a dialog with no window of its
+ * own can open behind whatever the user is in on Windows, so a bot's ask timed
+ * out with nothing seen (Asuka, 2026-11-27). The taskbar flashes until it's
+ * answered, in case Windows keeps another app in front.
+ */
+function askWindow(): BrowserWindow | null {
+  const win = mainWindow()
+  if (!win || win.isDestroyed()) return null
+  if (win.isMinimized()) win.restore()
+  if (!win.isVisible()) win.show()
+  win.focus()
+  win.flashFrame(true)
+  return win
 }
 
 export function setPcControl(change: Partial<PcControlSettings> & { bot?: unknown }): PcControlState {
@@ -139,21 +158,25 @@ export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'close
     .filter(Boolean)
     .join('\n\n')
   const close = new AbortController()
-  const shown = dialog
-    .showMessageBox({
-      type: 'question',
-      title: t('Control from Hermes'),
-      message: t('Allow {bot} to control this computer?', { bot: request.bot }),
-      detail,
-      buttons: [t('Allow'), t('Don’t Allow')],
-      defaultId: 1,
-      cancelId: 1,
-      noLink: true,
-      signal: close.signal
-    })
+  const win = askWindow()
+  const options: Electron.MessageBoxOptions = {
+    type: 'question',
+    title: t('Control from Hermes'),
+    message: t('Allow {bot} to control this computer?', { bot: request.bot }),
+    detail,
+    buttons: [t('Allow'), t('Don’t Allow')],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    signal: close.signal
+  }
+  const shown = (win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options))
     .then(answer => (close.signal.aborted ? 'closed' : answer.response === 0 ? 'allowed' : 'denied') as 'allowed' | 'denied' | 'closed')
     .catch(() => (close.signal.aborted ? 'closed' : 'denied') as 'closed' | 'denied')
-    .finally(() => asking.delete(key))
+    .finally(() => {
+      asking.delete(key)
+      if (win && !win.isDestroyed()) win.flashFrame(false)
+    })
   asking.set(key, { shown, close })
   return shown
 }
