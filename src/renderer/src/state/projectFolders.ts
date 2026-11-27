@@ -40,4 +40,5 @@ export function projectFor(folder: string | undefined, projects: readonly Projec
   return projects?.find(p => !p.isHome && folderKey(p.path) === key) ?? null
 }
 
-const folderKey = (path: string | undefined) => path?.trim().replace(/[\\/]+$/, '') || ''
+// Case aside: a Mac's and a Windows host's folders are, and Finder or Explorer may spell one otherwise.
+const folderKey = (path: string | undefined) => path?.trim().replace(/[\\/]+$/, '').toLowerCase() || ''

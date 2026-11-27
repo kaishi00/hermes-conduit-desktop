@@ -102,6 +102,7 @@ export function ProjectForm({
           start={folder.trim() || start}
           onPick={path => {
             setFolder(path)
+            setError(null)
             setBrowsing(false)
           }}
         />
