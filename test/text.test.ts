@@ -25,6 +25,9 @@ describe('cleanUserText', () => {
     expect(previewText(`${prior}\nWiring all three now. And then`)).toBe('Wiring all three now. And then')
     expect(previewText('[CONTEXT COMPACTION \u2014 REFERENCE ONLY] Earlier turns were compacted.')).toBe('')
     expect(previewText('new sheet\n\n[screenshot]\n<memory-context>\nrecalled')).toBe('new sheet')
+    expect(previewText(`${prior}\nWiring all three now.\n\n[END OF PRIOR CON`)).toBe('Wiring all three now.')
+    expect(previewText('[PRIOR CONTEXT \u2014 for refer')).toBe('')
+    expect(previewText('[screenshot]\n<memory-context>\nrecalled')).toBe('')
   })
 
   it('keeps a picture Hermes 0.23 noted below the attached context', () => {
