@@ -202,3 +202,46 @@ export function absolutePath(path: string, folder: string): string {
   const separator = /^[A-Za-z]:\\/.test(base) ? '\\' : '/'
   return `${base}${separator}${text.replace(/^\.\//, '')}`
 }
+
+/** The plugin finds folders a reply names too, and says which it found (desktop issue 686). */
+export const RESOLVE_FOLDERS_CAPABILITY = 'workspace-resolve-folders'
+
+export const resolvePath = (path: string, sessionIds: string[], profile?: string | null) =>
+  withProfile(
+    `${WORKSPACE}/resolve?${[`path=${encodeURIComponent(path)}`, ...sessionIds.filter(Boolean).map(id => `session_id=${encodeURIComponent(id)}`)].join('&')}`,
+    profile
+  )
+
+/** Where a path a reply named is on the host: found (a folder ends in its separator), not there, or unknown. */
+export type LinkLookup = { path: string } | { missing: string } | { unknown: true }
+
+/**
+ * Where a path a reply named is, as the phone looks it up (issue 1809, desktop issue 686): a rooted path as it is;
+ * a bare name or a relative path asked of the plugin for the chat (its folder, its repository's top, then where its
+ * own tools put it). The plugin saying the host has none is `missing`, named for the notice; a plugin without the
+ * lookup, or a failed one, is `unknown`, and the caller joins it to the chat's folder as before.
+ */
+export async function lookUpLink(
+  path: string,
+  ask: {
+    sessionIds: string[]
+    profile?: string | null
+    /** Whether the profile's plugin serves the folder-aware lookup. */
+    serves: () => Promise<boolean>
+    get: (route: string) => Promise<unknown>
+  }
+): Promise<LinkLookup> {
+  const text = path.trim()
+  if (/^(\/|[A-Za-z]:[\\/]|~\/)/.test(text)) return { path: text }
+  if (!ask.sessionIds.some(Boolean)) return { unknown: true }
+  try {
+    if (!(await ask.serves())) return { unknown: true }
+    const raw = (await ask.get(resolvePath(text, ask.sessionIds, ask.profile))) as { path?: unknown; isDirectory?: unknown } | null
+    const found = typeof raw?.path === 'string' && raw.path ? raw.path : null
+    if (!found) return { missing: baseName(text) || text }
+    if (raw?.isDirectory !== true) return { path: found }
+    return { path: `${found.replace(/[\\/]+$/, '')}${/^[A-Za-z]:\\/.test(found) ? '\\' : '/'}` }
+  } catch {
+    return { unknown: true }
+  }
+}

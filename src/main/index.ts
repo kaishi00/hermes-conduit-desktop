@@ -50,8 +50,9 @@ import { pluginRelease } from './pluginRelease'
 import { cleanHeaders } from './proxyHeaders'
 import { KeptHosts, keptRpcWritable } from './keptHosts'
 import { readServerCertificate } from './serverCertificate'
-import { hostSpellings, isThisComputer } from './localFolders'
-import { writeFile } from 'node:fs/promises'
+import { hostSpellings, isThisComputer, localSpelling } from './localFolders'
+import { stat, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath, copyDown } from './hostFiles'
 import { Connection, DISPLAY_SOCKET_PATH } from './connection'
 import { Pairing } from './pairing'
@@ -992,6 +993,35 @@ function registerIpc(): void {
     const picked = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options)
     const path = picked.canceled ? undefined : picked.filePaths[0]
     return path ? hostSpellings(path) : null
+  })
+  // A path link's right-click (desktop issue 686): open it in the Folder, show it in Finder or Explorer while the
+  // dashboard runs on this computer (Eric, 2026-11-27), or copy it. The choice goes back to the page, which looks the
+  // path up; null when the menu closed without one.
+  ipcMain.handle(IPC.pathLinkMenu, async (event): Promise<'folder' | 'computer' | 'copy' | null> => {
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    if (!owner) return null
+    const here = isThisComputer(connectionOf(event.sender.id)?.current().url)
+    const onComputer = process.platform === 'darwin' ? t('Show in Finder') : process.platform === 'win32' ? t('Show in Explorer') : t('Show in Files')
+    return new Promise(resolve => {
+      let chosen: 'folder' | 'computer' | 'copy' | null = null
+      const menu = Menu.buildFromTemplate([
+        { label: t('Show in Folder'), click: () => (chosen = 'folder') },
+        ...(here ? [{ label: onComputer, click: () => (chosen = 'computer') }] : []),
+        { type: 'separator' },
+        { label: t('Copy Path'), click: () => (chosen = 'copy') }
+      ])
+      // The callback comes once the menu closes, after a click's handler ran.
+      menu.popup({ window: owner, callback: () => resolve(chosen) })
+    })
+  })
+  // Shows a path the Hermes host named in Finder or Explorer: only while the dashboard runs on this computer, and
+  // only a path that's here. False otherwise, for the page to say so.
+  ipcMain.handle(IPC.showOnComputer, async (event, path: unknown): Promise<boolean> => {
+    if (typeof path !== 'string' || !path.trim() || !isThisComputer(connectionOf(event.sender.id)?.current().url)) return false
+    const local = localSpelling(path, { home: homedir(), windows: process.platform === 'win32' })
+    if (!(await stat(local).then(() => true, () => false))) return false
+    shell.showItemInFolder(local)
+    return true
   })
   // Save a file on the Hermes host (a reply's picture, audio or file, a workspace file) where the person picks.
   ipcMain.handle(IPC.saveHostFile, async (event, path: unknown, profile: unknown): Promise<string> => {

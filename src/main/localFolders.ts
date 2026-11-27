@@ -42,3 +42,18 @@ export function hostSpellings(path: string): string[] {
   const rest = drive[2]!.replace(/\\/g, '/').replace(/\/+$/, '')
   return [path, `/mnt/${drive[1]!.toLowerCase()}${rest ? `/${rest}` : ''}`]
 }
+
+/**
+ * A path on the Hermes host as this computer has it, for Show in Finder or Explorer on a dashboard that runs here
+ * (desktop issue 686): `~` is this computer's home, and on Windows a WSL Hermes' /mnt/<drive>/… is that drive's
+ * path. The caller checks it's there before showing it.
+ */
+export function localSpelling(path: string, deps: { home: string; windows: boolean }): string {
+  const text = path.trim()
+  let local = text === '~' ? deps.home : text.startsWith('~/') ? `${deps.home.replace(/[\\/]+$/, '')}/${text.slice(2)}` : text
+  const wsl = deps.windows ? /^\/mnt\/([a-z])(?:\/(.*))?$/i.exec(local) : null
+  if (wsl) local = `${wsl[1]!.toUpperCase()}:\\${(wsl[2] ?? '').replace(/\//g, '\\')}`
+  else if (deps.windows && /^[A-Za-z]:\//.test(local)) local = local.replace(/\//g, '\\')
+  // A folder's trailing separator: Finder and Explorer show the folder itself.
+  return local.length > 1 && !/^[A-Za-z]:[\\/]$/.test(local) ? local.replace(/[\\/]+$/, '') : local
+}

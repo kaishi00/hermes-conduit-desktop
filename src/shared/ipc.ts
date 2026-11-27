@@ -315,6 +315,13 @@ export interface ConduitApi {
    */
   pickLocalFolder(): Promise<string[] | null>
   /**
+   * A path link's right-click menu (desktop issue 686): Show in Folder, Show in Finder or Explorer while this
+   * window's dashboard runs on this computer, and Copy Path. The choice, or null when none was picked.
+   */
+  pathLinkMenu(): Promise<'folder' | 'computer' | 'copy' | null>
+  /** Shows a host path in Finder or Explorer, while the dashboard runs on this computer and the path is here; false otherwise. */
+  showOnComputer(path: string): Promise<boolean>
+  /**
    * Copies a picture, sound, video or PDF on the Hermes host down for the
    * viewer a chat's file card opens, and gives the copy's address on the
    * file scheme, or what went wrong (desktop#554). `ticket` names the copy
@@ -636,6 +643,8 @@ export const IPC = {
   saveHostFile: 'conduit:save-host-file',
   hostIsThisComputer: 'conduit:host-is-this-computer',
   pickLocalFolder: 'conduit:pick-local-folder',
+  pathLinkMenu: 'conduit:path-link-menu',
+  showOnComputer: 'conduit:show-on-computer',
   viewHostFile: 'conduit:view-host-file',
   cancelViewHostFile: 'conduit:cancel-view-host-file',
   viewStagedFile: 'conduit:view-staged-file',
