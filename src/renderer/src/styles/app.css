@@ -681,6 +681,9 @@ a:hover {
   margin-bottom: 6px;
   line-height: 16px;
 }
+.reply-speed {
+  font-variant-numeric: tabular-nums;
+}
 .reply-name {
   font-size: 12px;
   font-weight: 600;
