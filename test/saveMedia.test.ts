@@ -128,7 +128,7 @@ describe('saving pictures, files and audio to this computer', () => {
     try {
       expect(await copyPicture('data:image/png;base64,AQID')).toBe(true)
       expect([...new Uint8Array(copyImage.mock.calls[0]![0])]).toEqual([1, 2, 3])
-      // Bytes the system can't read as a picture, and a page that can't draw them either.
+      // Bytes the system can't read as a picture, with no page here to draw them (the drawn PNG is in pictureViewerCopy.test.ts).
       copyImage.mockResolvedValue(false)
       expect(await copyPicture('data:image/webp;base64,AQID')).toBe(false)
     } finally {
