@@ -33,7 +33,8 @@ import {
   type SignInRequest,
   type ThemeChoice,
   type AppIconChoice,
-  type HotkeyName
+  type HotkeyName,
+  type PcRequest
 } from '../shared/ipc'
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
@@ -71,6 +72,7 @@ import { applyAppIcon, watchNewWindows } from './appIcon'
 import { rebuildMenu } from './menuGate'
 import { watchEditMenu } from './editMenu'
 import { launchedAtLogin, loginItemState, openStartupSettings, setLoginItem } from './loginItem'
+import { deletePcDriver, initPcControl, installPcDriver, pcControlState, runPcRequest, setPcControl, stopControl } from './pcControl'
 import {
   appIconChoice,
   askHostAtLaunch,
@@ -633,6 +635,16 @@ function registerIpc(): void {
   ipcMain.handle(IPC.deviceReports, () => deviceReports())
   ipcMain.handle(IPC.updateState, () => updateState())
   ipcMain.handle(IPC.loginItem, () => loginItemState())
+  initPcControl({
+    notify: state => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlChanged, state),
+    stopped: () => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send(IPC.pcControlStopped)
+  })
+  ipcMain.handle(IPC.pcControlState, () => pcControlState())
+  ipcMain.handle(IPC.pcControlSet, (_event, change: unknown) => setPcControl(change && typeof change === 'object' ? change : {}))
+  ipcMain.handle(IPC.pcControlInstall, () => installPcDriver())
+  ipcMain.handle(IPC.pcControlDelete, () => deletePcDriver())
+  ipcMain.handle(IPC.pcControlRun, (_event, request: PcRequest) => runPcRequest(request))
+  ipcMain.on(IPC.pcControlStop, () => stopControl())
   ipcMain.handle(IPC.setLoginItem, (_event, on: unknown) => setLoginItem(on === true))
   ipcMain.on(IPC.openStartupSettings, () => openStartupSettings())
   ipcMain.handle(IPC.checkForUpdates, () => checkForUpdates())
