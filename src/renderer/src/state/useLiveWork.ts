@@ -24,6 +24,9 @@ export function useLiveWork(
   const scopeRef = useRef(scope)
   scopeRef.current = scope
   const applyRef = useRef(apply)
+  /** The newest read asked, and the newest applied: an older answer arriving late is dropped. */
+  const asks = useRef(0)
+  const applied = useRef(0)
   applyRef.current = apply
 
   useEffect(() => {
@@ -35,6 +38,7 @@ export function useLiveWork(
     const asked = scopeRef.current
     if (!sessionId || !enabled) return
     const askedAt = Date.now()
+    const ask = ++asks.current
     let answer: LiveWork
     try {
       answer = parseLiveWork(await gateway.http('GET', liveWorkPath(sessionId, profile)))
@@ -42,7 +46,8 @@ export function useLiveWork(
       // An older plugin (404), a chat Hermes has no row for yet, or a failed read: nothing changes.
       return
     }
-    if (scopeRef.current !== asked) return
+    if (scopeRef.current !== asked || ask < applied.current) return
+    applied.current = ask
     const was = last.current
     last.current = answer
     setWork(answer)

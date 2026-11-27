@@ -65,7 +65,8 @@ export function BesideChatPane({
     const words = text
     setSending(true)
     setText('')
-    const sent = await send(words)
+    // It has no queue dock: a send forwarded behind a turn in the gateway stays in its chat.
+    const sent = await send(words, [], undefined, { noDock: true })
     // One that didn't go keeps its words in the box.
     if (sent === false) setText(current => current || words)
     setSending(false)

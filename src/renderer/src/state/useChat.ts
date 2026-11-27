@@ -1048,7 +1048,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       text: string,
       attachments: StagedAttachment[] = [],
       wire?: string,
-      options: { takeOver?: boolean; spoken?: boolean } = {}
+      options: {
+        takeOver?: boolean
+        spoken?: boolean
+        /** A pane with no queue dock (Beside): a forwarded send keeps its bubble in the chat instead. */
+        noDock?: boolean
+      } = {}
     ): Promise<string | null | false> => {
       const trimmed = text.trim()
       if (!trimmed && !attachments.length) return null
@@ -1107,7 +1112,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           // The Webapp's queue took it behind the running turn: it waits in the dock until its turn starts.
           // `hermes dashboard` forwards a send into a turn the gateway runs to the gateway's queue: it waits
           // there too, where the plugin's reads keep it (liveWork.ts).
-          const forwarded = !sessionAuthority && receipt?.forwarded === true
+          const forwarded = !sessionAuthority && receipt?.forwarded === true && !options.noDock
           if ((forwarded || (sessionAuthority && joinsRunningTurn)) && receipt?.status === 'queued' && typeof receipt.admission_id === 'string' && receipt.admission_id) {
             const admission = receipt.admission_id
             dispatch({ type: 'held', key, admission })
