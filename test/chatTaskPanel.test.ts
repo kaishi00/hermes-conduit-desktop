@@ -117,7 +117,7 @@ describe('A chat’s Kanban task in the chat', () => {
     act(() => root.unmount())
   })
 
-  it('reads the open task again every 15 s while the window shows, so a new summary shows', async () => {
+  it('reads the open task again every 15 s while the window shows, and stops when it closes', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     const { box, root } = await draw()
     click(box.querySelector('.plan-toggle'))
@@ -129,8 +129,7 @@ describe('A chat’s Kanban task in the chat', () => {
     await settle()
     expect(reads()).toBe(first + 1)
     act(() => root.unmount())
-    act(() => vi.advanceTimersByTime(30_000))
-    expect(reads()).toBe(first + 1)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('closes when the task is gone from its board, and the line reads again', async () => {
@@ -168,6 +167,43 @@ describe('A chat’s Kanban task in the chat', () => {
     await settle()
     expect(box.querySelector('.task-panel')).toBeNull()
     expect(changed).toBe(1)
+    act(() => root.unmount())
+  })
+
+  it('a read still out from a closed panel leaves the task opened since alone', async () => {
+    const conduit = (window as unknown as { conduit: Record<string, unknown> }).conduit
+    const answer = conduit.httpOutcome as (method: string, path: string) => Promise<unknown>
+    let late: (outcome: unknown) => void = () => undefined
+    conduit.httpOutcome = async (method: string, path: string) => {
+      if (path.startsWith('/api/plugins/kanban/tasks/t2')) return new Promise(resolve => (late = resolve))
+      if (path.startsWith('/api/plugins/kanban/tasks/t3')) {
+        return { ok: true, result: { task: { id: 't3', title: 'Write it up', status: 'running', body: 'The report' }, comments: [], events: [], links: { parents: [], children: [] } } }
+      }
+      return answer(method, path)
+    }
+    const path = '../src/renderer/src/components/ChatTasksDock.tsx'
+    const { ChatTasksDock } = (await import(/* @vite-ignore */ path)) as { ChatTasksDock: unknown }
+    const box = document.createElement('div')
+    document.body.append(box)
+    const root = createRoot(box)
+    let changed = 0
+    const tasks = [
+      { id: 't2', title: 'Dig in', status: 'running', board: 'research', boardName: 'Research' },
+      { id: 't3', title: 'Write it up', status: 'running', board: 'research', boardName: 'Research' }
+    ]
+    act(() => root.render(createElement(ChatTasksDock as never, { tasks, chatKey: 'c1', bots: [], onChanged: () => changed++ })))
+    click(box.querySelector('.plan-toggle'))
+    const rows = () => [...box.querySelectorAll('.chat-task-open')]
+    click(rows()[0])
+    await settle()
+    click(rows()[1])
+    await settle()
+    expect(box.querySelector('.task-panel')?.textContent).toContain('The report')
+    // t2's read comes back a 404 only now, after its panel closed.
+    late({ ok: false, error: 'task not found', code: 404 })
+    await settle()
+    expect(box.querySelector('.task-panel')?.textContent).toContain('The report')
+    expect(changed).toBe(0)
     act(() => root.unmount())
   })
 })

@@ -8,8 +8,8 @@ import { TaskPanel } from './KanbanBoard'
 import { Icon } from './icons'
 import { everyWhileVisible } from '../state/visibility'
 
-/** Hermes says the task isn't there (any more): a 404. */
-const gone = (error: unknown) => (error as { code?: unknown } | null)?.code === 404 || /\b404\b|not found/i.test(error instanceof Error ? error.message : String(error))
+/** Hermes says the task isn't there (any more): a 404. Every gateway HTTP error carries its status, so a 500 that says "not found" doesn't count. */
+const gone = (error: unknown) => (error as { code?: unknown } | null)?.code === 404
 
 /** The open panel reads its task again this often while the window shows. */
 export const CHAT_TASK_PANEL_READ_MS = 15_000
@@ -106,7 +106,7 @@ export function ChatTasksDock({ tasks, chatKey, onOpen, bots, onChanged }: Props
           key={shownKey!}
           task={shownTask}
           bots={bots ?? null}
-          onClose={() => setShownKey(null)}
+          onClose={() => setShownKey(key => (key === shownKey ? null : key))}
           onChanged={onChanged}
           onOpen={
             onOpen
@@ -141,12 +141,20 @@ function ChatTaskPanel({
   onOpen?: () => void
 }) {
   const path = useCallback((rest: string) => boardPath(`/tasks/${encodeURIComponent(task.id)}${rest}`, task.board), [task.id, task.board])
+  // A read still out when this panel closed (the one after a Delete, or one from a task the user moved off) acts on nothing.
+  const live = useRef(true)
+  useEffect(() => {
+    live.current = true
+    return () => {
+      live.current = false
+    }
+  }, [])
   const load = useCallback(async () => {
     try {
       return parseTaskDetail(await gateway.http('GET', path('')))
     } catch (e) {
       // Deleted or gone from its board meanwhile: the panel closes and the line reads again, so it drops the task.
-      if (gone(e)) {
+      if (live.current && gone(e)) {
         onClose()
         onChanged?.()
       }
