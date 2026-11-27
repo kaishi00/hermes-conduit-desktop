@@ -55,6 +55,7 @@ import { Pairing } from './pairing'
 import { createFileStore } from './store'
 import { QuickAsk } from './quickAsk'
 import { GlobalHotkey } from './hotkey'
+import { CallWindowClose } from './callWindowClose'
 import { validAccelerator } from '../shared/accelerator'
 import { ChatWindowSet, chatWindowFor } from './chatWindowSet'
 import { createChatWindow } from './chatWindows'
@@ -343,9 +344,8 @@ const chatBrowserById = new Map<string, BrowserWindow>()
 /** The Live call window, and the id it's kept under now: its chat's once the call makes one (a reload's new chat too). */
 let callBrowser: BrowserWindow | null = null
 let callWindowId = LIVE_CALL_WINDOW_ID
-/** A call window closed mid-call: the longest it waits for its call to end, and the moment it gives the call's saves. */
-const CALL_CLOSE_CAP_MS = 5000
-const CALL_SAVE_GRACE_MS = 1500
+/** The call window's close, waiting on its call to end when it's closed mid-call (main/callWindowClose.ts). */
+let callClosing: CallWindowClose | null = null
 const chatWindows = new ChatWindowSet(
   (chat, onClosed) => {
     const window = createChatWindow(chat, onClosed)
@@ -657,8 +657,12 @@ function registerIpc(): void {
     // it already is comes forward and starts another call if it has none.
     const call = request.call === true && request.id === LIVE_CALL_WINDOW_ID
     // By the window, as its id becomes its chat's once the call's first request makes one.
-    const had = call && callBrowser && !callBrowser.isDestroyed() ? callBrowser : undefined
+    // One closing mid-call that's still the set's (its own close button) is kept after all; one a sign-out or a
+    // switch dropped from the set finishes closing, and a new window opens.
+    const kept = callBrowser && !callBrowser.isDestroyed() && (!callClosing?.closing || chatWindows.ids().includes(callWindowId))
+    const had = call && kept ? callBrowser : undefined
     if (had) {
+      callClosing?.cancel()
       if (had.isMinimized()) had.restore()
       had.show()
       had.focus()
@@ -686,19 +690,17 @@ function registerIpc(): void {
       // call, files a Classic call's chat and lets go of its presence, as the call's End does; closing at once
       // would drop the page before any of that ran. Hidden meanwhile, it closes once the call has ended, or
       // after a few seconds.
+      const closing = new CallWindowClose(() => {
+        if (!opened.isDestroyed()) opened.destroy()
+      })
+      callClosing = closing
       opened.on('close', event => {
         if (quitting || opened.isDestroyed() || windowCallIn !== opened.webContents) return
         event.preventDefault()
+        // Asked again while it closes (a sign-out after its own close button): one close is under way.
+        if (!closing.start()) return
         opened.hide()
-        const close = () => {
-          if (!opened.isDestroyed()) opened.destroy()
-        }
-        const cap = setTimeout(close, CALL_CLOSE_CAP_MS)
-        afterWindowCall = () => {
-          clearTimeout(cap)
-          // The call's last saves are under way as it ends: a moment for them before the page goes.
-          setTimeout(close, CALL_SAVE_GRACE_MS)
-        }
+        afterWindowCall = () => closing.callEnded()
         opened.webContents.send(IPC.menu, 'end-call')
       })
     }

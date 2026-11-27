@@ -360,13 +360,7 @@ export function App() {
         })
       : null
   }
-  shellShown.current =
-    status.phase !== 'locked' &&
-    !editing &&
-    !adding &&
-    !(repairing && status.phase !== 'open') &&
-    !(status.phase === 'signed-out' && status.choosing && status.hosts?.length) &&
-    !(signedOut || status.phase === 'failed')
+  shellShown.current = inShell
   return (
     <div className="app">
       <TitleBar {...brand} bare={inShell} />
