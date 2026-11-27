@@ -22,7 +22,7 @@ import { draftLine, type RoomDraft } from "../state/roomDrafts";
 import { lookPictureUrl, memberLook, type RoomLook, type RoomLooks } from "../state/roomLooks";
 import { StarterFaceArt } from "./StarterFaceArt";
 import { t } from "@shared/i18n";
-import type { HostBadge, OtherBot, OtherRoom } from "../state/keptHosts";
+import { keptHiddenBots, type HostBadge, type OtherBot, type OtherRoom } from "../state/keptHosts";
 import { keptWorkKey } from "../state/keptHosts";
 import { canAddFar, mixedBotKey, mixedTiles, neighbour, type MixedTile } from "../state/botOrder";
 import type { OwnHermesBot } from "../state/roomDrafts";
@@ -655,8 +655,12 @@ export function BotsHome({
       .then(setActionError)
       .finally(() => setBusy(false));
   };
-  /** Every bot a rename or delete re-files: the shown ones and this host's hidden ones, so none keeps the old name. */
-  const fileable: MixedTile[] = [...tiles, ...(hidden ?? []).map((bot) => ({ key: bot.name, host: hostUrl ?? "", bot, own: true }))];
+  /** Every bot a rename or delete re-files: the shown ones and every host's hidden ones, so none keeps the old name. */
+  const fileable: MixedTile[] = [
+    ...tiles,
+    ...(hidden ?? []).map((bot) => ({ key: bot.name, host: hostUrl ?? "", bot, own: true })),
+    ...(mixed ? [...new Set(otherBots.map((o) => o.host))].flatMap(keptHiddenBots).map((o) => ({ key: `${o.host}\u0000${o.bot.name}`, host: o.host, bot: o.bot, own: false })) : []),
+  ];
   const newCategory = async (tile: MixedTile) => {
     setMenu(null);
     const name = cleanName(await askText(t("New Category"), "", { confirm: t("Create"), maxLength: 40 }));

@@ -61,6 +61,19 @@ export function categoryNamed(name: string, among: readonly { category?: BotCate
   return { id: existing?.id ?? newCategoryId(), name }
 }
 
+/**
+ * Files several bots under one name in turn (a rename): each host's later bots take the id its first one got,
+ * so the host keeps one id for the name. `among` is that host's bots as last read.
+ */
+export function categoryFiler() {
+  const filed = new Map<string, { category?: BotCategory }[]>()
+  return (host: string, name: string, among: readonly { category?: BotCategory }[], current?: BotCategory): BotCategory => {
+    const category = categoryNamed(name, [...(filed.get(host) ?? []), ...among], current)
+    filed.set(host, [...(filed.get(host) ?? []), { category }])
+    return category
+  }
+}
+
 /** The ui_meta patch Edit Bot writes for the Category it leaves: null when it's the bot's own already. */
 export function editCategoryPatch(current: BotCategory | undefined, name: string | null | undefined, among: readonly { category?: BotCategory }[]): Record<string, unknown> | null {
   const clean = cleanName(name)
@@ -125,6 +138,8 @@ export function movingCategory(order: readonly string[], name: string, step: -1 
 
 /** The order with a renamed category in its old name's place. */
 export function renamingCategory(order: readonly string[], old: string, to: string): string[] {
+  // A name the order doesn't hold keeps the order as it is: one merged into an ordered name keeps that place.
+  if (!order.some(n => sameCategory(n, old))) return [...order]
   return order.flatMap(n => (sameCategory(n, old) ? [to] : sameCategory(n, to) ? [] : [n]))
 }
 
