@@ -167,7 +167,7 @@ function ChatLink({ href, children }: { href: string; children?: ReactNode }) {
         actions.open(session.sessionId, session.profile)
       }}
     >
-      {children}
+      <InLink.Provider value>{children}</InLink.Provider>
     </a>
   )
 }
@@ -194,9 +194,7 @@ const urlTransform = (url: string) => (url.startsWith(SESSION_LINK) ? url : defa
 const components: Components = {
   a: ({ href, children }) =>
     href?.startsWith(SESSION_LINK) ? (
-      <ChatLink href={href}>
-        <InLink.Provider value>{children}</InLink.Provider>
-      </ChatLink>
+      <ChatLink href={href}>{children}</ChatLink>
     ) : (
       <a href={href} target="_blank" rel="noreferrer">
         <Favicon href={href} />
