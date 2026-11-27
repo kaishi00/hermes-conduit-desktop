@@ -128,10 +128,10 @@ function reveal(window: BrowserWindow): void {
   } else window.show()
 }
 
-/** A Link invite opened from another app that the window hasn't taken yet. */
+/** A Conduit link opened from another app (a Link invite, a new chat) that the window hasn't taken yet. */
 let pendingLinkUrl: string | null = linkUrlFromArgs(process.argv)
 
-/** Shows the window and hands it the invite: now if it's loaded, else when it asks. */
+/** Shows the window and hands it the link: now if it's loaded, else when it asks. */
 function openLinkUrl(url: string): void {
   pendingLinkUrl = url
   showWindow()
@@ -1323,12 +1323,12 @@ if (!app.requestSingleInstanceLock()) {
   // The Mac hands a conduit:// link to the running app, before it's ready too.
   app.on('open-url', (event, url) => {
     event.preventDefault()
-    const invite = linkUrl(url)
-    if (!invite) return
-    if (app.isReady()) openLinkUrl(invite)
-    else pendingLinkUrl = invite
+    const link = linkUrl(url)
+    if (!link) return
+    if (app.isReady()) openLinkUrl(link)
+    else pendingLinkUrl = link
   })
-  // Conduit opens conduit://link/ invites; a run from source names its script too.
+  // Conduit opens conduit://link/ invites and conduit://new chats; a run from source names its script too.
   if (process.defaultApp && process.argv.length >= 2) app.setAsDefaultProtocolClient(LINK_SCHEME, process.execPath, [resolve(process.argv[1]!)])
   else app.setAsDefaultProtocolClient(LINK_SCHEME)
   // After every window has closed, so a move or maximize just before Quit is kept too.
