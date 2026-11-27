@@ -262,8 +262,12 @@ const FOLD_LINE = /^ {0,3}(?:<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summar
 const FOLD_FENCE = /^ {0,3}(`{3,}|~{3,})/
 const FOLD_OPENING_START = /^ {0,3}(<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summary>.*?<\/summary>)?)(.*)$/i
 const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
-/** A line without its code spans and comments: a `</details>` in one closes nothing. */
-const withoutCode = (line: string) => line.replace(/(`+)(?:(?!\1).)*?\1/g, '').replace(/<!--.*?-->/g, '')
+/**
+ * A line without its code spans and comments: a `</details>` in one closes nothing. Each is replaced by `filler`;
+ * a tag search passes a character no tag holds, so the text either side never joins into one (`</det` and `ails>`
+ * around a span, hermes-conduit#3379's review).
+ */
+const withoutCode = (line: string, filler = '') => line.replace(/(`+)(?:(?!\1).)*?\1/g, filler).replace(/<!--.*?-->/g, filler)
 
 /**
  * A fold's own lines (`<details>`, its `<summary>`, `</details>`) set apart by blank lines, so Markdown reads
@@ -330,7 +334,7 @@ export function withFoldsApart(text: string): string {
         : FOLD_CLOSING_END.test(body) ||
           // A close with words after it on the line stays as written: folded, they'd hide the rest of the reply.
           // One in a code span or a comment closes nothing, so it doesn't count (hermes-conduit#3349).
-          (!/<\/details\s*>/i.test(withoutCode(body)) && (withSummary || (closedAfter[index] && !/<[a-zA-Z/!]/.test(body))))
+          (!/<\/details\s*>/i.test(withoutCode(body, '\u0001')) && (withSummary || (closedAfter[index] && !/<[a-zA-Z/!]/.test(body))))
       if (!isFold) opening = null
     }
     let rest = line
