@@ -101,6 +101,34 @@ describe('the reply speeds hook', () => {
     localStorage.removeItem('conduit.showReplySpeedInComposer')
   })
 
+  it('drops a read from an earlier turn that answers after a later turn’s, success or failure', async () => {
+    localStorage.setItem('conduit.showReplySpeedInComposer', 'true')
+    const hook = renderHook(({ running }: Props) => useReplySpeeds('a', undefined, true, running), { running: false })
+    await settle()
+
+    // Turn 1 ends and its read hangs; turn 2 runs and ends, and its read answers first.
+    let release: (outcome: Outcome) => void = () => undefined
+    answer = () => new Promise<Outcome>(resolve => (release = resolve))
+    hook.rerender({ running: true })
+    await settle()
+    hook.rerender({ running: false })
+    await settle()
+    const late = release
+    answer = () => ({ ok: true, result: { session_id: 'a', replies: [{ row_id: 7, tokens_per_s: 42 }, { row_id: null, tokens_per_s: 61 }] } })
+    hook.rerender({ running: true })
+    await settle()
+    hook.rerender({ running: false })
+    await settle()
+    expect(hook.result().composer).toEqual({ rate: 61, stale: false })
+
+    late({ ok: false, status: 504, error: 'timed out' })
+    await settle()
+    expect(hook.result().composer).toEqual({ rate: 61, stale: false })
+    expect(hook.result().rows?.unsaved).toBe(61)
+    hook.unmount()
+    localStorage.removeItem('conduit.showReplySpeedInComposer')
+  })
+
   it('starts another chat with no composer speed', async () => {
     localStorage.setItem('conduit.showReplySpeedInComposer', 'true')
     const hook = renderHook(({ id }: { id: string }) => useReplySpeeds(id, undefined, true, false), { id: 'a' })
