@@ -606,6 +606,9 @@ function Shell({
   // One that sends asks first, showing the text, since any app or web page can open a link (Eric, 2026-11-27); Cancel leaves
   // the text in the composer, unsent.
   const [linkSend, setLinkSend] = useState<{ draft: number; text: string; sends: boolean } | null>(null)
+  // The selection as it is now, for a link's send that settles later.
+  const linkSelection = useRef(selected)
+  linkSelection.current = selected
   const openNewChatLink = useCallback(async (request: NewChatLink) => {
     const draft = ++draftCount.current
     setArchivedOpen(false)
@@ -625,8 +628,11 @@ function Shell({
     if (!linkSend.sends) return setQuote(quoteRequest({ draft: linkSend.text }))
     // A link's text is literal: "/…" never runs a command. The chat it makes becomes the selected one, as a send from the composer's does.
     void send(linkSend.text).then(created => {
-      if (created === false) setQuote(quoteRequest({ draft: linkSend.text }))
-      else if (created) {
+      // A refused send's text goes back only while its new chat is still the one open: never over another chat's draft.
+      const now = linkSelection.current
+      if (created === false) {
+        if (!now.id && now.draft === linkSend.draft) setQuote(quoteRequest({ draft: linkSend.text }))
+      } else if (created) {
         setSelected(s => (s.draft === linkSend.draft && !s.id ? { ...s, id: created } : s))
         void list.refresh()
       }
