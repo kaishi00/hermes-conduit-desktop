@@ -68,6 +68,7 @@ import { parseScreenKey, releaseScreen } from '../shared/screenWindows'
 import { ConduitTray } from './tray'
 import { DockPresence } from './dockPresence'
 import { applyAppIcon, watchNewWindows } from './appIcon'
+import { rebuildMenu } from './menuGate'
 import { watchEditMenu } from './editMenu'
 import { launchedAtLogin, loginItemState, openStartupSettings, setLoginItem } from './loginItem'
 import {
@@ -587,7 +588,7 @@ function registerIpc(): void {
     if (next.length === currentRailSections.length && next.every((s, i) => s === currentRailSections[i])) return
     currentRailSections = next
     // Not while Settings listens for Quick Ask's keys: the menu stays aside, and comes back in this order when that ends.
-    if (isMac && !recordingIn) Menu.setApplicationMenu(macMenu())
+    if (rebuildMenu(isMac, recordingIn !== null)) Menu.setApplicationMenu(macMenu())
   })
   ipcMain.handle(IPC.requests, event => connectionOf(event.sender.id)?.requests() ?? [])
   ipcMain.on(IPC.setWaiting, (_event, count: number) => tray.setWaiting(Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0))
@@ -599,7 +600,7 @@ function registerIpc(): void {
   ipcMain.on(IPC.setLanguage, (_event, choice: LanguageChoice) => {
     chooseLanguage(choice)
     // Not while Settings listens for Quick Ask's keys: the reload below ends the pick, which puts the menu back in the new language.
-    if (isMac && !recordingIn) Menu.setApplicationMenu(macMenu())
+    if (rebuildMenu(isMac, recordingIn !== null)) Menu.setApplicationMenu(macMenu())
     tray.refresh()
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.reload()
