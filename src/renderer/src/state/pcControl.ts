@@ -179,8 +179,13 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
           if (!live) return
           let result: Record<string, unknown>
           try {
-            const allowed = !request.needs_ok || (await askEverywhere(request, askSide(profile, state.id)))
-            result = allowed ? await window.conduit.pcControl.run(request) : { ok: false, grant: 'denied' }
+            // Stopped since this batch came in: answer stopped without asking first.
+            const stops = typeof request.gen === 'number' ? (await window.conduit.pcControl.state().catch(() => null))?.stops : undefined
+            if (stops !== undefined && stops !== request.gen) result = { ok: false, code: 'stopped' }
+            else {
+              const allowed = !request.needs_ok || (await askEverywhere(request, askSide(profile, state.id)))
+              result = allowed ? await window.conduit.pcControl.run(request) : { ok: false, grant: 'denied' }
+            }
           } catch (error) {
             result = { ok: false, code: 'failed', message: String(error) }
           }
