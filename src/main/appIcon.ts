@@ -35,10 +35,12 @@ export function applyAppIcon(choice: AppIconChoice): void {
   for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.setIcon(iconImage())
 }
 
-/** Every window opened later (chats in their own window, quick ask) wears the choice too. */
+/**
+ * Every window opened later (chats in their own window, Bot's Screen, quick ask) wears the choice too, the
+ * dark one included: a window with a title bar shows it there, and one left without falls back to the
+ * running exe's, Electron's own in a development build.
+ */
 export function watchNewWindows(): void {
   if (mac) return
-  app.on('browser-window-created', (_event, window) => {
-    if (current !== 'dark') window.setIcon(iconImage())
-  })
+  app.on('browser-window-created', (_event, window) => window.setIcon(iconImage()))
 }

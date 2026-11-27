@@ -43,6 +43,7 @@ import { useReplyFace } from './BotsHome'
 import { AskedQuestionBar, WorkPanel } from './WorkPanel'
 import { useChatCall } from './ChatCall'
 import { ChatHeader } from './ChatHeader'
+import { Icon } from './icons'
 import { chatMenuItems } from '../state/chatMenu'
 import { loadPins, savePins, withoutChat } from '../state/pinnedReplies'
 import { mutateSession } from '../state/chatActions'
@@ -634,8 +635,10 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
           menu={headerMenu}
           trailing={
             docked ? null : (
-              <button className="link" onClick={openInMain} title={t('Opens this chat in the main window and closes this one.')}>
-                {t('Open in Main Window')}
+              // A narrow window shows its icon instead, so the title keeps its room (app.css, .open-main).
+              <button className="link open-main" onClick={openInMain} aria-label={t('Open in Main Window')} title={t('Opens this chat in the main window and closes this one.')}>
+                <span className="open-main-label">{t('Open in Main Window')}</span>
+                <Icon name="mainWindow" />
               </button>
             )
           }
