@@ -88,6 +88,15 @@ describe('glyphs and groups', () => {
     expect(shortcutGroups(true)[0].rows).toHaveLength(9)
   })
 
+  it('lists Start Live Call with its keys after Quick Ask, and leaves it out without any', () => {
+    const rows = shortcutGroups(false, undefined, 'Alt+Space', 'Ctrl+Alt+L')[0].rows
+    expect(rows.slice(-2).map(r => [r.title, r.keys[0]])).toEqual([
+      ['Quick Ask', 'Alt+Space'],
+      ['Start Live Call', 'Ctrl+Alt+L']
+    ])
+    expect(shortcutGroups(false, undefined, 'Alt+Space', null)[0].rows).toHaveLength(10)
+  })
+
   it('lists the chat tabs’ keys, Ctrl on a Mac too', () => {
     const tabsOf = (mac: boolean) => shortcutGroups(mac)[0].rows.filter(r => r.title.endsWith('Tab')).map(r => r.keys[0])
     expect(tabsOf(false)).toEqual(['Ctrl+Tab', 'Ctrl+Shift+Tab'])

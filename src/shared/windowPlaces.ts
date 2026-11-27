@@ -16,7 +16,8 @@ export interface WindowPlace extends Rect {
   maximized?: boolean
 }
 
-export type WindowKind = 'main' | 'chat' | 'screen'
+/** The call window is the Live call shortcut's small one, kept apart from the chat windows' size. */
+export type WindowKind = 'main' | 'chat' | 'screen' | 'call'
 
 /** How much of the window's top strip must be on a screen to keep it where it was: enough to grab and drag. */
 const GRAB_WIDTH = 120

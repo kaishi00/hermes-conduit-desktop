@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_WINDOW_LIMIT, ChatWindowSet } from '../src/main/chatWindowSet'
-import { KEPT_ON_TOP_LIMIT, onTopKey, withKeptOnTop, chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, dockedRoomUrl, pulseFrameRequest, roomFrameRequest } from '../src/shared/chatWindows'
+import { KEPT_ON_TOP_LIMIT, LIVE_CALL_WINDOW_ID, onTopKey, withKeptOnTop, chatWindowRequest, chatWindowTitle, dockedChatRequest, dockedChatUrl, dockedFrameHost, dockedPulseUrl, dockedRoomUrl, pulseFrameRequest, roomFrameRequest } from '../src/shared/chatWindows'
 
 function harness() {
   const made: { id: string; focused: number; closed: boolean; onClosed: () => void }[] = []
@@ -44,6 +44,34 @@ describe('chat windows of their own', () => {
     expect(set.show({ id: 'g' })).toBe(true)
   })
 
+  it('gives the Live call window its chat’s id once the call makes the chat', () => {
+    const { set, made, changes } = harness()
+    set.show({ id: LIVE_CALL_WINDOW_ID, host: 'https://a.example', fresh: true, call: true })
+    set.show({ id: 'other' })
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 's9')).toBe(true)
+    expect(set.ids()).toEqual(['other', 's9'])
+    expect(changes.at(-1)).toEqual(['other', 's9'])
+    // Its row brings it forward, a delete closes it, and the closing window drops its new id.
+    expect(set.show({ id: 's9' })).toBe(true)
+    expect(made[0]!.focused).toBe(1)
+    expect(made).toHaveLength(2)
+    set.close(['s9'])
+    expect(made[0]!.closed).toBe(true)
+    expect(set.ids()).toEqual(['other'])
+    // Nothing to rename, or a chat that has a window already.
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 's9')).toBe(false)
+    set.show({ id: LIVE_CALL_WINDOW_ID, call: true })
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 'other')).toBe(false)
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 's10')).toBe(true)
+    // Renamed again from the id it has now: a reload of the window makes a new chat.
+    expect(set.rename(LIVE_CALL_WINDOW_ID, 's11')).toBe(false)
+    expect(set.rename('s10', 's11')).toBe(true)
+    expect(set.ids()).toEqual(['other', 's11'])
+    // The user closing a renamed window frees its place.
+    made[2]!.onClosed()
+    expect(set.ids()).toEqual(['other'])
+  })
+
   it('closes named chats’ windows, or every one on a switch', () => {
     const { set, made, changes } = harness()
     set.show({ id: 'a' })
@@ -84,6 +112,12 @@ describe('chat windows of their own', () => {
     const botChat = { id: 'b1', profile: 'ops', botChat: true, host: 'https://b.example' }
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify(botChat))}`)).toEqual(botChat)
     expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify({ id: 'b1', botChat: 'yes' }))}`)).toEqual({ id: 'b1' })
+  })
+
+  it('reads the Live call window, a new chat that starts its call as it opens', () => {
+    const call = { id: LIVE_CALL_WINDOW_ID, profile: 'ops', author: 'Nahida', host: 'https://a.example', fresh: true, call: true }
+    expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify(call))}`)).toEqual(call)
+    expect(chatWindowRequest(`#chat=${encodeURIComponent(JSON.stringify({ id: 's1', call: 1 }))}`)).toEqual({ id: 's1' })
   })
 
   it('docks another dashboard’s chat at the main window’s own page, and lets in nothing else', () => {

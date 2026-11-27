@@ -18,7 +18,8 @@ Your chats, bots, group chats and Needs you (approvals and questions), in a
 window of their own. Send pictures and files (attach, paste or drop them,
 and click one to preview it before it goes),
 pop a chat out into its own window, ask from anywhere with Quick Ask, call
-your bot with the phone's voice modes, and keep several Hermes hosts
+your bot with the phone's voice modes (or from anywhere, in a small window,
+with keys you pick in Settings), and keep several Hermes hosts
 side by side. Close the window and Conduit stays in the tray (the menu bar
 on the Mac), so approvals and finished replies still reach you as
 notifications. Settings > App > Open at Sign-In starts it there with your

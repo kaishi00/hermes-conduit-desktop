@@ -8,8 +8,8 @@ import { readFileSync } from 'node:fs'
 import { writeFileAtomic } from './atomicWrite'
 import { join } from 'node:path'
 import { LANGUAGES, pickLanguage, setLanguage, type Language } from '../shared/i18n'
-import type { AppIconChoice, LanguageChoice, ThemeChoice } from '../shared/ipc'
-import { DEFAULT_QUICK_ASK_ACCELERATOR, validAccelerator } from '../shared/accelerator'
+import type { AppIconChoice, HotkeyName, LanguageChoice, ThemeChoice } from '../shared/ipc'
+import { DEFAULT_HOTKEYS, validAccelerator } from '../shared/accelerator'
 
 const path = () => join(app.getPath('userData'), 'settings.json')
 
@@ -20,6 +20,7 @@ interface StoredSettings {
   askHost?: unknown
   appIcon?: unknown
   quickAsk?: unknown
+  liveCall?: unknown
   hideDock?: unknown
 }
 
@@ -126,16 +127,16 @@ export function chooseHideDock(on: boolean): boolean {
   }
 }
 
-/** Quick Ask's global shortcut: the one picked in Settings, null when it's turned off, Alt+Space until either. */
-export function quickAskAccelerator(): string | null {
-  const stored = read().quickAsk
+/** A global shortcut: the keys picked in Settings, null when it's turned off, its default until either (DEFAULT_HOTKEYS). */
+export function hotkeyAccelerator(which: HotkeyName): string | null {
+  const stored = read()[which]
   if (stored === false) return null
-  return validAccelerator(stored) ? stored : DEFAULT_QUICK_ASK_ACCELERATOR
+  return validAccelerator(stored) ? stored : DEFAULT_HOTKEYS[which]
 }
 
-export function chooseQuickAskAccelerator(accelerator: string | null): boolean {
+export function chooseHotkeyAccelerator(which: HotkeyName, accelerator: string | null): boolean {
   try {
-    writeFileAtomic(path(), JSON.stringify({ ...read(), quickAsk: accelerator ?? false }, null, 2))
+    writeFileAtomic(path(), JSON.stringify({ ...read(), [which]: accelerator ?? false }, null, 2))
     return true
   } catch {
     return false

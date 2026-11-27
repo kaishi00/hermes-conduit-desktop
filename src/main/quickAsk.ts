@@ -2,9 +2,9 @@
  * Quick ask: Alt+Space (Option+Space on the Mac) from anywhere opens a small
  * window over everything to ask Hermes one thing. It hides again on Esc or
  * when it loses focus; the chat it started opens in the main window on
- * request. Settings > Quick Ask picks other keys, or none.
+ * request. Settings > Quick Ask picks other keys, or none (main/hotkey.ts).
  */
-import { BrowserWindow, globalShortcut, screen } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import { t } from '../shared/i18n'
@@ -25,45 +25,6 @@ export function quickAskHeight(expanded: boolean | number): number {
 export class QuickAsk {
   private window: BrowserWindow | null = null
   private height = FIELD_HEIGHT
-  /** The keys picked, null when the shortcut is off. */
-  accelerator: string | null = null
-  /** Whether the system let Conduit have them: another app may hold them. */
-  registered = false
-
-  register(accelerator: string | null): boolean {
-    this.unregister()
-    this.accelerator = accelerator
-    if (!accelerator) return true
-    try {
-      this.registered = globalShortcut.register(accelerator, () => this.toggle())
-    } catch {
-      this.registered = false
-    }
-    return this.registered
-  }
-
-  /** Other keys from Settings: when the system refuses them, the ones before stay. */
-  change(accelerator: string | null): boolean {
-    const before = this.accelerator
-    if (accelerator === before && (this.registered || !accelerator)) return true
-    if (this.register(accelerator)) return true
-    this.register(before)
-    return false
-  }
-
-  /** While Settings listens for new keys, the ones held now are let go, so pressing them picks them instead of opening the window. */
-  suspend(): void {
-    this.unregister()
-  }
-
-  resume(): void {
-    if (!this.registered) this.register(this.accelerator)
-  }
-
-  unregister(): void {
-    if (this.registered && this.accelerator) globalShortcut.unregister(this.accelerator)
-    this.registered = false
-  }
 
   toggle(): void {
     const window = this.ensure()

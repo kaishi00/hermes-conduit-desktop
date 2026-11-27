@@ -1,6 +1,6 @@
 /**
  * Remembers where each kind of window was (Eric, 2026-11-27): the main
- * window, a chat's own window and a bot's screen window open where they were
+ * window, a chat's own window, the Live call window and a bot's screen window open where they were
  * last moved or resized, maximized again when they were, and on the primary
  * screen when theirs is gone. Kept in window-places.json in the data folder.
  *
@@ -21,14 +21,14 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 /** A place changed since the file was last written. */
 let dirty = false
 /** The windows of each kind open now, which a new one opens beside. */
-const open: Record<WindowKind, Set<BrowserWindow>> = { main: new Set(), chat: new Set(), screen: new Set() }
+const open: Record<WindowKind, Set<BrowserWindow>> = { main: new Set(), chat: new Set(), screen: new Set(), call: new Set() }
 
 function load(): Partial<Record<WindowKind, WindowPlace>> {
   if (places) return places
   places = {}
   try {
     const stored = JSON.parse(readFileSync(path(), 'utf8')) as Record<string, unknown>
-    for (const kind of ['main', 'chat', 'screen'] as const) {
+    for (const kind of ['main', 'chat', 'screen', 'call'] as const) {
       const place = readPlace(stored?.[kind])
       if (place) places[kind] = place
     }

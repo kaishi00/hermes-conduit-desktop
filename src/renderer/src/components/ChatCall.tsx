@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
 import type { PendingRequest } from '@shared/ipc'
-import { VOICE_MODE_EVENT, setVoiceMode, voiceMode, type VoiceMode } from '../state/gptLive'
+import { VOICE_MODE_EVENT, VOICE_MODE_STORAGE_KEY, setVoiceMode, voiceMode, type VoiceMode } from '../state/gptLive'
 import { AFTER_CALL_STALL_MS, afterCallStep, afterFailedSend, callChatId, leftByCall, type AfterCall } from '../state/afterCall'
 import { consented, isLive } from '../state/consent'
 import type { CallResume } from '../state/voiceSave'
@@ -120,8 +120,16 @@ export function useChatCall(options: ChatCallOptions): ChatCallState {
   const [nextMode, setNextMode] = useState<VoiceMode>(voiceMode)
   useEffect(() => {
     const changed = () => setNextMode(voiceMode())
+    // A mode picked in another window (the Live call window's capsule, a chat window) reaches this one as a storage change.
+    const stored = (event: StorageEvent) => {
+      if (event.key === null || event.key === VOICE_MODE_STORAGE_KEY) changed()
+    }
     window.addEventListener(VOICE_MODE_EVENT, changed)
-    return () => window.removeEventListener(VOICE_MODE_EVENT, changed)
+    window.addEventListener('storage', stored)
+    return () => {
+      window.removeEventListener(VOICE_MODE_EVENT, changed)
+      window.removeEventListener('storage', stored)
+    }
   }, [])
 
   // Show a picture on a call: it waits on the call's chat for the next request, and the call hears of it.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { acceleratorLabel } from '@shared/accelerator'
 import { t } from '@shared/i18n'
+import type { HotkeyState } from '@shared/ipc'
 import { shortcutGroups, type GoTo } from '../state/shortcuts'
 import { inSelectMenu } from './Select'
 
@@ -19,15 +20,18 @@ export function ShortcutsSheet({ sections, onClose }: { sections?: readonly GoTo
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
-  const [quickAsk, setQuickAsk] = useState<string | null>(null)
+  const [hotkeys, setHotkeys] = useState<{ quickAsk: string | null; liveCall: string | null }>({ quickAsk: null, liveCall: null })
   useEffect(() => {
     let live = true
-    void window.conduit.quickAskShortcut().then(({ accelerator, registered }) => live && setQuickAsk(accelerator && registered ? acceleratorLabel(accelerator, window.conduit.platform) : null))
+    const label = ({ accelerator, registered }: HotkeyState) => (accelerator && registered ? acceleratorLabel(accelerator, window.conduit.platform) : null)
+    void Promise.all([window.conduit.hotkey('quickAsk'), window.conduit.hotkey('liveCall')]).then(
+      ([quickAsk, liveCall]) => live && setHotkeys({ quickAsk: label(quickAsk), liveCall: label(liveCall) })
+    )
     return () => {
       live = false
     }
   }, [])
-  const groups = shortcutGroups(window.conduit.platform === 'darwin', sections, quickAsk)
+  const groups = shortcutGroups(window.conduit.platform === 'darwin', sections, hotkeys.quickAsk, hotkeys.liveCall)
   return (
     <div className="shortcuts-backdrop" onClick={onClose}>
       <div className="shortcuts-sheet" role="dialog" aria-modal="true" aria-label={t('Keyboard Shortcuts')} onClick={e => e.stopPropagation()}>

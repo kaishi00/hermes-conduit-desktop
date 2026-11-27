@@ -199,7 +199,10 @@ export type ThemeChoice = 'system' | 'dark' | 'light'
 /** The app icon, as on the phone: dark (the default) or light. */
 export type AppIconChoice = 'dark' | 'light'
 
-export interface QuickAskShortcut {
+/** A global shortcut picked in Settings: Quick Ask's, or the one that starts a Live call. */
+export type HotkeyName = 'quickAsk' | 'liveCall'
+
+export interface HotkeyState {
   accelerator: string | null
   registered: boolean
 }
@@ -430,12 +433,20 @@ export interface ConduitApi {
   copyText(text: string): void
   /** Hides the quick ask window. */
   hideQuickAsk(): void
-  /** The quick ask shortcut (null when it's off), and whether the system let Conduit have it. */
-  quickAskShortcut(): Promise<QuickAskShortcut>
-  /** Other keys for quick ask, or null for none. `changed` is false when the system refused them (another app has them): the ones before stay. */
-  setQuickAskShortcut(accelerator: string | null): Promise<QuickAskShortcut & { changed: boolean }>
-  /** Settings is listening for quick ask's new keys (true) or stopped: meanwhile the Mac's menu bar and the keys held now stand aside, so any keys can be picked. */
-  setQuickAskRecording(on: boolean): void
+  /** A global shortcut (null when it's off), and whether the system let Conduit have it. */
+  hotkey(which: HotkeyName): Promise<HotkeyState>
+  /** Other keys for a global shortcut, or null for none. `changed` is false when the system refused them (another app has them, or `takenBy` names Conduit's other shortcut that does): the ones before stay. */
+  setHotkey(which: HotkeyName, accelerator: string | null): Promise<HotkeyState & { changed: boolean; takenBy?: HotkeyName }>
+  /** Settings is listening for a global shortcut's new keys (true) or stopped: meanwhile the Mac's menu bar and every global shortcut stand aside, so any keys can be picked. */
+  setHotkeyRecording(on: boolean): void
+  /** A call window's call started (true) or ended: the main window keeps wake phrases quiet and asks before a switch meanwhile. */
+  noteWindowCall(calling: boolean): void
+  /** Whether a call runs in its own window (the Live call shortcut's). */
+  onWindowCall(listener: (calling: boolean) => void): () => void
+  /** The Live call window's chat was made (the call's first request): the window is now that chat's. */
+  noteCallWindowChat(storedId: string): void
+  /** Ends the call running in its own window: a call started in the main window takes the microphone. */
+  endWindowCall(): void
   /** How many things wait on the user, for the tray and the Dock's badge. */
   setWaiting(count: number): void
   /** A menu bar command (the Mac's File > New Chat). */
@@ -479,6 +490,10 @@ export type MenuAction =
   | 'go-4'
   | 'go-5'
   | 'go-6'
+  /** The Live call shortcut or the tray's Start Live Call: a call in a small window of its own. */
+  | 'live-call'
+  /** To a call window: the main window started a call, which takes the microphone. */
+  | 'end-call'
 
 export interface OpenChatRequest {
   storedId: string
@@ -528,6 +543,8 @@ export interface ChatWindowRequest {
   draft?: string
   /** A new chat in its profile (a Pulse card from no chat): `id` only names the pane. */
   fresh?: boolean
+  /** A small window that starts a Live call as it opens: the Live call shortcut's (Eric, 2026-11-27). */
+  call?: boolean
 }
 
 export const IPC = {
@@ -559,9 +576,12 @@ export const IPC = {
   copyText: 'conduit:copy-text',
   quickAskShown: 'conduit:quick-ask-shown',
   quickAskExpanded: 'conduit:quick-ask-expanded',
-  quickAskShortcut: 'conduit:quick-ask-shortcut',
-  setQuickAskShortcut: 'conduit:set-quick-ask-shortcut',
-  quickAskRecording: 'conduit:quick-ask-recording',
+  hotkey: 'conduit:hotkey',
+  setHotkey: 'conduit:set-hotkey',
+  hotkeyRecording: 'conduit:hotkey-recording',
+  windowCall: 'conduit:window-call',
+  endWindowCall: 'conduit:end-window-call',
+  callWindowChat: 'conduit:call-window-chat',
   windowShow: 'conduit:window-show',
   probe: 'conduit:probe',
   signIn: 'conduit:sign-in',

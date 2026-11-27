@@ -7475,7 +7475,7 @@ button.cap-row-text {
 }
 
 .shortcuts-sheet kbd,
-.quick-ask-shortcut kbd {
+.hotkey-setting kbd {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   color: var(--text-2);
@@ -7485,16 +7485,16 @@ button.cap-row-text {
   padding: 2px 6px;
 }
 
-.quick-ask-shortcut > kbd,
-.quick-ask-shortcut > span {
+.hotkey-setting > kbd,
+.hotkey-setting > span {
   margin-right: 10px;
 }
 
-.quick-ask-shortcut > .link + .link {
+.hotkey-setting > .link + .link {
   margin-left: 10px;
 }
 
-.quick-ask-taken {
+.hotkey-taken {
   color: var(--danger);
 }
 

@@ -32,7 +32,8 @@ import {
   type RpcOutcome,
   type SignInRequest,
   type ThemeChoice,
-  type AppIconChoice
+  type AppIconChoice,
+  type HotkeyName
 } from '../shared/ipc'
 import { probeHost } from './auth'
 import { forgetSignInSession, openSignInWindow } from './browserSignIn'
@@ -53,10 +54,12 @@ import { Connection, DISPLAY_SOCKET_PATH } from './connection'
 import { Pairing } from './pairing'
 import { createFileStore } from './store'
 import { QuickAsk } from './quickAsk'
+import { GlobalHotkey } from './hotkey'
+import { CallWindowClose } from './callWindowClose'
 import { validAccelerator } from '../shared/accelerator'
 import { ChatWindowSet, chatWindowFor } from './chatWindowSet'
 import { createChatWindow } from './chatWindows'
-import { dockedFrameHost, onTopKey } from '../shared/chatWindows'
+import { LIVE_CALL_WINDOW_ID, dockedFrameHost, onTopKey } from '../shared/chatWindows'
 import { keepOnTop } from './chatWindowsOnTop'
 import { ScreenWindowSet } from './screenWindowSet'
 import { createScreenWindow } from './screenWindows'
@@ -74,8 +77,8 @@ import {
   chooseAskHost,
   chooseHideDock,
   hideDockWhenClosed,
-  chooseQuickAskAccelerator,
-  quickAskAccelerator,
+  chooseHotkeyAccelerator,
+  hotkeyAccelerator,
   chooseLanguage,
   chooseLock,
   chooseTheme,
@@ -145,6 +148,16 @@ function sendCommand(action: MenuAction): void {
 }
 
 const quickAsk = new QuickAsk()
+/**
+ * The global shortcuts picked in Settings: Quick Ask's, and the Live call's,
+ * which the main window answers with a call in a small window of its own
+ * (or by coming forward to the call it already has).
+ */
+const hotkeys: Record<HotkeyName, GlobalHotkey> = {
+  quickAsk: new GlobalHotkey(() => quickAsk.toggle()),
+  liveCall: new GlobalHotkey(() => sendCommand('live-call'))
+}
+const showHotkeys = () => tray.setHotkeys(hotkeys.quickAsk.held, hotkeys.liveCall.held)
 
 /** The Mac's Hide from the Dock (desktop#586): the Dock icon only while a window of Conduit's own is open. */
 const dockPresence = isMac && app.dock
@@ -156,6 +169,7 @@ const dockPresence = isMac && app.dock
 
 const tray = new ConduitTray({
   quickAsk: () => quickAsk.toggle(),
+  liveCall: () => sendCommand('live-call'),
   window: () => mainWindow,
   showWindow,
   command: sendCommand,
@@ -328,13 +342,18 @@ const chatBrowserWindows = new WeakSet<BrowserWindow>()
 // Asking again for a chat's window brings it back, out of the dock or the taskbar too.
 /** Each chat window by its chat's stored id, so it's found before its session opens. */
 const chatBrowserById = new Map<string, BrowserWindow>()
-/** What each chat window's pin is remembered by (issue 608). */
+/** The Live call window, and the id it's kept under now: its chat's once the call makes one (a reload's new chat too). */
+let callBrowser: BrowserWindow | null = null
+let callWindowId = LIVE_CALL_WINDOW_ID
+/** The call window's close, waiting on its call to end when it's closed mid-call (main/callWindowClose.ts). */
+let callClosing: CallWindowClose | null = null
+/** What each chat window's pin is remembered by (issue 608). The call window's pin isn't remembered: it opens on top. */
 const chatOnTopKeys = new WeakMap<BrowserWindow, string>()
 const chatWindows = new ChatWindowSet(
   (chat, onClosed) => {
     const window = createChatWindow(chat, onClosed)
     chatBrowserWindows.add(window)
-    chatOnTopKeys.set(window, onTopKey(chat))
+    if (!chat.call) chatOnTopKeys.set(window, onTopKey(chat))
     chatBrowserById.set(chat.id, window)
     window.on('closed', () => {
       if (chatBrowserById.get(chat.id) === window) chatBrowserById.delete(chat.id)
@@ -638,14 +657,58 @@ function registerIpc(): void {
     // The dashboard on screen, or a combined one kept beside it.
     const host = typeof request.host === 'string' && request.host ? request.host : shownHost
     if (!host || !chatWindowDashboards().includes(host)) return false
-    return chatWindows.show({
+    // The Live call shortcut's window: a new chat that starts a call as it opens. Asked for again, the window
+    // it already is comes forward and starts another call if it has none.
+    const call = request.call === true && request.id === LIVE_CALL_WINDOW_ID
+    // By the window, as its id becomes its chat's once the call's first request makes one.
+    // One closing mid-call that's still the set's (its own close button) is kept after all; one a sign-out or a
+    // switch dropped from the set finishes closing, and a new window opens.
+    const kept = callBrowser && !callBrowser.isDestroyed() && (!callClosing?.closing || chatWindows.ids().includes(callWindowId))
+    const had = call && kept ? callBrowser : undefined
+    if (had) {
+      callClosing?.cancel()
+      if (had.isMinimized()) had.restore()
+      had.show()
+      had.focus()
+      had.webContents.send(IPC.menu, 'live-call')
+      return true
+    }
+    const shown = chatWindows.show({
       host,
       id: request.id,
       profile: typeof request.profile === 'string' ? request.profile : undefined,
       title: typeof request.title === 'string' ? request.title : undefined,
       author: typeof request.author === 'string' ? request.author : undefined,
-      ...(request.botChat === true ? { botChat: true } : {})
+      ...(request.botChat === true ? { botChat: true } : {}),
+      ...(call ? { call: true, fresh: true } : {})
     })
+    const opened = shown && call ? chatBrowserById.get(LIVE_CALL_WINDOW_ID) : undefined
+    if (opened) {
+      callBrowser = opened
+      callWindowId = LIVE_CALL_WINDOW_ID
+      // Under whichever id its chat gave it by then.
+      opened.once('closed', () => {
+        if (chatBrowserById.get(callWindowId) === opened) chatBrowserById.delete(callWindowId)
+      })
+      // Closed mid-call (its close button, a sign-out, a switch): the page ends the call first, so it saves the
+      // call, files a Classic call's chat and lets go of its presence, as the call's End does; closing at once
+      // would drop the page before any of that ran. Hidden meanwhile, it closes once the call has ended, or
+      // after a few seconds.
+      const closing = new CallWindowClose(() => {
+        if (!opened.isDestroyed()) opened.destroy()
+      })
+      callClosing = closing
+      opened.on('close', event => {
+        if (quitting || opened.isDestroyed() || windowCallIn !== opened.webContents) return
+        event.preventDefault()
+        // Asked again while it closes (a sign-out after its own close button): one close is under way.
+        if (!closing.start()) return
+        opened.hide()
+        afterWindowCall = () => closing.callEnded()
+        opened.webContents.send(IPC.menu, 'end-call')
+      })
+    }
+    return shown
   })
   ipcMain.handle(IPC.pageWatched, event => {
     const owner = BrowserWindow.fromWebContents(event.sender.hostWebContents ?? event.sender)
@@ -719,25 +782,35 @@ function registerIpc(): void {
     if (typeof text === 'string') clipboard.writeText(text)
   })
   ipcMain.on(IPC.quickAskExpanded, (_event, expanded: unknown) => quickAsk.setExpanded(typeof expanded === 'number' ? expanded : expanded === true))
-  const quickAskShortcut = () => ({ accelerator: quickAsk.accelerator, registered: quickAsk.registered })
-  ipcMain.handle(IPC.quickAskShortcut, () => {
+  const hotkeyName = (which: unknown): HotkeyName | null => (which === 'quickAsk' || which === 'liveCall' ? which : null)
+  const hotkeyState = (keys: GlobalHotkey) => ({ accelerator: keys.accelerator, registered: keys.registered })
+  ipcMain.handle(IPC.hotkey, (_event, which: unknown) => {
+    const name = hotkeyName(which)
+    if (!name) return { accelerator: null, registered: false }
+    const keys = hotkeys[name]
     // Saved keys another app held are asked for again: it may have let go of them since (desktop#520).
     // Never mid-pick, when they are let go on purpose.
-    if (!recordingIn && quickAsk.accelerator && !quickAsk.registered) {
-      quickAsk.resume()
-      tray.setQuickAsk(quickAsk.registered ? quickAsk.accelerator : null)
+    if (!recordingIn && keys.accelerator && !keys.registered) {
+      keys.resume()
+      showHotkeys()
     }
-    return quickAskShortcut()
+    return hotkeyState(keys)
   })
-  ipcMain.handle(IPC.setQuickAskShortcut, (_event, accelerator: unknown) => {
+  ipcMain.handle(IPC.setHotkey, (_event, which: unknown, accelerator: unknown) => {
+    const name = hotkeyName(which)
+    if (!name) return { accelerator: null, registered: false, changed: false }
+    const keys = hotkeys[name]
     const next = accelerator === null ? null : validAccelerator(accelerator) ? accelerator : undefined
-    const changed = next !== undefined && quickAsk.change(next)
-    if (changed) chooseQuickAskAccelerator(next)
+    // The other shortcut's keys are Conduit's own: the system would let them be held twice.
+    const other = hotkeys[name === 'quickAsk' ? 'liveCall' : 'quickAsk']
+    const clash = !!next && other.accelerator === next
+    const changed = next !== undefined && !clash && keys.change(next)
+    if (changed) chooseHotkeyAccelerator(name, next)
     // Also after a refusal: taking the keys before back may have just worked where it hadn't at launch.
-    tray.setQuickAsk(quickAsk.registered ? quickAsk.accelerator : null)
-    return { ...quickAskShortcut(), changed }
+    showHotkeys()
+    return { ...hotkeyState(keys), changed, ...(clash ? { takenBy: other === hotkeys.quickAsk ? 'quickAsk' : 'liveCall' } : {}) }
   })
-  // Settings is listening for new keys: the Mac's menu bar would take ⌘N and the rest first, and the keys held now would open Quick Ask.
+  // Settings is listening for new keys: the Mac's menu bar would take ⌘N and the rest first, and the keys held now would open Quick Ask or a call.
   let recordingIn: Electron.WebContents | null = null
   const endRecording = () => {
     if (!recordingIn) return
@@ -747,10 +820,10 @@ function registerIpc(): void {
     }
     recordingIn = null
     if (isMac) Menu.setApplicationMenu(macMenu())
-    quickAsk.resume()
-    tray.setQuickAsk(quickAsk.registered ? quickAsk.accelerator : null)
+    for (const keys of Object.values(hotkeys)) keys.resume()
+    showHotkeys()
   }
-  ipcMain.on(IPC.quickAskRecording, (event, on: unknown) => {
+  ipcMain.on(IPC.hotkeyRecording, (event, on: unknown) => {
     if (on !== true) {
       if (recordingIn === event.sender) endRecording()
       return
@@ -761,7 +834,56 @@ function registerIpc(): void {
     recordingIn.once('destroyed', endRecording)
     recordingIn.once('did-navigate', endRecording)
     if (isMac) Menu.setApplicationMenu(null)
-    quickAsk.suspend()
+    for (const keys of Object.values(hotkeys)) keys.suspend()
+  })
+  // The Live call window's call, told to the main window: it keeps wake phrases quiet and asks before a switch
+  // meanwhile, and a call it starts itself ends this one (it takes the microphone).
+  let windowCallIn: Electron.WebContents | null = null
+  /** A call window closed mid-call waits on its call ending (see openChatWindow). */
+  let afterWindowCall: (() => void) | null = null
+  const tellWindowCall = (calling: boolean) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.windowCall, calling)
+  }
+  const windowCallGone = () => {
+    if (windowCallIn && !windowCallIn.isDestroyed()) {
+      windowCallIn.off('destroyed', windowCallGone)
+      windowCallIn.off('did-start-navigation', reloaded)
+    }
+    windowCallIn = null
+    tellWindowCall(false)
+    const after = afterWindowCall
+    afterWindowCall = null
+    after?.()
+  }
+  // A reload keeps the webContents, so `destroyed` doesn't fire: the old page's call ended with it.
+  const reloaded = (navigation: { isMainFrame: boolean; isSameDocument: boolean }) => {
+    if (replacesPage(navigation)) windowCallGone()
+  }
+  ipcMain.on(IPC.windowCall, (event, calling: unknown) => {
+    if (calling === true) {
+      if (windowCallIn !== event.sender) {
+        if (windowCallIn && !windowCallIn.isDestroyed()) {
+          windowCallIn.off('destroyed', windowCallGone)
+          windowCallIn.off('did-start-navigation', reloaded)
+        }
+        windowCallIn = event.sender
+        windowCallIn.once('destroyed', windowCallGone)
+        windowCallIn.on('did-start-navigation', reloaded)
+      }
+      tellWindowCall(true)
+    } else if (windowCallIn === event.sender) windowCallGone()
+  })
+  ipcMain.on(IPC.callWindowChat, (event, storedId: unknown) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (typeof storedId !== 'string' || !storedId || !window || window !== callBrowser) return
+    const was = callWindowId
+    if (!chatWindows.rename(was, storedId)) return
+    callWindowId = storedId
+    if (chatBrowserById.get(was) === window) chatBrowserById.delete(was)
+    chatBrowserById.set(storedId, window)
+  })
+  ipcMain.on(IPC.endWindowCall, () => {
+    if (windowCallIn && !windowCallIn.isDestroyed()) windowCallIn.send(IPC.menu, 'end-call')
   })
   ipcMain.handle(IPC.answerRequest, (event, id: string, result: Record<string, unknown>) => connectionOf(event.sender.id)?.answerRequest(id, result) ?? false)
   ipcMain.handle(IPC.dismissRequest, (event, id: string) => connectionOf(event.sender.id)?.dropRequest(id))
@@ -1224,8 +1346,8 @@ if (!app.requestSingleInstanceLock()) {
     createWindow()
     applyAppIcon(appIconChoice())
     tray.create(appIconChoice())
-    quickAsk.register(quickAskAccelerator())
-    tray.setQuickAsk(quickAsk.registered ? quickAsk.accelerator : null)
+    for (const name of ['quickAsk', 'liveCall'] as const) hotkeys[name].register(hotkeyAccelerator(name))
+    showHotkeys()
     startUpdates(state => {
       send(IPC.updateStateChanged, state)
       tray.setUpdate(state.phase === 'ready' ? (state.version ?? null) : null)
