@@ -172,6 +172,20 @@ function ChatLink({ href, children }: { href: string; children?: ReactNode }) {
   )
 }
 
+/** Set inside a link: a picture there is part of the link, so a click follows it. */
+const InLink = createContext(false)
+
+/** A Markdown picture: a reply's picture that opens larger, or inside a link the same picture as the link's (Eric 2026-11-27). */
+function MarkdownPicture({ src, name, title }: { src: string; name: string; title?: string }) {
+  return useContext(InLink) ? (
+    <span className="reply-picture linked-picture">
+      <img src={src} alt={name} title={title} />
+    </span>
+  ) : (
+    <PictureImage src={src} name={name} title={title} className="reply-picture" />
+  )
+}
+
 // Links to chats stay links; anything else as react-markdown allows it.
 const urlTransform = (url: string) => (url.startsWith(SESSION_LINK) ? url : defaultUrlTransform(url))
 
@@ -184,14 +198,14 @@ const components: Components = {
     ) : (
       <a href={href} target="_blank" rel="noreferrer">
         <Favicon href={href} />
-        {children}
+        <InLink.Provider value>{children}</InLink.Provider>
       </a>
     ),
   pre: ({ children }) => <Pre>{children}</Pre>,
   code: ({ className, children }) => <Code className={className}>{children}</Code>,
   // A Markdown picture draws as a reply's picture: never wider than its column, a click opens it larger.
-  img: ({ src, alt }) =>
-    typeof src === 'string' && src ? <PictureImage src={src} name={alt || t('Image')} className="reply-picture" /> : alt ? <>{alt}</> : null,
+  img: ({ src, alt, title }) =>
+    typeof src === 'string' && src ? <MarkdownPicture src={src} name={alt || t('Image')} title={title} /> : alt ? <>{alt}</> : null,
   // A directive only Hermes Desktop draws: its card (remarkDesktopCards).
   ...({
     'desktop-card': ({ node }: { node?: { properties?: Record<string, unknown> } }) => {

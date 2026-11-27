@@ -79,10 +79,10 @@ function ViewerCopy({ src }: { src: string }) {
 }
 
 /** A picture drawn in place that opens larger when clicked. */
-export function PictureImage({ src, name, className = 'sent-picture' }: { src: string; name: string; className?: string }) {
+export function PictureImage({ src, name, title, className = 'sent-picture' }: { src: string; name: string; title?: string; className?: string }) {
   const open = useContext(ViewerContext)
   return (
-    <button className={`picture-button ${className}`} title={name} onClick={() => open(src, name)}>
+    <button className={`picture-button ${className}`} title={title || name} onClick={() => open(src, name)}>
       <img src={src} alt={name} />
     </button>
   )
