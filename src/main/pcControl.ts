@@ -21,7 +21,9 @@ import { artifactFor, deleteDriver, driver, driverPath, installDriver, stopDrive
 import { Executor, OWN_TITLES } from './pcExecutor'
 import { choosePcControl, pcControlSettings } from './settings'
 
-export const STOP_KEYS = 'CommandOrControl+Alt+Shift+S'
+import { STOP_KEYS, claimStopKeys, releaseStopKeys } from './pcControlKeys'
+
+export { STOP_KEYS }
 /** The bar stays this long after the last action. */
 const BAR_FOR_MS = 60_000
 const STOP_URL = 'conduit-stop://stop'
@@ -248,7 +250,7 @@ function showBar(botName: string, chat: string) {
   // Tried at every action, since another app may hold the keys for a while; the bar
   // shows them only while they're ours.
   // Only keys the bar registered itself: the same keys set for Quick Ask or a call stay theirs.
-  if (!ownKeys && !globalShortcut.isRegistered(STOP_KEYS)) ownKeys = globalShortcut.register(STOP_KEYS, () => stopControl())
+  ownKeys = claimStopKeys(globalShortcut, ownKeys, () => stopControl())
   const hotkey = ownKeys
   void bar.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(barPage(botName, chat, hotkey))).catch(() => undefined)
   bar.showInactive()
@@ -267,7 +269,7 @@ function holdBar() {
 function hideBar() {
   if (barTimer) clearTimeout(barTimer)
   barTimer = null
-  if (ownKeys) globalShortcut.unregister(STOP_KEYS)
+  releaseStopKeys(globalShortcut, ownKeys)
   ownKeys = false
   if (bar && !bar.isDestroyed()) bar.destroy()
   bar = null
