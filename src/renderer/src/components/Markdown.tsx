@@ -167,7 +167,7 @@ function ChatLink({ href, children }: { href: string; children?: ReactNode }) {
         actions.open(session.sessionId, session.profile)
       }}
     >
-      {children}
+      <InLink.Provider value>{children}</InLink.Provider>
     </a>
   )
 }
@@ -179,7 +179,7 @@ const InLink = createContext(false)
 function MarkdownPicture({ src, name, title }: { src: string; name: string; title?: string }) {
   return useContext(InLink) ? (
     <span className="reply-picture linked-picture">
-      <img src={src} alt={name} title={title} />
+      <img src={src} alt={name} title={title || name} />
     </span>
   ) : (
     <PictureImage src={src} name={name} title={title} className="reply-picture" />

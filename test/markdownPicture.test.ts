@@ -39,10 +39,26 @@ describe('a Markdown picture inside a link', () => {
   it('stays the link’s: no viewer button inside the anchor, the same size caps', () => {
     const html = draw('[![Build](https://example.com/badge.png)](https://example.com/build)')
     expect(html).not.toContain('<button')
-    expect(html).toMatch(/<a href="https:\/\/example.com\/build"[^>]*>.*<span class="reply-picture linked-picture"><img src="https:\/\/example.com\/badge.png" alt="Build"\/><\/span><\/a>/)
+    expect(html).toMatch(/<a href="https:\/\/example.com\/build"[^>]*>.*<span class="reply-picture linked-picture"><img src="https:\/\/example.com\/badge.png" alt="Build" title="Build"\/><\/span><\/a>/)
   })
 
   it('keeps a picture’s own title as its tooltip', () => {
     expect(draw('![A seedling](https://example.com/plant.png "Grown today")')).toContain('title="Grown today"')
+  })
+  it('opens larger where a chat link draws as plain words (no chat to open)', () => {
+    const html = draw('[![Chat](https://example.com/c.png)](conduit://session/abc)')
+    expect(html).toContain('class="picture-button reply-picture"')
+    expect(html).not.toContain('linked-picture')
+  })
+  it('stays a chat link’s where the chat can open', async () => {
+    const card = '../src/renderer/src/components/WorkLinkCard.tsx'
+    const { WorkLinks } = (await import(/* @vite-ignore */ card)) as { WorkLinks: { Provider: unknown } }
+    const actions = { open: () => {}, item: () => undefined, titleOf: () => undefined }
+    const html = renderToStaticMarkup(
+      createElement(WorkLinks.Provider as never, { value: actions }, createElement(Markdown as never, { text: '[![Chat](https://example.com/c.png)](conduit://session/abc)' }))
+    )
+    expect(html).toContain('class="chat-link"')
+    expect(html).not.toContain('<button')
+    expect(html).toContain('linked-picture')
   })
 })
