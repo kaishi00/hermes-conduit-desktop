@@ -127,7 +127,8 @@ export function deletePcDriver(): PcControlState {
 
 /** Asks the user whether this chat may drive the computer: Allow or Don't Allow; 'closed' once closePcAsk took it away. */
 export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'closed'> {
-  const key = request.session
+  const key = request?.session
+  if (typeof key !== 'string' || !key) return Promise.resolve('denied')
   const open = asking.get(key)
   if (open) return open.shown
   const detail = [
