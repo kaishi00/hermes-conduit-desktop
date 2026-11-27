@@ -695,8 +695,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           // kept for it while another chat shows.
           const owner = sideAgents.current.get(event.session_id)
           const answer = owner ? sideAgentAnswer(event) : null
+          // The entry stays: another command on that session may still answer.
           if (!owner || !answer) return
-          sideAgents.current.delete(event.session_id)
           if (owner === notesKey.current) dispatch({ type: 'output', text: answer, format: 'markdown' })
           else addChatNote(owner, { text: answer, format: 'markdown' })
           return

@@ -182,6 +182,9 @@ describe("a chat's own notes (issue 3394)", () => {
     await settle()
     emit({ type: 'btw.complete', session_id: 'live-a', payload: { task_id: 'btw_2', text: 'Never.' } })
     expect(words(hook.result().transcript).at(-1)).toContain('Never.')
+    // A second answer under that session is drawn too.
+    emit({ type: 'background.complete', session_id: 'live-a', payload: { task_id: 'bg_3', text: 'Also never.' } })
+    expect(words(hook.result().transcript).at(-1)).toContain('Also never.')
   })
 })
 
