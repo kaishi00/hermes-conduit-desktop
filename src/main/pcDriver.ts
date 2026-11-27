@@ -80,20 +80,24 @@ export function installDriver(onProgress?: (fraction: number) => void): Promise<
     // A stalled download gives up after a minute without data, so Try Again works.
     const abort = new AbortController()
     let idle = setTimeout(() => abort.abort(), STALL_MS)
-    const response = await net.fetch(RELEASE + artifact.file, { signal: abort.signal })
-    if (!response.ok || !response.body) throw new Error(`download ${response.status}`)
-    const total = Number(response.headers.get('content-length')) || 0
     const chunks: Uint8Array[] = []
-    let received = 0
-    const reader = response.body.getReader()
-    for (;;) {
-      const { done, value } = await reader.read()
+    try {
+      const response = await net.fetch(RELEASE + artifact.file, { signal: abort.signal })
+      if (!response.ok || !response.body) throw new Error(`download ${response.status}`)
+      const total = Number(response.headers.get('content-length')) || 0
+      let received = 0
+      const reader = response.body.getReader()
+      for (;;) {
+        const { done, value } = await reader.read()
+        clearTimeout(idle)
+        if (done) break
+        idle = setTimeout(() => abort.abort(), STALL_MS)
+        chunks.push(value)
+        received += value.length
+        if (total) onProgress?.(received / total)
+      }
+    } finally {
       clearTimeout(idle)
-      if (done) break
-      idle = setTimeout(() => abort.abort(), STALL_MS)
-      chunks.push(value)
-      received += value.length
-      if (total) onProgress?.(received / total)
     }
     const bytes = Buffer.concat(chunks)
     if (sha256(bytes) !== artifact.sha256) throw new Error('checksum')

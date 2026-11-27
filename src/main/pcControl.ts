@@ -34,6 +34,8 @@ let active: { bot: string; chat: string } | null = null
 let executor: Executor | null = null
 let bar: BrowserWindow | null = null
 let barTimer: ReturnType<typeof setTimeout> | null = null
+/** Whether the bar holds the Stop keys, so hiding it never drops another shortcut's. */
+let ownKeys = false
 /** Asks already on screen, by chat, so a burst of actions asks once. */
 const asking = new Map<string, Promise<boolean>>()
 
@@ -77,7 +79,7 @@ export function setPcControl(change: Partial<PcControlSettings> & { bot?: unknow
   const bot = change.bot as { name?: unknown; on?: unknown } | undefined
   if (bot && typeof bot.name === 'string' && typeof bot.on === 'boolean') {
     const now = pcControlSettings().bots
-    clean.bots = bot.on ? [...new Set([...now, bot.name])] : now.filter(name => name !== bot.name)
+    clean.bots = (bot.on ? [...new Set([...now, bot.name])] : now.filter(name => name !== bot.name)).slice(0, 64)
   }
   if (typeof change.on === 'boolean') clean.on = change.on
   if (typeof change.name === 'string') clean.name = change.name.slice(0, 64)
@@ -238,7 +240,9 @@ function showBar(botName: string, chat: string) {
   }
   // Tried at every action, since another app may hold the keys for a while; the bar
   // shows them only while they're ours.
-  const hotkey = globalShortcut.isRegistered(STOP_KEYS) || globalShortcut.register(STOP_KEYS, () => stopControl())
+  // Only keys the bar registered itself: the same keys set for Quick Ask or a call stay theirs.
+  if (!ownKeys && !globalShortcut.isRegistered(STOP_KEYS)) ownKeys = globalShortcut.register(STOP_KEYS, () => stopControl())
+  const hotkey = ownKeys
   void bar.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(barPage(botName, chat, hotkey))).catch(() => undefined)
   bar.showInactive()
   changed()
@@ -256,7 +260,8 @@ function holdBar() {
 function hideBar() {
   if (barTimer) clearTimeout(barTimer)
   barTimer = null
-  if (globalShortcut.isRegistered(STOP_KEYS)) globalShortcut.unregister(STOP_KEYS)
+  if (ownKeys) globalShortcut.unregister(STOP_KEYS)
+  ownKeys = false
   if (bar && !bar.isDestroyed()) bar.destroy()
   bar = null
 }
