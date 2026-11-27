@@ -495,7 +495,9 @@ function Shell({
   /** The dashboard on screen, for a chat coming back from a window of its own. */
   const statusUrlRef = useRef(status.url)
   statusUrlRef.current = status.url
-  const [selected, setSelected] = useState<{ id: string | null; profile?: string; title?: string; botChat?: boolean; folder?: string; draft?: number }>({ id: null })
+  // Every New Chat is numbered, the first one too, so its picks come back with its tab (desktop#661).
+  const draftCount = useRef(0)
+  const [selected, setSelected] = useState<{ id: string | null; profile?: string; title?: string; botChat?: boolean; folder?: string; draft?: number }>(() => ({ id: null, draft: ++draftCount.current }))
   /**
    * Another combined dashboard's chat opened in place, in the chat pane (the
    * phone's no-switch open, stage 2). It shows over the chat it was opened
@@ -524,6 +526,8 @@ function Shell({
     if (section !== 'chats' || !connected) setArchivedOpen(false)
   }, [section, connected])
   const list = useChatList(connected, status.url ?? '')
+  // Whether a New Chat's tab is still in the strip: past the kept drafts' limit, closed ones lose their picks first.
+  const draftTabOpen = useCallback((draft: number) => tabsRef.current.tabs.some(tab => tab.chat.id === null && tab.chat.draft === draft), [])
   const {
     transcriptStore,
     chat,
@@ -555,7 +559,7 @@ function Shell({
     olderRows,
     seekRow,
     react: reactTo
-  } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '', selected.draft, selected.id ? undefined : selected.title)
+  } = useChat(selected.id, selected.profile, status.sessionAuthority === true, connected, selected.botChat === true, selected.id ? undefined : selected.folder, status.url ?? '', selected.draft, selected.id ? undefined : selected.title, draftTabOpen)
   // A turn of the chat running in the gateway, on hermes dashboard, and the gateway's queue (liveWork.ts).
   const liveWork = useLiveWork(chat.storedId ?? null, selected.profile, connected && status.sessionAuthority !== true, useTranscriptValue(transcriptStore, state => state.running), queue.some(row => row.readOnly), applyLiveWork)
   // What this window shows of the transcript; the transcript itself is drawn by LiveTranscript, so a streaming
@@ -572,7 +576,6 @@ function Shell({
   const chatPane = useRef<HTMLElement>(null)
   chatProfileRef.current = chatProfile
   // `profile`: the one New Chat under All was asked for; else the profile chosen in the column.
-  const draftCount = useRef(0)
   const newChat = useCallback((profile?: string) => {
     setArchivedOpen(false)
     setSection('chats')
@@ -1867,7 +1870,7 @@ function Shell({
         .filter(row => same(row.profile) && !chatWindowIds.includes(row.id))
         .sort((a, b) => (b.activeAt ?? 0) - (a.activeAt ?? 0))[0]
       setBotsSide(false)
-      setSelected(newest ? { id: newest.id, profile: newest.profile, title: newest.title } : { id: null, profile: next })
+      setSelected(newest ? { id: newest.id, profile: newest.profile, title: newest.title } : { id: null, profile: next, draft: ++draftCount.current })
     },
     [selected.profile, selected.botChat, listedRows, chatWindowIds]
   )
@@ -2213,7 +2216,7 @@ function Shell({
         // An archived chat's tab closes, as a deleted one's does; on screen, the tab beside it shows.
         const dropped = dropChatTabs(tabsRef.current, row)
         if (dropped.tabs !== tabsRef.current) setTabs(dropped.tabs)
-        const next = dropped.show ? tabTarget(dropped.show) : { id: null, profile: chatProfileRef.current ?? undefined }
+        const next = dropped.show ? tabTarget(dropped.show) : { id: null, profile: chatProfileRef.current ?? undefined, draft: ++draftCount.current }
         setSelected(current => sameProfileAs(current.profile, row.profile) &&
           (current.id === row.id || (current === selected && chat.storedId === row.id))
           ? next
@@ -2641,7 +2644,7 @@ function Shell({
     }
     wakeCall.current = { id, profile: binding.profile }
     const row = id ? list.rows?.find(r => r.id === id) : undefined
-    setSelected(id ? { id, profile: binding.profile, title: row?.title } : { id: null, profile: binding.profile })
+    setSelected(id ? { id, profile: binding.profile, title: row?.title } : { id: null, profile: binding.profile, draft: ++draftCount.current })
     setSection('chats')
   }
   const wakeListRef = useRef(wakeList)

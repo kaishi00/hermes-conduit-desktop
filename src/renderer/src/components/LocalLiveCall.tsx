@@ -818,6 +818,14 @@ export function LocalLiveCall({
   // Connect once; hang up on leaving.
   useEffect(() => {
     stopReading()
+    // StrictMode mounts twice in a dev build with the same refs: the second run starts the call afresh, and the
+    // first run's work still on its way stops at its next check instead of leaving it on Connecting… (desktop#669).
+    ended.current = false
+    ending.current = false
+    // The first run's teardown saved its empty call: the real call saves again when it ends.
+    saved.current = false
+    let gone = false
+    const over = () => gone || ended.current
     let readyTimer = 0
     let keepalive = 0
     const stopListening = window.conduit.onLive(event => {
@@ -834,7 +842,7 @@ export function LocalLiveCall({
       else if (event.type === 'close') {
         socket.current = null
         trace.current?.step(`Socket closed (${event.code ?? 'no code'})`)
-        if (ended.current) return
+        if (over()) return
         if (!isRefusalClose(event.code, event.reason)) {
           // A live call that dropped opens a new session at once; a setup that failed is tried again after a pause.
           if (ready.current) return void reopen(0)
@@ -854,7 +862,7 @@ export function LocalLiveCall({
         fail(/\b404\b/.test(opened.error) ? PLUGIN_MISSING() : t('Could not open the Local Live connection.'))
         return false
       }
-      if (ended.current) {
+      if (over()) {
         window.conduit.liveClose(opened.id)
         return false
       }
@@ -867,7 +875,7 @@ export function LocalLiveCall({
     }
     // A new connection, and so a new session: what the old one was saying stops, and the new one is checked again.
     const reopen = (next: number) => {
-      if (ended.current) return
+      if (over()) return
       attempt.current = next
       connection.current += 1
       marker.current = null
@@ -886,13 +894,13 @@ export function LocalLiveCall({
     const retryAfter = (failed: number) => {
       window.clearTimeout(readyTimer)
       trace.current?.step(`Setup failed: trying again in ${reconnectDelayMs(failed) / 1000} s`)
-      window.setTimeout(() => !ended.current && reopen(failed + 1), reconnectDelayMs(failed))
+      window.setTimeout(() => !over() && reopen(failed + 1), reconnectDelayMs(failed))
     }
     const connect = async () => {
       trace.current = startCallTrace('Local Live')
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-        if (ended.current) return stream.getTracks().forEach(track => track.stop())
+        if (over()) return stream.getTracks().forEach(track => track.stop())
         trace.current.step(micStep(stream))
         mic.current = stream
         setMicStream(stream)
@@ -923,7 +931,7 @@ export function LocalLiveCall({
             }
             agent.current = liveInstructions(agentWith.current)
           }
-          if (ended.current) return
+          if (over()) return
         }
         if (!(await openSocket())) return
         const source = ctx.createMediaStreamSource(stream)
@@ -936,7 +944,7 @@ export function LocalLiveCall({
             : `Microphone closed while a reply arrives and plays, and ${Math.round(echo.current * 1000 + ECHO_TAIL_MS)} ms after`
         )
         node.onaudioprocess = event => {
-          if (!ready.current || ended.current || mutedRef.current) return
+          if (!ready.current || over() || mutedRef.current) return
           // While the server talks on the speakers, its own voice isn't sent back.
           if (gate.current.holds(ctx, playUntil.current, echo.current)) return
           const samples = event.inputBuffer.getChannelData(0)
@@ -959,6 +967,7 @@ export function LocalLiveCall({
       window.clearTimeout(readyTimer)
       window.clearInterval(keepalive)
       stopListening()
+      gone = true
       ended.current = true
       teardown()
       // Still waiting for the chat: they go once it's free.

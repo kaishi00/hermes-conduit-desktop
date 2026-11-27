@@ -31,7 +31,10 @@ const BOT_TAB = 'bot'
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-type Listed = { available: boolean; reason: string | null; terminals: TerminalRow[] } | { error: string } | 'loading'
+type Listed = { available: boolean; reason: string | null; terminals: TerminalRow[] } | { error: string; retry: boolean } | 'loading'
+
+/** How soon a failed list read is tried again while the drawer is up (issue 681). */
+export const TERMINALS_RETRY_MS = 10_000
 
 /**
  * The workbench's terminals (issue 450), in a drawer under its views: shells
@@ -67,15 +70,27 @@ export function TerminalDrawer({
   const [active, setActive] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
+  // A list read that failed while the drawer had a list: the list stays, with this note and Try Again.
+  const [readFailed, setReadFailed] = useState<string | null>(null)
 
   const read = useCallback(async () => {
     try {
       const list = parseList(await gateway.http('GET', listPath(root, profile)))
       setListed(list)
+      setReadFailed(null)
       setActive(current => (current === BOT_TAB || (current && list.terminals.some(row => row.id === current)) ? current : (list.terminals.at(-1)?.id ?? null)))
     } catch (e) {
-      // An older plugin has no terminals route.
-      setListed({ error: (e as { code?: unknown }).code === 404 ? t('Update the Conduit plugin on this host to open terminals here.') : message(e) })
+      // An older plugin has no terminals route: that stays until the plugin is updated.
+      if ((e as { code?: unknown }).code === 404) {
+        setReadFailed(null)
+        setListed({ error: t('Update the Conduit plugin on this host to open terminals here.'), retry: false })
+        return
+      }
+      // Anything else may pass (a dashboard restart, a dropped connection). The terminals the
+      // drawer has keep their views and sockets; the shells are still running on the host.
+      const why = message(e)
+      setListed(current => (current !== 'loading' && !('error' in current) ? current : { error: why, retry: true }))
+      setReadFailed(why)
     }
   }, [root, profile])
   useEffect(() => {
@@ -86,6 +101,13 @@ export function TerminalDrawer({
   useEffect(() => {
     if (botTurn) setActive(BOT_TAB)
   }, [botTurn])
+  // A failed read is tried again while the drawer is up, so it comes back by itself.
+  const retrying = readFailed !== null || (listed !== 'loading' && 'error' in listed && listed.retry)
+  useEffect(() => {
+    if (!retrying || folded) return
+    const timer = window.setInterval(() => void read(), TERMINALS_RETRY_MS)
+    return () => window.clearInterval(timer)
+  }, [retrying, folded, read])
 
   const start = async () => {
     setStarting(true)
@@ -156,10 +178,18 @@ export function TerminalDrawer({
       {/* Folded, the views stay mounted, so their shells keep their sockets and screens. */}
       <div className="bench-drawer-body" hidden={folded}>
         <BotCommands steps={steps} at={at} shown={onBot && !folded} />
-        {onBot ? null : listed === 'loading' ? (
+        {/* A failed read with no terminals yet says so on the Bot's Commands tab too, the only one there is. */}
+        {onBot && !(listed !== 'loading' && 'error' in listed && !terminals.length) ? null : listed === 'loading' ? (
           <div className="bench-note">{t('Loading…')}</div>
         ) : 'error' in listed ? (
-          <div className="bench-note">{listed.error}</div>
+          <div className="bench-note">
+            {listed.error}
+            {listed.retry ? (
+              <button className="secondary small" onClick={() => void read()}>
+                {t('Try Again')}
+              </button>
+            ) : null}
+          </div>
         ) : !listed.available ? (
           <div className="bench-note">{listed.reason ?? t('Terminals aren’t available on this Hermes.')}</div>
         ) : !terminals.length ? (
@@ -171,6 +201,14 @@ export function TerminalDrawer({
           </div>
         ) : null}
         {failed && !onBot ? <div className="bench-note error-text">{failed}</div> : null}
+        {readFailed && (!onBot || !terminals.length) && listed !== 'loading' && !('error' in listed) ? (
+          <div className="bench-note error-text">
+            {t('Couldn’t read the terminals: {reason}', { reason: readFailed })}
+            <button className="secondary small" onClick={() => void read()}>
+              {t('Try Again')}
+            </button>
+          </div>
+        ) : null}
         {terminals.map(row => (
           <TerminalView key={row.id} row={row} profile={profile} shown={row.id === shownId && !folded} onEnded={code => ended(row.id, code)} onGone={() => gone(row.id)} />
         ))}

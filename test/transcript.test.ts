@@ -4,6 +4,7 @@ import {
   inflightRemainder,
   prependOlder,
   withdrawPendingUser,
+  holdSent,
   coalesceDeltas,
   addPendingUser,
   applyEvent,
@@ -377,5 +378,33 @@ describe('a turn boundary while rows move', () => {
     state = play([{ type: 'message.delta', payload: { text: 'Ready.' } }], state)
     const done = play([{ type: 'message.complete', payload: { text: 'Ready.', persisted_turn: { final_assistant_row_id: 9 } } }], state)
     expect(done.items.filter(i => i.kind === 'assistant').map(i => (i as { rowId?: number }).rowId)).toEqual([9])
+  })
+  it('keeps a reply that came before a queued send’s receipt in its own turn', () => {
+    // An earlier reply with no row id yet (it streamed live), then a hidden turn starts.
+    let state = play([{ type: 'message.start' }, { type: 'message.delta', payload: { text: 'Earlier.' } }, { type: 'message.complete', payload: { text: 'Earlier.' } }])
+    state = play([{ type: 'message.start' }], state)
+    expect(state.turnFrom).toBe(1)
+    // A send queued behind it puts its bubble at the boundary, and the live reply's delta lands before the receipt.
+    state = addPendingUser(state, 'queued', [], 'q1')
+    state = play([{ type: 'message.delta', payload: { text: 'Hidden turn’s reply.' } }], state)
+    state = holdSent(state, 'q1', 'adm-1')
+    expect(state.turnFrom).toBe(1)
+    expect(state.items.map(i => ('text' in i ? i.text : ''))).toEqual(['Earlier.', 'Hidden turn’s reply.'])
+    const done = play([{ type: 'message.complete', payload: { text: 'Hidden turn’s reply.', persisted_turn: { final_assistant_row_id: 9 } } }], state)
+    expect(done.items.map(i => [('text' in i ? i.text : ''), (i as { rowId?: number }).rowId])).toEqual([
+      ['Earlier.', undefined],
+      ['Hidden turn’s reply.', 9]
+    ])
+  })
+
+  it('names no newest reply after a hidden turn that drew none', () => {
+    let state = play([{ type: 'message.start' }, { type: 'message.delta', payload: { text: 'Done.' } }, { type: 'message.complete', payload: {} }])
+    const key = state.items[0]!.key
+    expect(reactionTarget(state, key)).toEqual({ newest_role: 'assistant' })
+    state = play([{ type: 'message.start' }, { type: 'message.complete', payload: {} }], state)
+    expect(reactionTarget(state, key)).toBeNull()
+    // A later turn that draws its reply names it again.
+    state = play([{ type: 'message.start' }, { type: 'message.delta', payload: { text: 'Next.' } }, { type: 'message.complete', payload: {} }], state)
+    expect(reactionTarget(state, state.items.at(-1)!.key)).toEqual({ newest_role: 'assistant' })
   })
 })

@@ -260,7 +260,7 @@ type Node = { type: string; value?: string; children?: Node[]; data?: Record<str
 const DETAILS_OPEN = /^<details((?:\s+[\w-]+(?:=(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*>\s*(?:<summary>([\s\S]*?)<\/summary>)?\s*$/i
 const FOLD_LINE = /^ {0,3}(?:<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summary>.*?<\/summary>)?|<summary>.*<\/summary>|<\/details\s*>)\s*$/i
 const FOLD_FENCE = /^ {0,3}(`{3,}|~{3,})/
-const FOLD_OPENING_START = /^ {0,3}(<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(?:\s*<summary>.*?<\/summary>)?)(.*)$/i
+const FOLD_OPENING_START = /^ {0,3}(<details\b(?:[^>"']|"[^"]*"|'[^']*')*>(\s*<summary>.*?<\/summary>)?)(.*)$/i
 const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
 /**
  * A line without its code spans and comments, an unfinished comment running to the end of the line included: a
@@ -269,6 +269,34 @@ const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
  */
 const withoutCode = (line: string) =>
   line.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001').replace(/<!--.*?-->/g, '\u0001').replace(/<!--.*$/, '\u0001')
+
+/**
+ * Whether `text` ends in a `</details>` that closes a fold: one ending the line, outside a comment still streaming
+ * in (`Body <!-- </details>` waits for its `-->`, hermes-conduit#3388). A `</details>` ending the line can't be in a
+ * code span, which would end after it, and one after a finished comment still closes.
+ */
+const closesFold = (text: string) => FOLD_CLOSING_END.test(text) && /<\/details\s*>\s*$/i.test(withoutCode(text))
+
+/**
+ * Whether a line starting with `<details>` opens a fold: nothing after it, a body ending the fold on the line, a body
+ * after its own `<summary>` (its `</details>` later or still streaming in), or text with no tags that a later
+ * `</details>` closes. `<details> and <summary> make a fold.` and `<details> is the tag.` ending a reply stay prose.
+ * The look-ahead and the folding pass both ask this, so a line one reads as prose never takes the other's close
+ * (hermes-conduit#3388).
+ */
+function opensFold(opening: RegExpExecArray, closedLater: boolean): boolean {
+  const body = opening[3]!
+  if (!body.trim()) return true
+  // A body starting with a fence mark stays on the line, so it can't open a code block that runs on.
+  if (/^\s*(?:`{3}|~{3})/.test(body)) return false
+  if (closesFold(body)) return true
+  // A close with words after it on the line stays as written: folded, they'd hide the rest of the reply.
+  // One in a code span or a comment closes nothing, so it doesn't count (hermes-conduit#3349).
+  if (/<\/details\s*>/i.test(withoutCode(body))) return false
+  // Its own `<summary>`, never a `</summary>` inside the tag (`<details title=</summary>> x`).
+  if (opening[2] !== undefined) return true
+  return closedLater && !/<[a-zA-Z/!]/.test(body)
+}
 
 /**
  * A fold's own lines (`<details>`, its `<summary>`, `</details>`) set apart by blank lines, so Markdown reads
@@ -302,11 +330,11 @@ export function withFoldsApart(text: string): string {
     closedAfter[index] = closes > 0
     if (inCode[index]) continue
     // Only a `</details>` ending its line closes a fold, as the chat reads it (one per line, nothing after it, not
-    // even a comment or a code span); one in prose doesn't. The line as written, as the pass below reads it, so a
-    // fold this counts as closed is closed there too (hermes-conduit#3349). A `</details>` ending the line can't be
-    // inside a code span, which would end after it.
-    if (FOLD_CLOSING_END.test(lines[index]!)) closes++
-    if (FOLD_OPENING_START.test(lines[index]!)) closes = Math.max(0, closes - 1)
+    // even a comment or a code span); one in prose doesn't. Read with the same tests as the pass below, so a fold
+    // this counts as closed is closed there too (hermes-conduit#3349, #3388).
+    if (closesFold(lines[index]!)) closes++
+    const opening = FOLD_OPENING_START.exec(lines[index]!)
+    if (opening && opensFold(opening, closedAfter[index]!)) closes = Math.max(0, closes - 1)
   }
   for (const [index, line] of lines.entries()) {
     const found = FOLD_FENCE.exec(line)
@@ -322,30 +350,15 @@ export function withFoldsApart(text: string): string {
     }
     // A fold written on one line, `<details><summary>S</summary>body</details>`, taken apart.
     let opening = FOLD_OPENING_START.exec(line)
-    // Taken apart only when what follows is a fold's body: nothing, a body ending the fold on this line, or
-    // text with no tags that a later `</details>` closes. `<details> and <summary> make a fold.` stays prose.
-    // A body starting with a fence mark stays on the line, so it can't open a code block that runs on.
-    // After its own `<summary>`, a body is the fold's, its `</details>` later or still streaming in; without one, only
-    // tag-free text a later `</details>` closes is. `<details> is the tag.` ending a reply stays prose.
-    if (opening && opening[2]!.trim()) {
-      const body = opening[2]!
-      const withSummary = /<\/summary>\s*$/i.test(opening[1]!)
-      const isFold = /^\s*(?:`{3}|~{3})/.test(body)
-        ? false
-        : FOLD_CLOSING_END.test(body) ||
-          // A close with words after it on the line stays as written: folded, they'd hide the rest of the reply.
-          // One in a code span or a comment closes nothing, so it doesn't count (hermes-conduit#3349).
-          (!/<\/details\s*>/i.test(withoutCode(body)) && (withSummary || (closedAfter[index] && !/<[a-zA-Z/!]/.test(body))))
-      if (!isFold) opening = null
-    }
+    if (opening && !opensFold(opening, closedAfter[index]!)) opening = null
     let rest = line
     if (opening) {
       own(opening[1]!)
       depth++
-      rest = opening[2]!
+      rest = opening[3]!
       if (!rest.trim()) continue
     }
-    const closing = depth > 0 ? FOLD_CLOSING_END.exec(rest) : null
+    const closing = depth > 0 && closesFold(rest) ? FOLD_CLOSING_END.exec(rest) : null
     if (closing) {
       if (closing[1]!.trim()) out.push(closing[1]!)
       own('</details>')

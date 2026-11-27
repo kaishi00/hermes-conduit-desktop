@@ -413,7 +413,7 @@ const DELTA_FLUSH_MS = 100
 
 /** `host`: the dashboard this window shows, which keeps its own transcripts. */
 /** `title`: a new chat's title from a `conduit://new` link, given to Hermes as the chat is made. */
-export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string, host = '', draft?: number, title?: string) {
+export function useChat(storedId: string | null, profile: string | undefined, sessionAuthority: boolean, connected: boolean, botChat = false, folder?: string, host = '', draft?: number, title?: string, draftOpen?: (draft: number) => boolean) {
   const newChatTitle = useRef(title)
   newChatTitle.current = title
   // A chat this window opens on, kept from before (a dashboard switch remounts it), draws on the first frame.
@@ -572,7 +572,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     // reasoning, speed and approval picks stay with it. Another New Chat names another `draft` and starts clean.
     const draftKey = storedId ? null : `${draft ?? ''}\n${botChat}\n${profile ?? ''}\n${host}\n${connected}\n${sessionAuthority}`
     const sameDraft = draftKey !== null && openedDraft.current === draftKey
-    if (!sameDraft) keepDraft(keptDrafts.current, openedDraft.current, draftOverrides.current)
+    if (!sameDraft) keepDraft(keptDrafts.current, openedDraft.current, draftOverrides.current, draftOpen)
     openedDraft.current = draftKey
     const ticket = ++request.current
     liveId.current = null
@@ -1784,15 +1784,24 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   }
 }
 
-type DraftPicks = Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>
+export type DraftPicks = Pick<OpenChat, 'model' | 'provider' | 'reasoning' | 'speed' | 'yolo'>
 /** Past this many kept New Chats, the oldest goes: as many as the tab strip holds. */
 const KEPT_DRAFTS = 12
 
-/** Keeps a numbered New Chat's picks as it leaves the screen; one without picks, or unnumbered, keeps none. */
-function keepDraft(kept: Map<string, DraftPicks>, key: string | null, picks: DraftPicks) {
+/**
+ * Keeps a numbered New Chat's picks as it leaves the screen; one without picks, or unnumbered, keeps none. Past
+ * KEPT_DRAFTS, the drafts whose tabs have closed go first (`draftOpen`), then the one shown longest ago, so a
+ * draft still in the strip keeps its picks (desktop#661).
+ */
+export function keepDraft(kept: Map<string, DraftPicks>, key: string | null, picks: DraftPicks, draftOpen?: (draft: number) => boolean) {
   if (!key || key.startsWith('\n') || !Object.keys(picks).length) return
   kept.delete(key)
   kept.set(key, picks)
+  if (kept.size <= KEPT_DRAFTS) return
+  for (const old of [...kept.keys()]) {
+    if (kept.size <= KEPT_DRAFTS) return
+    if (old !== key && !draftOpen?.(Number(old.split('\n')[0]))) kept.delete(old)
+  }
   while (kept.size > KEPT_DRAFTS) kept.delete(kept.keys().next().value!)
 }
 

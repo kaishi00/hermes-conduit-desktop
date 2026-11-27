@@ -49094,6 +49094,21 @@
     "zh-Hans": "重命名…",
     "zh-Hant": "重新命名…"
   },
+  "Couldn’t read the terminals: {reason}": {
+    "de": "Die Terminals konnten nicht gelesen werden: {reason}",
+    "es": "No se pudieron leer los terminales: {reason}",
+    "fr": "Impossible de lire les terminaux : {reason}",
+    "id": "Tidak bisa membaca terminal: {reason}",
+    "it": "Impossibile leggere i terminali: {reason}",
+    "ja": "ターミナルを読み込めませんでした: {reason}",
+    "ko": "터미널을 읽을 수 없습니다: {reason}",
+    "pl": "Nie udało się odczytać terminali: {reason}",
+    "pt-BR": "Não foi possível ler os terminais: {reason}",
+    "ru": "Не удалось прочитать терминалы: {reason}",
+    "tr": "Terminaller okunamadı: {reason}",
+    "zh-Hans": "无法读取终端：{reason}",
+    "zh-Hant": "無法讀取終端機：{reason}"
+  },
   "{name} isn’t on the server. It may have been deleted, or it’s on another computer.": {
     "de": "{name} ist nicht auf dem Server. Die Datei wurde vielleicht gelöscht oder liegt auf einem anderen Computer.",
     "es": "{name} no está en el servidor. Puede que se haya borrado o que esté en otro ordenador.",

@@ -4,7 +4,7 @@ import { renderHook, settle } from './hookHarness'
 import { useReplySpeeds } from '../src/renderer/src/state/useReplySpeeds'
 
 type Props = { running: boolean }
-type Outcome = { ok: boolean; result?: unknown; status?: number; error?: string }
+type Outcome = { ok: boolean; result?: unknown; code?: number; error?: string }
 let answer: () => Outcome | Promise<Outcome>
 
 beforeEach(() => {
@@ -23,7 +23,7 @@ describe('the reply speeds hook', () => {
     expect(hook.result().rows?.unsaved).toBe(55)
     expect(hook.result().rows?.byRow.get(7)).toBe(42)
 
-    answer = () => ({ ok: false, status: 503, error: 'restarting' })
+    answer = () => ({ ok: false, code: 503, error: 'restarting' })
     hook.rerender({ running: true })
     await settle()
     expect(hook.result().rows?.unsaved).toBeUndefined()
@@ -31,6 +31,20 @@ describe('the reply speeds hook', () => {
 
     // The turn ends and its read fails: still no earlier turn's speed on its reply.
     hook.rerender({ running: false })
+    await settle()
+    expect(hook.result().rows?.unsaved).toBeUndefined()
+    expect(hook.result().rows?.byRow.get(7)).toBe(42)
+    hook.unmount()
+  })
+
+  it('drops the newest turn’s speed when a read fails without a turn starting first', async () => {
+    const hook = renderHook(({ connected }: { connected: boolean }) => useReplySpeeds('a', undefined, connected, false), { connected: true })
+    await settle()
+    expect(hook.result().rows?.unsaved).toBe(55)
+    // The connection drops and comes back; that read fails.
+    hook.rerender({ connected: false })
+    answer = () => ({ ok: false, code: 503, error: 'restarting' })
+    hook.rerender({ connected: true })
     await settle()
     expect(hook.result().rows?.unsaved).toBeUndefined()
     expect(hook.result().rows?.byRow.get(7)).toBe(42)
@@ -55,7 +69,7 @@ describe('the reply speeds hook', () => {
     expect(hook.result().composer).toEqual({ rate: 55, stale: false })
 
     // The next turn runs: the last speed stays, dimmed, and stays so when the turn's read fails.
-    answer = () => ({ ok: false, status: 503, error: 'restarting' })
+    answer = () => ({ ok: false, code: 503, error: 'restarting' })
     hook.rerender({ running: true })
     await settle()
     expect(hook.result().composer).toEqual({ rate: 55, stale: true })
@@ -93,7 +107,7 @@ describe('the reply speeds hook', () => {
     expect(hook.result().composer).toEqual({ rate: 55, stale: true })
 
     // That turn's own read fails: still dimmed, never gone.
-    answer = () => ({ ok: false, status: 503, error: 'restarting' })
+    answer = () => ({ ok: false, code: 503, error: 'restarting' })
     hook.rerender({ running: false })
     await settle()
     expect(hook.result().composer).toEqual({ rate: 55, stale: true })
@@ -121,7 +135,7 @@ describe('the reply speeds hook', () => {
     await settle()
     expect(hook.result().composer).toEqual({ rate: 61, stale: false })
 
-    late({ ok: false, status: 504, error: 'timed out' })
+    late({ ok: false, code: 504, error: 'timed out' })
     await settle()
     expect(hook.result().composer).toEqual({ rate: 61, stale: false })
     expect(hook.result().rows?.unsaved).toBe(61)
