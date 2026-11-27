@@ -26,27 +26,34 @@ export interface LinkOpenerOptions {
 
 export interface FileLinkActions {
   open: (path: string) => void
-  /** The link's right-click menu. */
-  menu: (path: string) => void
+  /** The link's right-click menu; `at`, the link's corner, for one opened from the keyboard. */
+  menu: (path: string, at?: { x: number; y: number }) => void
 }
+
+/**
+ * Whether a plugin's answer about the folder lookup still holds: a yes for the window's life, a no for a minute, so a
+ * plugin updated meanwhile is asked again (an ask that couldn't tell is asked again at once).
+ */
+export const servedAnswerHolds = (answer: boolean, askedAt: number, now: number) => answer || now - askedAt < 60_000
 
 export const missingNotice = (name: string) => t('{name} isn’t on the server. It may have been deleted, or it’s on another computer.', { name })
 
 export function useLinkOpener({ cwd, dashboard, profile, sessionIds, reveal, notice }: LinkOpenerOptions): FileLinkActions | null {
   const ids = sessionIds.filter((id): id is string => !!id)
   const idsKey = [...new Set(ids)].join('\n')
-  // Whether the profile's plugin finds folders, asked once per profile and dashboard; an ask that couldn't tell is asked again next time.
-  const served = useRef<{ key: string; answer: Promise<boolean | null> } | null>(null)
+  // Whether the profile's plugin finds folders, asked per profile and dashboard and kept as servedAnswerHolds says.
+  const served = useRef<{ key: string; askedAt: number; answer: Promise<boolean | null> } | null>(null)
   const servedKey = `${dashboard ?? ''}\n${profile ?? 'default'}`
   const servesFolders = useCallback(async () => {
     if (served.current?.key !== servedKey) {
       const answer = askPluginStatus(() => gateway.http('GET', scoped(STATUS_PATH, profile ?? 'default'), undefined, 8_000)).then(status =>
         status ? serves(status, [RESOLVE_FOLDERS_CAPABILITY]) : null
       )
-      served.current = { key: servedKey, answer }
+      served.current = { key: servedKey, askedAt: Date.now(), answer }
     }
-    const answer = await served.current.answer
-    if (answer === null) served.current = null
+    const asked = served.current
+    const answer = await asked.answer
+    if (served.current === asked && (answer === null || !servedAnswerHolds(answer, asked.askedAt, Date.now()))) served.current = null
     return answer === true
   }, [servedKey, profile])
   // A later click wins over a lookup still running for an earlier one.
@@ -84,9 +91,9 @@ export function useLinkOpener({ cwd, dashboard, profile, sessionIds, reveal, not
         const shown = await window.conduit.showOnComputer(at).catch(() => false)
         if (!shown) live.current.notice(t('{name} isn’t on this computer.', { name: baseName(at) || at }))
       })
-    const menu = (path: string) =>
+    const menu = (path: string, at?: { x: number; y: number }) =>
       void window.conduit
-        .pathLinkMenu()
+        .pathLinkMenu(at)
         .catch(() => null)
         .then(choice => {
           if (choice === 'folder') open(path)

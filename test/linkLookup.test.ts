@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { lookUpLink, resolvePath } from '../src/renderer/src/state/workspace'
+import { servedAnswerHolds } from '../src/renderer/src/state/linkOpener'
 import { localSpelling } from '../src/main/localFolders'
 
 // Desktop issue 686: a folder link a reply named, looked up for the chat as the phone looks files up.
@@ -54,7 +55,18 @@ describe('Show in Finder or Explorer', () => {
     expect(localSpelling('~/proj/.agents/', { home: '/Users/r', windows: false })).toBe('/Users/r/proj/.agents')
     expect(localSpelling('/Users/r/a.md', { home: '/Users/r', windows: false })).toBe('/Users/r/a.md')
     expect(localSpelling('/mnt/c/dev/app/', { home: 'C:\\Users\\r', windows: true })).toBe('C:\\dev\\app')
+    // A WSL home, or ~ there, isn't a path this computer can show.
+    expect(localSpelling('/home/r/proj', { home: 'C:\\Users\\r', windows: true })).toBeNull()
+    expect(localSpelling('~/proj', { home: 'C:\\Users\\r', windows: true })).toBeNull()
     expect(localSpelling('C:/dev/app/x.ts', { home: 'C:\\Users\\r', windows: true })).toBe('C:\\dev\\app\\x.ts')
     expect(localSpelling('/', { home: '/Users/r', windows: false })).toBe('/')
+  })
+})
+
+describe('the plugin’s answer about folder lookups', () => {
+  it('keeps a yes, and asks again a minute after a no', () => {
+    expect(servedAnswerHolds(true, 0, 10 * 60_000)).toBe(true)
+    expect(servedAnswerHolds(false, 0, 30_000)).toBe(true)
+    expect(servedAnswerHolds(false, 0, 61_000)).toBe(false)
   })
 })

@@ -56,7 +56,8 @@ function Code({ className, children }: { className?: string; children?: ReactNod
           if (e.key === 'Enter') links.open(path)
           else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
             e.preventDefault()
-            links.menu(path)
+            const box = e.currentTarget.getBoundingClientRect()
+            links.menu(path, { x: box.left, y: box.bottom })
           }
         }}
       >

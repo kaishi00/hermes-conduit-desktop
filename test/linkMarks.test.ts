@@ -22,12 +22,12 @@ afterEach(() => {
   host.remove()
 })
 
-async function render(text: string, openFile?: (path: string) => void) {
+async function render(text: string, openFile?: (path: string) => void, menu: (path: string, at?: { x: number; y: number }) => void = () => undefined) {
   // The node typecheck cannot follow renderer JSX and aliases; Vite resolves this renderer boundary.
   const path = '../src/renderer/src/components/Markdown.tsx'
   const { Markdown, FileLinks } = (await import(/* @vite-ignore */ path)) as { Markdown: unknown; FileLinks: { Provider: unknown } }
   root = createRoot(host)
-  act(() => root!.render(createElement(FileLinks.Provider as never, { value: openFile ? { open: openFile, menu: () => undefined } : null } as never, createElement(Markdown as never, { text } as never))))
+  act(() => root!.render(createElement(FileLinks.Provider as never, { value: openFile ? { open: openFile, menu } : null } as never, createElement(Markdown as never, { text } as never))))
 }
 
 describe('a site’s icon for a link', () => {
@@ -109,6 +109,20 @@ describe('a reply’s marks', () => {
     expect(link.getAttribute('title')).toBe('src/app.ts')
     act(() => link.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     expect(opened).toEqual(['src/app.ts'])
+  })
+
+  it('opens a path link’s menu on a right-click and from the keyboard (desktop issue 686)', async () => {
+    const menus: { path: string; at?: { x: number; y: number } }[] = []
+    await render('See `.agents/skills/x/`.', () => undefined, (path, at) => menus.push({ path, at }))
+    const link = host.querySelector<HTMLElement>('code.file-link')!
+    const right = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+    act(() => link.dispatchEvent(right))
+    expect(right.defaultPrevented).toBe(true)
+    act(() => link.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true })))
+    expect(menus.map(m => [m.path, m.at === undefined])).toEqual([
+      ['.agents/skills/x/', true],
+      ['.agents/skills/x/', false]
+    ])
   })
 
   it('leaves a code block’s code alone', async () => {
