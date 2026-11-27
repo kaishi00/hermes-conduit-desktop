@@ -147,4 +147,26 @@ describe('withChatNotes', () => {
     expect(chatNotes('d')).toEqual([{ key: 'note-x', after: 'row-1', text: 'x', format: 'plain' }])
     expect(chatNotes('c')).toHaveLength(MAX_CHAT_NOTES - 1)
   })
+
+  it("keeps the notes another chat window saved meanwhile", () => {
+    rememberChatNotes('a', state(row('row-1'), { kind: 'output', key: 'note-a', text: 'a', format: 'plain' }))
+    // Another window (a renderer of its own) saves a note for its chat.
+    const shared = JSON.parse(localStorage.getItem('conduit.chatNotes.v1') ?? '[]') as unknown[]
+    localStorage.setItem('conduit.chatNotes.v1', JSON.stringify([...shared, ['b', [{ key: 'note-b', after: null, text: 'b', format: 'plain' }]]]))
+    addChatNote('a', { text: 'late', format: 'plain' })
+    expect(chatNotes('b').map(n => n.key)).toEqual(['note-b'])
+    expect(chatNotes('a').map(n => n.text)).toEqual(['a', 'late'])
+  })
+
+  it('puts a note drawn after a message Hermes had not stored yet at the end, not above it', () => {
+    const live = { kind: 'assistant', key: 'a-7', text: 'live reply' } as TranscriptItem
+    rememberChatNotes('e', state(row('row-1'), live, { kind: 'output', key: 'note-e', text: 'e', format: 'plain' }))
+    expect(chatNotes('e')).toEqual([{ key: 'note-e', text: 'e', format: 'plain' }])
+    expect(withChatNotes(state(row('row-1'), row('row-2')), chatNotes('e')).items.map(i => i.key)).toEqual(['row-1', 'row-2', 'note-e'])
+  })
+
+  it('skips a kept note that is missing what it draws', () => {
+    localStorage.setItem('conduit.chatNotes.v1', JSON.stringify([['f', [{ key: 'note-f' }, { key: 'note-g', text: 'g', format: 'plain' }]]]))
+    expect(chatNotes('f').map(n => n.key)).toEqual(['note-g'])
+  })
 })

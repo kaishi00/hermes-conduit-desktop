@@ -25,71 +25,87 @@ const STORAGE_KEY = 'conduit.chatNotes.v1'
 export const MAX_CHAT_NOTES = 200
 export const MAX_CHAT_NOTE_CHARS = 256 * 1024
 
-let notes: Map<string, ChatNote[]> | null = null
-/** The order chats last gained a note in, oldest first, for trimming. */
-let order: string[] = []
-
-function load(): Map<string, ChatNote[]> {
-  if (notes) return notes
-  notes = new Map()
-  order = []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    const parsed = raw ? (JSON.parse(raw) as [string, ChatNote[]][]) : []
-    for (const [chat, list] of Array.isArray(parsed) ? parsed : []) {
-      if (typeof chat === 'string' && Array.isArray(list)) {
-        notes.set(chat, list)
-        order.push(chat)
-      }
-    }
-  } catch {
-    // None kept.
-  }
-  return notes
+interface Kept {
+  notes: Map<string, ChatNote[]>
+  /** The order chats last gained a note in, oldest first, for trimming. */
+  order: string[]
 }
 
-function save(): void {
-  const store = load()
+/** What was last saved, for when storage can't be read: kept for this launch only. */
+let memory: [string, ChatNote[]][] = []
+
+const isNote = (note: unknown): note is ChatNote => {
+  const n = note as Partial<ChatNote> | null
+  return !!n && typeof n.key === 'string' && typeof n.text === 'string' && (n.format === 'plain' || n.format === 'markdown')
+}
+
+/**
+ * Read afresh each time: every chat window is a renderer of its own sharing
+ * this storage, so a copy held here would write over the notes another
+ * window kept since.
+ */
+function load(): Kept {
+  let parsed: unknown = memory
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    parsed = raw ? JSON.parse(raw) : []
+  } catch {
+    // The copy this launch last saved.
+  }
+  const kept: Kept = { notes: new Map(), order: [] }
+  for (const entry of Array.isArray(parsed) ? parsed : []) {
+    if (!Array.isArray(entry)) continue
+    const [chat, list] = entry as [unknown, unknown]
+    if (typeof chat !== 'string' || !Array.isArray(list)) continue
+    const valid = list.filter(isNote)
+    if (!valid.length || kept.notes.has(chat)) continue
+    kept.notes.set(chat, valid)
+    kept.order.push(chat)
+  }
+  return kept
+}
+
+/** Saves `kept` with `chat` as the newest to gain a note. */
+function save(kept: Kept, chat: string): void {
+  const order = [...kept.order.filter(key => key !== chat), chat]
   // Past either limit the oldest notes go, the chats that gained one longest ago first; the newest always stays.
-  const all = order.flatMap(chat => (store.get(chat) ?? []).map(note => ({ chat, note })))
+  const all = order.flatMap(key => (kept.notes.get(key) ?? []).map(note => ({ key, note })))
   let chars = all.reduce((sum, entry) => sum + entry.note.text.length, 0)
   let dropped = 0
   while (all.length - dropped > 1 && (all.length - dropped > MAX_CHAT_NOTES || chars > MAX_CHAT_NOTE_CHARS)) {
     chars -= all[dropped]!.note.text.length
     dropped++
   }
-  store.clear()
-  order = []
-  for (const { chat, note } of all.slice(dropped)) {
-    if (!store.has(chat)) {
-      store.set(chat, [])
-      order.push(chat)
-    }
-    store.get(chat)!.push(note)
-  }
+  const grouped = new Map<string, ChatNote[]>()
+  for (const { key, note } of all.slice(dropped)) grouped.set(key, [...(grouped.get(key) ?? []), note])
+  memory = [...grouped.entries()]
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(order.map(chat => [chat, store.get(chat)])))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(memory))
   } catch {
     // Kept for this launch only.
   }
 }
 
-function touch(chat: string): void {
-  order = order.filter(key => key !== chat)
-  order.push(chat)
-}
-
 const isRow = (item: TranscriptItem) => item.key.startsWith('row-')
 
-/** The output items `state` draws, each with the stored row it follows. */
+/**
+ * The output items `state` draws, each with the stored row it follows. One
+ * drawn after a message Hermes hadn't stored yet (a live turn's, under its
+ * live key) goes at the end, never above that message once it's stored.
+ */
 function notesIn(state: TranscriptState): ChatNote[] {
   const found: ChatNote[] = []
   let after: string | null = null
+  let pastStored = false
   for (const item of state.items) {
     if (item.kind === 'output') {
-      found.push({ key: item.key, after, ...(item.command ? { command: item.command } : {}), text: item.text, format: item.format })
+      const place = pastStored ? {} : { after }
+      found.push({ key: item.key, ...place, ...(item.command ? { command: item.command } : {}), text: item.text, format: item.format })
     } else if (isRow(item)) {
       after = item.key
+      pastStored = false
+    } else if (item.kind === 'user' || item.kind === 'assistant') {
+      pastStored = true
     }
   }
   return found
@@ -100,26 +116,24 @@ export function rememberChatNotes(chat: string, state: TranscriptState): void {
   const drawn = notesIn(state)
   if (!drawn.length) return
   const store = load()
-  const kept = store.get(chat) ?? []
+  const kept = store.notes.get(chat) ?? []
   const known = new Set(kept.map(note => note.key))
   const fresh = drawn.filter(note => !known.has(note.key))
   if (!fresh.length) return
-  store.set(chat, [...kept, ...fresh])
-  touch(chat)
-  save()
+  store.notes.set(chat, [...kept, ...fresh])
+  save(store, chat)
 }
 
 /** A note for a chat that isn't on screen any more (a command that ended after the chat was left). */
 export function addChatNote(chat: string, note: Omit<ChatNote, 'key' | 'after'>): void {
   const store = load()
-  store.set(chat, [...(store.get(chat) ?? []), { key: newNoteKey(), ...note }])
-  touch(chat)
-  save()
+  store.notes.set(chat, [...(store.notes.get(chat) ?? []), { key: newNoteKey(), ...note }])
+  save(store, chat)
 }
 
 /** The notes kept for a chat. */
 export function chatNotes(chat: string): readonly ChatNote[] {
-  return load().get(chat) ?? []
+  return load().notes.get(chat) ?? []
 }
 
 /** A note's item key: unique across launches, so a kept note is never taken for another. */
@@ -156,8 +170,7 @@ export function withChatNotes(state: TranscriptState, kept: readonly ChatNote[])
 
 /** Forgets every kept note (tests). */
 export function forgetChatNotes(): void {
-  notes = new Map()
-  order = []
+  memory = []
   try {
     localStorage.removeItem(STORAGE_KEY)
   } catch {
