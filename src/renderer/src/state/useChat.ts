@@ -13,7 +13,8 @@ import { noteChatSession } from './expiredQuestions'
 import { connectionFrom, connectionOwner, type ConnectionCard } from './connections'
 import { isRuntimeGone } from './runtimeGone'
 import { gateway, GatewayError } from '../gateway'
-import { forgetTranscripts, keepTranscript, keptOlderAt, keptTranscript } from './transcriptCache'
+import { forgetTranscripts, keepTranscript, keptOlderAt, keptTranscript, keyOf } from './transcriptCache'
+import { addChatNote, chatNotes, rememberChatNotes, withChatNotes } from './chatNotes'
 import { TranscriptStore } from './transcriptStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { contextFromUsage, parseBreakdown, type ContextWindow } from './context'
@@ -236,6 +237,11 @@ function resumedTranscript(result: ResumeResult, rows: HistoryRow[] | null, tooL
   return rows ? attachBoards(state, toolAnswers({ messages: rows }), toolArgs({ messages: rows }), toolNames({ messages: rows })) : state
 }
 
+/** Whether an action draws one of the chat's own notes: a command's output, or a side agent's answer. */
+function makesNote(action: Action): boolean {
+  return action.type === 'output' || (action.type === 'event' && (action.event.type === 'btw.complete' || action.event.type === 'background.complete'))
+}
+
 function reducer(state: TranscriptState, action: Action): TranscriptState {
   switch (action.type) {
     case 'reset':
@@ -395,7 +401,17 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   // A chat this window opens on, kept from before (a dashboard switch remounts it), draws on the first frame.
   // Held outside React state, so only what reads it runs as a reply streams (transcriptStore.ts).
   const [transcriptStore] = useState(() => new TranscriptStore((storedId && connected ? keptTranscript(storedId, profile, host) : null) ?? emptyTranscript))
-  const dispatchNow = useCallback((action: Action) => transcriptStore.set(reducer(transcriptStore.get(), action)), [transcriptStore])
+  /** The open chat's notes are kept under this (chatNotes.ts): its dashboard, profile and stored id. */
+  const notesKey = useRef<string | null>(null)
+  const dispatchNow = useCallback(
+    (action: Action) => {
+      const next = reducer(transcriptStore.get(), action)
+      transcriptStore.set(next)
+      // Hermes never stores a note: it's kept for the chat, so a re-read or an open draws it again (issue 3394).
+      if (notesKey.current && makesNote(action)) rememberChatNotes(notesKey.current, next)
+    },
+    [transcriptStore]
+  )
   /** The transcript as it is now, for a callback or a cleanup. */
   const [transcriptRef] = useState(() => ({ get current() { return transcriptStore.get() } }))
   /**
@@ -479,6 +495,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   const gapPending = useRef(false)
   const chatRef = useRef(chat)
   chatRef.current = chat
+  notesKey.current = chat.storedId ? keyOf(chat.storedId, profile, host) : null
+  /** Counts the chats this pane has shown: a command's note that comes after the chat was left is kept for it, not drawn here. */
+  const shownChat = useRef(0)
   /** The new chat last opened (profile, host, connection), so a folder change alone keeps its picks. */
   const openedDraft = useRef<string | null>(null)
   /** A New Chat's picks while another shows (its tab, desktop#656's review): back in it, they're there again. */
@@ -504,6 +523,12 @@ export function useChat(storedId: string | null, profile: string | undefined, se
   /** The open (`request`) whose page read is on its way, so one a chat switch left behind can't end the next chat's. */
   const olderLoading = useRef<number | null>(null)
 
+  /** Leaving a chat keeps its transcript for coming back, and its notes for every read after (chatNotes.ts). */
+  const leaveChat = (id: string) => {
+    rememberChatNotes(keyOf(id, profile, host), transcriptRef.current)
+    keepTranscript(id, profile, transcriptRef.current, host, olderNow.current)
+  }
+
   // Resume when the chat (or the connection) changes.
   useEffect(() => {
     // A dropped connection clears what was kept, whatever is open, before any return below
@@ -515,9 +540,10 @@ export function useChat(storedId: string | null, profile: string | undefined, se
     if (!connected) created.current = null
     if (storedId && storedId === created.current) {
       drawn.current = storedId
-      return () => keepTranscript(storedId, profile, transcriptRef.current, host, olderNow.current)
+      return () => leaveChat(storedId)
     }
     created.current = null
+    shownChat.current++
     // A new chat whose folder alone changed (its Project chip, desktop#605) is the same draft: its model,
     // reasoning, speed and approval picks stay with it. Another New Chat names another `draft` and starts clean.
     const draftKey = storedId ? null : `${draft ?? ''}\n${botChat}\n${profile ?? ''}\n${host}\n${connected}\n${sessionAuthority}`
@@ -580,7 +606,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       ? undefined
       : (rows: HistoryRow[]) => {
           if (ticket !== request.current) return
-          pageCopy = rowsStandIn(rows)
+          pageCopy = withChatNotes(rowsStandIn(rows), chatNotes(keyOf(storedId, profile, host)))
           dispatch({ type: 'reset', state: pageCopy })
         }
     openingChat.current = resumeChat(params, storedId, profile, showPage)
@@ -613,6 +639,8 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         }
         olderNow.current = olderAt
         setOlder(olderAt)
+        // The chat's own notes, which Hermes' rows never hold (issue 3394).
+        for (const id of new Set([storedId, result.stored_session_id ?? storedId])) state = withChatNotes(state, chatNotes(keyOf(id, profile, host)))
         state = withInflight(state, result)
         state = withPendingConnection(state, result)
         dispatch({ type: 'reset', state })
@@ -650,7 +678,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
         openingChat.current = null
       })
     // Leaving the chat keeps its transcript for coming back.
-    return () => keepTranscript(storedId, profile, transcriptRef.current, host, olderNow.current)
+    return () => leaveChat(storedId)
   }, [storedId, profile, sessionAuthority, connected, folder, host, draft])
 
   // Live events for this chat.
@@ -783,6 +811,9 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       }
       olderNow.current = olderAt
       setOlder(olderAt)
+      // The notes drawn now, and any kept for the chat, stay: Hermes' rows never hold them (issue 3394).
+      rememberChatNotes(keyOf(stored, profile, host), transcriptRef.current)
+      for (const id of new Set([stored, result.stored_session_id ?? stored])) state = withChatNotes(state, chatNotes(keyOf(id, profile, host)))
       state = withInflight(state, result)
       state = withPendingConnection(state, result)
       dispatch({ type: 'reset', state })
@@ -1139,8 +1170,16 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       let { name, arg } = parseSlashCommand(typed)
       /** A Bot Chat's /new says why it compacts, under what was typed; shown after the compaction reads the history again, which would drop it. */
       let compactNote: string | null = null
-      const showCompactNote = () => compactNote && dispatch({ type: 'output', command: asTyped, text: compactNote, format: 'plain' })
-      const output = (body: string, format: 'plain' | 'markdown' = 'plain') => dispatch({ type: 'output', command: typed, text: body, format })
+      /** The chat the command runs in, and whether it's still the one shown when a note comes. */
+      let owner = chatRef.current.storedId
+      const shownAtStart = shownChat.current
+      const note = (command: string, text: string, format: 'plain' | 'markdown') => {
+        if (shownChat.current === shownAtStart) dispatch({ type: 'output', command, text, format })
+        // The chat was left while the command ran: kept for it, drawn when it opens (issue 3394).
+        else if (owner) addChatNote(keyOf(owner, profile, host), { command, text, format })
+      }
+      const showCompactNote = () => compactNote && note(asTyped, compactNote, 'plain')
+      const output = (body: string, format: 'plain' | 'markdown' = 'plain') => note(typed, body, format)
       const failed = (e: unknown) => dispatch({ type: 'notice', text: t('Command failed: {reason}', { reason: message(e) }), tone: 'error' })
       switch (name) {
         case 'new':
@@ -1189,6 +1228,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           const made = await sessionFor()
           sid = made.sid
           created = made.storedId
+          owner = made.storedId ?? owner
           done.created = created
         }
       } catch (e) {
@@ -1267,7 +1307,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           return done
       }
     },
-    [profile, sessionFor, reloadHistory, send, stop, isDraft]
+    [profile, host, sessionFor, reloadHistory, send, stop, isDraft]
   )
 
   /** A line in the chat from Conduit itself (a refusal, say), as a command's notice shows. */
