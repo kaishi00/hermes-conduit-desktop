@@ -638,9 +638,9 @@ export function BotsHome({
   const { folded, toggle: toggleFold } = useFoldedCategories();
   const filedRooms = categories?.rooms ?? {};
   const roomCategory = (roomId: string): string | null => filedRooms[roomId] ?? null;
-  const roomsIn = (name: string | null) => (name && categories?.fileRoom ? (rooms ?? []).filter((room) => sameCategory(roomCategory(room.roomId), name)) : []);
+  const roomsIn = (name: string | null) => (name && categories?.rooms ? (rooms ?? []).filter((room) => sameCategory(roomCategory(room.roomId), name)) : []);
   const sections = categories
-    ? categorySections(tiles, categories.order, (tile) => tile.bot.category?.name, categories.fileRoom ? (rooms ?? []).flatMap((room) => (roomCategory(room.roomId) ? [roomCategory(room.roomId)!] : [])) : [])
+    ? categorySections(tiles, categories.order, (tile) => tile.bot.category?.name, categories.rooms ? (rooms ?? []).flatMap((room) => (roomCategory(room.roomId) ? [roomCategory(room.roomId)!] : [])) : [])
     : null;
   const categoryNames = (sections ?? []).flatMap((section) => (section.name ? [section.name] : []));
   const [headingTarget, setHeadingTarget] = useState<string | null>(null);
@@ -1170,7 +1170,7 @@ export function BotsHome({
                   { className: `invite-tile ${invite.status}`, waiting: invite.status === "waiting" },
                 ),
               )}
-            {(rooms ?? []).filter((room) => !sections || !categories?.fileRoom || !roomCategory(room.roomId)).map(ownRoomRow)}
+            {(rooms ?? []).filter((room) => !sections || !categories?.rooms || !roomCategory(room.roomId)).map(ownRoomRow)}
             {otherRoomsAfter.map(otherRoomRow)}
             {draft ? (
               <div className="row bot-side-bot bot-side-room starting" aria-label={t("Group chat being started")}>

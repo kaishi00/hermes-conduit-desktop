@@ -2864,8 +2864,9 @@ function Shell({
       setOrder: categoryOrder.set,
       file: fileBots,
       rooms: roomCategories.rooms,
-      fileRoom: roomCategories.file,
-      refileRooms: (old: string, to: string | null) => roomCategories.set(refilingRooms(roomCategories.rooms, old, to))
+      // Filed while connected only, as bots are: the host's copy is read on each connection and wins.
+      fileRoom: connected ? roomCategories.file : undefined,
+      refileRooms: connected ? (old: string, to: string | null) => roomCategories.set(refilingRooms(roomCategories.rooms, old, to)) : undefined
     },
   }
 

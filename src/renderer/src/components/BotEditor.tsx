@@ -168,6 +168,7 @@ export function BotEditor({ bot, among = [], onClose, onSaved }: Props) {
 
   const changed = useMemo(() => {
     if (Object.keys(metaPatch(bot, draft)).length || draft.picture || draft.removePicture) return true
+    if (editCategoryPatch(bot.category, draft.category, among)) return true
     if (!details) return draft.description.trim() !== (bot.description ?? '').trim()
     return (
       draft.description.trim() !== details.description.trim() ||
@@ -175,7 +176,7 @@ export function BotEditor({ bot, among = [], onClose, onSaved }: Props) {
       (!!draft.provider && !!draft.model && (draft.provider !== details.provider || draft.model !== details.model)) ||
       (!!draft.capabilities && Object.keys(capabilityParams(details.capabilities, draft.capabilities)).length > 0)
     )
-  }, [bot, draft, details])
+  }, [bot, draft, details, among])
 
   /** Writes the look again over Hermes' newest copy, once, after another client wrote it first. */
   const retryMeta = async (patch: Record<string, unknown>) => {
