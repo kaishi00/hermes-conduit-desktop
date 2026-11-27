@@ -3,7 +3,9 @@
  * `session.resume`, then the live turn's events folded in as they arrive.
  * Pure functions, so the tests can play a turn's events through them.
  */
-import { cleanUserText, type Attachment } from './text'
+import { cleanUserText, isContextEngineSummary, withoutCompaction, type Attachment } from './text'
+
+export { isContextEngineSummary, withoutCompaction }
 import { isPlanTool, parsePlan, type Plan } from './plan'
 import { t } from '../../../shared/i18n'
 import { sideAgentNote } from './slash'
@@ -291,23 +293,13 @@ export function workstreamBrief(raw: string): { bot: string; task: string; words
   return words ? { bot, task, words } : { bot, task }
 }
 
-/** A user row: a cron report's note, a workstream's brief, or a message of yours. */
-/**
- * A context engine's summary of the chat, written in Hermes' place: LCM-X
- * stores its frontier as a user row of parts headed
- * `[Session Arc Summary (d1, node 22)]` (Recent, Session Arc, Durable or
- * Depth-N; its engine.py `_LCM_SUMMARY_PART_HEADER_RE`), with no flag or
- * display kind, so Hermes' projection passes it through, and a compaction
- * carries it forward as a fresh row. A row it merged with keeps its own copy,
- * so the whole carrier is nobody's message (the phone's
- * MessageNormalizer.hasCompactionSummaryPrefix).
- */
-const CONTEXT_ENGINE_SUMMARY = /^\[(?:recent|session arc|durable|depth-\d+) summary \(d\d+, node \d+\)\]/i
-
-export function isContextEngineSummary(raw: string): boolean {
-  return CONTEXT_ENGINE_SUMMARY.test(raw.slice(0, 200).trimStart())
+/** Whether the row says it is Hermes' summary (`_compressed_summary`, on the row or its metadata). */
+function flaggedSummary(row: HistoryRow): boolean {
+  const flag = (value: unknown) => value === true || value === 1
+  return flag(row._compressed_summary) || flag(metadataOf(row.metadata)?._compressed_summary)
 }
 
+/** A user row: a cron report's note, a workstream's brief, or a message of yours. */
 function userRow(key: string, raw: string, at?: number): UserItem | CronReportItem | BriefItem | null {
   if (isContextEngineSummary(raw)) return null
   const cron = cronReport(raw)
@@ -492,7 +484,8 @@ export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
     const key = row.row_id != null ? `row-${row.row_id}` : nextKey('h')
     switch (row.role) {
       case 'user': {
-        const item = userRow(key, rowText(row), at)
+        const own = withoutCompaction(rowText(row), flaggedSummary(row))
+        const item = own === null ? null : userRow(key, own, at)
         if (item) items.push(item.kind === 'user' && row.display_kind === 'steer' ? { ...item, steer: true } : item)
         break
       }
@@ -501,7 +494,7 @@ export function fromHistory(rows: HistoryRow[]): TranscriptItem[] {
           items.push({ kind: 'thinking', key: `${key}-r`, text: row.reasoning.trim(), streaming: false })
         }
         // A reply that is only Hermes' silence marker shows nothing (issue 2700).
-        const text = silenceShown(rowText(row)).trim()
+        const text = silenceShown(withoutCompaction(rowText(row), flaggedSummary(row)) ?? '').trim()
         const reactions = reactionsFrom(metadataOf(row.display_metadata)?.reactions)
         if (text)
           items.push({

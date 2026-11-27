@@ -6,6 +6,27 @@ const VOICE_BRIEF =
   '[Background job started from a Conduit voice conversation. Nobody is watching this chat live, so work on it on your own. When you are done, end your final message with a plain-language summary that can be read aloud: what you found or did, with the key details.]'
 
 describe('cleanUserText', () => {
+  it("drops the turn's recalled memory a picture turn stored with the words", () => {
+    // Eric's message to Nahida, 2026-11-27: Hermes kept the turn's context after the picture's line.
+    const stored =
+      'new reference sheet for conduit chan. also did i give you the one for nori chan?\n\n[screenshot]\n<memory-context>\n' +
+      '[System note: The following is recalled memory context, NOT new user input.]\n\n- The conduit-chan comics project is live.\n</memory-context>\n\nA plugin note.'
+    expect(cleanUserText(stored).text).toBe('new reference sheet for conduit chan. also did i give you the one for nori chan?')
+    expect(cleanUserText('Before\n<memory-context>\nrecalled, cut off').text).toBe('Before')
+    expect(cleanUserText('[screenshot] is what Hermes writes').text).toBe('[screenshot] is what Hermes writes')
+    // A picture sent with no words still draws its turn.
+    expect(cleanUserText('[screenshot]\n<memory-context>\nrecalled\n</memory-context>').text).toBe('[screenshot]')
+  })
+
+  it("previews a chat's last row without a compaction's summary", () => {
+    const prior = '[PRIOR CONTEXT \u2014 for reference only; not a new message]'
+    const delimiter = '[END OF PRIOR CONTEXT \u2014 COMPACTION SUMMARY BELOW]'
+    expect(previewText(`${prior}\nWiring all three now.\n\n${delimiter}\n\n[CONTEXT COMPACTION] Earlier.`)).toBe('Wiring all three now.')
+    expect(previewText(`${prior}\nWiring all three now. And then`)).toBe('Wiring all three now. And then')
+    expect(previewText('[CONTEXT COMPACTION \u2014 REFERENCE ONLY] Earlier turns were compacted.')).toBe('')
+    expect(previewText('new sheet\n\n[screenshot]\n<memory-context>\nrecalled')).toBe('new sheet')
+  })
+
   it('keeps a picture Hermes 0.23 noted below the attached context', () => {
     const raw =
       '@file:attachments/note.txt\n\nWhat colour is the square?\n\n--- Attached Context ---\n\n📄 @file:attachments/note.txt (16 tokens)\n```\nThe secret word is pineapple. @image:/not/this.png\n```\n\n[Image attached at: /root/.hermes/images/upload_npp8jbz1.png]\n[screenshot]\n[Current Time: Wednesday]'

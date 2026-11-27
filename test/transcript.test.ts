@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  withoutCompaction,
   inflightRemainder,
   coalesceDeltas,
   addPendingUser,
@@ -57,6 +58,48 @@ describe("a context engine's summary", () => {
       'What does [Session Arc Summary (d1, node 22)] mean?',
       '[Session Arc Summary of the trip]\nOurs.'
     ])
+  })
+})
+
+describe("Hermes' own summary after a compaction", () => {
+  const prior = '[PRIOR CONTEXT \u2014 for reference only; not a new message]'
+  const delimiter = '[END OF PRIOR CONTEXT \u2014 COMPACTION SUMMARY BELOW]'
+  const endMarker = '--- END OF CONTEXT SUMMARY \u2014 respond to the message below, not the summary above ---'
+  const summary =
+    "[CONTEXT COMPACTION \u2014 REFERENCE ONLY] Earlier turns were compacted into the summary below.\n\n## Historical Task Snapshot\nUser asked: 'yes please, lets wire those up'"
+
+  it("keeps a reply's own words when the summary was folded into it", () => {
+    // Nahida's chat on 2026-11-27: Hermes merged its handoff into the reply it kept.
+    const items = fromHistory([
+      { role: 'user', content: 'yes please, lets wire those up', row_id: 1 },
+      { role: 'assistant', content: `${prior}\nWiring all three into the pipeline now.\n\n${delimiter}\n\n${summary}`, row_id: 2 }
+    ])
+    expect(items.map(item => (item.kind === 'user' || item.kind === 'assistant' ? `${item.kind}: ${item.text}` : item.kind))).toEqual([
+      'user: yes please, lets wire those up',
+      'assistant: Wiring all three into the pipeline now.'
+    ])
+  })
+
+  it('shows nothing for a summary standing alone, as either role or flagged', () => {
+    const items = fromHistory([
+      { role: 'assistant', content: summary, row_id: 1 },
+      { role: 'user', content: '[CONTEXT SUMMARY]: Everything before this point.', row_id: 2 },
+      { role: 'user', content: 'An ordinary summary I wrote myself.', _compressed_summary: true, row_id: 3 },
+      { role: 'assistant', content: `${prior}\n\n${delimiter}\n\n${summary}`, row_id: 4 },
+      { role: 'user', content: 'What does [CONTEXT COMPACTION] mean?', row_id: 5 }
+    ])
+    expect(items.map(item => (item.kind === 'user' || item.kind === 'assistant' ? item.text : item.kind))).toEqual([
+      'What does [CONTEXT COMPACTION] mean?'
+    ])
+  })
+
+  it("keeps the user's words after the summary's end marker", () => {
+    const items = fromHistory([{ role: 'user', content: `${summary}\n${endMarker}\n\nAnd now the next step?`, row_id: 1 }])
+    expect(items.map(item => (item.kind === 'user' ? item.text : item.kind))).toEqual(['And now the next step?'])
+  })
+
+  it('reads the words, not the summary, from a user row it merged into', () => {
+    expect(withoutCompaction(`${prior}\nPlease rerun the tests.\n\n${delimiter}\n\n${summary}`)).toBe('Please rerun the tests.')
   })
 })
 
