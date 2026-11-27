@@ -369,6 +369,8 @@ export interface TranscriptState {
    * that start is theirs, never the next held one's.
    */
   readStarted?: string[]
+  /** The held sends brought back lately, by admission: a later read that names one doesn't draw it twice. */
+  released?: string[]
   /**
    * Where the running turn's rows begin, from its `message.start`. A turn
    * with no row of the user's (a hidden one) has nothing else to say which
@@ -1066,7 +1068,23 @@ export function holdSent(state: TranscriptState, key: string, admission: string)
 export function releaseHeld(state: TranscriptState, admission: string, steer = false): TranscriptState {
   const held = state.held?.find(h => h.admission === admission)
   if (!held) return state
-  return { ...state, items: [...seal(state.items), { ...held.item, at: Date.now(), ...(steer ? { steer: true as const } : {}) }], held: state.held!.filter(h => h !== held) }
+  return {
+    ...state,
+    items: [...seal(state.items), { ...held.item, at: Date.now(), ...(steer ? { steer: true as const } : {}) }],
+    held: state.held!.filter(h => h !== held),
+    released: [...(state.released ?? []).slice(-15), admission]
+  }
+}
+
+/**
+ * A message of the gateway's queue whose turn a live-work read names as running, that this transcript doesn't
+ * hold (the chat was reopened while it waited, or another app sent it): it comes in from its queued words,
+ * once, as a held one would.
+ */
+export function startQueuedWords(state: TranscriptState, admission: string, text: string): TranscriptState {
+  if (state.held?.some(h => h.admission === admission)) return releaseHeld(state, admission)
+  if (state.released?.includes(admission) || !text.trim()) return state
+  return releaseHeld({ ...state, held: [...(state.held ?? []), { admission, item: { kind: 'user', key: nextKey('u'), text } }] }, admission)
 }
 
 /** Withdrawn or discarded: it never runs, so it never comes back. */

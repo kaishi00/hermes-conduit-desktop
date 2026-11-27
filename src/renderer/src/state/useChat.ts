@@ -29,6 +29,7 @@ import {
   dropHeld,
   holdSent,
   releaseHeld,
+  startQueuedWords,
   reholdEdited,
   attachBoards,
   withKeptDetails,
@@ -78,6 +79,7 @@ type Action =
   /** The queue took a send behind the running turn, or a dock action settled one. */
   | { type: 'held'; key: string; admission: string }
   | { type: 'liveIdle' }
+  | { type: 'queuedStarted'; admission: string; text: string }
   | { type: 'released' | 'dropped' | 'started'; admission: string }
   | { type: 'edited'; admission: string; edited: string; text: string }
   | { type: 'failed'; error: string }
@@ -265,6 +267,11 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
       return state.held?.some(h => h.admission === action.admission)
         ? { ...releaseHeld(state, action.admission), readStarted: [...(state.readStarted ?? []).slice(-7), action.admission] }
         : state
+    case 'queuedStarted': {
+      // A read names the turn of a queued message this transcript doesn't hold: its words come in.
+      const next = startQueuedWords(state, action.admission, action.text)
+      return next === state ? state : { ...next, readStarted: [...(state.readStarted ?? []).slice(-7), action.admission] }
+    }
     case 'liveIdle':
       // No turn runs there: no unnamed start is still to come.
       return state.readStarted ? { ...state, readStarted: undefined } : state
@@ -1711,6 +1718,13 @@ export function useChat(storedId: string | null, profile: string | undefined, se
           dispatch({ type: 'dropped', admission: held.admission })
           settled = true
         }
+      }
+      // A message the last read listed whose turn runs now, that nothing here holds (the chat was reopened
+      // while it waited, or another app sent it): its words come in once, from the queue.
+      const heldNow = new Set((transcriptRef.current.held ?? []).map(h => h.admission))
+      for (const row of was.queued) {
+        if (work.started.includes(row.admissionId) && !heldNow.has(row.admissionId))
+          dispatch({ type: 'queuedStarted', admission: row.admissionId, text: row.text })
       }
       // Holds the read could know of are settled now (released, dropped, or started by an unnamed message.start).
       for (const admission of [...heldAt.current.keys()]) if (!newer(admission) && !waiting.has(admission)) heldAt.current.delete(admission)

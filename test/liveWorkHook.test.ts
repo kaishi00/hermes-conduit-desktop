@@ -108,4 +108,20 @@ describe("applyLiveWork on hermes dashboard", () => {
     })
     expect(resumes()).toBeGreaterThan(opened)
   })
+
+  it("brings in a queued message's words when its turn starts and nothing here holds it", async () => {
+    const hook = renderHook(chatHook, {})
+    mounted.push(hook)
+    await settle()
+    // Reopened while it waited: the dock row came from the read, no bubble is held.
+    const listed = { ...noLiveWork, running: true, queued: [queued('adm-7')] }
+    act(() => hook.result().applyLiveWork(listed, noLiveWork, Date.now() + 1))
+    expect(userWords(hook.result().transcript)).toEqual([])
+    const turn = { ...noLiveWork, running: true, started: ['adm-7'] }
+    act(() => hook.result().applyLiveWork(turn, listed, Date.now() + 1))
+    expect(userWords(hook.result().transcript)).toEqual(['later'])
+    // Once: the next read naming it again draws nothing more.
+    act(() => hook.result().applyLiveWork(turn, listed, Date.now() + 1))
+    expect(userWords(hook.result().transcript)).toEqual(['later'])
+  })
 })
