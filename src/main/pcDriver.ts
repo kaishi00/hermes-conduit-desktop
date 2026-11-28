@@ -57,11 +57,16 @@ export const artifactFor = (platform = process.platform, arch = process.arch): A
 
 const folder = () => join(app.getPath('userData'), 'cua-driver', DRIVER_VERSION)
 
+/** Where the executable can sit: the target root, or the archive's own top-level folder. */
+export function driverCandidates(artifact: Artifact, root: string): string[] {
+  const archiveRoot = artifact.file.endsWith('.tar.gz') ? artifact.file.replace(/\.tar\.gz$/, '') : null
+  return [join(root, artifact.binary), ...(archiveRoot ? [join(root, archiveRoot, artifact.binary)] : [])]
+}
+
 export function driverPath(): string | null {
   const artifact = artifactFor()
   if (!artifact) return null
-  const path = join(folder(), artifact.binary)
-  return existsSync(path) ? path : null
+  return driverCandidates(artifact, folder()).find(existsSync) ?? null
 }
 
 export const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
