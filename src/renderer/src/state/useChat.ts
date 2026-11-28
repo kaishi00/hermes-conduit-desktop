@@ -79,6 +79,7 @@ type Action =
   /** The queue took a send behind the running turn, or a dock action settled one. */
   | { type: 'held'; key: string; admission: string }
   | { type: 'liveIdle' }
+  | { type: 'queueRead'; rows: { admission: string; sequence: number }[] }
   | { type: 'queuedStarted'; admission: string; text: string }
   | { type: 'released' | 'dropped' | 'started'; admission: string }
   | { type: 'edited'; admission: string; edited: string; text: string }
@@ -270,11 +271,16 @@ function reducer(state: TranscriptState, action: Action): TranscriptState {
     case 'queuedStarted': {
       // A read names the turn of a queued message this transcript doesn't hold: its words come in.
       const next = startQueuedWords(state, action.admission, action.text)
-      return next === state ? state : { ...next, readStarted: [...(state.readStarted ?? []).slice(-7), action.admission] }
+      if (next === state) return state
+      // Its unnamed start already came and no held send took it (hermes-conduit 3420).
+      if (state.otherStarts?.includes(action.admission)) return { ...next, otherStarts: state.otherStarts.filter(a => a !== action.admission) }
+      return { ...next, readStarted: [...(state.readStarted ?? []).slice(-7), action.admission] }
     }
+    case 'queueRead':
+      return { ...state, ahead: action.rows }
     case 'liveIdle':
       // No turn runs there: no unnamed start is still to come.
-      return state.readStarted ? { ...state, readStarted: undefined } : state
+      return state.readStarted || state.otherStarts ? { ...state, readStarted: undefined, otherStarts: undefined } : state
     case 'dropped':
       return dropHeld(state, action.admission)
     case 'edited':
@@ -1710,6 +1716,7 @@ export function useChat(storedId: string | null, profile: string | undefined, se
       const newer = (admission: string) => (heldAt.current.get(admission) ?? 0) > askedAt
       const waiting = new Set(work.queued.map(row => row.admissionId))
       setQueue(rows => [...work.queued, ...rows.filter(row => row.readOnly && !waiting.has(row.admissionId) && newer(row.admissionId))])
+      dispatch({ type: 'queueRead', rows: work.queued.map(row => ({ admission: row.admissionId, sequence: row.sequence })) })
       let settled = false
       for (const held of transcriptRef.current.held ?? []) {
         if (waiting.has(held.admission) || newer(held.admission)) continue

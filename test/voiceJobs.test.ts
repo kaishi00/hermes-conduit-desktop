@@ -144,6 +144,27 @@ describe('correcting a running job', () => {
   })
 })
 
+describe('a follow-up that may have landed', () => {
+  // hermes-conduit 3361 / desktop issue 732: no answer back may still have reached Hermes.
+  it('says it may have gone after a timeout, and not sent when it never left or Hermes refused', async () => {
+    const { GatewayError } = await import('../src/renderer/src/gateway')
+    const { followUpMayHaveGone } = await import('../src/renderer/src/state/voiceJobs')
+    expect(followUpMayHaveGone(new GatewayError('Request timed out'))).toBe(true)
+    expect(followUpMayHaveGone(new Error('socket closed'))).toBe(true)
+    expect(followUpMayHaveGone(new GatewayError('Not connected to Hermes.', undefined, 'not_connected'))).toBe(false)
+    expect(followUpMayHaveGone(new GatewayError('busy', -32000))).toBe(false)
+
+    const errors = [new GatewayError('Request timed out'), new GatewayError('Not connected to Hermes.', undefined, 'not_connected')]
+    const { jobs } = setup()
+    ;(jobs as unknown as { correct: () => Promise<never> }).correct = async () => {
+      throw errors.shift()
+    }
+    await jobs.start('Book a table for two')
+    expect(await jobs.followUp('job-1', 'make it three')).toMatchObject({ status: 'unknown', delivery: 'unknown' })
+    expect(await jobs.followUp('job-1', 'make it four')).toMatchObject({ status: 'not_sent' })
+  })
+})
+
 describe("GPT-Live's job follow-ups", () => {
   it('reads "Job 2:" and "Add to job 2:" at the start only', async () => {
     const { jobFollowUpMarker } = await import('../src/renderer/src/state/voiceJobs')

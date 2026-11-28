@@ -1211,13 +1211,14 @@ function registerIpc(): void {
   ipcMain.handle(IPC.rpc, async (event, method: string, params?: Record<string, unknown>): Promise<RpcOutcome> => {
     try {
       const through = connectionOf(event.sender.id)
-      if (!through) throw new Error('Not connected to that Hermes.')
+      if (!through) throw Object.assign(new Error('Not connected to that Hermes.'), { data: { reason: 'not_connected' } })
       const result = await through.rpc(method, params ?? {})
       eventRouter.noteOpened(event.sender.id, method, params, result)
       return { ok: true, result }
     } catch (error) {
       const code = (error as { code?: unknown }).code
-      const reason = jsonRpcErrorReason(error)
+      // A gateway refusal's reason, or one of Conduit's own (`not_connected`: never sent).
+      const reason = jsonRpcErrorReason(error) ?? (error as { data?: { reason?: unknown } }).data?.reason
       return {
         ok: false,
         error: error instanceof Error ? error.message : String(error),

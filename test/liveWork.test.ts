@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addPendingUser, applyEvent, emptyTranscript, holdSent, releaseHeld } from '../src/renderer/src/state/transcript'
+import { addPendingUser, applyEvent, emptyTranscript, holdSent, otherStartAhead, releaseHeld, type TranscriptState } from '../src/renderer/src/state/transcript'
 import { forwardedRow, liveWorkActive, liveWorkPath, noLiveWork, parseLiveWork } from '../src/renderer/src/state/liveWork'
 
 describe('a chat’s turn running in the gateway, on hermes dashboard', () => {
@@ -59,5 +59,30 @@ describe('a chat’s turn running in the gateway, on hermes dashboard', () => {
     state = applyEvent(state, { type: 'message.start', payload: {} })
     expect(state.held?.map(h => h.admission)).toEqual(['adm-2'])
     expect(state.readStarted).toEqual([])
+  })
+
+  // Desktop issue 732 (hermes-conduit 3420, 3444): the start behind another app's queued message is that one's.
+  it('leaves a held send waiting when the read listed another app’s message ahead of it', () => {
+    let state = holdSent(addPendingUser({ ...emptyTranscript }, 'mine', [], 'u-2'), 'u-2', 'adm-2')
+    state = { ...state, ahead: [{ admission: 'adm-2', sequence: 2 }, { admission: 'adm-1', sequence: 1 }] }
+    expect(otherStartAhead(state, 'adm-2')).toBe('adm-1')
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    expect(state.held?.map(h => h.admission)).toEqual(['adm-2'])
+    expect(state.otherStarts).toEqual(['adm-1'])
+    // adm-1's start is counted once: the next unnamed start is adm-2's.
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    expect(state.held ?? []).toEqual([])
+    expect(state.items).toMatchObject([{ kind: 'user', text: 'mine' }])
+  })
+
+  it('records another app’s start with nothing held, so a send held after it keeps its own', () => {
+    let state: TranscriptState = { ...emptyTranscript, ahead: [{ admission: 'adm-1', sequence: 1 }] }
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    expect(state.otherStarts).toEqual(['adm-1'])
+    state = holdSent(addPendingUser(state, 'mine', [], 'u-2'), 'u-2', 'adm-2')
+    state = { ...state, ahead: [{ admission: 'adm-2', sequence: 2 }] }
+    expect(otherStartAhead(state, 'adm-2')).toBeUndefined()
+    state = applyEvent(state, { type: 'message.start', payload: {} })
+    expect(state.held ?? []).toEqual([])
   })
 })

@@ -330,6 +330,16 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export const jobPrompt = (instructions: string) =>
   `[Background job started from a Conduit voice conversation. Nobody is watching this chat live, so work on it on your own. When you are done, end your final message with a plain-language summary that can be read aloud: what you found or did, with the key details.]\n\n${instructions}`
 
+/**
+ * Whether a request that failed may still have reached Hermes: one with no answer back (a timeout, a
+ * dropped connection). One Hermes answered with an error, or one that never left because Conduit
+ * wasn't connected, didn't.
+ */
+export function followUpMayHaveGone(error: unknown): boolean {
+  if (!(error instanceof GatewayError)) return true
+  return error.code === undefined && error.reason !== 'not_connected'
+}
+
 export class VoiceJobs {
   jobs: VoiceJob[] = []
   private count = 0
@@ -477,7 +487,7 @@ export class VoiceJobs {
       } catch (e) {
         this.surface.discard(sid, text, e)
         // No answer back (a timeout, a dropped connection): Hermes may have it.
-        if (!(e instanceof GatewayError && e.code !== undefined)) deliveryUnknown = true
+        if (followUpMayHaveGone(e)) deliveryUnknown = true
         throw e
       }
       // Filed under Voice Jobs, beneath the call's chat; the plugin archives it once Hermes answers.
@@ -524,6 +534,15 @@ export class VoiceJobs {
     try {
       outcome = await this.correct(job.sid, `(voice) ${text}`, this.profile)
     } catch (e) {
+      // No answer back (a timeout, a dropped connection): the redirect may have reached Hermes, so
+      // the call hears it may have gone, as for a job's own submit (hermes-conduit 3361). One Hermes
+      // refused, or one that never left (not connected), wasn't sent.
+      if (followUpMayHaveGone(e))
+        return {
+          status: 'unknown',
+          delivery: 'unknown',
+          message: `The connection dropped while Conduit passed the user's words to ${quoted}, so Hermes may have them. Tell the user it may have gone through, and don't send it again unless they ask; the result still comes back later on this call.`
+        }
       return { status: 'not_sent', error: message(e) }
     }
     if (outcome === 'redirected')

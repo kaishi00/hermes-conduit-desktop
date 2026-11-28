@@ -80,7 +80,7 @@ export function useReplySpeeds(
       if (stillAsked()) setRead({ scope: asked, speeds: answer, fresh: true })
     } catch {
       // An older plugin (404), a chat Hermes has no row for yet, or a failed read: the saved rows' speeds
-      // stay; the newest turn's, which may be an earlier turn's, goes, and the composer's chip stays dimmed.
+      // stay; the newest turn's goes, and the composer's chip stays dimmed.
       if (stillAsked()) setRead(was => (was.scope === asked ? { ...dropUnsaved(was), fresh: false } : was))
     }
   }, [sessionId, profile])
