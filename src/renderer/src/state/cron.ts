@@ -55,6 +55,8 @@ export interface CronRun {
   /** Epoch milliseconds. */
   startedAt?: number
   active: boolean
+  /** A run with no conversation, only its output: a script's fire, or a kind this app doesn't know (issue 3455). */
+  outputOnly: boolean
 }
 
 const text = (value: unknown): string | undefined => {
@@ -140,7 +142,8 @@ export function parseRuns(raw: unknown): CronRun[] {
     // names no session, and a kind this app doesn't know is no chat either
     // (issue 3455).
     const source = text(row.source) ?? text(outer.source)
-    const id = !source || source === 'cron' ? rowId : undefined
+    const outputOnly = !!source && source !== 'cron'
+    const id = outputOnly ? undefined : rowId
     const seconds = Number(row.started_at ?? row.last_active)
     runs.push({
       key: rowId ?? `run-${index}`,
@@ -150,7 +153,8 @@ export function parseRuns(raw: unknown): CronRun[] {
       model: text(row.model),
       profile: text(row.profile),
       startedAt: Number.isFinite(seconds) && seconds > 0 ? (seconds > 10_000_000_000 ? seconds : seconds * 1000) : undefined,
-      active: row.is_active === true
+      active: row.is_active === true,
+      outputOnly
     })
   })
   return runs

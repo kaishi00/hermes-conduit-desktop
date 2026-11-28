@@ -4232,6 +4232,11 @@ html[data-window='quick'] body {
   user-select: text;
 }
 
+.job-run:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
 /* A script's run: its output, not a conversation (issue 3455). */
 .job-run-output {
   padding: 12px 14px;
