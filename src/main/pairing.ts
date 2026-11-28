@@ -77,6 +77,8 @@ export class Pairing {
   private signing: Pick<PairKeys, 'signPrivate' | 'signPublic'> | null = null
   private received: Received | null = null
   private run = 0
+  /** The last code's take-back, which a new code waits for so a late DELETE can't remove its sender. */
+  private cleaning: Promise<void> = Promise.resolve()
   private expiry: ReturnType<typeof setTimeout> | null = null
   private readonly mailbox: string
 
@@ -91,6 +93,7 @@ export class Pairing {
   /** Makes the inbox and answers the link the QR code shows. */
   async start(): Promise<{ ok: true; link: string; expires: number } | { ok: false; error: string }> {
     await this.cancel()
+    await this.cleaning
     const mine = ++this.run
     const fresh = makePairKeys()
     this.signing ??= { signPrivate: fresh.signPrivate, signPublic: fresh.signPublic }
@@ -153,12 +156,14 @@ export class Pairing {
     this.inbox = null
     this.received = null
     if (!keys || !inbox) return
-    if (options.deleteInbox) {
-      this.signing = null
-      await this.owner('DELETE', `/v1/inboxes/${inbox}`, undefined, keys).catch(() => undefined)
-    } else {
-      await this.owner('DELETE', `/v1/inboxes/${inbox}/senders/${SENDER}`, undefined, keys).catch(() => undefined)
-    }
+    if (options.deleteInbox) this.signing = null
+    const path = options.deleteInbox ? `/v1/inboxes/${inbox}` : `/v1/inboxes/${inbox}/senders/${SENDER}`
+    const done = this.owner('DELETE', path, undefined, keys).then(
+      () => undefined,
+      () => undefined
+    )
+    this.cleaning = done
+    await done
   }
 
   private async poll(mine: number): Promise<void> {

@@ -26,6 +26,32 @@ function fakeMailbox() {
 }
 
 describe('Pairing', () => {
+  it('a new code waits for the last one’s take-back, so a late DELETE can’t remove its sender', async () => {
+    const box = fakeMailbox()
+    const order: string[] = []
+    let release!: () => void
+    const held = new Promise<void>(r => (release = r))
+    const fetch = async (url: string, init: { method: string; signal?: AbortSignal }) => {
+      const path = new URL(url).pathname
+      if (init.method === 'DELETE' && path.endsWith('/senders/phone') && order.includes('PUT') && !order.includes('DELETE (held)')) {
+        order.push('DELETE (held)')
+        await held
+      } else if (init.method !== 'GET') order.push(init.method)
+      return box.fetch(url, init)
+    }
+    const pairing = new Pairing({ fetch: fetch as never, mailbox: 'https://mail.test', onEvent: () => {}, signIn: async () => ({ ok: true }), switchHost: () => true })
+    expect((await pairing.start()).ok).toBe(true)
+    const cancelling = pairing.cancel()
+    const restarting = pairing.start()
+    await new Promise(r => setTimeout(r, 30))
+    expect(order.filter(m => m === 'PUT')).toHaveLength(1)
+    release()
+    await cancelling
+    expect((await restarting).ok).toBe(true)
+    expect(order.lastIndexOf('PUT')).toBeGreaterThan(order.indexOf('DELETE (held)'))
+    await pairing.cancel()
+  })
+
   it('keeps one inbox across new codes and takes the old code back', async () => {
     const box = fakeMailbox()
     const events: unknown[] = []
