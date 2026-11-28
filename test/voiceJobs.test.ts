@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { GatewayError } from '../src/renderer/src/gateway'
 import {
   jobPrompt,
   MAX_SAVED_JOBS,
   SAVED_JOB_MAX_AGE_MS,
   VoiceJobs,
   completionPrompt,
+  correctionMayHaveGone,
   jobTitle,
   listResult,
   mergeLedger,
@@ -17,7 +19,7 @@ import {
 
 type Event = { type: string; session_id?: string; payload?: unknown }
 
-function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 'redirected') {
+function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 'redirected', correctionError?: Error) {
   const corrected: [string, string, string | undefined][] = []
   const adopted: [string | undefined, string, string, string][] = []
   const calls: [string, Record<string, unknown>][] = []
@@ -41,6 +43,7 @@ function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 
     },
     async (sid, text, profile) => {
       corrected.push([sid, text, profile])
+      if (correctionError) throw correctionError
       return correction
     },
     async (profile, sid, title, goal) => {
@@ -237,5 +240,24 @@ describe('jobs kept past their call', () => {
     expect(replyAfter({ messages: [{ role: 'assistant', text: '', tool_calls: [{ id: 'x' }], timestamp: 200 }] }, 100_000)).toBeNull()
     expect(replyAfter({ messages: [{ role: 'tool', text: 'x', timestamp: 200 }] }, 100_000)).toBeNull()
     expect(replyAfter({ messages: [{ role: 'assistant', content: [{ text: 'Done ' }, { text: 'now' }], timestamp: 200 }] }, 100_000)).toBe('Done now')
+  })
+})
+
+describe('a follow-up whose redirect may have landed', () => {
+  it('reports unknown after a timeout, not_sent when nothing left', async () => {
+    const timeout = setup(false, 'redirected', Object.assign(new Error('request timed out'), { name: 'TimeoutError' }))
+    await timeout.jobs.start('Check the render')
+    expect(await timeout.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'unknown' })
+    const refused = setup(false, 'redirected', new GatewayError('refused', -32000))
+    await refused.jobs.start('Check the render')
+    expect(await refused.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
+    const dropped = setup(false, 'redirected', new Error('WebSocket closed'))
+    await dropped.jobs.start('Check the render')
+    expect(await dropped.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'unknown' })
+    const offline = setup(false, 'redirected', new Error('Not connected to Hermes.'))
+    await offline.jobs.start('Check the render')
+    expect(await offline.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
+    expect(correctionMayHaveGone(new Error('WebSocket closed'))).toBe(true)
+    expect(correctionMayHaveGone(new Error('Not connected to Hermes.'))).toBe(false)
   })
 })

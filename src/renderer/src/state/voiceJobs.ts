@@ -27,6 +27,13 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 
 const withProfile = (path: string, profile?: string) => (profile && profile !== 'default' ? `${path}?profile=${encodeURIComponent(profile)}` : path)
 
+/** A correction may have reached Hermes unless the gateway gave a definitive answer (issue 732). */
+export function correctionMayHaveGone(error: unknown): boolean {
+  const text = String((error as { message?: unknown } | null)?.message ?? error).toLowerCase()
+  if (text.includes('not connected to hermes') || text.includes('gateway not connected')) return false
+  return !(error instanceof GatewayError && error.code !== undefined)
+}
+
 /** The plugin keeps a voice call's jobs in its bot's Work panel (notifier `work-adopt`). */
 export const ADOPT_CAPABILITY = 'work-adopt'
 export const ADOPT_PATH = '/api/plugins/conduit_push/workstreams/adopt'
@@ -524,6 +531,9 @@ export class VoiceJobs {
     try {
       outcome = await this.correct(job.sid, `(voice) ${text}`, this.profile)
     } catch (e) {
+      if (correctionMayHaveGone(e)) {
+        return { status: 'unknown', message: `The redirect to ${quoted} may have reached Hermes; don't send it again unless the user asks.` }
+      }
       return { status: 'not_sent', error: message(e) }
     }
     if (outcome === 'redirected')
