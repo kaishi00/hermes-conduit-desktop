@@ -338,8 +338,10 @@ export function commentLines(lines: readonly string[]): boolean[] {
         at = end + 3
       } else if (element) {
         at = element.index + element[0].length
-        // `<script/>` holds no text.
-        if (element[0].endsWith('/>')) continue
+        // `<script/>` holds no text. Only an element where a page's tags go counts: starting the line or right after
+        // another tag, never prose naming it (`The <script> tag`) or an attribute's value (`title="<script>"`).
+        const before = text.slice(0, element.index).trimEnd()
+        if (element[0].endsWith('/>') || (before && !before.endsWith('>'))) continue
         const name = element[1]!.toLowerCase()
         const after = rawTextEnd(name, text, at)
         if (after < 0) {

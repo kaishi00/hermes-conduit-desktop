@@ -233,6 +233,9 @@ describe('text tags in a reply', () => {
     const script = ['<details>', '<summary>S</summary>', '<script>', 'var m = "<!--";', '</details>', '</script>', '</details>', 'After.']
     expect(commentLines(script)).toEqual([false, false, false, true, true, false, false, false])
     expect(commentLines(['<textarea>', '<!--', '</textarea>', '<title><!--</title>', '<details>'])).toEqual([false, true, false, false, false])
+    // Prose naming a script, or an attribute holding one, opens no script text: a comment after it still counts.
+    expect(commentLines(['The <script> tag runs JavaScript.', '<!-- note', '</details>', '-->'])).toEqual([false, false, true, false])
+    expect(commentLines(['<div title="<script>"> <!-- note', '</details>', '-->'])).toEqual([false, true, false])
     const html = draw(lines.join('\n'))
     expect(html).toContain('reply-fold')
     // The fold runs to the real close: More. is inside it, After. outside.
