@@ -90,7 +90,7 @@ export function setPcControl(change: Partial<PcControlSettings> & { bot?: unknow
   const clean: Partial<PcControlSettings> = {}
   if (typeof change.adopt === 'string' && change.adopt) clean.bots = adoptBareBots(pcControlSettings().bots, change.adopt).slice(0, 64)
   const bot = change.bot as { name?: unknown; host?: unknown; on?: unknown } | undefined
-  if (bot && typeof bot.name === 'string' && typeof bot.host === 'string' && bot.host && typeof bot.on === 'boolean') {
+  if (bot && typeof bot.name === 'string' && bot.name && typeof bot.host === 'string' && bot.host && typeof bot.on === 'boolean') {
     const key = pcAllowKey(bot.host, bot.name)
     const now = clean.bots ?? pcControlSettings().bots
     clean.bots = (bot.on ? [...new Set([...now, key])] : now.filter(entry => entry !== key)).slice(0, 64)

@@ -346,6 +346,14 @@ describe('barPage', () => {
 })
 
 describe('the allow list, per dashboard', () => {
+  it('takes no tick without a bot’s name (desktop#740 review)', async () => {
+    const settings = await import('../src/main/settings')
+    const choose = vi.mocked(settings.choosePcControl)
+    choose.mockClear()
+    setPcControl({ bot: { name: '', host: 'https://a.example', on: true } } as never)
+    expect(choose.mock.calls.at(-1)?.[0]).not.toHaveProperty('bots')
+  })
+
   it('runs nothing for a same-named bot on a dashboard it wasn’t ticked on', async () => {
     drive.path = '/driver'
     await expect(runPcRequest(request('s30', { needs_ok: false, host: 'https://b.example' }))).resolves.toEqual({ ok: false, code: 'off' })

@@ -193,22 +193,42 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
   shownHost.current = hostName
 
   // A list saved before it was kept per dashboard goes to the one showing now (shared/pcControl.ts).
+  // Tried again until it holds: a write that failed would leave every tick doing nothing (desktop#740 review).
   const bare = !!state && hasBareBots(state.bots)
   useEffect(() => {
-    if (connected && host && bare) void window.conduit.pcControl.set({ adopt: host }).catch(() => undefined)
+    if (!connected || !host || !bare) return
+    let live = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const again = () => {
+      if (live) timer = setTimeout(adopt, RETRY_MS)
+    }
+    const adopt = () =>
+      void window.conduit.pcControl.set({ adopt: host }).then(next => {
+        if (hasBareBots(next.bots)) again()
+      }, again)
+    adopt()
+    return () => {
+      live = false
+      if (timer) clearTimeout(timer)
+    }
   }, [connected, host, bare])
 
   useEffect(() => {
     if (!connected || !state || !key) return
     const names = key.split('\n')
     let live = true
+    // The asks on screen for this dashboard, taken away when it goes (desktop#740 review).
+    const asking = new Set<string>()
     const loops = names.map(async profile => {
       const status = await askPluginStatus(() => gateway.http('GET', withQuery(STATUS_PATH, profile), undefined, 12_000)).catch(() => null)
       if (!live || (status && status.state === 'reported' && !serves(status, [PC_CAPABILITY]))) return
       offered.current.add(profile)
       while (live) {
         let requests: PcRequest[] = []
+        let stamped = true
         try {
+          // The stop count before asking: Stop pressed while the poll is held open stops what it brings too.
+          let gen = (await window.conduit.pcControl.state().catch(() => null))?.stops
           const body = await gateway.http(
             'GET',
             pcPath('/next', profile, { computer: state.id, name: state.shownName, platform: state.platform, wait: String(PC_WAIT_S) }),
@@ -216,10 +236,15 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
             (PC_WAIT_S + 10) * 1000
           )
           requests = requestsFrom(body, profile, titles.current.get(profile) ?? profile, host, shownHost.current)
-          // Stop pressed elsewhere (the phone): the bar goes before anything new runs.
-          if ((body as { stopped?: unknown } | null)?.stopped === true) window.conduit.pcControl.stoppedElsewhere()
-          // Stop pressed from here on stops the whole batch, not just the action running then.
-          const gen = (await window.conduit.pcControl.state().catch(() => null))?.stops
+          // Stop pressed elsewhere (the phone): the bar goes before anything new runs. The plugin already
+          // answered what was waiting, so what came with it counts from that Stop on.
+          if ((body as { stopped?: unknown } | null)?.stopped === true) {
+            window.conduit.pcControl.stoppedElsewhere()
+            gen = (await window.conduit.pcControl.state().catch(() => null))?.stops
+          }
+          // Stop pressed from here on stops the whole batch, not just the action running then. A count that
+          // couldn't be read asks and runs nothing (desktop#740 review).
+          stamped = typeof gen === 'number'
           if (typeof gen === 'number') requests = requests.map(request => ({ ...request, gen }))
         } catch {
           await new Promise(resolve => setTimeout(resolve, RETRY_MS))
@@ -231,11 +256,14 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
           try {
             // Stopped since this batch came in: answer stopped without asking first.
             const stops = typeof request.gen === 'number' ? (await window.conduit.pcControl.state().catch(() => null))?.stops : undefined
-            const still = batchStill(request, stops)
+            const still = stamped ? batchStill(request, stops) : 'unknown'
             if (still === 'stopped') result = { ok: false, code: 'stopped' }
             else if (still === 'unknown') result = { ok: false, code: 'failed', message: 'Conduit couldn’t read whether Stop was pressed.' }
             else {
-              const answer = request.needs_ok ? await askEverywhere(request, askSide(profile, state.id)) : 'allowed'
+              asking.add(request.session)
+              const answer = request.needs_ok ? await askEverywhere(request, askSide(profile, state.id)).finally(() => asking.delete(request.session)) : 'allowed'
+              // Left this dashboard while it asked: nothing runs, and no answer goes to the one now showing.
+              if (!live) return
               result =
                 answer === 'allowed'
                   ? await window.conduit.pcControl.run(request)
@@ -252,6 +280,7 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
     })
     return () => {
       live = false
+      for (const session of asking) window.conduit.pcControl.closeAsk(session)
       void Promise.allSettled(loops)
     }
   }, [connected, host, key, state?.id, state?.shownName, state?.platform])
