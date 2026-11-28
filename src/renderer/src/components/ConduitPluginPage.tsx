@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import type { PluginRelease } from '@shared/ipc'
 import {
@@ -114,6 +114,12 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   const [, tick] = useState(0)
   // A row from another dashboard, or a held scan whose job moved on, goes (desktop#289, #318).
   const current = useUpdateRow()
+  // A run started from another dashboard's page goes on once this is the one on screen: it stays this page's.
+  const own = dashboardHost()
+  const farHere = useHostPluginRows().get(own)
+  const farRunning = farHere?.update.phase === 'updating'
+  // Its held scan waits on its own Update Anyway, as this dashboard's does.
+  const farBusy = farRunning || farHere?.update.phase === 'scanHeld'
 
   const refresh = useCallback(async () => {
     setChecking(true)
@@ -132,6 +138,11 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
     const timer = setInterval(() => tick(n => n + 1), 1000)
     return () => clearInterval(timer)
   }, [current.phase])
+  const farRan = useRef(false)
+  useEffect(() => {
+    if (farRan.current && !farRunning) void refresh()
+    farRan.current = farRunning
+  }, [farRunning, refresh])
   useEffect(() => {
     // No plugin, or an update the host couldn't run: the steps open by themselves.
     if (status.state === 'missing' || current.phase === 'failed') setShowsCommands(true)
@@ -145,7 +156,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   const notes =
     available && latest ? releaseNotes(parseChangelog(release.changelog), running ?? (status.state === 'reported' ? status.version : null), latest) : null
   const canUpdate = canUpdateHere(status)
-  const showsAction = current.phase !== 'updating' && (available || restart)
+  const showsAction = current.phase !== 'updating' && !farBusy && (available || restart)
 
   const statusText = (() => {
     if (status.state === 'unknown')
@@ -259,11 +270,21 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
           onDismiss={() => setUpdate({ phase: 'idle' })}
           onAcceptScan={canUpdate ? () => void runUpdate(() => void refresh(), true, latest) : null}
         />
+        {farHere && farHere.update.phase !== 'idle' ? (
+          <UpdateRow
+            state={farHere.update}
+            capabilities={status.state === 'reported' ? status.capabilities : null}
+            startedAt={farHere.startedAt}
+            showsWait
+            onDismiss={() => dismissHostUpdate(own)}
+            onAcceptScan={canUpdate ? () => void runHostUpdate(own, true, latest) : null}
+          />
+        ) : null}
       </section>
 
       <OtherDashboards
         latest={latest}
-        thisNeedsUpdate={canUpdate && current.phase !== 'updating' && current.phase !== 'scanHeld' && (available || restart)}
+        thisNeedsUpdate={canUpdate && current.phase !== 'updating' && !farBusy && current.phase !== 'scanHeld' && (available || restart)}
         onUpdateThis={() => void runUpdate(() => void refresh(), false, latest)}
       />
 
@@ -425,20 +446,25 @@ function OtherDashboards({ latest, thisNeedsUpdate, onUpdateThis }: { latest: st
     for (const host of liveKey ? liveKey.split('\n') : []) if (!hostUpdateRunning(host)) void readHostPlugin(host)
   }, [liveKey])
   const keptKey = kept.map(h => h.url).join('\n')
-  useEffect(() => forgetHostPluginRows(keptKey ? keptKey.split('\n') : []), [keptKey])
+  // The one on screen keeps a row it brought home (a run started before the switch).
+  useEffect(() => forgetHostPluginRows([...(keptKey ? keptKey.split('\n') : []), own]), [keptKey, own])
   const anyRunning = kept.some(h => rows.get(h.url)?.update.phase === 'updating')
   useEffect(() => {
     if (!anyRunning) return
     const timer = setInterval(() => tick(n => n + 1), 1000)
     return () => clearInterval(timer)
   }, [anyRunning])
-  if (!kept.length) return null
   const due = live.filter(host => {
     const row = rows.get(host)
     // A held scan waits on its own Update Anyway.
     return !!row && row.update.phase !== 'updating' && row.update.phase !== 'scanHeld' && hostNeedsUpdate(row, latest)
   })
   const allCount = due.length + (thisNeedsUpdate ? 1 : 0)
+  // Only Update All's button opens its confirmation: one left open while the count fell doesn't come back by itself.
+  useEffect(() => {
+    if (allCount < 2) setConfirmingAll(false)
+  }, [allCount])
+  if (!kept.length) return null
   return (
     <section className="pset-section">
       <h2>{t('Other dashboards')}</h2>
@@ -493,6 +519,10 @@ function OtherDashboardRow({ host, row, latest }: { host: KeptHost; row: HostPlu
   const running = runningVersion(status)
   const canUpdate = host.state === 'live' && canUpdateHere(status)
   const showsAction = update.phase !== 'updating' && update.phase !== 'scanHeld' && (available || restart)
+  // Update All may start its run: a confirmation left open doesn't come back after it.
+  useEffect(() => {
+    if (!showsAction) setConfirming(false)
+  }, [showsAction])
   const line = (() => {
     if (host.state !== 'live') return keptStateLabel(host.state)
     if (status.state === 'unknown') return row?.checking ? t("Checking this dashboard's notifier…") : t("Couldn't reach this dashboard's notifier.")
@@ -510,6 +540,13 @@ function OtherDashboardRow({ host, row, latest }: { host: KeptHost; row: HostPlu
         <span className={available || restart ? 'plugin-version attention' : 'plugin-version meta'}>{running ?? '—'}</span>
       </div>
       <p className="meta">{line}</p>
+      {status.state === 'reported'
+        ? status.degraded.map(code => (
+            <p key={code} className="plugin-degraded">
+              ⚠ {degradedText(code)}
+            </p>
+          ))
+        : null}
       {showsAction ? (
         confirming ? (
           <div className="plugin-confirm">
@@ -517,9 +554,11 @@ function OtherDashboardRow({ host, row, latest }: { host: KeptHost; row: HostPlu
               <strong>{restart && !available ? t('Finish the update?') : t('Update the Conduit plugin?')}</strong>
             </p>
             <p className="meta">
-              {t(
-                "Hermes updates the plugin on the host, then restarts its gateway and dashboard once running chats finish. You can close Conduit: you'll get a notification when it's done."
-              )}
+              {status.state === 'reported' && status.managedBy !== null
+                ? t('The new plugin is already on the host. Hermes restarts its gateway and dashboard to run it, once running chats finish.')
+                : t(
+                    "Hermes updates the plugin on the host, then restarts its gateway and dashboard once running chats finish. You can close Conduit: you'll get a notification when it's done."
+                  )}
             </p>
             <div className="pset-actions">
               <button className="secondary" onClick={() => setConfirming(false)}>
