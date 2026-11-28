@@ -39,7 +39,10 @@ export interface CronJob {
   host?: string
 }
 
-/** One run of a job: an agent run is a conversation (`id`); a script's run has only its output. */
+/**
+ * One run of a job: an agent run is a conversation (`id`); a script's run has
+ * only its output (`preview`), and no `id` to open (issue 3455).
+ */
 export interface CronRun {
   key: string
   id?: string
@@ -131,10 +134,16 @@ export function parseRuns(raw: unknown): CronRun[] {
     if (!value || typeof value !== 'object') return
     const outer = value as Record<string, unknown>
     const row = (outer.session && typeof outer.session === 'object' ? outer.session : outer) as Record<string, unknown>
-    const id = text(row.id) ?? text(row.session_id)
+    const rowId = text(row.id) ?? text(row.session_id)
+    // Only an agent run (`source` "cron", or a row that doesn't say) is a
+    // conversation. A `cron_output` row's id (`cron_output:<job>:<time>`)
+    // names no session, and a kind this app doesn't know is no chat either
+    // (issue 3455).
+    const source = text(row.source) ?? text(outer.source)
+    const id = !source || source === 'cron' ? rowId : undefined
     const seconds = Number(row.started_at ?? row.last_active)
     runs.push({
-      key: id ?? `run-${index}`,
+      key: rowId ?? `run-${index}`,
       id,
       title: text(row.title) ?? text(row.name),
       preview: text(row.preview) ?? text(row.summary),

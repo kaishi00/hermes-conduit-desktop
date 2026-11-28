@@ -79,6 +79,21 @@ describe('scheduled jobs', () => {
     expect(runs[1]).toMatchObject({ key: 'run-1', id: undefined, title: 'Script output' })
   })
 
+  it('opens only a run with a session: a script’s output row has an id that names none (issue 3455)', () => {
+    const runs = parseRuns({
+      runs: [
+        { id: 'local-409c9669', source: 'cron', title: 'IPv6 sweep' },
+        { id: 'cron_output:4f00afd560b2:2026-11-28_10-10-45', source: 'cron_output', preview: '**Status:** silent (empty output)' },
+        { source: 'cron_output', session: { id: 'cron_output:4f00afd560b2:exec:3' } },
+        { id: 'cron_4f00afd560b2_20261128_095300' },
+        { id: 'future-row', source: 'something_new' }
+      ]
+    })
+    expect(runs.map(run => run.id)).toEqual(['local-409c9669', undefined, undefined, 'cron_4f00afd560b2_20261128_095300', undefined])
+    expect(runs[1]).toMatchObject({ key: 'cron_output:4f00afd560b2:2026-11-28_10-10-45', preview: '**Status:** silent (empty output)' })
+    expect(new Set(runs.map(run => run.key)).size).toBe(5)
+  })
+
   it('names the profile in a path, the default one too', () => {
     expect(cronPath('/api/cron/jobs', 'all')).toBe('/api/cron/jobs?profile=all')
     expect(cronPath('/api/cron/jobs/a/runs?limit=20', 'default')).toBe('/api/cron/jobs/a/runs?limit=20&profile=default')
