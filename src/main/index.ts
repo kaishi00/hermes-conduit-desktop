@@ -965,7 +965,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pairCancel, () => pairing.cancel())
   // Sign-ins leave this computer only from its own window, and only once they're unlocked.
   ipcMain.handle(IPC.phoneSignInStart, async event => {
-    if (!fromMain(event)) return { ok: false, error: 'refused' }
+    if (!fromMain(event)) return { ok: false, error: refused.message }
     if (!(await unlock())) return { ok: false, error: t('Unlock your Hermes sign-ins first.') }
     return phoneSignIn.start()
   })

@@ -74,6 +74,42 @@ describe('PhoneSignIn', () => {
     expect(box.calls.some(c => c.method === 'DELETE' && c.path === `/v1/inboxes/${link.inbox}`)).toBe(true)
   })
 
+  /** A sign-in showing the phone's words, with the phone's own keys. */
+  async function received(hosts: () => SavedConnection[], phoneKey?: Buffer) {
+    const box = fakeMailbox()
+    const events: { phase: string; words?: string[]; hosts?: { url: string; sendable: boolean }[] }[] = []
+    const signIn = new PhoneSignIn({ fetch: box.fetch as never, mailbox: 'https://mail.test', onEvent: e => events.push(e), hosts })
+    const started = await signIn.start()
+    if (!started.ok) throw new Error(started.error)
+    const link = parsePairLink(started.link, SIGNIN_LINK_SCHEME)!
+    const phone = makePairKeys()
+    const phoneInbox = inboxId(phone.signPublic)
+    const request = { v: 1, want: 'signins', reply: { inbox: phoneInbox, token: b64u(Buffer.alloc(32, 7)), key: b64u(phoneKey ?? phone.sealPublic) } }
+    box.leave(sealForComputer(Buffer.from(JSON.stringify(request)), fromB64u(link.key), link.inbox))
+    for (let i = 0; i < 100 && !events.length; i++) await new Promise(r => setTimeout(r, 10))
+    return { box, events, signIn, phoneInbox }
+  }
+
+  it('lists the hosts again when a picked one was signed out, and sends nothing', async () => {
+    let hosts = HOSTS
+    const { box, events, signIn, phoneInbox } = await received(() => hosts)
+    hosts = HOSTS.filter(h => h.url !== 'http://100.64.0.2:9119')
+    await signIn.send(['https://hermes.example', 'http://100.64.0.2:9119'])
+    expect(events.map(e => e.phase)).toEqual(['received', 'received'])
+    expect(events[1]!.words).toEqual(events[0]!.words)
+    expect(events[1]!.hosts!.map(h => h.url)).toEqual(['https://hermes.example', 'https://sso.example'])
+    expect(box.calls.some(c => c.method === 'POST' && c.path === `/v1/inboxes/${phoneInbox}/envelopes`)).toBe(false)
+    await signIn.cancel()
+  })
+
+  it('ends as a failure when the phone’s key can’t be sealed to', async () => {
+    // An all-zero X25519 key is a low-order point: the agreement refuses it.
+    const { box, events, signIn, phoneInbox } = await received(() => HOSTS, Buffer.alloc(32))
+    await signIn.send(['https://hermes.example'])
+    expect(events.at(-1)!.phase).toBe('failed')
+    expect(box.calls.some(c => c.method === 'POST' && c.path === `/v1/inboxes/${phoneInbox}/envelopes`)).toBe(false)
+  })
+
   it('reads only a well-formed request', () => {
     const key = b64u(Buffer.alloc(32, 1))
     const inbox = 'a'.repeat(43)
