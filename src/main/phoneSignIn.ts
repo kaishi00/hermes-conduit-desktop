@@ -73,6 +73,7 @@ export class PhoneSignIn {
   /** Kept for the app's run, as in pairing.ts: the mailbox makes only a few inboxes an hour. */
   private signing: Pick<PairKeys, 'signPrivate' | 'signPublic'> | null = null
   private request: PhoneRequest | null = null
+  private words: string[] = []
   private run = 0
   private expiry: ReturnType<typeof setTimeout> | null = null
   private readonly mailbox: string
@@ -124,7 +125,11 @@ export class PhoneSignIn {
       .filter(h => picked.has(h.url))
       .map(sendableHost)
       .filter((h): h is Record<string, unknown> => h !== null)
-    if (!hosts.length) return
+    if (!hosts.length) {
+      // The picked hosts were signed out meanwhile: say so rather than leave the button dead.
+      this.deps.onEvent({ phase: 'received', words: this.words, hosts: this.listed() })
+      return
+    }
     this.request = null
     this.deps.onEvent({ phase: 'sending' })
     const envelope = sealForPhone(Buffer.from(JSON.stringify({ v: 1, hosts })), request.key, request.inbox)
@@ -189,7 +194,8 @@ export class PhoneSignIn {
             const request = readRequest(opened.plaintext.toString('utf8'))
             if (!request) continue
             this.request = request
-            this.deps.onEvent({ phase: 'received', words: pairWords(keys.sealPublic, opened.ephemeralPublic), hosts: this.listed() })
+            this.words = pairWords(keys.sealPublic, opened.ephemeralPublic)
+            this.deps.onEvent({ phase: 'received', words: this.words, hosts: this.listed() })
             return
           } catch {
             // Not for this key: leave it.
