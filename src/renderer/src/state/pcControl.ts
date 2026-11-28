@@ -80,6 +80,11 @@ export interface AskSide {
  * to the plugin, which says whether the phone got there first. An ask that
  * ran out or was taken back is a no.
  */
+/** Stop wins only when both counts are known and differ; a failed state read falls back to asking (issue 735). */
+export function stoppedSince(gen: number | undefined, stops: number | undefined): boolean {
+  return typeof gen === 'number' && typeof stops === 'number' && stops !== gen
+}
+
 export async function askEverywhere(request: PcRequest, side: AskSide): Promise<boolean> {
   const local = side.local(request)
   if (!request.ask) return (await local) === 'allowed'
@@ -181,7 +186,7 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
           try {
             // Stopped since this batch came in: answer stopped without asking first.
             const stops = typeof request.gen === 'number' ? (await window.conduit.pcControl.state().catch(() => null))?.stops : undefined
-            if (stops !== undefined && stops !== request.gen) result = { ok: false, code: 'stopped' }
+            if (stoppedSince(request.gen, stops)) result = { ok: false, code: 'stopped' }
             else {
               const allowed = !request.needs_ok || (await askEverywhere(request, askSide(profile, state.id)))
               result = allowed ? await window.conduit.pcControl.run(request) : { ok: false, grant: 'denied' }

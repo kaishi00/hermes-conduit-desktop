@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PcRequest } from '../src/shared/ipc'
-import { askEverywhere, requestsFrom, type AskSide } from '../src/renderer/src/state/pcControl'
+import { askEverywhere, requestsFrom, stoppedSince, type AskSide } from '../src/renderer/src/state/pcControl'
 import { declineLabel, askerLine, parsePrompt } from '../src/renderer/src/state/presented'
 
 const request: PcRequest = { id: 'r1', session: 's1', chat: 'Tidy', action: 'capture', args: {}, needs_ok: true, ask: 'ask-1', bot: 'Nahida', profile: 'nahida' }
@@ -73,5 +73,16 @@ describe('computer asks', () => {
     expect(prompt.pc).toEqual({ computer: 'c1', name: 'Asuka', bot: 'Nahida' })
     expect(askerLine(prompt)).toBe('Control from Hermes')
     expect(declineLabel(prompt)).toBe('Don’t Allow')
+  })
+})
+
+
+describe('stoppedSince', () => {
+  it('stops only when both counts are known and differ', () => {
+    expect(stoppedSince(3, 4)).toBe(true)
+    expect(stoppedSince(3, 3)).toBe(false)
+    // A failed state read: ask as usual, as the main process does.
+    expect(stoppedSince(3, undefined)).toBe(false)
+    expect(stoppedSince(undefined, 4)).toBe(false)
   })
 })
