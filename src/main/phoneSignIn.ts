@@ -140,12 +140,15 @@ export class PhoneSignIn {
       })
       await mailboxAnswer(response)
     } catch (error) {
-      await this.cancel()
+      // The card shows the failure at once; taking the code back can wait on the mailbox.
+      const cleanup = this.cancel()
       this.deps.onEvent({ phase: 'failed', error: t('Couldn’t send to your iPhone: {reason}', { reason: (error as Error).message }) })
+      await cleanup
       return
     }
-    await this.cancel({ deleteInbox: true })
+    const cleanup = this.cancel({ deleteInbox: true })
     this.deps.onEvent({ phase: 'done' })
+    await cleanup
   }
 
   /** Stops waiting and takes the code back (the inbox too, once done). */
