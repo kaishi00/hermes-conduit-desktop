@@ -56,6 +56,7 @@ import { homedir } from 'node:os'
 import { hostFileName, hostFilePath, dataUrlBytes, streamToFile, isDashboardPage, kanbanAttachmentPath, copyDown } from './hostFiles'
 import { Connection, DISPLAY_SOCKET_PATH } from './connection'
 import { Pairing } from './pairing'
+import { PhoneSignIn } from './phoneSignIn'
 import { createFileStore } from './store'
 import { QuickAsk } from './quickAsk'
 import { GlobalHotkey } from './hotkey'
@@ -495,6 +496,13 @@ const pairing = new Pairing({
     hostStore.rename?.(url, name)
     connection.hostsChanged()
   }
+})
+
+const phoneSignIn = new PhoneSignIn({
+  fetch: globalThis.fetch.bind(globalThis),
+  mailbox: process.env.CONDUIT_PAIR_MAILBOX || undefined,
+  onEvent: event => send(IPC.phoneSignInEvent, event),
+  hosts: () => connection.hosts().flatMap(h => hostStore.get?.(h.url) ?? [])
 })
 
 let unlocking: Promise<boolean> | null = null
@@ -955,6 +963,9 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pairStart, () => pairing.start())
   ipcMain.handle(IPC.pairConfirm, () => pairing.confirm())
   ipcMain.handle(IPC.pairCancel, () => pairing.cancel())
+  ipcMain.handle(IPC.phoneSignInStart, () => phoneSignIn.start())
+  ipcMain.handle(IPC.phoneSignInSend, (_event, urls: unknown) => phoneSignIn.send(Array.isArray(urls) ? urls.filter((u): u is string => typeof u === 'string') : []))
+  ipcMain.handle(IPC.phoneSignInCancel, () => phoneSignIn.cancel())
   ipcMain.handle(IPC.switchHost, (_e, url: unknown) => typeof url === 'string' && connection.switchHost(url, taken => keptHosts.take(taken)))
   ipcMain.handle(IPC.removeHost, (_e, url: unknown) => {
     if (typeof url === 'string') connection.removeHost(url)

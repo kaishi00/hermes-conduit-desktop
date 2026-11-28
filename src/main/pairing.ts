@@ -16,7 +16,7 @@ import { t } from '../shared/i18n'
 export const DEFAULT_MAILBOX = 'https://rooms.milim.dev'
 export const PAIR_TTL_MS = 10 * 60_000
 const SENDER = 'phone'
-const POLL_WAIT_S = 25
+export const POLL_WAIT_S = 25
 
 export interface PairingDeps {
   fetch: Fetch
@@ -204,27 +204,37 @@ export class Pairing {
     }
   }
 
-  private async owner(method: string, pathAndQuery: string, body: unknown, keys: PairKeys): Promise<unknown> {
-    const bytes = body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body))
-    const url = new URL(pathAndQuery, `${this.mailbox}/`)
-    const headers: Record<string, string> = { Authorization: ownerAuthorization(keys.signPrivate, method, url.host, pathAndQuery, bytes, this.now) }
-    if (body !== undefined) headers['Content-Type'] = 'application/json'
-    const response = await this.deps.fetch(url.toString(), {
-      method,
-      headers,
-      body: body === undefined ? undefined : bytes,
-      signal: AbortSignal.timeout((POLL_WAIT_S + 10) * 1000)
-    })
-    const text = await response.text()
-    if (!response.ok) {
-      let code = `HTTP ${response.status}`
-      try {
-        code = (JSON.parse(text) as { error?: string }).error ?? code
-      } catch {
-        // Not JSON.
-      }
-      throw new Error(code)
-    }
-    return text ? JSON.parse(text) : null
+  private owner(method: string, pathAndQuery: string, body: unknown, keys: PairKeys): Promise<unknown> {
+    return mailboxOwner(this.deps.fetch, this.mailbox, method, pathAndQuery, body, keys, this.now)
   }
+}
+
+/** One request to the mailbox as an inbox's owner; throws its error code. */
+export async function mailboxOwner(fetch: Fetch, mailbox: string, method: string, pathAndQuery: string, body: unknown, keys: Pick<PairKeys, 'signPrivate'>, now: number): Promise<unknown> {
+  const bytes = body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body))
+  const url = new URL(pathAndQuery, `${mailbox}/`)
+  const headers: Record<string, string> = { Authorization: ownerAuthorization(keys.signPrivate, method, url.host, pathAndQuery, bytes, now) }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const response = await fetch(url.toString(), {
+    method,
+    headers,
+    body: body === undefined ? undefined : bytes,
+    signal: AbortSignal.timeout((POLL_WAIT_S + 10) * 1000)
+  })
+  return mailboxAnswer(response)
+}
+
+/** A mailbox answer's JSON, or its error code thrown. */
+export async function mailboxAnswer(response: Response): Promise<unknown> {
+  const text = await response.text()
+  if (!response.ok) {
+    let code = `HTTP ${response.status}`
+    try {
+      code = (JSON.parse(text) as { error?: string }).error ?? code
+    } catch {
+      // Not JSON.
+    }
+    throw new Error(code)
+  }
+  return text ? JSON.parse(text) : null
 }

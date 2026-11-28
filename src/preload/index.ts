@@ -10,6 +10,7 @@ import {
   type MenuAction,
   type OpenChatRequest,
   type PairEvent,
+  type PhoneSignInEvent,
   type PendingRequest,
   type Platform,
   type RpcOutcome
@@ -170,6 +171,10 @@ const api: ConduitApi = {
   pairConfirm: () => ipcRenderer.invoke(IPC.pairConfirm),
   pairCancel: () => ipcRenderer.invoke(IPC.pairCancel),
   onPair: listener => listen<PairEvent>(IPC.pairEvent, listener),
+  phoneSignInStart: () => ipcRenderer.invoke(IPC.phoneSignInStart),
+  phoneSignInSend: urls => ipcRenderer.invoke(IPC.phoneSignInSend, urls),
+  phoneSignInCancel: () => ipcRenderer.invoke(IPC.phoneSignInCancel),
+  onPhoneSignIn: listener => listen<PhoneSignInEvent>(IPC.phoneSignInEvent, listener),
   onStatus: listener => listen<ConnectionStatus>(IPC.statusChanged, listener),
   onEvent: listener => listen<GatewayEventMessage>(IPC.event, listener),
   requests: () => ipcRenderer.invoke(IPC.requests),

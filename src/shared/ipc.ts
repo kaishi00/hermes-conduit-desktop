@@ -124,6 +124,23 @@ export interface PairEvent {
   error?: string
 }
 
+/** A host listed for signing Conduit on an iPhone in from here. */
+export interface PhoneSignInHost {
+  url: string
+  name: string
+  /** False for one signed in through a browser or single sign-on: the phone signs in to it itself. */
+  sendable: boolean
+}
+
+/** How signing a phone in from here is going. */
+export interface PhoneSignInEvent {
+  phase: 'received' | 'sending' | 'done' | 'failed' | 'expired'
+  /** The four words both screens show. */
+  words?: string[]
+  hosts?: PhoneSignInHost[]
+  error?: string
+}
+
 /** A signed-in Hermes host, without its secrets. */
 export interface HostSummary {
   url: string
@@ -377,6 +394,11 @@ export interface ConduitApi {
   pairConfirm(): Promise<void>
   pairCancel(): Promise<void>
   onPair(listener: (event: PairEvent) => void): () => void
+  /** Signing Conduit on an iPhone in from here: the code's link, then events as the phone answers. */
+  phoneSignInStart(): Promise<{ ok: true; link: string; expires: number } | { ok: false; error: string }>
+  phoneSignInSend(urls: string[]): Promise<void>
+  phoneSignInCancel(): Promise<void>
+  onPhoneSignIn(listener: (event: PhoneSignInEvent) => void): () => void
   /** Retry now, while reconnecting or failed. */
   reconnect(): Promise<void>
   rpc<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
@@ -633,6 +655,10 @@ export const IPC = {
   pairConfirm: 'conduit:pair-confirm',
   pairCancel: 'conduit:pair-cancel',
   pairEvent: 'conduit:pair-event',
+  phoneSignInStart: 'conduit:phone-sign-in-start',
+  phoneSignInSend: 'conduit:phone-sign-in-send',
+  phoneSignInCancel: 'conduit:phone-sign-in-cancel',
+  phoneSignInEvent: 'conduit:phone-sign-in-event',
   removeHost: 'conduit:remove-host',
   status: 'conduit:status',
   keptHosts: 'conduit:kept-hosts',
