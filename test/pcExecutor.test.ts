@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Executor, elementsOf, parseKeys, pickWindow, windowsOf, type DriverClient } from '../src/main/pcExecutor'
 import type { ToolResult } from '../src/main/pcDriver'
-import { askingProfiles, requestsFrom } from '../src/renderer/src/state/pcControl'
+import { askingProfiles, requestsFrom, stopProfiles } from '../src/renderer/src/state/pcControl'
+import { adoptBareBots, hasBareBots, pcAllowed } from '../src/shared/pcControl'
 import { artifactFor, sha256 } from '../src/main/pcDriver'
 
 const WINDOWS: ToolResult = {
@@ -109,16 +110,46 @@ describe('pcExecutor', () => {
 describe('pcControl', () => {
   it('reads /pc/next and names the bot', () => {
     const body = { requests: [{ id: 'r1', session: 's1', chat: 'Tidy', action: 'capture', args: { mode: 'som' }, needs_ok: true }, { id: '' }] }
-    expect(requestsFrom(body, 'nahida', 'Nahida')).toEqual([
-      { id: 'r1', session: 's1', chat: 'Tidy', action: 'capture', args: { mode: 'som' }, needs_ok: true, bot: 'Nahida', profile: 'nahida' }
+    expect(requestsFrom(body, 'nahida', 'Nahida', 'https://a.example', 'Home')).toEqual([
+      { id: 'r1', session: 's1', chat: 'Tidy', action: 'capture', args: { mode: 'som' }, needs_ok: true, bot: 'Nahida', profile: 'nahida', host: 'https://a.example', hostName: 'Home' }
     ])
   })
 
-  it('asks only for bots picked, still on the dashboard, once the driver is there', () => {
-    const state = { on: true, bots: ['nahida', 'gone'], driver: 'ready' } as never
-    expect(askingProfiles(state, [{ name: 'nahida' }, { name: 'furina' }])).toEqual(['nahida'])
-    expect(askingProfiles({ ...(state as object), driver: 'missing' } as never, [{ name: 'nahida' }])).toEqual([])
-    expect(askingProfiles({ ...(state as object), on: false } as never, [{ name: 'nahida' }])).toEqual([])
+  it('asks only for bots picked on this dashboard, still on it, once the driver is there', () => {
+    const A = 'https://a.example'
+    const state = { on: true, bots: [`${A}\nnahida`, `${A}\ngone`, 'https://b.example\nfurina'], driver: 'ready' } as never
+    expect(askingProfiles(state, [{ name: 'nahida' }, { name: 'furina' }], A)).toEqual(['nahida'])
+    // Desktop issue 729: the same name on another dashboard isn't ticked there.
+    expect(askingProfiles(state, [{ name: 'nahida' }, { name: 'furina' }], 'https://b.example')).toEqual(['furina'])
+    expect(askingProfiles(state, [{ name: 'nahida' }], '')).toEqual([])
+    expect(askingProfiles({ ...(state as object), driver: 'missing' } as never, [{ name: 'nahida' }], A)).toEqual([])
+    expect(askingProfiles({ ...(state as object), on: false } as never, [{ name: 'nahida' }], A)).toEqual([])
+  })
+
+  it('gives a list saved by name to the dashboard showing, once', () => {
+    expect(adoptBareBots(['nahida', 'https://b.example\nfurina'], 'https://a.example')).toEqual(['https://a.example\nnahida', 'https://b.example\nfurina'])
+    expect(adoptBareBots(['nahida'], '')).toEqual(['nahida'])
+    expect(hasBareBots(['https://a.example\nnahida'])).toBe(false)
+    expect(pcAllowed(['nahida'], 'https://a.example', 'nahida')).toBe(false)
+  })
+
+  it('tells Stop to this dashboard’s allowed bots and those it asked', () => {
+    expect(stopProfiles(['https://a.example\nnahida', 'https://b.example\nfurina'], 'https://a.example', ['zhongli', 'nahida'])).toEqual(['nahida', 'zhongli'])
+  })
+
+  // Each pinned archive's real layout (desktop issue 725: the Mac archive has a
+  // top-level folder, so the old path found nothing after unpacking). Checked
+  // against the pinned downloads; a new pin updates this list after listing it.
+  it('points at the executable where each pinned archive keeps it', () => {
+    const layouts: Record<string, string> = {
+      'cua-driver-rs-0.52.0-windows-x86_64-binary.zip': 'cua-driver.exe',
+      'cua-driver-rs-0.52.0-windows-arm64-binary.zip': 'cua-driver.exe',
+      'cua-driver-rs-0.52.0-darwin-universal.tar.gz': 'cua-driver-rs-0.52.0-darwin-universal/CuaDriver.app/Contents/MacOS/cua-driver'
+    }
+    for (const [platform, arch] of [['win32', 'x64'], ['win32', 'arm64'], ['darwin', 'arm64'], ['darwin', 'x64']]) {
+      const artifact = artifactFor(platform as NodeJS.Platform, arch as NodeJS.Architecture)!
+      expect(layouts[artifact.file], artifact.file).toBe(artifact.binary)
+    }
   })
 
   it('pins a driver build for Windows and the Mac', () => {

@@ -30,7 +30,9 @@ Settings > Control from Hermes lets bots you pick drive this computer
 (see the screen, click and type) from wherever their Hermes runs, through
 the plugin's `conduit_user_computer` tool. It's off until you turn it on,
 which downloads trycua's cua-driver (the driver Hermes' own computer use runs)
-into Conduit's data folder; each chat asks you first, and while a bot is in
+into Conduit's data folder. A bot is picked on its own dashboard, so a bot
+of the same name on another Hermes asks nothing until you pick it there; each
+chat asks you first, naming the Hermes that asks, and while a bot is in
 control a bar on top of your screen says so, with Stop (Ctrl+Alt+Shift+S, or
 ⌘⌥⇧S on the Mac). Windows and the Mac; plugin 0.203 or later.
 
