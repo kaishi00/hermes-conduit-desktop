@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { currentBack, isBackButton, nearestBack } from '../src/renderer/src/state/mouseBack'
+import { currentBack, isBackButton, nearestBack, SAME_PRESS_MS, samePress } from '../src/renderer/src/state/mouseBack'
+import { isBackCommand } from '../src/main/backCommand'
 
 interface Fake {
   name: string
@@ -33,5 +34,29 @@ describe("the mouse's back button", () => {
     expect(nearestBack([a, b], null)?.name).toBe('b')
     expect(nearestBack([a, b], node('elsewhere', root))?.name).toBe('b')
     expect(nearestBack([], root)).toBeUndefined()
+  })
+})
+
+describe('one Back press arriving two ways', () => {
+  it('goes back once when the button and the window command come together', () => {
+    expect(samePress({ source: 'button', at: 1000 }, 'window', 1000 + SAME_PRESS_MS - 1)).toBe(true)
+    expect(samePress({ source: 'window', at: 1000 }, 'button', 1100)).toBe(true)
+  })
+
+  it('counts presses by the same path, by the keyboard, or far apart as their own', () => {
+    expect(samePress(null, 'button', 0)).toBe(false)
+    expect(samePress({ source: 'button', at: 1000 }, 'button', 1100)).toBe(false)
+    expect(samePress({ source: 'key', at: 1000 }, 'window', 1100)).toBe(false)
+    expect(samePress({ source: 'button', at: 1000 }, 'key', 1100)).toBe(false)
+    expect(samePress({ source: 'button', at: 1000 }, 'window', 1000 + SAME_PRESS_MS)).toBe(false)
+  })
+})
+
+describe('a Back from the window', () => {
+  it("is Windows' browser-backward command or a Mac's swipe back", () => {
+    expect(isBackCommand('app-command', 'browser-backward')).toBe(true)
+    expect(isBackCommand('app-command', 'browser-forward')).toBe(false)
+    expect(isBackCommand('swipe', 'left')).toBe(true)
+    expect(isBackCommand('swipe', 'right')).toBe(false)
   })
 })

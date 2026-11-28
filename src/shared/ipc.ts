@@ -510,6 +510,8 @@ export interface ConduitApi {
   setWaiting(count: number): void
   /** A menu bar command (the Mac's File > New Chat). */
   onMenu(listener: (action: MenuAction) => void): () => void
+  /** The window's Back from outside the page: Windows' browser-backward command, a Mac's swipe back (navigateBack.ts). */
+  onNavigateBack(listener: () => void): () => void
   /** Updates the sections the Mac's View menu binds to ⌘1–⌘6, in rail order. */
   setRailSections(sections: readonly RailSection[]): void
   /** A Link invite opened from another app before the window could take it, taken once. */
@@ -610,6 +612,7 @@ export interface ChatWindowRequest {
 
 export const IPC = {
   menu: 'conduit:menu',
+  navigateBack: 'conduit:navigate-back',
   setRailSections: 'conduit:set-rail-sections',
   takeLinkUrl: 'conduit:take-link-url',
   linkUrl: 'conduit:link-url',

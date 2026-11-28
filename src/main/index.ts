@@ -102,6 +102,7 @@ import { LIVE_TOKEN_PATHS, mintedSocket, type LiveSocketEvent } from '../shared/
 import { setLanguage, t } from '../shared/i18n'
 import { STALLED_CLOSE_CODE, STALLED_REASON, liveSendDecision } from './liveBacklog'
 import { trustSystemRoots } from './systemRoots'
+import { watchNavigateBack } from './navigateBack'
 import { checkForUpdates, downloadUpdate, installUpdate, setAutoUpdate, startUpdates, updateState } from './updates'
 
 const isMac = process.platform === 'darwin'
@@ -320,6 +321,8 @@ process.on('uncaughtException', error => {
 
 app.on('browser-window-created', (_event, window) => {
   const id = window.webContents.id
+  // A mouse's Back that arrives as a window command rather than a button press (desktop#755).
+  watchNavigateBack(window)
   // A reloaded page (a language change) opens its sessions again: until it does, it hasn't, so a notification
   // for one isn't left to a page that can't tell it's its own yet.
   window.webContents.on('did-start-navigation', navigation => {

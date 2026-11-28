@@ -643,6 +643,7 @@ function WindowChat({ request, status }: { request: ChatWindowRequest; status: C
               ? {
                   text: t('{bot}’s work · {ref}', { bot: botTitle, ref: workItem.ref }),
                   title: t('Back to {bot}', { bot: botTitle }),
+                  back: !!bot?.botChatId,
                   onClick: () => {
                     if (bot?.botChatId) openOther(bot.botChatId, botTitle, { botChat: true })
                   }
