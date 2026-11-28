@@ -49558,5 +49558,20 @@
     "tr": "Gönderildi. iPhone’unuz oturum açılacak her panoyu gösterir.",
     "zh-Hans": "已发送。你的 iPhone 会列出每个要登录的仪表板。",
     "zh-Hant": "已傳送。你的 iPhone 會列出每個要登入的儀表板。"
+  },
+  "Unlock your Hermes sign-ins first.": {
+    "de": "Entsperre zuerst deine Hermes-Anmeldungen.",
+    "es": "Primero desbloquea tus inicios de sesión de Hermes.",
+    "fr": "Déverrouille d’abord tes connexions Hermes.",
+    "id": "Buka kunci info masuk Hermes Anda terlebih dahulu.",
+    "it": "Prima sblocca i tuoi accessi a Hermes.",
+    "ja": "先に Hermes のサインイン情報のロックを解除してください。",
+    "ko": "먼저 Hermes 로그인 정보의 잠금을 해제하세요.",
+    "pl": "Najpierw odblokuj swoje logowania do Hermes.",
+    "pt-BR": "Primeiro desbloqueie seus logins do Hermes.",
+    "ru": "Сначала разблокируйте входы в Hermes.",
+    "tr": "Önce Hermes oturum açma bilgilerinizin kilidini açın.",
+    "zh-Hans": "请先解锁你的 Hermes 登录信息。",
+    "zh-Hant": "請先解鎖你的 Hermes 登入資訊。"
   }
 }

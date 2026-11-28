@@ -118,12 +118,17 @@ export function SignInYourIphone() {
     if (round === 0) return
     let live = true
     setStage({ kind: 'starting' })
-    void window.conduit.phoneSignInStart().then(async result => {
-      if (!live) return
-      if (!result.ok) return setStage({ kind: 'ended', message: result.error, tone: 'error' })
-      const qr = await QRCode.toDataURL(result.link, { margin: 1, width: 520, errorCorrectionLevel: 'M' })
-      if (live) setStage({ kind: 'showing', qr, expires: result.expires })
-    })
+    void window.conduit
+      .phoneSignInStart()
+      .then(async result => {
+        if (!live) return
+        if (!result.ok) return setStage({ kind: 'ended', message: result.error, tone: 'error' })
+        const qr = await QRCode.toDataURL(result.link, { margin: 1, width: 520, errorCorrectionLevel: 'M' })
+        if (live) setStage({ kind: 'showing', qr, expires: result.expires })
+      })
+      .catch((error: Error) => {
+        if (live) setStage({ kind: 'ended', message: error.message || t('Pairing didn’t work.'), tone: 'error' })
+      })
     const off = window.conduit.onPhoneSignIn((event: PhoneSignInEvent) => {
       if (event.phase === 'received') {
         const hosts = event.hosts ?? []
@@ -176,8 +181,8 @@ export function SignInYourIphone() {
         <>
           <p>{t('Check that your iPhone shows these same four words.')}</p>
           <div className="pair-words" aria-label={t('Words to compare')}>
-            {stage.words.map(word => (
-              <span key={word}>{word}</span>
+            {stage.words.map((word, i) => (
+              <span key={i}>{word}</span>
             ))}
           </div>
           <p>{t('Sign-ins to send:')}</p>
@@ -198,7 +203,7 @@ export function SignInYourIphone() {
               {host.sendable ? null : <span className="meta">{t('Sign in on the phone')}</span>}
             </label>
           ))}
-          <button className="primary" disabled={!picked.size} onClick={() => void window.conduit.phoneSignInSend([...picked])}>
+          <button className="primary" disabled={!picked.size} onClick={() => void window.conduit.phoneSignInSend([...picked]).catch((error: Error) => setStage({ kind: 'ended', message: t('Couldn’t send to your iPhone: {reason}', { reason: error.message }), tone: 'error' }))}>
             {t('They match, send')}
           </button>
           <button className="link-button" onClick={again}>
