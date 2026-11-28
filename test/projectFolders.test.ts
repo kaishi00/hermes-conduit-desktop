@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { firstListed, folderStart, HOST_HOME, listedFolder, newChatProjects, projectFor } from '../src/renderer/src/state/projectFolders'
 import type { Project } from '../src/renderer/src/state/projects'
-import { hostSpellings, isThisComputer } from '../src/main/localFolders'
+import { forgetResolvedHosts, hostSpellings, isThisComputer, resolveHost } from '../src/main/localFolders'
 
 const project = (id: string, path?: string, isHome = false): Project => ({ id, title: id, path, isHome, isAuto: false, count: 0, previews: [] })
 
@@ -44,6 +44,28 @@ describe('a project’s folder from this computer (desktop#605)', () => {
     await isThisComputer('http://192.168.1.21:9119', deps)
     await isThisComputer('http://[fe80::2]:9119', deps)
     expect(asked).toEqual([])
+  })
+
+  it('keeps only the system’s answer: a lookup past the wait counts as elsewhere this time and its late answer serves the next ask', async () => {
+    forgetResolvedHosts()
+    let answer: (addresses: string[]) => void = () => {}
+    let asks = 0
+    const slow = () => {
+      asks++
+      return new Promise<string[]>(done => (answer = done))
+    }
+    expect(await resolveHost('mac.tail1234.ts.net', { lookup: slow, waitMs: 5 })).toEqual([])
+    answer(['100.101.102.103'])
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(await resolveHost('mac.tail1234.ts.net', { lookup: slow, waitMs: 5 })).toEqual(['100.101.102.103'])
+    expect(asks).toBe(1)
+    const missing = async () => {
+      throw new Error('ENOTFOUND')
+    }
+    expect(await resolveHost('gone.example.com', { lookup: missing, waitMs: 5 })).toEqual([])
+    expect(await resolveHost('gone.example.com', { lookup: slow, waitMs: 5 })).toEqual([])
+    expect(asks).toBe(1)
+    forgetResolvedHosts()
   })
 
   it('opens the host’s folders at its home folder when nothing else names one, and shows that folder’s path once listed (desktop issue 763)', () => {

@@ -37,12 +37,17 @@ vi.mock('../src/renderer/src/gateway', () => ({
 
 let local = false
 let picked: string[] | null = null
+let picks = 0
 beforeEach(() => {
   created.length = 0
+  picks = 0
   ;(window as unknown as { conduit: unknown }).conduit = {
     platform: 'darwin',
     hostIsThisComputer: async () => local,
-    pickLocalFolder: async () => picked
+    pickLocalFolder: async () => {
+      picks++
+      return picked
+    }
   }
 })
 
@@ -51,13 +56,13 @@ const settle = () =>
     for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0))
   })
 
-async function renderForm(onDone = vi.fn()) {
+async function renderForm(onDone = vi.fn(), start = '/home/eric') {
   const path = '../src/renderer/src/components/NewProjectForm.tsx'
   const { ProjectForm } = (await import(/* @vite-ignore */ path)) as { ProjectForm: unknown }
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
-  act(() => root.render(createElement(ProjectForm as never, { withProfile: (p: object) => ({ ...p, profile: 'atlas' }), profile: 'atlas', start: '/home/eric', onDone } as never)))
+  act(() => root.render(createElement(ProjectForm as never, { withProfile: (p: object) => ({ ...p, profile: 'atlas' }), profile: 'atlas', start, onDone } as never)))
   await settle()
   const button = (label: string) => [...host.querySelectorAll('button')].find(b => b.textContent?.includes(label)) as HTMLButtonElement
   const folder = () => (host.querySelector('input[aria-label="Folder on the Hermes host"]') as HTMLInputElement).value
@@ -123,5 +128,49 @@ describe('New Project’s Browse (desktop#605)', () => {
     await settle()
     expect(created).toEqual([{ method: 'projects.create', params: { name: 'Site', folders: ['/Users/ruan/dev'], primary_path: '/Users/ruan/dev', use: true, profile: 'atlas' } }])
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ id: 'p_new', path: '/Users/ruan/dev' }))
+  })
+
+  it('asks whether Hermes is here at the click, so a lookup that finished after the form opened still opens Finder (desktop issue 763)', async () => {
+    local = false
+    picked = ['/Users/ruan/dev']
+    const { host, button, folder } = await renderForm()
+    local = true
+    act(() => button('Browse…').click())
+    await settle()
+    expect(folder()).toBe('/Users/ruan/dev')
+    expect(host.querySelector('.host-folders')).toBeNull()
+  })
+
+  it('opens one Finder for two quick clicks', async () => {
+    local = true
+    picked = ['/Users/ruan/dev']
+    const { button } = await renderForm()
+    act(() => {
+      button('Browse…').click()
+      button('Browse…').click()
+    })
+    await settle()
+    expect(picks).toBe(1)
+  })
+
+  it('opens the host’s folders at its home when nothing names a folder, and offers it only once Hermes names its path (desktop issue 763)', async () => {
+    local = false
+    listed['~'] = [{ name: 'projects', path: '/home/eric/projects', isDirectory: true }]
+    const { host, button, folder } = await renderForm(vi.fn(), '~')
+    act(() => button('Browse…').click())
+    await settle()
+    expect(host.querySelector('.host-folders-path')?.textContent).toBe('/home/eric')
+    expect(button('Use This Folder').disabled).toBe(false)
+    act(() => button('Use This Folder').click())
+    await settle()
+    expect(folder()).toBe('/home/eric')
+    listed['~'] = []
+    const empty = await renderForm(vi.fn(), '~')
+    act(() => empty.button('Browse…').click())
+    await settle()
+    expect(empty.host.querySelector('.host-folders-path')?.textContent).toBe('~')
+    expect(empty.button('Use This Folder').disabled).toBe(true)
+    expect(empty.button('New Folder').disabled).toBe(true)
+    delete listed['~']
   })
 })
