@@ -203,7 +203,7 @@ export function SignInYourIphone() {
               {host.sendable ? null : <span className="meta">{t('Sign in on the phone')}</span>}
             </label>
           ))}
-          <button className="primary" disabled={!picked.size} onClick={() => void window.conduit.phoneSignInSend([...picked])}>
+          <button className="primary" disabled={!picked.size} onClick={() => void window.conduit.phoneSignInSend([...picked]).catch((error: Error) => setStage({ kind: 'ended', message: t('Couldn’t send to your iPhone: {reason}', { reason: error.message }), tone: 'error' }))}>
             {t('They match, send')}
           </button>
           <button className="link-button" onClick={again}>

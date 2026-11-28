@@ -132,8 +132,9 @@ export class PhoneSignIn {
     }
     this.request = null
     this.deps.onEvent({ phase: 'sending' })
-    const envelope = sealForPhone(Buffer.from(JSON.stringify({ v: 1, hosts })), request.key, request.inbox)
     try {
+      // Inside the try: a key that can't be agreed with ends as a failure, not a stuck "sending".
+      const envelope = sealForPhone(Buffer.from(JSON.stringify({ v: 1, hosts })), request.key, request.inbox)
       const response = await this.deps.fetch(`${this.mailbox}/v1/inboxes/${request.inbox}/envelopes`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${request.token}`, 'Content-Type': 'application/json' },

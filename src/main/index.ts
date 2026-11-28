@@ -963,9 +963,17 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pairStart, () => pairing.start())
   ipcMain.handle(IPC.pairConfirm, () => pairing.confirm())
   ipcMain.handle(IPC.pairCancel, () => pairing.cancel())
-  ipcMain.handle(IPC.phoneSignInStart, () => phoneSignIn.start())
-  ipcMain.handle(IPC.phoneSignInSend, (_event, urls: unknown) => phoneSignIn.send(Array.isArray(urls) ? urls.filter((u): u is string => typeof u === 'string') : []))
-  ipcMain.handle(IPC.phoneSignInCancel, () => phoneSignIn.cancel())
+  // Sign-ins leave this computer only from its own window, and only once they're unlocked.
+  ipcMain.handle(IPC.phoneSignInStart, async event => {
+    if (!fromMain(event)) return { ok: false, error: 'refused' }
+    if (!(await unlock())) return { ok: false, error: t('Unlock your Hermes sign-ins first.') }
+    return phoneSignIn.start()
+  })
+  ipcMain.handle(IPC.phoneSignInSend, async (event, urls: unknown) => {
+    if (!fromMain(event) || !(await unlock())) return
+    return phoneSignIn.send(Array.isArray(urls) ? urls.filter((u): u is string => typeof u === 'string') : [])
+  })
+  ipcMain.handle(IPC.phoneSignInCancel, event => (fromMain(event) ? phoneSignIn.cancel() : undefined))
   ipcMain.handle(IPC.switchHost, (_e, url: unknown) => typeof url === 'string' && connection.switchHost(url, taken => keptHosts.take(taken)))
   ipcMain.handle(IPC.removeHost, (_e, url: unknown) => {
     if (typeof url === 'string') connection.removeHost(url)
