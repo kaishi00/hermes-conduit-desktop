@@ -361,6 +361,16 @@ export interface TranscriptState {
    * that start is theirs, never the next held one's.
    */
   readStarted?: string[]
+  /**
+   * The messages the last live-work read listed as waiting in the gateway's queue, by admission and place
+   * (useChat's applyLiveWork): an unnamed `message.start` behind another app's message there is that one's.
+   */
+  ahead?: { admission: string; sequence: number }[]
+  /**
+   * Other apps' queued messages whose unnamed `message.start` already came (hermes-conduit 3420, 3444): a read
+   * bringing their words in later doesn't wait for that start again.
+   */
+  otherStarts?: string[]
   /** The held sends brought back lately, by admission: a later read that names one doesn't draw it twice. */
   released?: string[]
   /**
@@ -642,6 +652,10 @@ export function applyEvent(state: TranscriptState, event: { type: string; payloa
       // (liveWork.ts). The Webapp names every turn's admission, so this never guesses there.
       if (state.readStarted?.length) return { ...started, readStarted: state.readStarted.slice(1) }
       const oldest = state.held?.[0]?.admission
+      // Another app's message listed ahead of the oldest held one (or with none held) starts first: this start is
+      // its turn, and the held send waits for its own (hermes-conduit 3420, 3444).
+      const other = otherStartAhead(state, oldest)
+      if (other) return { ...started, otherStarts: [...(state.otherStarts ?? []).slice(-7), other] }
       return oldest ? releaseHeld(started, oldest) : started
     }
     case 'message.delta': {
@@ -1064,6 +1078,16 @@ export function toolNames(raw: unknown): Map<string, string> {
 }
 
 /** A send the chat's queue took behind the running turn: its bubble waits in the dock, out of the transcript. */
+/** The oldest message the last read listed ahead of `held` (any, with none held) that nothing here holds and whose start hasn't come. */
+export function otherStartAhead(state: TranscriptState, held: string | undefined): string | undefined {
+  const rows = state.ahead ?? []
+  const mine = held === undefined ? Infinity : (rows.find(row => row.admission === held)?.sequence ?? Infinity)
+  const holding = new Set((state.held ?? []).map(h => h.admission))
+  return rows
+    .filter(row => row.sequence < mine && !holding.has(row.admission) && !(state.otherStarts ?? []).includes(row.admission))
+    .sort((a, b) => a.sequence - b.sequence)[0]?.admission
+}
+
 export function holdSent(state: TranscriptState, key: string, admission: string): TranscriptState {
   const item = state.items.find((i): i is UserItem => i.kind === 'user' && i.key === key)
   if (!item) return state

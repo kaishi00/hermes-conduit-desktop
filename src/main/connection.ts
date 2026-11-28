@@ -576,7 +576,8 @@ export class Connection {
   }
 
   async rpc<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-    if (!this.client || this.status.phase !== 'open') throw new Error(t('Not connected to Hermes.'))
+    // Never sent: a caller can tell it from a request that may have reached Hermes.
+    if (!this.client || this.status.phase !== 'open') throw Object.assign(new Error(t('Not connected to Hermes.')), { data: { reason: 'not_connected' } })
     return this.client.request<T>(method, params, uploadTimeoutMs(params))
   }
 

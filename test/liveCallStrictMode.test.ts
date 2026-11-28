@@ -19,13 +19,25 @@ vi.mock('../src/renderer/src/gateway', () => ({
   GatewayError: class extends Error {}
 }))
 
+vi.mock('../src/renderer/src/state/voiceSave', async original => ({
+  ...(await original<typeof import('../src/renderer/src/state/voiceSave')>()),
+  saveCall: async (_profile: unknown, callId: string) => {
+    saves.push(callId)
+  }
+}))
+
+const saves: string[] = []
 let sessions = 0
+let peers = 0
+let closedPeers = 0
 
 let mints = 0
 let opens = 0
 let liveIds: string[] = []
 let closed: string[] = []
 beforeEach(() => {
+  sessions = 0
+  saves.length = 0
   mints = 0
   opens = 0
   liveIds = []
@@ -52,6 +64,33 @@ beforeEach(() => {
     }
   }
   ;(globalThis as unknown as { AudioContext: unknown }).AudioContext = Context
+  peers = 0
+  closedPeers = 0
+  class Peer {
+    iceGatheringState = 'complete'
+    connectionState = 'new'
+    localDescription = { sdp: 'v=0' }
+    constructor() {
+      peers++
+    }
+    addTrack() {}
+    createDataChannel() {
+      return { addEventListener() {}, close() {}, send() {}, readyState: 'connecting' }
+    }
+    async createOffer() {
+      return { type: 'offer', sdp: 'v=0' }
+    }
+    async setLocalDescription() {}
+    async setRemoteDescription() {}
+    addEventListener() {}
+    getSenders() {
+      return []
+    }
+    close() {
+      closedPeers++
+    }
+  }
+  ;(globalThis as unknown as { RTCPeerConnection: unknown }).RTCPeerConnection = Peer
   ;(window as unknown as { conduit: unknown }).conduit = {
     liveOpen: async () => {
       const id = `live-${++opens}`
@@ -90,9 +129,31 @@ describe('a live call in a dev build (desktop#669)', () => {
     // The first mount aborts before it opens anything; exactly one socket stays for the real call.
     expect(liveIds.length - closed.length).toBe(1)
     expect(opens + mints).toBe(liveIds.length)
+    // The first run's teardown saved its empty call; the real call saves once more when it ends.
+    const before = saves.length
     act(() => root.unmount())
     await settle()
     // Teardown closes the surviving socket, too.
     expect(closed).toEqual(liveIds)
+    expect(saves.length).toBe(before + 1)
+  })
+
+  // Desktop issue 736: GPT-Live starts through WebRTC and a host session, not the relay socket.
+  it('opens GPT-Live once under StrictMode’s double mount', async () => {
+    const path = '../src/renderer/src/components/GptLiveCall.tsx'
+    const mod = (await import(/* @vite-ignore */ path)) as Record<string, (props: unknown) => null>
+    const host = document.createElement('div')
+    const root = createRoot(host)
+    const props = { profile: 'default', chatId: 'c1', items: [], onSay: () => {}, running: false, turnsDone: 0, lastReply: '', onEnd: () => {} }
+    act(() => root.render(createElement(StrictMode, null, createElement(mod.GptLiveCall as never, props))))
+    for (let i = 0; i < 6; i++) await settle()
+    // One host session and one live peer for the real call.
+    expect(sessions).toBe(1)
+    expect(peers - closedPeers).toBe(1)
+    const before = saves.length
+    act(() => root.unmount())
+    await settle()
+    expect(closedPeers).toBe(peers)
+    expect(saves.length).toBe(before + 1)
   })
 })

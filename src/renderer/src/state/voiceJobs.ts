@@ -31,6 +31,8 @@ const withProfile = (path: string, profile?: string) => (profile && profile !== 
 export function correctionMayHaveGone(error: unknown): boolean {
   const text = String((error as { message?: unknown } | null)?.message ?? error).toLowerCase()
   if (/not connected to (that )?hermes/i.test(text) || text.includes('gateway not connected')) return false
+  // Main marks a call that never left with this reason, whatever its words.
+  if (error instanceof GatewayError && error.reason === 'not_connected') return false
   return !(error instanceof GatewayError && error.code !== undefined)
 }
 
@@ -337,6 +339,11 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export const jobPrompt = (instructions: string) =>
   `[Background job started from a Conduit voice conversation. Nobody is watching this chat live, so work on it on your own. When you are done, end your final message with a plain-language summary that can be read aloud: what you found or did, with the key details.]\n\n${instructions}`
 
+/**
+ * Whether a request that failed may still have reached Hermes: one with no answer back (a timeout, a
+ * dropped connection). One Hermes answered with an error, or one that never left because Conduit
+ * wasn't connected, didn't.
+ */
 export class VoiceJobs {
   jobs: VoiceJob[] = []
   private count = 0
@@ -484,7 +491,7 @@ export class VoiceJobs {
       } catch (e) {
         this.surface.discard(sid, text, e)
         // No answer back (a timeout, a dropped connection): Hermes may have it.
-        if (!(e instanceof GatewayError && e.code !== undefined)) deliveryUnknown = true
+        if (correctionMayHaveGone(e)) deliveryUnknown = true
         throw e
       }
       // Filed under Voice Jobs, beneath the call's chat; the plugin archives it once Hermes answers.

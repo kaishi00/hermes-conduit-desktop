@@ -271,6 +271,41 @@ const withoutCode = (line: string) =>
   line.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001').replace(/<!--.*?-->/g, '\u0001').replace(/<!--.*$/, '\u0001')
 
 /**
+ * Whether each line lies wholly inside a comment opened on an earlier line, its `-->` still to come: a `</details>`
+ * there closes nothing (hermes-conduit 3349). The line holding the `-->` isn't, since a close ending it comes after
+ * the comment. Comments in code spans and fenced blocks don't count.
+ */
+export function commentLines(lines: readonly string[]): boolean[] {
+  const inside: boolean[] = lines.map(() => false)
+  let open = false
+  let fence: string | null = null
+  for (const [index, line] of lines.entries()) {
+    let rest = line
+    if (open) {
+      const end = line.indexOf('-->')
+      if (end < 0) {
+        inside[index] = true
+        continue
+      }
+      rest = line.slice(end + 3)
+      open = false
+    } else {
+      const found = FOLD_FENCE.exec(line)
+      if (fence) {
+        if (found && found[1]![0] === fence[0] && found[1]!.length >= fence.length) fence = null
+        continue
+      }
+      if (found) {
+        fence = found[1]!
+        continue
+      }
+    }
+    open = /<!--/.test(rest.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001').replace(/<!--.*?-->/g, '\u0001'))
+  }
+  return inside
+}
+
+/**
  * Whether `text` ends in a `</details>` that closes a fold: one ending the line, outside a comment still streaming
  * in (`Body <!-- </details>` waits for its `-->`, hermes-conduit#3388). A `</details>` ending the line can't be in a
  * code span, which would end after it, and one after a finished comment still closes.
@@ -324,11 +359,13 @@ export function withFoldsApart(text: string): string {
       if (found && found[1]![0] === codeFence[0] && found[1]!.length >= codeFence.length) codeFence = null
     } else if (found) codeFence = found[1]!
   }
+  // Nor one on a line inside a comment opened on an earlier line (hermes-conduit 3349).
+  const inComment = commentLines(lines)
   // More `</details>` after it than folds opened after it: one is left over for this line's.
   let closes = 0
   for (let index = lines.length - 1; index >= 0; index--) {
     closedAfter[index] = closes > 0
-    if (inCode[index]) continue
+    if (inCode[index] || inComment[index]) continue
     // Only a `</details>` ending its line closes a fold, as the chat reads it (one per line, nothing after it, not
     // even a comment or a code span); one in prose doesn't. Read with the same tests as the pass below, so a fold
     // this counts as closed is closed there too (hermes-conduit#3349, #3388).
@@ -345,6 +382,10 @@ export function withFoldsApart(text: string): string {
     }
     if (found) {
       fence = found[1]!
+      out.push(line)
+      continue
+    }
+    if (inComment[index]) {
       out.push(line)
       continue
     }

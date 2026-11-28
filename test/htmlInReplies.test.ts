@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { pageAt, safeColor, splitPages, startsPage, withPagesSaid, withoutTags } from '../src/renderer/src/state/htmlInReplies'
+import { commentLines, pageAt, safeColor, splitPages, startsPage, withPagesSaid, withoutTags } from '../src/renderer/src/state/htmlInReplies'
 import { copyableReply } from '../src/renderer/src/state/quote'
 import { namingFiles, splitReply } from '../src/renderer/src/state/media'
 import { spokenText } from '../src/renderer/src/state/voice'
@@ -217,6 +217,18 @@ describe('text tags in a reply', () => {
     const html = draw('<details> Here is the syntax:\n<details> and <summary> make a fold.\n</details>')
     expect(html).toContain('reply-fold')
     expect(html).toContain('&lt;details&gt; and &lt;summary&gt; make a fold.')
+  })
+
+  it('reads a close inside a comment that runs over lines as no close (hermes-conduit 3349)', () => {
+    const lines = ['<details>', '<summary>S</summary>', 'Body <!-- a note', '</details>', '-->', 'More.', '</details>', 'After.']
+    expect(commentLines(lines)).toEqual([false, false, false, true, false, false, false, false])
+    expect(commentLines(['`<!--` in code', '</details>'])).toEqual([false, false])
+    expect(commentLines(['```', '<!--', '```', '</details>'])).toEqual([false, false, false, false])
+    const html = draw(lines.join('\n'))
+    expect(html).toContain('reply-fold')
+    // The fold runs to the real close: More. is inside it, After. outside.
+    expect(html.indexOf('More.')).toBeLessThan(html.lastIndexOf('</details>'))
+    expect(html.indexOf('After.')).toBeGreaterThan(html.lastIndexOf('</details>'))
   })
 
   it('reads no summary from a </summary> inside the details tag (hermes-conduit#3349)', () => {

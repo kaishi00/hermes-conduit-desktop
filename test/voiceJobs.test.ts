@@ -147,6 +147,30 @@ describe('correcting a running job', () => {
   })
 })
 
+describe('a request with no answer back', () => {
+  // hermes-conduit 3361 / desktop issue 732: one main marks as never sent stays not sent, whatever its words,
+  // and a job's own submit with no answer back tells the call Hermes may have it.
+  it('reads main\'s not_connected reason, and a job submit that may have gone says so', async () => {
+    const { GatewayError } = await import('../src/renderer/src/gateway')
+    const { correctionMayHaveGone } = await import('../src/renderer/src/state/voiceJobs')
+    expect(correctionMayHaveGone(new GatewayError('socket closed', undefined, 'not_connected'))).toBe(false)
+    expect(correctionMayHaveGone(new GatewayError('Request timed out'))).toBe(true)
+
+    const failingSubmit = (error: Error) => {
+      const { jobs } = setup()
+      const rpc = (jobs as unknown as { rpc: (m: string, p: Record<string, unknown>) => Promise<unknown> }).rpc
+      ;(jobs as unknown as { rpc: typeof rpc }).rpc = async (method, params) => {
+        if (method === 'prompt.submit') throw error
+        return rpc(method, params)
+      }
+      return jobs
+    }
+    expect(await failingSubmit(new GatewayError('Request timed out')).start('Book a table')).toMatchObject({ status: 'error', delivery: 'unknown' })
+    expect(await failingSubmit(new GatewayError('socket closed', undefined, 'not_connected')).start('Book a table')).not.toHaveProperty('delivery')
+    expect(await failingSubmit(new GatewayError('busy', -32000)).start('Book a table')).not.toHaveProperty('delivery')
+  })
+})
+
 describe("GPT-Live's job follow-ups", () => {
   it('reads "Job 2:" and "Add to job 2:" at the start only', async () => {
     const { jobFollowUpMarker } = await import('../src/renderer/src/state/voiceJobs')
