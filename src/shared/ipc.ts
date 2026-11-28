@@ -506,8 +506,14 @@ export interface ConduitApi {
   noteCallWindowChat(storedId: string): void
   /** Ends the call running in its own window: a call started in the main window takes the microphone. */
   endWindowCall(): void
-  /** How many things wait on the user, for the tray and the Dock's badge. */
+  /** How many things wait on the user, for the tray. */
   setWaiting(count: number): void
+  /**
+   * The app icon's number (state/appBadge): the Mac's Dock and Linux
+   * launchers show `count`, Windows `image` (a PNG data URL) over the
+   * taskbar button; 0 shows none.
+   */
+  setBadge(count: number, image: string | null): void
   /** A menu bar command (the Mac's File > New Chat). */
   onMenu(listener: (action: MenuAction) => void): () => void
   /** The window's Back from outside the page: Windows' browser-backward command, a Mac's swipe back (navigateBack.ts). */
@@ -621,6 +627,7 @@ export const IPC = {
   answerRequest: 'conduit:answer-request',
   dismissRequest: 'conduit:dismiss-request',
   setWaiting: 'conduit:set-waiting',
+  setBadge: 'conduit:set-badge',
   openChat: 'conduit:open-chat',
   openChatSettings: 'conduit:open-chat-settings',
   openChatWindow: 'conduit:open-chat-window',

@@ -120,6 +120,7 @@ import { STALLED_CLOSE_CODE, STALLED_REASON, liveSendDecision } from './liveBack
 import { trustSystemRoots } from './systemRoots'
 import { watchNavigateBack } from './navigateBack'
 import { checkForUpdates, downloadUpdate, installUpdate, setAutoUpdate, startUpdates, updateState } from './updates'
+import { applyOverlay, cleanCount, cleanImage, setAppBadge } from './appBadge'
 
 const isMac = process.platform === 'darwin'
 let mainWindow: BrowserWindow | null = null
@@ -583,6 +584,8 @@ function createWindow(): void {
   window.on('ready-to-show', () => {
     if (!startInTray) reveal(window)
     startInTray = false
+    // The app icon's number on Windows rides on the taskbar button, which a new window starts without.
+    applyOverlay(window)
     // Hide from the Dock takes over once the window has shown, or stayed in the tray, so a launch doesn't flicker the icon.
     dockPresence?.setEnabled(hideDockWhenClosed())
   })
@@ -624,6 +627,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.requests, event => connectionOf(event.sender.id)?.requests() ?? [])
   ipcMain.on(IPC.setWaiting, (_event, count: number) => tray.setWaiting(Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0))
+  ipcMain.on(IPC.setBadge, (_event, count: unknown, image: unknown) => setAppBadge(cleanCount(count), cleanImage(image), mainWindow))
   ipcMain.on(IPC.windowShow, () => showWindow())
   ipcMain.on(IPC.language, event => {
     const choice = languageChoice()

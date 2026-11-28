@@ -236,7 +236,9 @@ import { ProjectForm } from './components/NewProjectForm'
 import { useAnsweringBots, useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
-import { loadMarks, saveMarksSoon, toggleStar, isStarred, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
+import { loadMarks, saveMarksSoon, toggleStar, isStarred, showsUnread, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
+import { BADGE_MODE_EVENT, badgeCount, badgeImage, loadBadgeMode, type BadgeMode } from './state/appBadge'
+import { AppBadgeSetting } from './components/AppBadgeSetting'
 import { readRowFor, useOpenChatRead } from './state/openChatRead'
 import { isDone, useChatDone } from './state/chatDone'
 import { muteOf, muteOfTarget, muteProfilesToAsk, turnNotifies, useChatMute, type MuteTarget } from './state/chatMute'
@@ -2306,6 +2308,23 @@ function Shell({
 
   // The tray's count and the Dock's badge.
   useEffect(() => window.conduit.setWaiting(needsCount), [needsCount])
+  // The app icon's number (state/appBadge): Needs you, and each unread chat that isn't already in it.
+  const [badgeMode, setBadgeMode] = useState<BadgeMode>(loadBadgeMode)
+  useEffect(() => {
+    const follow = (event: Event) => setBadgeMode((event as CustomEvent<BadgeMode>).detail)
+    window.addEventListener(BADGE_MODE_EVENT, follow)
+    return () => window.removeEventListener(BADGE_MODE_EVENT, follow)
+  }, [])
+  const badge = useMemo(() => {
+    const waitingIds = new Set<string>([
+      ...requests.flatMap(r => (r.sessionId ? [r.sessionId] : [])),
+      ...waitingRows.flatMap(row => row.sessionIds),
+      ...otherWaiting.flatMap(row => row.sessionIds)
+    ])
+    const unreadIds = (listedRows ?? []).filter(row => showsUnread(marks, row, row.id === readRow?.id)).map(row => row.id)
+    return badgeCount(badgeMode, needsCount, waitingIds, unreadIds)
+  }, [badgeMode, needsCount, requests, waitingRows, otherWaiting, listedRows, marks, readRow])
+  useEffect(() => window.conduit.setBadge(badge, badgeImage(badge)), [badge])
 
   // Notifications for what happens in a chat the user isn't looking at.
   const waitingRowsRef = useRef(waiting.rows)
@@ -4225,6 +4244,7 @@ function Settings({
               {t('When a reply finishes or something needs you in a chat you’re not looking at')}
             </label>
           </dd>
+          <AppBadgeSetting />
           <dt>{t('Language')}</dt>
           <dd>
             <Select

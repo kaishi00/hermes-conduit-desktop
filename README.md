@@ -22,7 +22,9 @@ your bot with the phone's voice modes (or from anywhere, in a small window,
 with keys you pick in Settings), and keep several Hermes hosts
 side by side. Close the window and Conduit stays in the tray (the menu bar
 on the Mac), so approvals and finished replies still reach you as
-notifications. Settings > App > Open at Sign-In starts it there with your
+notifications, and its icon (the taskbar button on Windows, the Dock on the
+Mac) counts the chats waiting on you, or only what Needs you holds, as
+Settings > App > App icon badge picks. Settings > App > Open at Sign-In starts it there with your
 computer, with no window (the Microsoft Store's copy is turned on in Windows'
 Startup apps). It speaks the iPhone app's thirteen languages.
 
