@@ -260,6 +260,7 @@ import { Select } from './components/Select'
 import { KeptPane } from './components/KeptPane'
 import { DockedChatPane, tellDockedShown, type DockedChat, type DockedFrame } from './components/DockedChat'
 import { DockedPulseFrame } from './components/DockedPulse'
+import { keepsBotChatPlace } from './state/chatPlaces'
 import { botSideScroll, ScrollPane, useBackScroll, useShownAgain } from './state/keptScroll'
 
 /** A call's transcript while no call reads it. */
@@ -1339,9 +1340,13 @@ function Shell({
   const keepsPlace = useCallback(
     (chat: string, leaving: boolean) =>
       ((!leaving || showsTabStrip(tabs)) && tabs.tabs.some(tab => tab.chat.id === chat)) ||
-      // A Bot Chat left for one of its workstreams, and back from it by its title line or a Back press (desktop#755).
-      (leaving ? !!workItem && chat === workBot?.botChatId : chat === backToBotChat.current),
-    [tabs, workItem, workBot?.botChatId]
+      keepsBotChatPlace(chat, leaving, {
+        botChatId: workBot?.botChatId,
+        // The bot's own work read can trail a just-started workstream; the cross-bot set may have it first.
+        toWorkstream: !!workItem || workSessions.has(selected.id ?? ''),
+        backTo: backToBotChat.current
+      }),
+    [tabs, workItem, workBot?.botChatId, workSessions, selected.id]
   )
   // Cleared once the chat it names has opened, so the Bot Chat opened any other way opens on its newest rows (desktop#467).
   useEffect(() => {
@@ -3096,8 +3101,9 @@ function Shell({
                         title: t('Back to {bot}', { bot: workBot.title }),
                         back: !!workBot.botChatId,
                         onClick: () => {
-                          backToBotChat.current = workBot.botChatId ?? null
-                          if (workBot.botChatId) openBot(workBot)
+                          if (!workBot.botChatId) return
+                          backToBotChat.current = workBot.botChatId
+                          openBot(workBot)
                         }
                       }
                     : undefined

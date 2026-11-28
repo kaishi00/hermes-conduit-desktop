@@ -44,3 +44,16 @@ export class ChatPlaces {
 }
 
 export const chatPlaces = new ChatPlaces()
+
+/**
+ * Whether a Bot Chat keeps the reader's place (desktop#755): left for one of its workstreams, it keeps it, and opened
+ * on the way back from that workstream (its title line, or a Back press on it), it opens there. Opened any other way,
+ * it opens on its newest rows (desktop#467).
+ */
+export function keepsBotChatPlace(
+  chat: string,
+  leaving: boolean,
+  bot: { botChatId?: string | null; toWorkstream: boolean; backTo: string | null }
+): boolean {
+  return leaving ? bot.toWorkstream && !!bot.botChatId && chat === bot.botChatId : !!bot.backTo && chat === bot.backTo
+}
