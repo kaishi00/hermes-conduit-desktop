@@ -14747,6 +14747,27 @@ button.rail-brand-button:hover {
   margin: 0;
 }
 
+/* Sign in your iPhone, below it on Settings' page. */
+.iphone-sign-in {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.iphone-sign-in p {
+  margin: 0;
+}
+
+.iphone-sign-in > button {
+  align-self: flex-start;
+}
+
+.iphone-sign-in-host {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* The one-time card under the chat list. */
 .other-app-card {
   position: relative;

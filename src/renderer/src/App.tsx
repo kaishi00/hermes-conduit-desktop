@@ -15,7 +15,7 @@ import { BotsHome, useReplyFace, type BotAction, type BotsDraft } from './compon
 import { ProjectsPane } from './components/ProjectsPane'
 import { ArchivedChats } from './components/ArchivedChats'
 import { ChatList, type MoveTarget } from './components/ChatList'
-import { IPhoneAppCard, IPhoneAppPanel } from './components/IPhoneApp'
+import { IPhoneAppCard, IPhoneAppPanel, SignInYourIphone } from './components/IPhoneApp'
 import { useOfferIphone } from './state/useOfferIphone'
 import { PROFILE_COLUMN_WIDTH } from './components/ProfileColumn'
 import { SettingsProfileCard, settingsProfileTile } from './components/SettingsProfile'
@@ -3983,6 +3983,9 @@ function Settings({
         <SettingsSubpage title={t('Conduit on iPhone')} onBack={() => setPage('main')}>
           <div className="settings-card settings-card-single">
             <IPhoneAppPanel />
+          </div>
+          <div className="settings-card settings-card-single">
+            <SignInYourIphone />
           </div>
         </SettingsSubpage>
       </SettingsPane>
