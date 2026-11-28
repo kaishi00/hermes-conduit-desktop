@@ -118,6 +118,7 @@ export function SignInYourIphone() {
     if (round === 0) return
     let live = true
     setStage({ kind: 'starting' })
+    setPicked(new Set())
     void window.conduit
       .phoneSignInStart()
       .then(async result => {
@@ -132,7 +133,9 @@ export function SignInYourIphone() {
     const off = window.conduit.onPhoneSignIn((event: PhoneSignInEvent) => {
       if (event.phase === 'received') {
         const hosts = event.hosts ?? []
-        setPicked(new Set(hosts.filter(h => h.sendable).map(h => h.url)))
+        const sendable = hosts.filter(h => h.sendable).map(h => h.url)
+        // A list shown again keeps what was unchecked; the first one checks every host.
+        setPicked(prev => (prev.size ? new Set(sendable.filter(url => prev.has(url))) : new Set(sendable)))
         setStage({ kind: 'received', words: event.words ?? [], hosts })
       } else if (event.phase === 'sending') setStage({ kind: 'sending' })
       else if (event.phase === 'done') setStage({ kind: 'done' })

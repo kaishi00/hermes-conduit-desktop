@@ -120,13 +120,10 @@ export class PhoneSignIn {
     const request = this.request
     if (!request) return
     const picked = new Set(urls)
-    const hosts = this.deps
-      .hosts()
-      .filter(h => picked.has(h.url))
-      .map(sendableHost)
-      .filter((h): h is Record<string, unknown> => h !== null)
-    if (!hosts.length) {
-      // The picked hosts were signed out meanwhile: say so rather than leave the button dead.
+    const still = this.deps.hosts().filter(h => picked.has(h.url))
+    const hosts = still.map(sendableHost).filter((h): h is Record<string, unknown> => h !== null)
+    if (!hosts.length || still.length < picked.size) {
+      // A picked host was signed out meanwhile: list them again rather than send fewer than were checked.
       this.deps.onEvent({ phase: 'received', words: this.words, hosts: this.listed() })
       return
     }
