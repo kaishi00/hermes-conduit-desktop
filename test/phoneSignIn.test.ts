@@ -120,6 +120,32 @@ describe('PhoneSignIn', () => {
     expect([...nextPicked(new Set(['b']), list.filter(h => h.url !== 'b'))]).toEqual([])
   })
 
+  it('a new code waits for the last one’s take-back, so a late DELETE can’t remove its sender', async () => {
+    const box = fakeMailbox()
+    const order: string[] = []
+    let release!: () => void
+    const held = new Promise<void>(r => (release = r))
+    const fetch = async (url: string, init: { method: string; headers?: Record<string, string>; body?: unknown; signal?: AbortSignal }) => {
+      const path = new URL(url).pathname
+      if (init.method === 'DELETE' && path.endsWith('/senders/phone') && order.includes('PUT') && !order.includes('DELETE (held)')) {
+        order.push('DELETE (held)')
+        await held
+      } else if (init.method !== 'GET') order.push(init.method)
+      return box.fetch(url, init)
+    }
+    const signIn = new PhoneSignIn({ fetch: fetch as never, mailbox: 'https://mail.test', onEvent: () => {}, hosts: () => HOSTS })
+    expect((await signIn.start()).ok).toBe(true)
+    const cancelling = signIn.cancel()
+    const restarting = signIn.start()
+    await new Promise(r => setTimeout(r, 30))
+    expect(order.filter(m => m === 'PUT')).toHaveLength(1)
+    release()
+    await cancelling
+    expect((await restarting).ok).toBe(true)
+    expect(order.lastIndexOf('PUT')).toBeGreaterThan(order.indexOf('DELETE (held)'))
+    await signIn.cancel()
+  })
+
   it('reads only a well-formed request', () => {
     const key = b64u(Buffer.alloc(32, 1))
     const inbox = 'a'.repeat(43)
