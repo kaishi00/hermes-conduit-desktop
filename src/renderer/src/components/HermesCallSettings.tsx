@@ -5,6 +5,7 @@ import { CALLS_CAPABILITY, CALLS_PATH } from '../state/callbacks'
 import { STATUS_PATH, pluginStatus, serves } from '../state/plugin'
 import { cleanRules, gapChoices, gapText, parseCallsStatus, testCallPrompt, watchPrompt, withProfile, type Bounds, type CallSettings, type CallsStatus } from '../state/callSettings'
 import { Select } from './Select'
+import { APP_STORE_URL } from '../state/otherApp'
 
 /**
  * Settings > Voice > Calls from Hermes, after the phone's: this profile's call
@@ -114,7 +115,10 @@ export function HermesCallSettings({ profile, onNewChat }: { profile?: string; o
           </p>
           {!status.canRing ? (
             <p className="meta settings-caption">
-              {t('Turn on notifications for this profile in Conduit on your iPhone first, in Settings under Notifications: Hermes calls you through them.')}
+              {t('Turn on notifications for this profile in Conduit on your iPhone first, in Settings under Notifications: Hermes calls you through them.')}{' '}
+              <a className="link" href={APP_STORE_URL} target="_blank" rel="noreferrer">
+                {t('Get Conduit on iPhone')}
+              </a>
             </p>
           ) : null}
           {draft.enabled ? (

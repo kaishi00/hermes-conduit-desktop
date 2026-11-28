@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { GatewayError } from '../src/renderer/src/gateway'
 import {
   jobPrompt,
   MAX_SAVED_JOBS,
   SAVED_JOB_MAX_AGE_MS,
   VoiceJobs,
   completionPrompt,
+  correctionMayHaveGone,
   jobTitle,
   listResult,
   mergeLedger,
@@ -17,7 +19,7 @@ import {
 
 type Event = { type: string; session_id?: string; payload?: unknown }
 
-function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 'redirected') {
+function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 'redirected', correctionError?: Error) {
   const corrected: [string, string, string | undefined][] = []
   const adopted: [string | undefined, string, string, string][] = []
   const calls: [string, Record<string, unknown>][] = []
@@ -41,6 +43,7 @@ function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 
     },
     async (sid, text, profile) => {
       corrected.push([sid, text, profile])
+      if (correctionError) throw correctionError
       return correction
     },
     async (profile, sid, title, goal) => {
@@ -144,24 +147,27 @@ describe('correcting a running job', () => {
   })
 })
 
-describe('a follow-up that may have landed', () => {
-  // hermes-conduit 3361 / desktop issue 732: no answer back may still have reached Hermes.
-  it('says it may have gone after a timeout, and not sent when it never left or Hermes refused', async () => {
+describe('a request with no answer back', () => {
+  // hermes-conduit 3361 / desktop issue 732: one main marks as never sent stays not sent, whatever its words,
+  // and a job's own submit with no answer back tells the call Hermes may have it.
+  it('reads main\'s not_connected reason, and a job submit that may have gone says so', async () => {
     const { GatewayError } = await import('../src/renderer/src/gateway')
-    const { followUpMayHaveGone } = await import('../src/renderer/src/state/voiceJobs')
-    expect(followUpMayHaveGone(new GatewayError('Request timed out'))).toBe(true)
-    expect(followUpMayHaveGone(new Error('socket closed'))).toBe(true)
-    expect(followUpMayHaveGone(new GatewayError('Not connected to Hermes.', undefined, 'not_connected'))).toBe(false)
-    expect(followUpMayHaveGone(new GatewayError('busy', -32000))).toBe(false)
+    const { correctionMayHaveGone } = await import('../src/renderer/src/state/voiceJobs')
+    expect(correctionMayHaveGone(new GatewayError('socket closed', undefined, 'not_connected'))).toBe(false)
+    expect(correctionMayHaveGone(new GatewayError('Request timed out'))).toBe(true)
 
-    const errors = [new GatewayError('Request timed out'), new GatewayError('Not connected to Hermes.', undefined, 'not_connected')]
-    const { jobs } = setup()
-    ;(jobs as unknown as { correct: () => Promise<never> }).correct = async () => {
-      throw errors.shift()
+    const failingSubmit = (error: Error) => {
+      const { jobs } = setup()
+      const rpc = (jobs as unknown as { rpc: (m: string, p: Record<string, unknown>) => Promise<unknown> }).rpc
+      ;(jobs as unknown as { rpc: typeof rpc }).rpc = async (method, params) => {
+        if (method === 'prompt.submit') throw error
+        return rpc(method, params)
+      }
+      return jobs
     }
-    await jobs.start('Book a table for two')
-    expect(await jobs.followUp('job-1', 'make it three')).toMatchObject({ status: 'unknown', delivery: 'unknown' })
-    expect(await jobs.followUp('job-1', 'make it four')).toMatchObject({ status: 'not_sent' })
+    expect(await failingSubmit(new GatewayError('Request timed out')).start('Book a table')).toMatchObject({ status: 'error', delivery: 'unknown' })
+    expect(await failingSubmit(new GatewayError('socket closed', undefined, 'not_connected')).start('Book a table')).not.toHaveProperty('delivery')
+    expect(await failingSubmit(new GatewayError('busy', -32000)).start('Book a table')).not.toHaveProperty('delivery')
   })
 })
 
@@ -258,5 +264,28 @@ describe('jobs kept past their call', () => {
     expect(replyAfter({ messages: [{ role: 'assistant', text: '', tool_calls: [{ id: 'x' }], timestamp: 200 }] }, 100_000)).toBeNull()
     expect(replyAfter({ messages: [{ role: 'tool', text: 'x', timestamp: 200 }] }, 100_000)).toBeNull()
     expect(replyAfter({ messages: [{ role: 'assistant', content: [{ text: 'Done ' }, { text: 'now' }], timestamp: 200 }] }, 100_000)).toBe('Done now')
+  })
+})
+
+describe('a follow-up whose redirect may have landed', () => {
+  it('reports unknown for a dropped redirect, not_sent before a frame left', async () => {
+    const timeout = setup(false, 'redirected', Object.assign(new Error('request timed out'), { name: 'TimeoutError' }))
+    await timeout.jobs.start('Check the render')
+    expect(await timeout.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'unknown' })
+    const refused = setup(false, 'redirected', new GatewayError('refused', -32000))
+    await refused.jobs.start('Check the render')
+    expect(await refused.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
+    const dropped = setup(false, 'redirected', new Error('WebSocket closed'))
+    await dropped.jobs.start('Check the render')
+    expect(await dropped.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'unknown' })
+    const offline = setup(false, 'redirected', new Error('Not connected to Hermes.'))
+    await offline.jobs.start('Check the render')
+    expect(await offline.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
+    const farHost = setup(false, 'redirected', new Error('Not connected to that Hermes.'))
+    await farHost.jobs.start('Check the render')
+    expect(await farHost.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
+    expect(correctionMayHaveGone(new Error('WebSocket closed'))).toBe(true)
+    expect(correctionMayHaveGone(new Error('Not connected to Hermes.'))).toBe(false)
+    expect(correctionMayHaveGone(new Error('Not connected to that Hermes.'))).toBe(false)
   })
 })

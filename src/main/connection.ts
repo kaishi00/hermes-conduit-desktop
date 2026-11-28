@@ -18,7 +18,7 @@ import { JsonRpcGatewayClient, type WebSocketLike } from '../vendor/hermes-share
 import { reconnectBackoffDelayMs, isStableOpen } from '../vendor/hermes-shared/reconnect-backoff'
 import {
   AuthError,
-  CONDUIT_CLIENT_HEADER,
+  CONDUIT_HEADERS,
   SESSION_TOKEN_HEADER,
   type CookieJar,
   browserSession,
@@ -640,7 +640,7 @@ export class Connection {
     if (!path.startsWith('/api/')) throw new Error('Only dashboard API paths can be called.')
     if (saved.method === 'browser') return this.browserRequest(saved, method, path, body, signal, accept, raw)
     const send = async (): Promise<Response> => {
-      const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit', ...raw?.headers }
+      const headers: Record<string, string> = { Accept: accept, ...CONDUIT_HEADERS, ...raw?.headers }
       if (body !== undefined) headers['Content-Type'] = 'application/json'
       if (raw?.body) headers['Content-Type'] = 'application/octet-stream'
       if (saved.method === 'password' && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
@@ -680,7 +680,7 @@ export class Connection {
    */
   private async browserRequest(saved: SavedConnection, method: string, path: string, body: unknown, signal: AbortSignal | undefined, accept: string, raw?: RawRequest): Promise<Response> {
     const send = async (): Promise<Response> => {
-      const headers: Record<string, string> = { Accept: accept, [CONDUIT_CLIENT_HEADER]: 'conduit', ...raw?.headers }
+      const headers: Record<string, string> = { Accept: accept, ...CONDUIT_HEADERS, ...raw?.headers }
       if (body !== undefined) headers['Content-Type'] = 'application/json'
       if (raw?.body) headers['Content-Type'] = 'application/octet-stream'
       if (this.saved === saved && this.openToken) headers[SESSION_TOKEN_HEADER] = this.openToken
@@ -729,7 +729,7 @@ export class Connection {
     if (!path.startsWith('/api/plugins/') && path !== DISPLAY_SOCKET_PATH) throw new Error('Only plugin sockets can be opened.')
     const url = new URL(await this.socketUrl(saved, path))
     for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value)
-    const headers: Record<string, string> = { [CONDUIT_CLIENT_HEADER]: 'conduit' }
+    const headers: Record<string, string> = { ...CONDUIT_HEADERS }
     if ((saved.method === 'password' || saved.method === 'browser') && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
     if (saved.method === 'oidc') headers.Authorization = `Bearer ${await this.oidcAccess(saved)}`
     return this.deps.createSocket(url.toString(), withProxyHeaders(headers, url.toString(), saved.url, saved.headers))
@@ -765,7 +765,7 @@ export class Connection {
     }
     if (generation !== this.generation) return 'Cancelled.'
 
-    const headers: Record<string, string> = { [CONDUIT_CLIENT_HEADER]: 'conduit' }
+    const headers: Record<string, string> = { ...CONDUIT_HEADERS }
     // A sign-in window's cookies pass its proxy on the socket's handshake too.
     if ((saved.method === 'password' || saved.method === 'browser') && saved.cookies) headers.Cookie = cookieHeader(saved.cookies)
     if (saved.method === 'oidc') {

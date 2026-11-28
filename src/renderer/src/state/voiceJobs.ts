@@ -27,6 +27,15 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 
 const withProfile = (path: string, profile?: string) => (profile && profile !== 'default' ? `${path}?profile=${encodeURIComponent(profile)}` : path)
 
+/** A correction may have reached Hermes unless the gateway gave a definitive answer (issue 732). */
+export function correctionMayHaveGone(error: unknown): boolean {
+  const text = String((error as { message?: unknown } | null)?.message ?? error).toLowerCase()
+  if (/not connected to (that )?hermes/i.test(text) || text.includes('gateway not connected')) return false
+  // Main marks a call that never left with this reason, whatever its words.
+  if (error instanceof GatewayError && error.reason === 'not_connected') return false
+  return !(error instanceof GatewayError && error.code !== undefined)
+}
+
 /** The plugin keeps a voice call's jobs in its bot's Work panel (notifier `work-adopt`). */
 export const ADOPT_CAPABILITY = 'work-adopt'
 export const ADOPT_PATH = '/api/plugins/conduit_push/workstreams/adopt'
@@ -335,11 +344,6 @@ export const jobPrompt = (instructions: string) =>
  * dropped connection). One Hermes answered with an error, or one that never left because Conduit
  * wasn't connected, didn't.
  */
-export function followUpMayHaveGone(error: unknown): boolean {
-  if (!(error instanceof GatewayError)) return true
-  return error.code === undefined && error.reason !== 'not_connected'
-}
-
 export class VoiceJobs {
   jobs: VoiceJob[] = []
   private count = 0
@@ -487,7 +491,7 @@ export class VoiceJobs {
       } catch (e) {
         this.surface.discard(sid, text, e)
         // No answer back (a timeout, a dropped connection): Hermes may have it.
-        if (followUpMayHaveGone(e)) deliveryUnknown = true
+        if (correctionMayHaveGone(e)) deliveryUnknown = true
         throw e
       }
       // Filed under Voice Jobs, beneath the call's chat; the plugin archives it once Hermes answers.
@@ -534,15 +538,9 @@ export class VoiceJobs {
     try {
       outcome = await this.correct(job.sid, `(voice) ${text}`, this.profile)
     } catch (e) {
-      // No answer back (a timeout, a dropped connection): the redirect may have reached Hermes, so
-      // the call hears it may have gone, as for a job's own submit (hermes-conduit 3361). One Hermes
-      // refused, or one that never left (not connected), wasn't sent.
-      if (followUpMayHaveGone(e))
-        return {
-          status: 'unknown',
-          delivery: 'unknown',
-          message: `The connection dropped while Conduit passed the user's words to ${quoted}, so Hermes may have them. Tell the user it may have gone through, and don't send it again unless they ask; the result still comes back later on this call.`
-        }
+      if (correctionMayHaveGone(e)) {
+        return { status: 'unknown', message: `The redirect to ${quoted} may have reached Hermes; don't send it again unless the user asks.` }
+      }
       return { status: 'not_sent', error: message(e) }
     }
     if (outcome === 'redirected')

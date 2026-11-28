@@ -15,6 +15,8 @@ import { BotsHome, useReplyFace, type BotAction, type BotsDraft } from './compon
 import { ProjectsPane } from './components/ProjectsPane'
 import { ArchivedChats } from './components/ArchivedChats'
 import { ChatList, type MoveTarget } from './components/ChatList'
+import { IPhoneAppCard, IPhoneAppPanel, SignInYourIphone } from './components/IPhoneApp'
+import { useOfferIphone } from './state/useOfferIphone'
 import { PROFILE_COLUMN_WIDTH } from './components/ProfileColumn'
 import { SettingsProfileCard, settingsProfileTile } from './components/SettingsProfile'
 import { Composer } from './components/Composer'
@@ -526,6 +528,7 @@ function Shell({
     if (section !== 'chats' || !connected) setArchivedOpen(false)
   }, [section, connected])
   const list = useChatList(connected, status.url ?? '')
+  const offerIphone = useOfferIphone(connected, status.url ?? '')
   // Whether a New Chat's tab is still in the strip: past the kept drafts' limit, closed ones lose their picks first.
   const draftTabOpen = useCallback((draft: number) => tabsRef.current.tabs.some(tab => tab.chat.id === null && tab.chat.draft === draft), [])
   const {
@@ -3052,6 +3055,7 @@ function Shell({
                   badgeFor={badgeFor}
                   onOpenOther={selectOtherRow}
                   onHide={() => hideList(true)}
+                  footer={offerIphone.shown ? <IPhoneAppCard onDone={offerIphone.done} /> : null}
                 />
               )}
             </div>
@@ -3800,7 +3804,7 @@ function Settings({
   const [readAloudOn, setReadAloudOn] = useState(readsRepliesAloud)
   const [speed, setSpeed] = useState(readAloudSpeed)
   const [page, setPage] = useState<
-    'main' | 'usage' | 'models' | 'capabilities' | 'memory' | 'workspace' | 'advanced' | 'chat' | 'plugin' | 'vault' | 'appearance' | 'multiplayer' | 'voice' | 'calls' | 'pulse'
+    'main' | 'usage' | 'models' | 'capabilities' | 'memory' | 'workspace' | 'advanced' | 'chat' | 'plugin' | 'vault' | 'appearance' | 'multiplayer' | 'voice' | 'calls' | 'pulse' | 'iphone'
   >('main')
   // Back from a page lands where Settings was, on the row it was opened from.
   const pane = useRef<HTMLElement>(null)
@@ -3973,6 +3977,19 @@ function Settings({
       </SettingsPane>
     )
   // Pulse's settings, also behind the Pulse page's gear: Hermes and the plugin say "Settings > Pulse" (desktop#398).
+  if (page === 'iphone')
+    return (
+      <SettingsPane pane={pane}>
+        <SettingsSubpage title={t('Conduit on iPhone')} onBack={() => setPage('main')}>
+          <div className="settings-card settings-card-single">
+            <IPhoneAppPanel />
+          </div>
+          <div className="settings-card settings-card-single">
+            <SignInYourIphone />
+          </div>
+        </SettingsSubpage>
+      </SettingsPane>
+    )
   if (page === 'pulse')
     return (
       <SettingsPane pane={pane}>
@@ -4230,6 +4247,7 @@ function Settings({
       <section className="settings-group">
         <h2>{t('Support')}</h2>
         <dl className="settings-card">
+          <SettingsLink label={t('Conduit on iPhone')} detail={t('iPhone, iPad, Apple Watch and CarPlay')} onOpen={() => setPage('iphone')} />
           <dt>{t('Last live call')}</dt>
           <dd>
             <LastCallTrace />

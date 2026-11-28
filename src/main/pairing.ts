@@ -16,7 +16,7 @@ import { t } from '../shared/i18n'
 export const DEFAULT_MAILBOX = 'https://rooms.milim.dev'
 export const PAIR_TTL_MS = 10 * 60_000
 const SENDER = 'phone'
-const POLL_WAIT_S = 25
+export const POLL_WAIT_S = 25
 
 export interface PairingDeps {
   fetch: Fetch
@@ -77,6 +77,8 @@ export class Pairing {
   private signing: Pick<PairKeys, 'signPrivate' | 'signPublic'> | null = null
   private received: Received | null = null
   private run = 0
+  /** The last code's take-back, which a new code waits for so a late DELETE can't remove its sender. */
+  private cleaning: Promise<void> = Promise.resolve()
   private expiry: ReturnType<typeof setTimeout> | null = null
   private readonly mailbox: string
 
@@ -91,6 +93,7 @@ export class Pairing {
   /** Makes the inbox and answers the link the QR code shows. */
   async start(): Promise<{ ok: true; link: string; expires: number } | { ok: false; error: string }> {
     await this.cancel()
+    await this.cleaning
     const mine = ++this.run
     const fresh = makePairKeys()
     this.signing ??= { signPrivate: fresh.signPrivate, signPublic: fresh.signPublic }
@@ -153,12 +156,14 @@ export class Pairing {
     this.inbox = null
     this.received = null
     if (!keys || !inbox) return
-    if (options.deleteInbox) {
-      this.signing = null
-      await this.owner('DELETE', `/v1/inboxes/${inbox}`, undefined, keys).catch(() => undefined)
-    } else {
-      await this.owner('DELETE', `/v1/inboxes/${inbox}/senders/${SENDER}`, undefined, keys).catch(() => undefined)
-    }
+    if (options.deleteInbox) this.signing = null
+    const path = options.deleteInbox ? `/v1/inboxes/${inbox}` : `/v1/inboxes/${inbox}/senders/${SENDER}`
+    const done = this.owner('DELETE', path, undefined, keys).then(
+      () => undefined,
+      () => undefined
+    )
+    this.cleaning = done
+    await done
   }
 
   private async poll(mine: number): Promise<void> {
@@ -204,27 +209,37 @@ export class Pairing {
     }
   }
 
-  private async owner(method: string, pathAndQuery: string, body: unknown, keys: PairKeys): Promise<unknown> {
-    const bytes = body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body))
-    const url = new URL(pathAndQuery, `${this.mailbox}/`)
-    const headers: Record<string, string> = { Authorization: ownerAuthorization(keys.signPrivate, method, url.host, pathAndQuery, bytes, this.now) }
-    if (body !== undefined) headers['Content-Type'] = 'application/json'
-    const response = await this.deps.fetch(url.toString(), {
-      method,
-      headers,
-      body: body === undefined ? undefined : bytes,
-      signal: AbortSignal.timeout((POLL_WAIT_S + 10) * 1000)
-    })
-    const text = await response.text()
-    if (!response.ok) {
-      let code = `HTTP ${response.status}`
-      try {
-        code = (JSON.parse(text) as { error?: string }).error ?? code
-      } catch {
-        // Not JSON.
-      }
-      throw new Error(code)
-    }
-    return text ? JSON.parse(text) : null
+  private owner(method: string, pathAndQuery: string, body: unknown, keys: PairKeys): Promise<unknown> {
+    return mailboxOwner(this.deps.fetch, this.mailbox, method, pathAndQuery, body, keys, this.now)
   }
+}
+
+/** One request to the mailbox as an inbox's owner; throws its error code. */
+export async function mailboxOwner(fetch: Fetch, mailbox: string, method: string, pathAndQuery: string, body: unknown, keys: Pick<PairKeys, 'signPrivate'>, now: number): Promise<unknown> {
+  const bytes = body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body))
+  const url = new URL(pathAndQuery, `${mailbox}/`)
+  const headers: Record<string, string> = { Authorization: ownerAuthorization(keys.signPrivate, method, url.host, pathAndQuery, bytes, now) }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const response = await fetch(url.toString(), {
+    method,
+    headers,
+    body: body === undefined ? undefined : bytes,
+    signal: AbortSignal.timeout((POLL_WAIT_S + 10) * 1000)
+  })
+  return mailboxAnswer(response)
+}
+
+/** A mailbox answer's JSON, or its error code thrown. */
+export async function mailboxAnswer(response: Response): Promise<unknown> {
+  const text = await response.text()
+  if (!response.ok) {
+    let code = `HTTP ${response.status}`
+    try {
+      code = (JSON.parse(text) as { error?: string }).error ?? code
+    } catch {
+      // Not JSON.
+    }
+    throw new Error(code)
+  }
+  return text ? JSON.parse(text) : null
 }
