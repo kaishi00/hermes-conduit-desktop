@@ -76,7 +76,7 @@ describe('scheduled jobs', () => {
   it('reads runs: a conversation by its id, a script’s run without one', () => {
     const runs = parseRuns({ runs: [{ id: 'cron_j1_1', title: 'Morning', started_at: 1795000000, is_active: true }, { title: 'Script output', source: 'cron_output', started_at: 1794990000 }] })
     expect(runs[0]).toMatchObject({ key: 'cron_j1_1', id: 'cron_j1_1', startedAt: 1795000000000, active: true })
-    expect(runs[1]).toMatchObject({ key: 'run-1', id: undefined, title: 'Script output' })
+    expect(runs[1]).toMatchObject({ key: 'run-1', id: undefined, title: 'Script output', outputOnly: true })
   })
 
   it('opens only a run with a session: a script’s output row has an id that names none (issue 3455)', () => {
@@ -90,6 +90,7 @@ describe('scheduled jobs', () => {
       ]
     })
     expect(runs.map(run => run.id)).toEqual(['local-409c9669', undefined, undefined, 'cron_4f00afd560b2_20261128_095300', undefined])
+    expect(runs.map(run => run.outputOnly)).toEqual([false, true, true, false, true])
     expect(runs[1]).toMatchObject({ key: 'cron_output:4f00afd560b2:2026-11-28_10-10-45', preview: '**Status:** silent (empty output)' })
     expect(new Set(runs.map(run => run.key)).size).toBe(5)
   })
