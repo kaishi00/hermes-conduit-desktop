@@ -224,6 +224,11 @@ describe('text tags in a reply', () => {
     expect(commentLines(lines)).toEqual([false, false, false, true, false, false, false, false])
     expect(commentLines(['`<!--` in code', '</details>'])).toEqual([false, false])
     expect(commentLines(['```', '<!--', '```', '</details>'])).toEqual([false, false, false, false])
+    // A `<!--` in a script's or a style's text is text, as a page reads it (hermes-conduit#3460 review).
+    expect(commentLines(['<script>var marker = "<!--";</script>', '<details>'])).toEqual([false, false])
+    expect(commentLines(['<script>', 'const m = "<!--";', '</script>', '<details>'])).toEqual([false, false, false, false])
+    expect(commentLines(['<style>/* <!-- */</style> <!-- real', '<details>', '-->'])).toEqual([false, true, false])
+    expect(commentLines(['<!-- <script>', '<details>', '-->', 'After.'])).toEqual([false, true, false, false])
     const html = draw(lines.join('\n'))
     expect(html).toContain('reply-fold')
     // The fold runs to the real close: More. is inside it, After. outside.

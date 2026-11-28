@@ -191,6 +191,9 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
   const offered = useRef(new Set<string>())
   const shownHost = useRef(hostName)
   shownHost.current = hostName
+  // The dashboard showing now, which a running action's result is checked against.
+  const showing = useRef(host)
+  showing.current = host
 
   // A list saved before it was kept per dashboard goes to the one showing now (shared/pcControl.ts).
   // Tried again until it holds: a write that failed would leave every tick doing nothing (desktop#740 review).
@@ -275,8 +278,9 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
             result = { ok: false, code: 'failed', message: String(error) }
           }
           // Left this dashboard while it ran: its result (a capture, typed text, a command's output) never goes
-          // to the one showing now, which the gateway reaches (desktop#744 review).
-          if (!live) return
+          // to the one showing now, which the gateway reaches (desktop#744 review). The same dashboard picked up
+          // again (a blip in the connection, a change to the bots or the name) still gets its answer.
+          if (!live && showing.current !== host) return
           await gateway.http('POST', pcPath('/result', profile), { computer: state.id, id: request.id, result }, 30_000).catch(() => undefined)
         }
       }

@@ -79,6 +79,10 @@ export interface KeptHostsDeps {
 const stateOf = (status: ConnectionStatus): KeptHostState | null =>
   status.phase === 'open' ? 'live' : status.phase === 'connecting' ? 'connecting' : status.phase === 'reconnecting' ? 'down' : status.phase === 'failed' ? 'signIn' : null
 
+
+/** A kept host not connected now: the request never left, which the renderer tells apart (`not_connected`). */
+const notConnected = () => Object.assign(new Error('Not connected to that Hermes.'), { data: { reason: 'not_connected' } })
+
 export class KeptHosts {
   private readonly kept = new Map<string, { connection: Connection; state: KeptHostState }>()
 
@@ -143,7 +147,7 @@ export class KeptHosts {
   async http<T>(url: string, path: string, method = 'GET', body?: unknown): Promise<T> {
     if (method !== 'GET' && !(KEPT_WRITE_METHODS.includes(method) && keptWritable(path))) throw new Error('Only reads can go to another dashboard.')
     const kept = this.kept.get(url)
-    if (!kept || kept.state !== 'live') throw new Error('Not connected to that Hermes.')
+    if (!kept || kept.state !== 'live') throw notConnected()
     return method === 'GET' ? kept.connection.http<T>('GET', path, undefined, 6_000) : kept.connection.http<T>(method, path, body)
   }
 
@@ -154,7 +158,7 @@ export class KeptHosts {
   async rpc<T>(url: string, method: string, params: Record<string, unknown> = {}): Promise<T> {
     if (!KEPT_RPC_METHODS.includes(method) && !keptRpcWritable(method, params)) throw new Error('Only reads can go to another dashboard.')
     const kept = this.kept.get(url)
-    if (!kept || kept.state !== 'live') throw new Error('Not connected to that Hermes.')
+    if (!kept || kept.state !== 'live') throw notConnected()
     return kept.connection.rpc<T>(method, params)
   }
 

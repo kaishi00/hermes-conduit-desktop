@@ -270,14 +270,26 @@ const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
 const withoutCode = (line: string) =>
   line.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001').replace(/<!--.*?-->/g, '\u0001').replace(/<!--.*$/, '\u0001')
 
+const RAW_TEXT_OPENING = /<(script|style|textarea|title)\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi
+
+/** The index just past `name`'s closing tag in `text`, reading from `start`, or -1 while it's still to come. */
+function rawTextEnd(name: string, text: string, start: number): number {
+  const end = text.toLowerCase().indexOf(`</${name}`, start)
+  if (end < 0) return -1
+  const close = text.indexOf('>', end)
+  return close < 0 ? -1 : close + 1
+}
+
 /**
  * Whether each line lies wholly inside a comment opened on an earlier line, its `-->` still to come: a `</details>`
  * there closes nothing (hermes-conduit 3349). The line holding the `-->` isn't, since a close ending it comes after
- * the comment. Comments in code spans and fenced blocks don't count.
+ * the comment. Comments in code spans and fenced blocks don't count, nor a `<!--` in a script's, a style's, a
+ * textarea's or a title's text, which a page reads as text (hermes-conduit#3460 review).
  */
 export function commentLines(lines: readonly string[]): boolean[] {
   const inside: boolean[] = lines.map(() => false)
   let open = false
+  let raw: string | null = null
   let fence: string | null = null
   for (const [index, line] of lines.entries()) {
     let rest = line
@@ -289,6 +301,11 @@ export function commentLines(lines: readonly string[]): boolean[] {
       }
       rest = line.slice(end + 3)
       open = false
+    } else if (raw) {
+      const after = rawTextEnd(raw, line, 0)
+      if (after < 0) continue
+      rest = line.slice(after)
+      raw = null
     } else {
       const found = FOLD_FENCE.exec(line)
       if (fence) {
@@ -300,7 +317,33 @@ export function commentLines(lines: readonly string[]): boolean[] {
         continue
       }
     }
-    open = /<!--/.test(rest.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001').replace(/<!--.*?-->/g, '\u0001'))
+    const text = rest.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001')
+    // Read left to right: whichever opens first, a comment or a raw-text element, holds what follows.
+    let at = 0
+    while (at < text.length) {
+      const comment = text.indexOf('<!--', at)
+      RAW_TEXT_OPENING.lastIndex = at
+      const element = RAW_TEXT_OPENING.exec(text)
+      if (comment >= 0 && (!element || comment < element.index)) {
+        const end = text.indexOf('-->', comment + 4)
+        if (end < 0) {
+          open = true
+          break
+        }
+        at = end + 3
+      } else if (element) {
+        at = element.index + element[0].length
+        // `<script/>` holds no text.
+        if (element[0].endsWith('/>')) continue
+        const name = element[1]!.toLowerCase()
+        const after = rawTextEnd(name, text, at)
+        if (after < 0) {
+          raw = name
+          break
+        }
+        at = after
+      } else break
+    }
   }
   return inside
 }
