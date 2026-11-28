@@ -61,7 +61,18 @@ export function ProjectForm({
       setBusy(false)
     }
   }
+  // One Browse at a time: the check can wait on a lookup, and a second click meanwhile would ask for a second dialog.
+  const browsingNow = useRef(false)
   async function browse() {
+    if (browsingNow.current) return
+    browsingNow.current = true
+    try {
+      await browseOnce()
+    } finally {
+      browsingNow.current = false
+    }
+  }
+  async function browseOnce() {
     setError(null)
     // Asked at the click, not only as the form opened: a name that points back here takes a lookup (desktop issue 763).
     const here = await window.conduit.hostIsThisComputer().catch(() => false)

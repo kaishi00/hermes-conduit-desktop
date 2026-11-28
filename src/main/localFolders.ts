@@ -45,19 +45,42 @@ export type ThisComputerDeps = {
 const RESOLVE_WAIT_MS = 2000
 const resolved = new Map<string, { at: number; addresses: string[] }>()
 
-async function resolveHost(host: string): Promise<string[]> {
+/**
+ * A name's addresses, kept a minute. Only the system's answer is kept: a
+ * lookup that outlasts the wait counts as elsewhere this time, and its answer,
+ * when it comes, is kept for the next ask, so one slow lookup doesn't hide
+ * Finder for a minute. A name the system says doesn't exist is kept as none.
+ */
+export async function resolveHost(
+  host: string,
+  deps: { lookup?: (host: string) => Promise<string[]>; waitMs?: number; now?: () => number } = {}
+): Promise<string[]> {
+  const now = deps.now ?? Date.now
   const kept = resolved.get(host)
-  if (kept && Date.now() - kept.at < 60_000) return kept.addresses
+  if (kept && now() - kept.at < 60_000) return kept.addresses
+  const ask = deps.lookup ?? (name => lookup(name, { all: true }).then(found => found.map(entry => entry.address)))
+  const asked = ask(host).then(
+    addresses => {
+      resolved.set(host, { at: now(), addresses })
+      return addresses
+    },
+    () => {
+      resolved.set(host, { at: now(), addresses: [] })
+      return [] as string[]
+    }
+  )
   let timer: ReturnType<typeof setTimeout> | undefined
-  const gaveUp = new Promise<string[]>(done => (timer = setTimeout(() => done([]), RESOLVE_WAIT_MS)))
-  const asked = lookup(host, { all: true }).then(found => found.map(entry => entry.address))
+  const gaveUp = new Promise<string[]>(done => (timer = setTimeout(() => done([]), deps.waitMs ?? RESOLVE_WAIT_MS)))
   try {
-    const addresses = await Promise.race([asked, gaveUp])
-    resolved.set(host, { at: Date.now(), addresses })
-    return addresses
+    return await Promise.race([asked, gaveUp])
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** Forgets the kept answers, for tests. */
+export function forgetResolvedHosts(): void {
+  resolved.clear()
 }
 
 function ownAddresses(): string[] {
