@@ -5,6 +5,7 @@ import {
   SAVED_JOB_MAX_AGE_MS,
   VoiceJobs,
   completionPrompt,
+  correctionMayHaveGone,
   jobTitle,
   listResult,
   mergeLedger,
@@ -17,7 +18,7 @@ import {
 
 type Event = { type: string; session_id?: string; payload?: unknown }
 
-function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 'redirected') {
+function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 'redirected', correctionError?: Error) {
   const corrected: [string, string, string | undefined][] = []
   const adopted: [string | undefined, string, string, string][] = []
   const calls: [string, Record<string, unknown>][] = []
@@ -41,6 +42,7 @@ function setup(fail = false, correction: 'redirected' | 'queued' | 'rejected' = 
     },
     async (sid, text, profile) => {
       corrected.push([sid, text, profile])
+      if (correctionError) throw correctionError
       return correction
     },
     async (profile, sid, title, goal) => {
@@ -237,5 +239,19 @@ describe('jobs kept past their call', () => {
     expect(replyAfter({ messages: [{ role: 'assistant', text: '', tool_calls: [{ id: 'x' }], timestamp: 200 }] }, 100_000)).toBeNull()
     expect(replyAfter({ messages: [{ role: 'tool', text: 'x', timestamp: 200 }] }, 100_000)).toBeNull()
     expect(replyAfter({ messages: [{ role: 'assistant', content: [{ text: 'Done ' }, { text: 'now' }], timestamp: 200 }] }, 100_000)).toBe('Done now')
+  })
+})
+
+
+describe('a follow-up whose redirect may have landed', () => {
+  it('reports unknown after a timeout, not_sent when nothing left', async () => {
+    const timeout = setup(false, 'redirected', Object.assign(new Error('request timed out'), { name: 'TimeoutError' }))
+    await timeout.jobs.start('Check the render')
+    expect(await timeout.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'unknown' })
+    const refused = setup(false, 'redirected', new Error('fetch failed'))
+    await refused.jobs.start('Check the render')
+    expect(await refused.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
+    expect(correctionMayHaveGone({ code: 504 })).toBe(true)
+    expect(correctionMayHaveGone({ message: 'connection refused' })).toBe(false)
   })
 })

@@ -27,6 +27,16 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 
 const withProfile = (path: string, profile?: string) => (profile && profile !== 'default' ? `${path}?profile=${encodeURIComponent(profile)}` : path)
 
+/** A correction that timed out or lost the connection may still have reached Hermes (issue 732). */
+export function correctionMayHaveGone(error: unknown): boolean {
+  const e = (error ?? {}) as { name?: unknown; code?: unknown; message?: unknown }
+  const name = String(e.name ?? '')
+  const code = e.code
+  const text = String(e.message ?? error).toLowerCase()
+  return name === 'TimeoutError' || name === 'AbortError' || code === 408 || code === 504 || text.includes('timed out') || text.includes('timeout')
+}
+
+
 /** The plugin keeps a voice call's jobs in its bot's Work panel (notifier `work-adopt`). */
 export const ADOPT_CAPABILITY = 'work-adopt'
 export const ADOPT_PATH = '/api/plugins/conduit_push/workstreams/adopt'
@@ -524,6 +534,9 @@ export class VoiceJobs {
     try {
       outcome = await this.correct(job.sid, `(voice) ${text}`, this.profile)
     } catch (e) {
+      if (correctionMayHaveGone(e)) {
+        return { status: 'unknown', message: `The redirect to ${quoted} may have reached Hermes; don't send it again unless the user asks.` }
+      }
       return { status: 'not_sent', error: message(e) }
     }
     if (outcome === 'redirected')
