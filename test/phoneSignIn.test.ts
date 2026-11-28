@@ -110,6 +110,16 @@ describe('PhoneSignIn', () => {
     expect(box.calls.some(c => c.method === 'POST' && c.path === `/v1/inboxes/${phoneInbox}/envelopes`)).toBe(false)
   })
 
+  it('checks every sendable host first, and keeps unchecks when the list shows again', async () => {
+    // A path the node typecheck doesn't follow: the component is the renderer's, checked by tsconfig.web.json.
+    const file = '../src/renderer/src/components/IPhoneApp.tsx'
+    const { nextPicked } = (await import(/* @vite-ignore */ file)) as { nextPicked: (prev: Set<string>, hosts: { url: string; sendable: boolean }[]) => Set<string> }
+    const list = [{ url: 'a', sendable: true }, { url: 'b', sendable: true }, { url: 'sso', sendable: false }]
+    expect([...nextPicked(new Set(), list)]).toEqual(['a', 'b'])
+    expect([...nextPicked(new Set(['b']), list)]).toEqual(['b'])
+    expect([...nextPicked(new Set(['b']), list.filter(h => h.url !== 'b'))]).toEqual([])
+  })
+
   it('reads only a well-formed request', () => {
     const key = b64u(Buffer.alloc(32, 1))
     const inbox = 'a'.repeat(43)

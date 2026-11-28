@@ -49573,5 +49573,20 @@
     "tr": "Önce Hermes oturum açma bilgilerinizin kilidini açın.",
     "zh-Hans": "请先解锁你的 Hermes 登录信息。",
     "zh-Hant": "請先解鎖你的 Hermes 登入資訊。"
+  },
+  "Only Conduit’s main window can do that.": {
+    "de": "Das kann nur das Hauptfenster von Conduit.",
+    "es": "Solo la ventana principal de Conduit puede hacerlo.",
+    "fr": "Seule la fenêtre principale de Conduit peut faire cela.",
+    "id": "Hanya jendela utama Conduit yang dapat melakukannya.",
+    "it": "Solo la finestra principale di Conduit può farlo.",
+    "ja": "これは Conduit のメインウインドウでのみ行えます。",
+    "ko": "Conduit의 기본 창에서만 할 수 있어요.",
+    "pl": "Może to zrobić tylko główne okno Conduit.",
+    "pt-BR": "Só a janela principal do Conduit pode fazer isso.",
+    "ru": "Это можно сделать только в главном окне Conduit.",
+    "tr": "Bunu yalnızca Conduit’in ana penceresi yapabilir.",
+    "zh-Hans": "只有 Conduit 的主窗口可以执行此操作。",
+    "zh-Hant": "只有 Conduit 的主視窗可以執行此操作。"
   }
 }
