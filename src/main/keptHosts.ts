@@ -34,9 +34,10 @@ export function keptRpcWritable(method: string, params: Record<string, unknown>)
 /**
  * What another dashboard takes besides reads: its scheduled jobs and its task board, which Tasks
  * shows and changes in place, with no switch (Eric, 2026-11-22: Scheduled's faces and Board's
- * dropdown reach every combined dashboard).
+ * dropdown reach every combined dashboard), and its Conduit plugin's update, which Settings >
+ * Conduit plugin starts there (Eric, 2026-11-28).
  */
-export const KEPT_WRITE_PATHS: readonly string[] = ['/api/cron/jobs', '/api/plugins/kanban/']
+export const KEPT_WRITE_PATHS: readonly string[] = ['/api/cron/jobs', '/api/plugins/kanban/', '/api/plugins/conduit_push/self/update']
 const KEPT_WRITE_METHODS: readonly string[] = ['POST', 'PUT', 'PATCH', 'DELETE']
 /**
  * Whether a change may go to `path` on another dashboard: under KEPT_WRITE_PATHS once the URL

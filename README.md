@@ -110,7 +110,9 @@ The free [Conduit plugin](https://github.com/kaishi00/hermes-conduit-notifier)
 on your Hermes host adds notifications, live voice calls, Pulse and the rest
 of Conduit's features. Install it with
 `hermes plugins install kaishi00/hermes-conduit-notifier --enable`, then
-restart Hermes. The iPhone app's
+restart Hermes. Settings > Conduit plugin shows its version and updates it,
+and with combined dashboards it lists theirs too, with Update All. The
+iPhone app's
 [Connecting](https://github.com/kaishi00/hermes-conduit#connecting) guide
 covers Tailscale, Docker and setting up a dashboard by hand.
 
