@@ -432,13 +432,17 @@ function OtherDashboards({ latest, thisNeedsUpdate, onUpdateThis }: { latest: st
     const timer = setInterval(() => tick(n => n + 1), 1000)
     return () => clearInterval(timer)
   }, [anyRunning])
-  if (!kept.length) return null
   const due = live.filter(host => {
     const row = rows.get(host)
     // A held scan waits on its own Update Anyway.
     return !!row && row.update.phase !== 'updating' && row.update.phase !== 'scanHeld' && hostNeedsUpdate(row, latest)
   })
   const allCount = due.length + (thisNeedsUpdate ? 1 : 0)
+  // Only Update All's button opens its confirmation: one left open while the count fell doesn't come back by itself.
+  useEffect(() => {
+    if (allCount < 2) setConfirmingAll(false)
+  }, [allCount])
+  if (!kept.length) return null
   return (
     <section className="pset-section">
       <h2>{t('Other dashboards')}</h2>
@@ -517,9 +521,11 @@ function OtherDashboardRow({ host, row, latest }: { host: KeptHost; row: HostPlu
               <strong>{restart && !available ? t('Finish the update?') : t('Update the Conduit plugin?')}</strong>
             </p>
             <p className="meta">
-              {t(
-                "Hermes updates the plugin on the host, then restarts its gateway and dashboard once running chats finish. You can close Conduit: you'll get a notification when it's done."
-              )}
+              {status.state === 'reported' && status.managedBy !== null
+                ? t('The new plugin is already on the host. Hermes restarts its gateway and dashboard to run it, once running chats finish.')
+                : t(
+                    "Hermes updates the plugin on the host, then restarts its gateway and dashboard once running chats finish. You can close Conduit: you'll get a notification when it's done."
+                  )}
             </p>
             <div className="pset-actions">
               <button className="secondary" onClick={() => setConfirming(false)}>

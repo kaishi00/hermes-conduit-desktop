@@ -12,6 +12,7 @@ import { gateway, keptGateway } from '../gateway'
 import { SELF_UPDATE_PATH, outcomeAfterStall, stallLimitMs, untilQuiet, type PluginStatus, type UpdateState } from './plugin'
 import { dashboardHost } from './dashboardProfile'
 import { STALL_CHECK_MS, follow, readStatus, type UpdateHttp } from './pluginUpdate'
+import { forgetCapabilityAnswers } from './usePredictions'
 
 /** One other dashboard's row: what its plugin last said, and its update. */
 export interface HostPluginRow {
@@ -120,6 +121,8 @@ export async function runHostUpdate(host: string, acceptScan = false, latest: st
   } finally {
     live = false
     running.delete(host)
+    // Its plugin may now be another version, with other capabilities: answers kept for it go too.
+    forgetCapabilityAnswers()
     await readHostPlugin(host, http)
   }
 }
