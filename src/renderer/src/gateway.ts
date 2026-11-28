@@ -38,7 +38,7 @@ export type DashboardHttp = <T = unknown>(method: 'GET' | 'POST' | 'PATCH' | 'PU
 
 /**
  * Another combined dashboard's calls, through its kept connection: any read, and changes only to
- * its scheduled jobs and task board (main's KEPT_WRITE_PATHS).
+ * its scheduled jobs, task board and plugin update (main's KEPT_WRITE_PATHS).
  */
 export function keptGateway(host: string) {
   return {

@@ -7944,6 +7944,20 @@ button.cap-row-text {
 .plugin-update progress {
   width: 100%;
 }
+/* Another combined dashboard's plugin on Settings > Conduit plugin: its name, version, Update and run. */
+.plugin-host {
+  border-top: 1px solid var(--line);
+  padding: 10px 0 4px;
+}
+.plugin-host:first-of-type {
+  border-top: none;
+}
+.plugin-host .pset-row span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* A held scan's findings, one per line. */
 .plugin-scan-findings {
   white-space: pre-line;

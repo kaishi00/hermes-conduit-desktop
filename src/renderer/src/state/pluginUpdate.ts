@@ -57,9 +57,9 @@ export async function readStatus(http: UpdateHttp = hostHttp): Promise<PluginSta
   }
 }
 
-const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+export const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 /** How often the update's watchdog looks at it. */
-const STALL_CHECK_MS = 15_000
+export const STALL_CHECK_MS = 15_000
 
 /**
  * Hands the update to the host and follows its job, as the phone's runOnHost does. A run whose steps go
@@ -86,7 +86,7 @@ export async function runUpdate(onDone: () => void, acceptScan = false, latest: 
       heard =>
         follow(http, set, heard, acceptScan, following, id => {
           jobId = id
-        }),
+        }, { current: currentUpdate, startedAt: runStarted }),
       () => stallLimitMs(update),
       STALL_CHECK_MS
     )
@@ -117,17 +117,25 @@ export async function runUpdate(onDone: () => void, acceptScan = false, latest: 
   }
 }
 
+/** The row a run follows: where it stands now, and when the run started. */
+export interface FollowedRow {
+  current: () => UpdateState
+  startedAt: number
+}
+
 /**
  * Starts the host's job and follows it, reporting each step through `set`, each answer from the host
  * through `heard` and the job it follows through `onJob`. Stops once the run is no longer `live`.
+ * `row` is the row it reports to: this dashboard's, or another combined one's (otherHostsPluginUpdate.ts).
  */
-async function follow(
+export async function follow(
   http: UpdateHttp,
   set: (next: UpdateState) => void,
   heard: () => void,
   acceptScan: boolean,
   live: () => boolean,
-  onJob: (id: string) => void
+  onJob: (id: string) => void,
+  row: FollowedRow
 ) {
   let job: Record<string, unknown> | null = null
   try {
@@ -147,8 +155,8 @@ async function follow(
   for (;;) {
     const state = jobState(job)
     if (state && state.phase !== 'updating') return set(state)
-    set(state ?? update)
-    if (Date.now() - startedAt > HOST_FOLLOW_LIMIT_MS) return set({ phase: 'runningOnHost' })
+    set(state ?? row.current())
+    if (Date.now() - row.startedAt > HOST_FOLLOW_LIMIT_MS) return set({ phase: 'runningOnHost' })
     await pause(2000)
     if (!live()) return
     // Reads fail while the dashboard restarts; the next poll asks again. Only an answer counts as word

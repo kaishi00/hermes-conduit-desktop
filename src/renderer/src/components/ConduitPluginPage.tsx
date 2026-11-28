@@ -21,7 +21,20 @@ import {
 import { Icon } from './icons'
 import { GatewayWait } from './GatewayWait'
 import { useMouseBack } from '../state/mouseBack'
-import { readStatus, runUpdate, setUpdate, updateStartedAt, useUpdateRow } from '../state/pluginUpdate'
+import { currentUpdate, readStatus, runUpdate, setUpdate, updateStartedAt, useUpdateRow } from '../state/pluginUpdate'
+import { dashboardHost } from '../state/dashboardProfile'
+import { hostName } from '../state/hostNames'
+import { keptStateLabel, useKeptHosts } from '../state/keptHosts'
+import {
+  dismissHostUpdate,
+  forgetHostPluginRows,
+  hostUpdateRunning,
+  readHostPlugin,
+  runHostUpdate,
+  useHostPluginRows,
+  type HostPluginRow
+} from '../state/otherHostsPluginUpdate'
+import type { KeptHost } from '@shared/ipc'
 
 function featureTitle(id: string): string {
   switch (id) {
@@ -248,6 +261,12 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
         />
       </section>
 
+      <OtherDashboards
+        latest={latest}
+        thisNeedsUpdate={canUpdate && current.phase !== 'updating' && current.phase !== 'scanHeld' && (available || restart)}
+        onUpdateThis={() => void runUpdate(() => void refresh(), false, latest)}
+      />
+
       {status.state === 'reported' ? (
         <section className="pset-section">
           <h2>{t('What it does here')}</h2>
@@ -293,13 +312,19 @@ function UpdateRow({
   state,
   capabilities,
   onDismiss,
-  onAcceptScan
+  onAcceptScan,
+  startedAt = updateStartedAt(),
+  showsWait = true
 }: {
   state: UpdateState
   /** The plugin's, read when the page opened: the wait's list needs it to name the work (0.135+). */
   capabilities: string[] | null
   onDismiss: () => void
   onAcceptScan: (() => void) | null
+  /** When the run started: this dashboard's, unless another dashboard's row says. */
+  startedAt?: number
+  /** The running-work list and Restart Now under the drain step: this dashboard's only. */
+  showsWait?: boolean
 }) {
   if (state.phase === 'idle') return null
   let title: string
@@ -356,10 +381,10 @@ function UpdateRow({
               {t('Step {current} of {last} · {time}', {
                 current: String(stepNumber(state.step)),
                 last: String(STEP_COUNT),
-                time: elapsed(Date.now() - updateStartedAt())
+                time: elapsed(Date.now() - startedAt)
               })}
             </span>
-            {state.step === 'draining' ? <GatewayWait capabilities={capabilities} /> : null}
+            {state.step === 'draining' && showsWait ? <GatewayWait capabilities={capabilities} /> : null}
           </>
         ) : null}
         {detail ? <span className={state.phase === 'scanHeld' ? 'meta plugin-scan-findings' : 'meta'}>{detail}</span> : null}
@@ -374,6 +399,160 @@ function UpdateRow({
           ×
         </button>
       ) : null}
+    </div>
+  )
+}
+
+/** Whether a row's plugin waits on an update or its restart, and Conduit can run it there. */
+function hostNeedsUpdate(row: HostPluginRow, latest: string | null): boolean {
+  return canUpdateHere(row.status) && (updateAvailable(row.status, latest) || restartPending(row.status))
+}
+
+/**
+ * The other combined dashboards' plugins, each with its version and Update, and Update All for every
+ * dashboard that needs one, this one included: no switch to update each (Eric, 2026-11-28).
+ */
+function OtherDashboards({ latest, thisNeedsUpdate, onUpdateThis }: { latest: string | null; thisNeedsUpdate: boolean; onUpdateThis: () => void }) {
+  const own = dashboardHost()
+  const kept = useKeptHosts(own).filter(h => h.url !== own)
+  const rows = useHostPluginRows()
+  const [confirmingAll, setConfirmingAll] = useState(false)
+  const [, tick] = useState(0)
+  const live = kept.filter(h => h.state === 'live').map(h => h.url)
+  const liveKey = live.join('\n')
+  useEffect(() => {
+    // Asked on every visit, and as each one connects; a run going reads it when it ends.
+    for (const host of liveKey ? liveKey.split('\n') : []) if (!hostUpdateRunning(host)) void readHostPlugin(host)
+  }, [liveKey])
+  const keptKey = kept.map(h => h.url).join('\n')
+  useEffect(() => forgetHostPluginRows(keptKey ? keptKey.split('\n') : []), [keptKey])
+  const anyRunning = kept.some(h => rows.get(h.url)?.update.phase === 'updating')
+  useEffect(() => {
+    if (!anyRunning) return
+    const timer = setInterval(() => tick(n => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [anyRunning])
+  if (!kept.length) return null
+  const due = live.filter(host => {
+    const row = rows.get(host)
+    // A held scan waits on its own Update Anyway.
+    return !!row && row.update.phase !== 'updating' && row.update.phase !== 'scanHeld' && hostNeedsUpdate(row, latest)
+  })
+  const allCount = due.length + (thisNeedsUpdate ? 1 : 0)
+  return (
+    <section className="pset-section">
+      <h2>{t('Other dashboards')}</h2>
+      <p className="meta">{t('Your combined dashboards, each with its own copy of the plugin. Update them here without switching.')}</p>
+      {kept.map(host => (
+        <OtherDashboardRow key={host.url} host={host} row={rows.get(host.url)} latest={latest} />
+      ))}
+      {allCount > 1 ? (
+        confirmingAll ? (
+          <div className="plugin-confirm">
+            <p>
+              <strong>{t('Update the plugin on every dashboard that needs it?')}</strong>
+            </p>
+            <p className="meta">
+              {t(
+                "Each host updates its plugin, then restarts its gateway and dashboard once running chats finish. You'll get a notification as each one is done."
+              )}
+            </p>
+            <div className="pset-actions">
+              <button className="secondary" onClick={() => setConfirmingAll(false)}>
+                {t('Cancel')}
+              </button>
+              <button
+                className="primary"
+                onClick={() => {
+                  setConfirmingAll(false)
+                  // This dashboard's run only when nothing has started it meanwhile.
+                  if (thisNeedsUpdate && currentUpdate().phase !== 'updating') onUpdateThis()
+                  for (const host of due) void runHostUpdate(host, false, latest)
+                }}
+              >
+                {t('Update All')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="primary" onClick={() => setConfirmingAll(true)}>
+            {t('Update All ({count})', { count: String(allCount) })}
+          </button>
+        )
+      ) : null}
+    </section>
+  )
+}
+
+function OtherDashboardRow({ host, row, latest }: { host: KeptHost; row: HostPluginRow | undefined; latest: string | null }) {
+  const [confirming, setConfirming] = useState(false)
+  const status = row?.status ?? { state: 'unknown' as const }
+  const update = row?.update ?? { phase: 'idle' as const }
+  const available = updateAvailable(status, latest)
+  const restart = restartPending(status)
+  const running = runningVersion(status)
+  const canUpdate = host.state === 'live' && canUpdateHere(status)
+  const showsAction = update.phase !== 'updating' && update.phase !== 'scanHeld' && (available || restart)
+  const line = (() => {
+    if (host.state !== 'live') return keptStateLabel(host.state)
+    if (status.state === 'unknown') return row?.checking ? t("Checking this dashboard's notifier…") : t("Couldn't reach this dashboard's notifier.")
+    if (status.state === 'missing') return t('Missing or out of date on this host. Open this dashboard to install it.')
+    if (available && latest) return t('Version {version} is available.', { version: latest })
+    if (restart) return t('The new plugin is on the host. Hermes needs a restart to use it.')
+    if (status.managedBy !== null)
+      return status.managedBy ? t('{name} keeps the plugin up to date.', { name: status.managedBy }) : t("This dashboard's host keeps the plugin up to date.")
+    return t('Up to date')
+  })()
+  return (
+    <div className="plugin-host">
+      <div className="pset-row">
+        <span>{hostName(host.url)}</span>
+        <span className={available || restart ? 'plugin-version attention' : 'plugin-version meta'}>{running ?? '—'}</span>
+      </div>
+      <p className="meta">{line}</p>
+      {showsAction ? (
+        confirming ? (
+          <div className="plugin-confirm">
+            <p>
+              <strong>{restart && !available ? t('Finish the update?') : t('Update the Conduit plugin?')}</strong>
+            </p>
+            <p className="meta">
+              {t(
+                "Hermes updates the plugin on the host, then restarts its gateway and dashboard once running chats finish. You can close Conduit: you'll get a notification when it's done."
+              )}
+            </p>
+            <div className="pset-actions">
+              <button className="secondary" onClick={() => setConfirming(false)}>
+                {t('Cancel')}
+              </button>
+              <button
+                className="primary"
+                onClick={() => {
+                  setConfirming(false)
+                  void runHostUpdate(host.url, false, latest)
+                }}
+              >
+                {restart && !available ? t('Restart Hermes') : t('Update and Restart Hermes')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="secondary" disabled={!canUpdate} onClick={() => setConfirming(true)}>
+            {restart && !available ? t('Finish Update') : t('Update to {version}', { version: latest ?? '' })}
+          </button>
+        )
+      ) : null}
+      {showsAction && host.state === 'live' && status.state === 'reported' && !canUpdate ? (
+        <p className="meta">{t('Update Hermes, or run the commands under Do it manually.')}</p>
+      ) : null}
+      <UpdateRow
+        state={update}
+        capabilities={null}
+        startedAt={row?.startedAt ?? 0}
+        showsWait={false}
+        onDismiss={() => dismissHostUpdate(host.url)}
+        onAcceptScan={canUpdate ? () => void runHostUpdate(host.url, true, latest) : null}
+      />
     </div>
   )
 }
