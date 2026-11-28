@@ -118,6 +118,8 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   const own = dashboardHost()
   const farHere = useHostPluginRows().get(own)
   const farRunning = farHere?.update.phase === 'updating'
+  // Its held scan waits on its own Update Anyway, as this dashboard's does.
+  const farBusy = farRunning || farHere?.update.phase === 'scanHeld'
 
   const refresh = useCallback(async () => {
     setChecking(true)
@@ -154,7 +156,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   const notes =
     available && latest ? releaseNotes(parseChangelog(release.changelog), running ?? (status.state === 'reported' ? status.version : null), latest) : null
   const canUpdate = canUpdateHere(status)
-  const showsAction = current.phase !== 'updating' && !farRunning && (available || restart)
+  const showsAction = current.phase !== 'updating' && !farBusy && (available || restart)
 
   const statusText = (() => {
     if (status.state === 'unknown')
@@ -273,7 +275,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
             state={farHere.update}
             capabilities={null}
             startedAt={farHere.startedAt}
-            showsWait={false}
+            showsWait
             onDismiss={() => dismissHostUpdate(own)}
             onAcceptScan={canUpdate ? () => void runHostUpdate(own, true, latest) : null}
           />
@@ -282,7 +284,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
 
       <OtherDashboards
         latest={latest}
-        thisNeedsUpdate={canUpdate && current.phase !== 'updating' && !farRunning && current.phase !== 'scanHeld' && (available || restart)}
+        thisNeedsUpdate={canUpdate && current.phase !== 'updating' && !farBusy && current.phase !== 'scanHeld' && (available || restart)}
         onUpdateThis={() => void runUpdate(() => void refresh(), false, latest)}
       />
 
@@ -444,7 +446,8 @@ function OtherDashboards({ latest, thisNeedsUpdate, onUpdateThis }: { latest: st
     for (const host of liveKey ? liveKey.split('\n') : []) if (!hostUpdateRunning(host)) void readHostPlugin(host)
   }, [liveKey])
   const keptKey = kept.map(h => h.url).join('\n')
-  useEffect(() => forgetHostPluginRows(keptKey ? keptKey.split('\n') : []), [keptKey])
+  // The one on screen keeps a row it brought home (a run started before the switch).
+  useEffect(() => forgetHostPluginRows([...(keptKey ? keptKey.split('\n') : []), own]), [keptKey, own])
   const anyRunning = kept.some(h => rows.get(h.url)?.update.phase === 'updating')
   useEffect(() => {
     if (!anyRunning) return

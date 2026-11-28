@@ -4,6 +4,11 @@ vi.mock('../src/renderer/src/gateway', () => ({
   gateway: { http: () => Promise.reject(new Error('no gateway in tests')) },
   keptGateway: () => ({ http: () => Promise.reject(new Error('no kept gateway in tests')) })
 }))
+const { forgetCapabilityAnswers } = vi.hoisted(() => ({ forgetCapabilityAnswers: vi.fn() }))
+vi.mock('../src/renderer/src/state/usePredictions', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/renderer/src/state/usePredictions')>()),
+  forgetCapabilityAnswers
+}))
 const { dismissHostUpdate, forgetHostPluginRows, hostPluginRow, hostUpdateRunning, readHostPlugin, runHostUpdate } = await import(
   '../src/renderer/src/state/otherHostsPluginUpdate'
 )
@@ -106,5 +111,11 @@ describe('what another dashboard takes as a change', () => {
     expect(keptWritable('/api/plugins/conduit_push/self/update?force=true')).toBe(true)
     expect(keptWritable('/api/plugins/conduit_push/self/restart')).toBe(false)
     expect(keptWritable('/api/plugins/conduit_push/self/update/../restart')).toBe(false)
+  })
+
+  it('drops the capability answers kept for hosts when a run ends', async () => {
+    forgetCapabilityAnswers.mockClear()
+    await runHostUpdate('https://c.example', false, '9.0.0', hostUpdating('9.0.0'))
+    expect(forgetCapabilityAnswers).toHaveBeenCalled()
   })
 })
