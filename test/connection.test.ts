@@ -505,7 +505,7 @@ describe('the connection', () => {
     await tick()
     expect(h.sockets).toHaveLength(1)
     expect(h.sockets[0]!.url).toBe('wss://hermes.example.com/api/ws?ticket=T1')
-    expect(h.sockets[0]!.headers).toEqual({ 'X-Conduit-Client': 'conduit', Cookie: 'hermes_session=s1' })
+    expect(h.sockets[0]!.headers).toEqual({ 'X-Conduit-Client': 'conduit', 'X-Conduit-Platform': 'desktop', Cookie: 'hermes_session=s1' })
     expect(h.connection.current()).toMatchObject({ phase: 'open', hostLabel: 'hermes.example.com', username: 'eric', sessionAuthority: true })
     expect(h.saved()).toMatchObject({ url: 'https://hermes.example.com', method: 'password', password: 'pw', cookies: { hermes_session: 's1' } })
     // It says it answers server requests, as Hermes' own clients do.

@@ -1,6 +1,6 @@
 import { searchFold } from '../state/searchFold'
 import { opensInTab } from '../state/workspaceTabs'
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { underSource } from '../state/voiceList'
 import { includedInAll, newChatProfiles, profileGroups, readClosedSections, readGroupByProfile, readLeftOut, shownInAll, writeClosedSections, writeGroupByProfile, writeLeftOut } from '../state/profileGroups'
 import { foldedKeyForSelection, sectionFolded, sectionRows, startOfDay, timeLabel, type ChatRow, type UnreadProfile } from '../state/chats'
@@ -85,6 +85,8 @@ interface ListSection {
 }
 
 interface Props {
+  /** Under the list, outside its scroll: the one-time Conduit on iPhone card. */
+  footer?: ReactNode
   rows: ChatRow[] | null
   /** Hides the list: the « at its top. */
   onHide?: () => void
@@ -253,7 +255,8 @@ export function ChatList({
   otherRows = NO_ROWS,
   badgeFor,
   onOpenOther,
-  onHide
+  onHide,
+  footer
 }: Props) {
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -1036,6 +1039,7 @@ export function ChatList({
         ) : null}
       </div>
       <UpdatingCapsule shown={!!updating && sections.length > 0} />
+      {footer}
       {menu ? (
         <div
           ref={menuRef}

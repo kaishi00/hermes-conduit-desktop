@@ -29,6 +29,10 @@ export type Fetch = typeof fetch
 
 /** The header that tells the Conduit plugin a socket is Conduit's, not Hermes Desktop's (notifier #454). */
 export const CONDUIT_CLIENT_HEADER = 'X-Conduit-Client'
+/** Which Conduit this is, beside X-Conduit-Client: the plugin notes which apps reach a host, so the phone offers this app only where it hasn't been used. */
+export const CONDUIT_PLATFORM_HEADER = 'X-Conduit-Platform'
+/** The headers every request and socket to a dashboard carries. */
+export const CONDUIT_HEADERS: Readonly<Record<string, string>> = { [CONDUIT_CLIENT_HEADER]: 'conduit', [CONDUIT_PLATFORM_HEADER]: 'desktop' }
 
 /** How REST calls carry Hermes' session token. */
 export const SESSION_TOKEN_HEADER = 'X-Hermes-Session-Token'

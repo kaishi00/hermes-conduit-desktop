@@ -3,6 +3,7 @@ import type { HostSummary, SignInMethod, TroubleshootingTopic } from '@shared/ip
 import { t } from '@shared/i18n'
 import { ServerCertificate } from './ServerCertificate'
 import { PairWithPhone } from './PairWithPhone'
+import { IPhoneAppPanel } from './IPhoneApp'
 import { Troubleshooting } from './Troubleshooting'
 import { composerDrafts } from '../state/composerDrafts'
 import { copyHostData, finishHostMove, undoHostCopy } from '../state/hostData'
@@ -67,6 +68,7 @@ export function SignIn({
   /** Repair's address saved as another dashboard: Switch goes there. */
   const [savedAs, setSavedAs] = useState<string | null>(null)
   const [pairing, setPairing] = useState(false)
+  const [gettingApp, setGettingApp] = useState(false)
   const [proxyOpen, setProxyOpen] = useState(false)
   const [accessId, setAccessId] = useState('')
   const [accessSecret, setAccessSecret] = useState('')
@@ -177,6 +179,20 @@ export function SignIn({
     )
   }
 
+  if (gettingApp) {
+    return (
+      <div className="signin">
+        <div className="signin-card pair-card">
+          <h1>{t('Conduit on iPhone')}</h1>
+          <IPhoneAppPanel />
+          <button className="link-button" type="button" onClick={() => setGettingApp(false)}>
+            {t('Back')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (troubleshooting) {
     return (
       <div className="signin">
@@ -265,6 +281,9 @@ export function SignIn({
               <div className="or-line">{t('or')}</div>
               <button className="secondary pair-button" type="button" onClick={() => setPairing(true)}>
                 {t('Pair with your iPhone')}
+              </button>
+              <button className="link-button" type="button" onClick={() => setGettingApp(true)}>
+                {t('No Conduit on your iPhone yet?')}
               </button>
             </>
           )}
