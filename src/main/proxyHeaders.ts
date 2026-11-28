@@ -14,7 +14,7 @@ export type ProxyHeaders = Record<string, string>
 const RESERVED = new Set([
   'host', 'cookie', 'content-length', 'content-type', 'transfer-encoding', 'connection', 'upgrade',
   'keep-alive', 'proxy-connection', 'te', 'trailer', 'expect', 'origin',
-  'x-conduit-client', 'x-hermes-session-token'
+  'x-conduit-client', 'x-conduit-platform', 'x-hermes-session-token'
 ])
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
 

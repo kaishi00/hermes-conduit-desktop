@@ -70,7 +70,7 @@ export function IPhoneAppCard({ onDone }: { onDone: () => void }) {
       <strong>{t('Take Conduit with you')}</strong>
       {showing ? (
         <>
-          {qr ? <img className="other-app-qr" src={qr} alt={t('App Store code for Conduit on iPhone')} /> : null}
+          {qr ? <img className="other-app-qr" src={qr} alt={t('App Store code for Conduit on iPhone')} /> : <div className="other-app-qr" />}
           <p>{t('Scan with your iPhone’s camera.')}</p>
           <a className="link" href={APP_STORE_URL} target="_blank" rel="noreferrer">
             {t('Open in the App Store')}
