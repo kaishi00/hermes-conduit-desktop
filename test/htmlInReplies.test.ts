@@ -226,9 +226,13 @@ describe('text tags in a reply', () => {
     expect(commentLines(['```', '<!--', '```', '</details>'])).toEqual([false, false, false, false])
     // A `<!--` in a script's or a style's text is text, as a page reads it (hermes-conduit#3460 review).
     expect(commentLines(['<script>var marker = "<!--";</script>', '<details>'])).toEqual([false, false])
-    expect(commentLines(['<script>', 'const m = "<!--";', '</script>', '<details>'])).toEqual([false, false, false, false])
+    expect(commentLines(['<script>', 'const m = "<!--";', '</script>', '<details>'])).toEqual([false, true, false, false])
     expect(commentLines(['<style>/* <!-- */</style> <!-- real', '<details>', '-->'])).toEqual([false, true, false])
     expect(commentLines(['<!-- <script>', '<details>', '-->', 'After.'])).toEqual([false, true, false, false])
+    // A `</details>` in a script's text closes nothing (desktop#759 review).
+    const script = ['<details>', '<summary>S</summary>', '<script>', 'var m = "<!--";', '</details>', '</script>', '</details>', 'After.']
+    expect(commentLines(script)).toEqual([false, false, false, true, true, false, false, false])
+    expect(commentLines(['<textarea>', '<!--', '</textarea>', '<title><!--</title>', '<details>'])).toEqual([false, true, false, false, false])
     const html = draw(lines.join('\n'))
     expect(html).toContain('reply-fold')
     // The fold runs to the real close: More. is inside it, After. outside.

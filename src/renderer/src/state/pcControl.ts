@@ -265,8 +265,9 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
             else {
               asking.add(request.session)
               const answer = request.needs_ok ? await askEverywhere(request, askSide(profile, state.id)).finally(() => asking.delete(request.session)) : 'allowed'
-              // Left this dashboard while it asked: nothing runs, and no answer goes to the one now showing.
-              if (!live) return
+              // Left this dashboard while it asked: nothing runs, and no answer goes to the one now showing. The same
+              // dashboard picked up again still gets the ask's answer, stopped when its dialog was closed (desktop#759 review).
+              if (!live && showing.current !== host) return
               result =
                 answer === 'allowed'
                   ? await window.conduit.pcControl.run(request)

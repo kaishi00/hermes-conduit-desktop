@@ -284,7 +284,8 @@ function rawTextEnd(name: string, text: string, start: number): number {
  * Whether each line lies wholly inside a comment opened on an earlier line, its `-->` still to come: a `</details>`
  * there closes nothing (hermes-conduit 3349). The line holding the `-->` isn't, since a close ending it comes after
  * the comment. Comments in code spans and fenced blocks don't count, nor a `<!--` in a script's, a style's, a
- * textarea's or a title's text, which a page reads as text (hermes-conduit#3460 review).
+ * textarea's or a title's text, which a page reads as text (hermes-conduit#3460 review). A line wholly inside such
+ * text counts too: a page reads a `</details>` there as text, so it closes nothing (desktop#759 review).
  */
 export function commentLines(lines: readonly string[]): boolean[] {
   const inside: boolean[] = lines.map(() => false)
@@ -303,7 +304,11 @@ export function commentLines(lines: readonly string[]): boolean[] {
       open = false
     } else if (raw) {
       const after = rawTextEnd(raw, line, 0)
-      if (after < 0) continue
+      // Wholly a script's text: a `</details>` there closes nothing either, as a page reads it.
+      if (after < 0) {
+        inside[index] = true
+        continue
+      }
       rest = line.slice(after)
       raw = null
     } else {
