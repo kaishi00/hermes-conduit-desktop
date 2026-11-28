@@ -2325,8 +2325,11 @@ function Shell({
   }, [badgeMode, needsCount, waitingIds, requests, chat.liveId, chat.storedId, waiting.rows, otherWaiting, listedRows, marks, readRow])
   // Only Windows draws the number itself; the Dock and Linux launchers take the count.
   useEffect(() => window.conduit.setBadge(badge, window.conduit.platform === 'win32' ? badgeImage(badge) : null), [badge])
-  // No number once this screen goes (signed out, or a host being edited).
-  useEffect(() => () => window.conduit.setBadge(0, null), [])
+  // No number, and nothing waiting in the tray, once this screen goes (signed out, or a host being edited).
+  useEffect(() => () => {
+    window.conduit.setBadge(0, null)
+    window.conduit.setWaiting(0)
+  }, [])
 
   // Notifications for what happens in a chat the user isn't looking at.
   const waitingRowsRef = useRef(waiting.rows)
