@@ -108,6 +108,13 @@ type SignInStage =
  * phone's camera, then the four words both screens show, the hosts to send
  * and They match (main/phoneSignIn.ts seals them to the phone).
  */
+/** The hosts checked when a list shows: every sendable one the first time; a list
+ *  shown again (a pick signed out meanwhile) keeps what was unchecked. */
+export function nextPicked(prev: Set<string>, hosts: { url: string; sendable: boolean }[]): Set<string> {
+  const sendable = hosts.filter(h => h.sendable).map(h => h.url)
+  return new Set(prev.size ? sendable.filter(url => prev.has(url)) : sendable)
+}
+
 export function SignInYourIphone() {
   const [stage, setStage] = useState<SignInStage>({ kind: 'idle' })
   const [round, setRound] = useState(0)
@@ -133,9 +140,7 @@ export function SignInYourIphone() {
     const off = window.conduit.onPhoneSignIn((event: PhoneSignInEvent) => {
       if (event.phase === 'received') {
         const hosts = event.hosts ?? []
-        const sendable = hosts.filter(h => h.sendable).map(h => h.url)
-        // A list shown again keeps what was unchecked; the first one checks every host.
-        setPicked(prev => (prev.size ? new Set(sendable.filter(url => prev.has(url))) : new Set(sendable)))
+        setPicked(prev => nextPicked(prev, hosts))
         setStage({ kind: 'received', words: event.words ?? [], hosts })
       } else if (event.phase === 'sending') setStage({ kind: 'sending' })
       else if (event.phase === 'done') setStage({ kind: 'done' })
