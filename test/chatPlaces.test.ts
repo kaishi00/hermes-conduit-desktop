@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHAT_PLACES_KEPT, ChatPlaces } from '../src/renderer/src/state/chatPlaces'
+import { CHAT_PLACES_KEPT, ChatPlaces, keepsBotChatPlace } from '../src/renderer/src/state/chatPlaces'
 import { opensInTab } from '../src/renderer/src/state/workspaceTabs'
 
 describe('a tab’s place in its chat', () => {
@@ -33,5 +33,21 @@ describe('a row opened in a tab', () => {
     expect(opensInTab(click(0, { ctrl: true }), true)).toBe(false)
     expect(opensInTab(click(0, { ctrl: true }), false)).toBe(true)
     expect(opensInTab(click(0), false)).toBe(false)
+  })
+})
+
+describe("a Bot Chat's place on the way to and back from its workstream (desktop#755)", () => {
+  const bot = { botChatId: 'bot-chat', toWorkstream: true, backTo: null }
+  it('keeps the place when left for one of its workstreams, and for nothing else', () => {
+    expect(keepsBotChatPlace('bot-chat', true, bot)).toBe(true)
+    expect(keepsBotChatPlace('bot-chat', true, { ...bot, toWorkstream: false })).toBe(false)
+    expect(keepsBotChatPlace('other', true, bot)).toBe(false)
+    expect(keepsBotChatPlace('bot-chat', true, { ...bot, botChatId: undefined })).toBe(false)
+  })
+
+  it('opens there only on the way back from the workstream', () => {
+    expect(keepsBotChatPlace('bot-chat', false, { ...bot, backTo: 'bot-chat' })).toBe(true)
+    expect(keepsBotChatPlace('bot-chat', false, bot)).toBe(false)
+    expect(keepsBotChatPlace('other', false, { ...bot, backTo: 'bot-chat' })).toBe(false)
   })
 })
