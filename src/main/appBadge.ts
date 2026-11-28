@@ -29,5 +29,5 @@ export function setAppBadge(count: number, image: string | null, window: Browser
 export function applyOverlay(window: BrowserWindow | null): void {
   if (process.platform !== 'win32' || !window || window.isDestroyed()) return
   const image = last.count > 0 && last.image ? nativeImage.createFromDataURL(last.image) : null
-  window.setOverlayIcon(image && !image.isEmpty() ? image : null, last.count > 0 ? String(last.count) : '')
+  window.setOverlayIcon(image && !image.isEmpty() ? image : null, last.count > 99 ? '99+' : last.count > 0 ? String(last.count) : '')
 }

@@ -237,7 +237,7 @@ import { useAnsweringBots, useLiveStatus } from './state/liveStatus'
 import { loadPins, newPin, pinsOfChat, savePins, withoutChat, type PinnedReply } from './state/pinnedReplies'
 import { PinnedRepliesSheet, type PinControls } from './components/PinnedReplies'
 import { loadMarks, saveMarksSoon, toggleStar, isStarred, showsUnread, projectChatUnread as projectChatUnreadIn, type ChatMarks } from './state/chatMarks'
-import { BADGE_MODE_EVENT, badgeCount, badgeImage, loadBadgeMode, type BadgeMode } from './state/appBadge'
+import { BADGE_MODE_EVENT, badgeCount, badgeImage, badgeWaitingIds, loadBadgeMode, type BadgeMode } from './state/appBadge'
 import { AppBadgeSetting } from './components/AppBadgeSetting'
 import { readRowFor, useOpenChatRead } from './state/openChatRead'
 import { isDone, useChatDone } from './state/chatDone'
@@ -2316,18 +2316,17 @@ function Shell({
     return () => window.removeEventListener(BADGE_MODE_EVENT, follow)
   }, [])
   const badge = useMemo(() => {
-    // Every id a waiting chat goes by: a live request's is the runtime's, its row's stored id comes from the
-    // plugin's list (unfiltered, as the tabs read it), so a chat both waiting and unread counts once.
-    const badgeWaitingIds = new Set<string>([
-      ...waitingIds,
-      ...requests.flatMap(r => (r.sessionId ? chatIdsOf(r.sessionId, r.sessionId === chat.liveId ? chat.storedId : null, waiting.rows).concat(r.sessionId) : [])),
-      ...otherWaiting.flatMap(row => row.sessionIds)
-    ])
+    // A live request's stored id: the chat on screen's, a chat this window opened (chats), else a waiting row's.
+    const storedOf = (id: string) => (id === chat.liveId ? chat.storedId : chats.current.get(id)?.storedId)
+    const requestIds = requests.flatMap(r => (r.sessionId ? [r.sessionId] : []))
+    const badgeWaiting = badgeWaitingIds(waitingIds, requestIds, storedOf, waiting.rows, otherWaiting)
     const unreadIds = (listedRows ?? []).filter(row => showsUnread(marks, row, row.id === readRow?.id)).map(row => row.id)
-    return badgeCount(badgeMode, needsCount, badgeWaitingIds, unreadIds)
+    return badgeCount(badgeMode, needsCount, badgeWaiting, unreadIds)
   }, [badgeMode, needsCount, waitingIds, requests, chat.liveId, chat.storedId, waiting.rows, otherWaiting, listedRows, marks, readRow])
   // Only Windows draws the number itself; the Dock and Linux launchers take the count.
   useEffect(() => window.conduit.setBadge(badge, window.conduit.platform === 'win32' ? badgeImage(badge) : null), [badge])
+  // No number once this screen goes (signed out, or a host being edited).
+  useEffect(() => () => window.conduit.setBadge(0, null), [])
 
   // Notifications for what happens in a chat the user isn't looking at.
   const waitingRowsRef = useRef(waiting.rows)
