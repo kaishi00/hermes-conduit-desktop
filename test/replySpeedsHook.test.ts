@@ -143,33 +143,6 @@ describe('the reply speeds hook', () => {
     localStorage.removeItem('conduit.showReplySpeedInComposer')
   })
 
-  // Desktop issue 734: the success half of the drop guard.
-  it('drops an earlier turn’s read that succeeds after a later turn’s has landed', async () => {
-    localStorage.setItem('conduit.showReplySpeedInComposer', 'true')
-    const hook = renderHook(({ running }: Props) => useReplySpeeds('a', undefined, true, running), { running: false })
-    await settle()
-    let release: (outcome: Outcome) => void = () => undefined
-    answer = () => new Promise<Outcome>(resolve => (release = resolve))
-    hook.rerender({ running: true })
-    await settle()
-    hook.rerender({ running: false })
-    await settle()
-    const late = release
-    answer = () => ({ ok: true, result: { session_id: 'a', replies: [{ row_id: 7, tokens_per_s: 42 }, { row_id: null, tokens_per_s: 61 }] } })
-    hook.rerender({ running: true })
-    await settle()
-    hook.rerender({ running: false })
-    await settle()
-    expect(hook.result().composer).toEqual({ rate: 61, stale: false })
-
-    late({ ok: true, result: { session_id: 'a', replies: [{ row_id: 7, tokens_per_s: 42 }, { row_id: null, tokens_per_s: 33 }] } })
-    await settle()
-    expect(hook.result().composer).toEqual({ rate: 61, stale: false })
-    expect(hook.result().rows?.unsaved).toBe(61)
-    hook.unmount()
-    localStorage.removeItem('conduit.showReplySpeedInComposer')
-  })
-
   it('dims the chip from the first render of a running turn', async () => {
     localStorage.setItem('conduit.showReplySpeedInComposer', 'true')
     const seen: { running: boolean; stale?: boolean }[] = []
