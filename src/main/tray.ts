@@ -60,8 +60,6 @@ export class ConduitTray {
     if (count === this.waiting) return
     this.waiting = count
     this.render()
-    // The Mac's Dock and Linux launchers show it as a badge.
-    app.setBadgeCount(count)
   }
 
   /** The app icon picked in Settings > Appearance; the Mac's menu bar keeps its monochrome template. */

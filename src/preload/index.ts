@@ -182,6 +182,7 @@ const api: ConduitApi = {
   answerRequest: (id, result) => ipcRenderer.invoke(IPC.answerRequest, id, result),
   dismissRequest: id => ipcRenderer.invoke(IPC.dismissRequest, id),
   setWaiting: count => ipcRenderer.send(IPC.setWaiting, count),
+  setBadge: (count, image) => ipcRenderer.send(IPC.setBadge, count, image),
   openChat: chat => ipcRenderer.send(IPC.openChat, chat),
   openChatSettings: () => ipcRenderer.send(IPC.openChatSettings),
   onOpenChat: listener => listen<OpenChatRequest>(IPC.openChat, listener),
