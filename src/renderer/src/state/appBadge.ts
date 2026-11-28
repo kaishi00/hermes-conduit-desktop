@@ -7,6 +7,7 @@
  * over the taskbar button. Kept on this computer.
  */
 import { t } from '../../../shared/i18n'
+import { chatIdsOf, type WaitingRow } from './needsYou'
 
 export type BadgeMode = 'chats' | 'needsYou' | 'off'
 
@@ -52,6 +53,26 @@ export function badgeCount(mode: BadgeMode, needs: number, waitingIds: ReadonlyS
   if (mode === 'off') return 0
   if (mode === 'needsYou') return needs
   return needs + new Set(unreadIds.filter(id => !waitingIds.has(id))).size
+}
+
+/**
+ * Every id a waiting chat goes by, for `badgeCount`: Needs you's own
+ * (`waitingIds`), each live request's id with the stored id this window
+ * knows it by (`storedOf`) or a waiting row lists with it, and other
+ * dashboards' waiting rows. A chat both waiting and unread then counts once.
+ */
+export function badgeWaitingIds(
+  waitingIds: Iterable<string>,
+  requestIds: readonly string[],
+  storedOf: (sessionId: string) => string | null | undefined,
+  rows: readonly WaitingRow[],
+  otherRows: readonly WaitingRow[]
+): Set<string> {
+  return new Set<string>([
+    ...waitingIds,
+    ...requestIds.flatMap(id => [id, ...chatIdsOf(id, storedOf(id), rows)]),
+    ...otherRows.flatMap(row => row.sessionIds)
+  ])
 }
 
 /** The badge's text: past 99, "99+". */
