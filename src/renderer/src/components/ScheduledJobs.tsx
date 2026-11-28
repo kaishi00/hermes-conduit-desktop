@@ -464,8 +464,21 @@ function JobDetails({
         {failure ? <p className="meta">{failure}</p> : null}
         {!runs && !failure ? <p className="meta">{t('Loading…')}</p> : null}
         {runs && !runs.length ? <p className="meta">{t('This job has not run yet.')}</p> : null}
-        {runs?.map(run => (
-          <button key={run.key} className="needs-row job-run" disabled={!run.id} onClick={() => onOpenRun(run)}>
+        {runs?.map(run => !run.id ? (
+          // A script's run has no conversation, only its output (issue 3455):
+          // two lines of it, and all of it when opened.
+          <details key={run.key} className="job-run-output">
+            <summary title={t("Shows this run's output. A script ran it, so it has no chat.")}>
+              <span className="needs-top">
+                <span className="needs-title">{run.title ?? run.preview ?? t('Run')}</span>
+                <span className="meta row-time">{run.active ? t('Running') : run.startedAt ? absoluteDateText(new Date(run.startedAt)) : ''}</span>
+              </span>
+              <span className="job-run-output-peek">{run.preview ?? t('No output recorded.')}</span>
+            </summary>
+            <p className="job-run-output-text">{run.preview ?? t('No output recorded.')}</p>
+          </details>
+        ) : (
+          <button key={run.key} className="needs-row job-run" onClick={() => onOpenRun(run)}>
             <span className="needs-body">
               <span className="needs-top">
                 <span className="needs-title">{run.title ?? run.preview ?? t('Run')}</span>
