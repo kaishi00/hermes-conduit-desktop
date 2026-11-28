@@ -174,4 +174,31 @@ describe('the reply speeds hook', () => {
     hook.unmount()
     localStorage.removeItem('conduit.showReplySpeedInComposer')
   })
+
+  it('ignores an earlier turn’s hanging read that succeeds after the later turn landed', async () => {
+    localStorage.setItem('conduit.showReplySpeedInComposer', 'true')
+    const pending: ((outcome: Outcome) => void)[] = []
+    answer = () => new Promise<Outcome>(resolve => pending.push(resolve))
+    const hook = renderHook(({ running }: Props) => useReplySpeeds('a', undefined, true, running), { running: false })
+    await settle()
+    // A new turn starts while the read asked at the last turn's end is still out.
+    hook.rerender({ running: true })
+    await settle()
+    hook.rerender({ running: false })
+    await settle()
+    expect(pending.length).toBe(2)
+    // The newer read lands first, with this turn's speed.
+    pending[1]!({ ok: true, result: { session_id: 'a', replies: [{ row_id: 7, tokens_per_s: 42 }, { row_id: null, tokens_per_s: 61 }] } })
+    await settle()
+    expect(hook.result().composer).toEqual({ rate: 61, stale: false })
+    expect(hook.result().rows?.unsaved).toBe(61)
+    // The older read succeeds late: its earlier speed must not come back.
+    pending[0]!({ ok: true, result: { session_id: 'a', replies: [{ row_id: 7, tokens_per_s: 42 }, { row_id: null, tokens_per_s: 55 }] } })
+    await settle()
+    expect(hook.result().composer).toEqual({ rate: 61, stale: false })
+    expect(hook.result().rows?.unsaved).toBe(61)
+    hook.unmount()
+    localStorage.removeItem('conduit.showReplySpeedInComposer')
+  })
+
 })
