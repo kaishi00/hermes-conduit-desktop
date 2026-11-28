@@ -54,8 +54,7 @@ beforeEach(() => {
   ;(globalThis as unknown as { AudioContext: unknown }).AudioContext = Context
   ;(window as unknown as { conduit: unknown }).conduit = {
     liveOpen: async () => {
-      opens++
-      const id = `live-${++mints}`
+      const id = `live-${++opens}`
       liveIds.push(id)
       return { ok: true, id }
     },
@@ -75,20 +74,25 @@ beforeEach(() => {
 
 describe('a live call in a dev build (desktop#669)', () => {
   it.each([
-    ['Gemini', 'GeminiLiveCall'],
-    ['Grok', 'GrokLiveCall'],
-    ['Local', 'LocalLiveCall']
-  ])('opens %s once under StrictMode’s double mount', async (_label, name) => {
+    ['Gemini', 'GeminiLiveCall', {}],
+    ['Qwen', 'GeminiLiveCall', { provider: 'qwen' }],
+    ['Grok', 'GrokLiveCall', {}],
+    ['Local', 'LocalLiveCall', {}]
+  ])('opens %s once under StrictMode’s double mount', async (_label, name, extra) => {
     const path = `../src/renderer/src/components/${name}.tsx`
     const mod = (await import(/* @vite-ignore */ path)) as Record<string, (props: unknown) => null>
     const Component = mod[name]!
     const host = document.createElement('div')
     const root = createRoot(host)
-    const props = { chatId: 'c1', items: [], onSay: () => {}, running: false, turnsDone: 0, lastReply: '', onEnd: () => {} }
+    const props = { chatId: 'c1', items: [], onSay: () => {}, running: false, turnsDone: 0, lastReply: '', onEnd: () => {}, ...extra }
     act(() => root.render(createElement(StrictMode, null, createElement(Component as never, props))))
     for (let i = 0; i < 6; i++) await settle()
-    // The first mount's socket is closed at once; exactly one stays for the real call.
+    // The first mount aborts before it opens anything; exactly one socket stays for the real call.
     expect(liveIds.length - closed.length).toBe(1)
+    expect(opens + mints).toBe(liveIds.length)
     act(() => root.unmount())
+    await settle()
+    // Teardown closes the surviving socket, too.
+    expect(closed).toEqual(liveIds)
   })
 })

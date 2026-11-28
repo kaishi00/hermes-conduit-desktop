@@ -30,7 +30,7 @@ const withProfile = (path: string, profile?: string) => (profile && profile !== 
 /** A correction may have reached Hermes unless the gateway gave a definitive answer (issue 732). */
 export function correctionMayHaveGone(error: unknown): boolean {
   const text = String((error as { message?: unknown } | null)?.message ?? error).toLowerCase()
-  if (text.includes('not connected to hermes') || text.includes('gateway not connected')) return false
+  if (/not connected to (that )?hermes/i.test(text) || text.includes('gateway not connected')) return false
   return !(error instanceof GatewayError && error.code !== undefined)
 }
 
