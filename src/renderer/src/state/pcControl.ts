@@ -254,7 +254,12 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
           continue
         }
         for (const request of requests) {
-          if (!live) return
+          if (!live) {
+            // The same dashboard picked up again: the rest of the batch hears Stop rather than nothing (desktop#762 review).
+            if (showing.current !== host) return
+            await gateway.http('POST', pcPath('/result', profile), { computer: state.id, id: request.id, result: { ok: false, code: 'stopped' } }, 30_000).catch(() => undefined)
+            continue
+          }
           let result: Record<string, unknown>
           try {
             // Stopped since this batch came in: answer stopped without asking first.
@@ -265,8 +270,9 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
             else {
               asking.add(request.session)
               const answer = request.needs_ok ? await askEverywhere(request, askSide(profile, state.id)).finally(() => asking.delete(request.session)) : 'allowed'
-              // Left this dashboard while it asked: nothing runs, and no answer goes to the one now showing.
-              if (!live) return
+              // Left this dashboard while it asked: nothing runs, and no answer goes to the one now showing. The same
+              // dashboard picked up again still gets the ask's answer, stopped when its dialog was closed (desktop#759 review).
+              if (!live && showing.current !== host) return
               result =
                 answer === 'allowed'
                   ? await window.conduit.pcControl.run(request)

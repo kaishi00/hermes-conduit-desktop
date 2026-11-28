@@ -270,7 +270,7 @@ const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
 const withoutCode = (line: string) =>
   line.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001').replace(/<!--.*?-->/g, '\u0001').replace(/<!--.*$/, '\u0001')
 
-const RAW_TEXT_OPENING = /<(script|style|textarea|title)\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi
+const RAW_TEXT_OPENING = /<(script|style|textarea|title)(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*')*>/gi
 
 /** The index just past `name`'s closing tag in `text`, reading from `start`, or -1 while it's still to come. */
 function rawTextEnd(name: string, text: string, start: number): number {
@@ -284,7 +284,8 @@ function rawTextEnd(name: string, text: string, start: number): number {
  * Whether each line lies wholly inside a comment opened on an earlier line, its `-->` still to come: a `</details>`
  * there closes nothing (hermes-conduit 3349). The line holding the `-->` isn't, since a close ending it comes after
  * the comment. Comments in code spans and fenced blocks don't count, nor a `<!--` in a script's, a style's, a
- * textarea's or a title's text, which a page reads as text (hermes-conduit#3460 review).
+ * textarea's or a title's text, which a page reads as text (hermes-conduit#3460 review). A line wholly inside such
+ * text counts too: a page reads a `</details>` there as text, so it closes nothing (desktop#759 review).
  */
 export function commentLines(lines: readonly string[]): boolean[] {
   const inside: boolean[] = lines.map(() => false)
@@ -303,7 +304,11 @@ export function commentLines(lines: readonly string[]): boolean[] {
       open = false
     } else if (raw) {
       const after = rawTextEnd(raw, line, 0)
-      if (after < 0) continue
+      // Wholly a script's text: a `</details>` there closes nothing either, as a page reads it.
+      if (after < 0) {
+        inside[index] = true
+        continue
+      }
       rest = line.slice(after)
       raw = null
     } else {
@@ -333,8 +338,10 @@ export function commentLines(lines: readonly string[]): boolean[] {
         at = end + 3
       } else if (element) {
         at = element.index + element[0].length
-        // `<script/>` holds no text.
-        if (element[0].endsWith('/>')) continue
+        // `<script/>` holds no text. Only an element where a page's tags go counts: starting the line or right after
+        // another tag, never prose naming it (`The <script> tag`) or an attribute's value (`title="<script>"`).
+        const before = text.slice(0, element.index).trimEnd()
+        if (element[0].endsWith('/>') || (before && !before.endsWith('>'))) continue
         const name = element[1]!.toLowerCase()
         const after = rawTextEnd(name, text, at)
         if (after < 0) {
