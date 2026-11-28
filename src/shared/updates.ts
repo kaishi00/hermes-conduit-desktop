@@ -69,7 +69,7 @@ export function nextUpdateState(state: UpdateState, event: UpdateEvent, now: num
   const waiting = state.phase === 'ready' && state.rechecking === true
   switch (event.kind) {
     case 'checking':
-      return state.phase === 'ready' ? { ...state, rechecking: true } : { ...state, phase: 'checking', before: state.phase }
+      return state.phase === 'ready' ? { ...state, rechecking: true, before: undefined } : { ...state, phase: 'checking', before: state.phase }
     case 'none':
       // Nothing newer than this copy (the waiting release was pulled): what's downloaded still installs at quit.
       if (waiting) return { ...state, rechecking: undefined, checkedAt: now }
@@ -80,9 +80,9 @@ export function nextUpdateState(state: UpdateState, event: UpdateEvent, now: num
       if (waiting) return { ...state, phase: 'downloading', version: event.version, percent: 0, rechecking: undefined, checkedAt: now }
       return { ...state, phase: state.auto ? 'downloading' : 'available', version: event.version, percent: 0, checkedAt: now }
     case 'download':
-      return { ...state, phase: 'downloading', percent: 0 }
+      return { ...state, phase: 'downloading', percent: 0, rechecking: undefined }
     case 'progress':
-      return { ...state, phase: 'downloading', percent: Math.max(0, Math.min(100, Math.round(event.percent))) }
+      return { ...state, phase: 'downloading', percent: Math.max(0, Math.min(100, Math.round(event.percent))), rechecking: undefined }
     case 'downloaded':
       return { ...state, phase: 'ready', version: event.version, percent: 100, rechecking: undefined }
     case 'failed': {
@@ -90,6 +90,7 @@ export function nextUpdateState(state: UpdateState, event: UpdateEvent, now: num
       if (waiting) return { ...state, rechecking: undefined, checkedAt: now }
       // A failed check that started with a known version (Download or Try Again showing) keeps it and its button.
       const kept = state.phase === 'checking' && state.version && (state.before === 'available' || state.before === 'download-failed') ? state.before : null
+      // A failed download that was replacing a waiting one is download-failed too, not ready: on Windows the updater deletes the earlier installer when a download fails, so Restart to Update would install nothing.
       const phase = kept ?? (state.phase === 'downloading' && state.version ? 'download-failed' : 'error')
       return { ...state, phase, percent: undefined, checkedAt: now }
     }
