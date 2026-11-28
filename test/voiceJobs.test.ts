@@ -244,7 +244,7 @@ describe('jobs kept past their call', () => {
 })
 
 describe('a follow-up whose redirect may have landed', () => {
-  it('reports unknown after a timeout, not_sent when nothing left', async () => {
+  it('reports unknown for a dropped redirect, not_sent before a frame left', async () => {
     const timeout = setup(false, 'redirected', Object.assign(new Error('request timed out'), { name: 'TimeoutError' }))
     await timeout.jobs.start('Check the render')
     expect(await timeout.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'unknown' })
@@ -257,7 +257,11 @@ describe('a follow-up whose redirect may have landed', () => {
     const offline = setup(false, 'redirected', new Error('Not connected to Hermes.'))
     await offline.jobs.start('Check the render')
     expect(await offline.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
+    const farHost = setup(false, 'redirected', new Error('Not connected to that Hermes.'))
+    await farHost.jobs.start('Check the render')
+    expect(await farHost.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
     expect(correctionMayHaveGone(new Error('WebSocket closed'))).toBe(true)
     expect(correctionMayHaveGone(new Error('Not connected to Hermes.'))).toBe(false)
+    expect(correctionMayHaveGone(new Error('Not connected to that Hermes.'))).toBe(false)
   })
 })
