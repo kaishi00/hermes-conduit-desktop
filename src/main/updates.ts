@@ -25,6 +25,8 @@ function readAuto(): boolean {
 let state: UpdateState = { current: '', off: null, auto: true, phase: 'idle' }
 let listener: ((state: UpdateState) => void) | null = null
 let timer: NodeJS.Timeout | null = null
+/** A check past a waiting download runs with autoDownload off, whatever the setting; the setting applies when it ends. */
+let checkingPastWaiting = false
 
 function apply(event: UpdateEvent): void {
   state = nextUpdateState(state, event, Date.now())
@@ -69,15 +71,16 @@ export function startUpdates(changed: (state: UpdateState) => void): void {
 export async function checkForUpdates(): Promise<UpdateState> {
   // A check under way isn't doubled; one past a downloaded update finds any newer release.
   if (!mayCheck(state)) return state
-  const pastWaiting = state.phase === 'ready'
-  if (pastWaiting) autoUpdater.autoDownload = false
+  checkingPastWaiting = state.phase === 'ready'
+  if (checkingPastWaiting) autoUpdater.autoDownload = false
   try {
     await autoUpdater.checkForUpdates()
   } catch {
     // The updater's error event has usually said so already.
     if (state.phase === 'checking' || state.rechecking) apply({ kind: 'failed' })
   } finally {
-    if (pastWaiting) autoUpdater.autoDownload = state.auto
+    if (checkingPastWaiting) autoUpdater.autoDownload = state.auto
+    checkingPastWaiting = false
   }
   return state
 }
@@ -116,7 +119,7 @@ export function setAutoUpdate(auto: boolean): UpdateState {
   } catch {
     // Not saved: it still applies until Conduit quits.
   }
-  autoUpdater.autoDownload = auto
+  if (!checkingPastWaiting) autoUpdater.autoDownload = auto
   apply({ kind: 'auto', on: auto })
   if (auto && (state.phase === 'available' || state.phase === 'download-failed')) void downloadUpdate()
   return state

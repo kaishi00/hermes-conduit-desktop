@@ -64,6 +64,14 @@ describe('updates', () => {
     expect(run(ready, { kind: 'failed' }).phase).toBe('error')
   })
 
+  it('clears rechecking once a download starts, so a failed one never stops the checks', () => {
+    const ready = run(start, { kind: 'checking' }, { kind: 'found', version: '1.0.1' }, { kind: 'downloaded', version: '1.0.1' })
+    const failed = run(ready, { kind: 'checking' }, { kind: 'progress', percent: 10 }, { kind: 'failed' })
+    expect(failed).toMatchObject({ phase: 'download-failed', rechecking: undefined })
+    expect(mayCheck(failed)).toBe(true)
+    expect(run(ready, { kind: 'checking' }, { kind: 'download' }).rechecking).toBeUndefined()
+  })
+
   it('waits for Download when installs are not automatic, and keeps the version when that download fails', () => {
     const found = run({ ...start, auto: false }, { kind: 'checking' }, { kind: 'found', version: '1.0.1' })
     expect(found.phase).toBe('available')
