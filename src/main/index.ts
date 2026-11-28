@@ -98,6 +98,22 @@ import { lockKind, promptUnlock } from './appLock'
 import { declineDeviceReports, deviceReports, sendDeviceReports, watchDeviceReports, watchWindowFreezes } from './deviceReports'
 import type { WebSocketLike } from '../vendor/hermes-shared/json-rpc-gateway'
 import { jsonRpcErrorReason } from '../vendor/hermes-shared/json-rpc-channel'
+
+/**
+ * A failed request as the renderer gets it: the error, a status or JSON-RPC code, and the reason (a gateway
+ * refusal's, or one of Conduit's own: `not_connected`, never sent). The same for the dashboard showing and a kept
+ * one, so a kept dashboard's request that never left isn't read as one with no answer back (desktop#744 review).
+ */
+function rpcFailure(error: unknown): RpcOutcome {
+  const code = (error as { code?: unknown } | null)?.code
+  const reason = jsonRpcErrorReason(error) ?? (error as { data?: { reason?: unknown } } | null)?.data?.reason
+  return {
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+    ...(typeof code === 'number' ? { code } : {}),
+    ...(typeof reason === 'string' ? { reason } : {})
+  }
+}
 import { LIVE_TOKEN_PATHS, mintedSocket, type LiveSocketEvent } from '../shared/ipc'
 import { setLanguage, t } from '../shared/i18n'
 import { STALLED_CLOSE_CODE, STALLED_REASON, liveSendDecision } from './liveBacklog'
@@ -1211,7 +1227,7 @@ function registerIpc(): void {
       if (keptRpcWritable(method, given) && _e.sender !== mainWindow?.webContents) return { ok: false, error: 'Only reads can go to another dashboard.' }
       return { ok: true, result: await keptHosts.rpc(url, method, given) }
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      return rpcFailure(error)
     }
   })
   ipcMain.handle(IPC.keptHttp, async (event, url: unknown, path: unknown, method: unknown, body: unknown): Promise<RpcOutcome> => {
@@ -1222,8 +1238,7 @@ function registerIpc(): void {
     try {
       return { ok: true, result: await keptHosts.http(url, path, method ?? 'GET', body) }
     } catch (error) {
-      const code = (error as { code?: unknown }).code
-      return { ok: false, error: error instanceof Error ? error.message : String(error), ...(typeof code === 'number' ? { code } : {}) }
+      return rpcFailure(error)
     }
   })
   ipcMain.handle(IPC.reconnect, event => connectionOf(event.sender.id)?.reconnectNow())
@@ -1235,15 +1250,7 @@ function registerIpc(): void {
       eventRouter.noteOpened(event.sender.id, method, params, result)
       return { ok: true, result }
     } catch (error) {
-      const code = (error as { code?: unknown }).code
-      // A gateway refusal's reason, or one of Conduit's own (`not_connected`: never sent).
-      const reason = jsonRpcErrorReason(error) ?? (error as { data?: { reason?: unknown } }).data?.reason
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-        code: typeof code === 'number' ? code : undefined,
-        reason: typeof reason === 'string' ? reason : undefined
-      }
+      return rpcFailure(error)
     }
   })
   ipcMain.handle(IPC.http, async (event, method: string, path: string, body?: unknown, timeoutMs?: unknown): Promise<RpcOutcome> => {

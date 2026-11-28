@@ -158,6 +158,9 @@ describe('combined dashboards in the main process', () => {
     // Its bots' pictures are a read, and so are its list of group chats and its models (a scheduled job's there).
     expect(KEPT_RPC_METHODS).toEqual(['profiles.list', 'profiles.get_asset', 'groups.list', 'model.options'])
     await expect(h.kept.rpc('https://d.example', 'profiles.list')).rejects.toThrow(/Not connected/)
+    // One not connected now says the request never left, as the dashboard showing does (desktop#744 review).
+    await expect(h.kept.rpc('https://d.example', 'profiles.list')).rejects.toMatchObject({ data: { reason: 'not_connected' } })
+    await expect(h.kept.http('https://d.example', '/api/profiles')).rejects.toMatchObject({ data: { reason: 'not_connected' } })
   })
 
   it('needs two in the group, keeps at most three beside the one on screen, and connects beside one left out', async () => {

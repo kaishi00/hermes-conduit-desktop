@@ -61,6 +61,20 @@ describe('Control from Hermes, an action running as the dashboard changes', () =
     hook.unmount()
   })
 
+  it('still answers when the same dashboard is picked up again while it ran', async () => {
+    const hook = renderHook(
+      (p: { name: string }) => usePcControl(true, 'h1', 'h1', bots, { ...(state('h1') as object), shownName: p.name } as never),
+      { name: 'PC' }
+    )
+    for (let i = 0; i < 6; i++) await settle()
+    expect(runs).toBe(1)
+    hook.rerender({ name: 'Desk' })
+    finishRun({ ok: true })
+    for (let i = 0; i < 3; i++) await settle()
+    expect(results).toEqual([{ computer: 'pc1', id: 'r1', result: { ok: true } }])
+    hook.unmount()
+  })
+
   it('sends no result once you’ve left that dashboard while it ran', async () => {
     const hook = renderHook((p: { host: string }) => usePcControl(true, p.host, p.host, bots, state(p.host)), { host: 'h1' })
     for (let i = 0; i < 6; i++) await settle()
