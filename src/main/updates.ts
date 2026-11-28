@@ -3,13 +3,14 @@
  * rules). The state goes to every window as it changes; the tray offers
  * Restart to Update once one is downloaded. Install updates automatically
  * off still checks, and the download waits for Settings' Download button.
+ * A downloaded update is still checked past: a newer release replaces it.
  */
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { writeFileAtomic } from './atomicWrite'
-import { CHECK_EVERY_MS, FIRST_CHECK_MS, mayCheck, mayDownload, nextUpdateState, updatesOff, type UpdateEvent, type UpdateState } from '../shared/updates'
+import { CHECK_EVERY_MS, FIRST_CHECK_MS, mayCheck, mayDownload, nextUpdateState, replacesWaiting, updatesOff, type UpdateEvent, type UpdateState } from '../shared/updates'
 
 const file = () => join(app.getPath('userData'), 'updates.json')
 
@@ -51,7 +52,12 @@ export function startUpdates(changed: (state: UpdateState) => void): void {
   autoUpdater.logger = null
   autoUpdater.on('checking-for-update', () => apply({ kind: 'checking' }))
   autoUpdater.on('update-not-available', () => apply({ kind: 'none' }))
-  autoUpdater.on('update-available', info => apply({ kind: 'found', version: info.version }))
+  autoUpdater.on('update-available', info => {
+    const before = state
+    apply({ kind: 'found', version: info.version })
+    // A check past a waiting download doesn't fetch by itself (checkForUpdates), so the same version isn't handed to the installer again; a newer one is fetched here, Install updates automatically or not.
+    if (replacesWaiting(before, state)) void fetchUpdate()
+  })
   autoUpdater.on('download-progress', progress => apply({ kind: 'progress', percent: progress.percent }))
   autoUpdater.on('update-downloaded', info => apply({ kind: 'downloaded', version: info.version }))
   // A failed check or download (offline, GitHub down) shows in Settings and is tried again at the next check or with Try Again.
@@ -61,12 +67,17 @@ export function startUpdates(changed: (state: UpdateState) => void): void {
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
-  // A downloaded update stays put until it's installed; a check under way isn't doubled.
+  // A check under way isn't doubled; one past a downloaded update finds any newer release.
   if (!mayCheck(state)) return state
+  const pastWaiting = state.phase === 'ready'
+  if (pastWaiting) autoUpdater.autoDownload = false
   try {
     await autoUpdater.checkForUpdates()
   } catch {
-    if (state.phase === 'checking') apply({ kind: 'failed' })
+    // The updater's error event has usually said so already.
+    if (state.phase === 'checking' || state.rechecking) apply({ kind: 'failed' })
+  } finally {
+    if (pastWaiting) autoUpdater.autoDownload = state.auto
   }
   return state
 }
@@ -75,6 +86,10 @@ export async function checkForUpdates(): Promise<UpdateState> {
 export async function downloadUpdate(): Promise<void> {
   if (!mayDownload(state)) return
   apply({ kind: 'download' })
+  await fetchUpdate()
+}
+
+async function fetchUpdate(): Promise<void> {
   try {
     await autoUpdater.downloadUpdate()
   } catch {
