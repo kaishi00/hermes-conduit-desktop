@@ -236,6 +236,8 @@ describe('text tags in a reply', () => {
     // Prose naming a script, or an attribute holding one, opens no script text: a comment after it still counts.
     expect(commentLines(['The <script> tag runs JavaScript.', '<!-- note', '</details>', '-->'])).toEqual([false, false, true, false])
     expect(commentLines(['<div title="<script>"> <!-- note', '</details>', '-->'])).toEqual([false, true, false])
+    // A custom element named after one (`<script-src>`, `<title-card>`) is an ordinary element (hermes-conduit#3465 review).
+    expect(commentLines(['<title-card>', '<details>', '</details>'])).toEqual([false, false, false])
     const html = draw(lines.join('\n'))
     expect(html).toContain('reply-fold')
     // The fold runs to the real close: More. is inside it, After. outside.

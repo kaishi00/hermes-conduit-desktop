@@ -13,7 +13,8 @@ vi.mock('../src/renderer/src/gateway', () => ({
         // One action, then the poll stays open.
         if (served) return new Promise(() => {})
         served = true
-        return { requests: [{ id: 'r1', session: 's1', chat: 'c1', action: 'type', args: { text: 'hi' }, needs_ok: needsOk }] }
+        const first = { id: 'r1', session: 's1', chat: 'c1', action: 'type', args: { text: 'hi' }, needs_ok: needsOk }
+        return { requests: two ? [first, { ...first, id: 'r2' }] : [first] }
       }
       if (method === 'POST' && path.includes('/pc/result')) results.push(body)
       return {}
@@ -24,12 +25,14 @@ vi.mock('../src/renderer/src/gateway', () => ({
 
 let finishRun: (result: Record<string, unknown>) => void = () => {}
 let needsOk = false
+let two = false
 const dialogs = new Map<string, (answer: 'allowed' | 'denied' | 'closed') => void>()
 let runs = 0
 beforeEach(() => {
   results.length = 0
   served = false
   needsOk = false
+  two = false
   dialogs.clear()
   runs = 0
   ;(window as unknown as { conduit: unknown }).conduit = {
@@ -91,6 +94,23 @@ describe('Control from Hermes, an action running as the dashboard changes', () =
     for (let i = 0; i < 3; i++) await settle()
     expect(runs).toBe(0)
     expect(results).toEqual([{ computer: 'pc1', id: 'r1', result: { ok: false, code: 'stopped' } }])
+    hook.unmount()
+  })
+
+  it('tells the rest of the batch it was stopped too when the same dashboard is picked up again (desktop#762 review)', async () => {
+    needsOk = true
+    two = true
+    const hook = renderHook(
+      (p: { name: string }) => usePcControl(true, 'h1', 'h1', bots, { ...(state('h1') as object), shownName: p.name } as never),
+      { name: 'PC' }
+    )
+    for (let i = 0; i < 6; i++) await settle()
+    hook.rerender({ name: 'Desk' })
+    for (let i = 0; i < 4; i++) await settle()
+    expect(results).toEqual([
+      { computer: 'pc1', id: 'r1', result: { ok: false, code: 'stopped' } },
+      { computer: 'pc1', id: 'r2', result: { ok: false, code: 'stopped' } }
+    ])
     hook.unmount()
   })
 

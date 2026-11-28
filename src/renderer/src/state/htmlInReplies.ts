@@ -270,7 +270,7 @@ const FOLD_CLOSING_END = /^(.*?)<\/details\s*>\s*$/i
 const withoutCode = (line: string) =>
   line.replace(/(`+)(?:(?!\1).)*?\1/g, '\u0001').replace(/<!--.*?-->/g, '\u0001').replace(/<!--.*$/, '\u0001')
 
-const RAW_TEXT_OPENING = /<(script|style|textarea|title)\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi
+const RAW_TEXT_OPENING = /<(script|style|textarea|title)(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*')*>/gi
 
 /** The index just past `name`'s closing tag in `text`, reading from `start`, or -1 while it's still to come. */
 function rawTextEnd(name: string, text: string, start: number): number {

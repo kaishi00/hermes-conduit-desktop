@@ -254,7 +254,12 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
           continue
         }
         for (const request of requests) {
-          if (!live) return
+          if (!live) {
+            // The same dashboard picked up again: the rest of the batch hears Stop rather than nothing (desktop#762 review).
+            if (showing.current !== host) return
+            await gateway.http('POST', pcPath('/result', profile), { computer: state.id, id: request.id, result: { ok: false, code: 'stopped' } }, 30_000).catch(() => undefined)
+            continue
+          }
           let result: Record<string, unknown>
           try {
             // Stopped since this batch came in: answer stopped without asking first.
