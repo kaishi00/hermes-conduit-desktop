@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { GatewayError } from '../src/renderer/src/gateway'
 import {
   jobPrompt,
   MAX_SAVED_JOBS,
@@ -242,16 +243,21 @@ describe('jobs kept past their call', () => {
   })
 })
 
-
 describe('a follow-up whose redirect may have landed', () => {
   it('reports unknown after a timeout, not_sent when nothing left', async () => {
     const timeout = setup(false, 'redirected', Object.assign(new Error('request timed out'), { name: 'TimeoutError' }))
     await timeout.jobs.start('Check the render')
     expect(await timeout.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'unknown' })
-    const refused = setup(false, 'redirected', new Error('fetch failed'))
+    const refused = setup(false, 'redirected', new GatewayError('refused', -32000))
     await refused.jobs.start('Check the render')
     expect(await refused.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
-    expect(correctionMayHaveGone({ code: 504 })).toBe(true)
-    expect(correctionMayHaveGone({ message: 'connection refused' })).toBe(false)
+    const dropped = setup(false, 'redirected', new Error('WebSocket closed'))
+    await dropped.jobs.start('Check the render')
+    expect(await dropped.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'unknown' })
+    const offline = setup(false, 'redirected', new Error('Not connected to Hermes.'))
+    await offline.jobs.start('Check the render')
+    expect(await offline.jobs.followUp('job-1', 'one more')).toMatchObject({ status: 'not_sent' })
+    expect(correctionMayHaveGone(new Error('WebSocket closed'))).toBe(true)
+    expect(correctionMayHaveGone(new Error('Not connected to Hermes.'))).toBe(false)
   })
 })

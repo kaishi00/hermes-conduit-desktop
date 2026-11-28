@@ -27,15 +27,12 @@ import { discardTurnSurface, reportTurnSurface } from './turnSurface'
 
 const withProfile = (path: string, profile?: string) => (profile && profile !== 'default' ? `${path}?profile=${encodeURIComponent(profile)}` : path)
 
-/** A correction that timed out or lost the connection may still have reached Hermes (issue 732). */
+/** A correction may have reached Hermes unless the gateway gave a definitive answer (issue 732). */
 export function correctionMayHaveGone(error: unknown): boolean {
-  const e = (error ?? {}) as { name?: unknown; code?: unknown; message?: unknown }
-  const name = String(e.name ?? '')
-  const code = e.code
-  const text = String(e.message ?? error).toLowerCase()
-  return name === 'TimeoutError' || name === 'AbortError' || code === 408 || code === 504 || text.includes('timed out') || text.includes('timeout')
+  const text = String((error as { message?: unknown } | null)?.message ?? error).toLowerCase()
+  if (text.includes('not connected to hermes') || text.includes('gateway not connected')) return false
+  return !(error instanceof GatewayError && error.code !== undefined)
 }
-
 
 /** The plugin keeps a voice call's jobs in its bot's Work panel (notifier `work-adopt`). */
 export const ADOPT_CAPABILITY = 'work-adopt'
