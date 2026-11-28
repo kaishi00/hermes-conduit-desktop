@@ -1025,7 +1025,7 @@ function registerIpc(): void {
   // A project's folder from Finder or Explorer, only while the dashboard runs on this computer (desktop#605).
   ipcMain.handle(IPC.hostIsThisComputer, event => isThisComputer(connectionOf(event.sender.id)?.current().url))
   ipcMain.handle(IPC.pickLocalFolder, async (event): Promise<string[] | null> => {
-    if (!isThisComputer(connectionOf(event.sender.id)?.current().url)) return null
+    if (!(await isThisComputer(connectionOf(event.sender.id)?.current().url))) return null
     const owner = BrowserWindow.fromWebContents(event.sender)
     const options: Electron.OpenDialogOptions = { properties: ['openDirectory', 'createDirectory'] }
     const picked = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options)
@@ -1038,7 +1038,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pathLinkMenu, async (event, at: unknown): Promise<'folder' | 'computer' | 'copy' | null> => {
     const owner = BrowserWindow.fromWebContents(event.sender)
     if (!owner) return null
-    const here = isThisComputer(connectionOf(event.sender.id)?.current().url)
+    const here = await isThisComputer(connectionOf(event.sender.id)?.current().url)
     const onComputer = showOnComputerLabel(process.platform, t)
     return new Promise(resolve => {
       let chosen: 'folder' | 'computer' | 'copy' | null = null
@@ -1058,7 +1058,7 @@ function registerIpc(): void {
   // Shows a path the Hermes host named in Finder or Explorer: only while the dashboard runs on this computer, and
   // only a path that's here. False otherwise, for the page to say so.
   ipcMain.handle(IPC.showOnComputer, async (event, path: unknown): Promise<boolean> => {
-    if (typeof path !== 'string' || !path.trim() || !isThisComputer(connectionOf(event.sender.id)?.current().url)) return false
+    if (typeof path !== 'string' || !path.trim() || !(await isThisComputer(connectionOf(event.sender.id)?.current().url))) return false
     const local = localSpelling(path, { home: homedir(), windows: process.platform === 'win32' })
     if (!local || !(await stat(local).then(() => true, () => false))) return false
     shell.showItemInFolder(local)

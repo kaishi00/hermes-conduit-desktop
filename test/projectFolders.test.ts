@@ -1,21 +1,59 @@
 import { describe, expect, it } from 'vitest'
-import { firstListed, folderStart, newChatProjects, projectFor } from '../src/renderer/src/state/projectFolders'
+import { firstListed, folderStart, HOST_HOME, listedFolder, newChatProjects, projectFor } from '../src/renderer/src/state/projectFolders'
 import type { Project } from '../src/renderer/src/state/projects'
 import { hostSpellings, isThisComputer } from '../src/main/localFolders'
 
 const project = (id: string, path?: string, isHome = false): Project => ({ id, title: id, path, isHome, isAuto: false, count: 0, previews: [] })
 
 describe('a project’s folder from this computer (desktop#605)', () => {
-  const deps = { hostname: () => 'Ruans-MacBook', addresses: () => ['127.0.0.1', '192.168.1.20', 'fe80::1', '::1'] }
+  const names: Record<string, string[]> = {
+    'ruans-macbook.tail1234.ts.net': ['100.101.102.103'],
+    'hermes.home.arpa': ['fd7a:115c:a1e0::1%utun4'],
+    'loop.example.com': ['127.0.0.1'],
+    'hermes.example.com': ['203.0.113.7'],
+    'ruans-macbook.example.com': ['203.0.113.8']
+  }
+  const asked: string[] = []
+  const deps = {
+    hostname: () => 'Ruans-MacBook',
+    addresses: () => ['127.0.0.1', '192.168.1.20', 'fe80::1', '::1', '100.101.102.103', 'fd7a:115c:a1e0::1'],
+    resolve: async (host: string) => {
+      asked.push(host)
+      if (host === 'slow.example.com') throw new Error('ENOTFOUND')
+      return names[host] ?? []
+    }
+  }
 
-  it('counts loopback, this computer’s name and its own addresses as this computer', () => {
-    for (const url of ['http://localhost:9119', 'http://127.0.0.1:9119', 'http://[::1]:9119', 'http://ruans-macbook.local:9119', 'http://Ruans-MacBook:9119', 'http://192.168.1.20:9119'])
-      expect(isThisComputer(url, deps), url).toBe(true)
+  it('counts loopback, this computer’s name and its own addresses as this computer', async () => {
+    for (const url of ['http://localhost:9119', 'http://127.0.0.1:9119', 'http://[::1]:9119', 'http://ruans-macbook.local:9119', 'http://Ruans-MacBook:9119', 'http://192.168.1.20:9119', 'http://100.101.102.103:9119'])
+      expect(await isThisComputer(url, deps), url).toBe(true)
   })
 
-  it('counts any other host, a missing address and a broken one as elsewhere', () => {
-    for (const url of ['http://192.168.1.21:9119', 'https://hermes.example.com', 'http://ruans-macbook.example.com', undefined, 'not a url'])
-      expect(isThisComputer(url, deps), String(url)).toBe(false)
+  it('counts a name that resolves back here, such as a Tailscale name, as this computer (desktop issue 763)', async () => {
+    for (const url of ['https://ruans-macbook.tail1234.ts.net', 'http://hermes.home.arpa:9119', 'http://loop.example.com:9119'])
+      expect(await isThisComputer(url, deps), url).toBe(true)
+  })
+
+  it('counts any other host, a name that doesn’t resolve, a missing address and a broken one as elsewhere', async () => {
+    for (const url of ['http://192.168.1.21:9119', 'https://hermes.example.com', 'http://ruans-macbook.example.com', 'http://slow.example.com', undefined, 'not a url'])
+      expect(await isThisComputer(url, deps), String(url)).toBe(false)
+  })
+
+  it('looks up names only, never an address', async () => {
+    asked.length = 0
+    await isThisComputer('http://192.168.1.21:9119', deps)
+    await isThisComputer('http://[fe80::2]:9119', deps)
+    expect(asked).toEqual([])
+  })
+
+  it('opens the host’s folders at its home folder when nothing else names one, and shows that folder’s path once listed (desktop issue 763)', () => {
+    expect(folderStart(undefined, [])).toBe(HOST_HOME)
+    expect(folderStart(undefined, null)).toBe(HOST_HOME)
+    expect(folderStart('  ', [project('Loose')])).toBe(HOST_HOME)
+    const parent = (path: string) => path.slice(0, path.lastIndexOf('/')) || '/'
+    expect(listedFolder(HOST_HOME, ['/Users/ruan/Desktop', '/Users/ruan/dev'], parent)).toBe('/Users/ruan')
+    expect(listedFolder(HOST_HOME, [], parent)).toBe(HOST_HOME)
+    expect(listedFolder('/srv', ['/srv/site'], parent)).toBe('/srv')
   })
 
   it('offers a Windows folder in its WSL spelling too', () => {
@@ -50,11 +88,11 @@ describe('a new chat’s project (desktop#605)', () => {
     expect(projectFor('/srv/site', null)).toBeNull()
   })
 
-  it('opens the host’s folders at the chat’s folder, else Home’s, else Hermes’ default', () => {
+  it('opens the host’s folders at the chat’s folder, else Home’s, else the host’s home folder', () => {
     expect(folderStart('/srv/app', list)).toBe('/srv/app')
     expect(folderStart(undefined, list)).toBe('/home/eric')
-    expect(folderStart(undefined, [project('x')])).toBe('')
-    expect(folderStart(undefined, null)).toBe('')
+    expect(folderStart(undefined, [project('x')])).toBe(HOST_HOME)
+    expect(folderStart(undefined, null)).toBe(HOST_HOME)
   })
 })
 

@@ -3,7 +3,7 @@ import { t } from '@shared/i18n'
 import { gateway } from '../gateway'
 import { createParams, parseProjects, type Project } from '../state/projects'
 import { changePath, childPath, fsListPath, parentPath, parseListing, validName, type WorkspaceEntry } from '../state/workspace'
-import { firstListed } from '../state/projectFolders'
+import { firstListed, HOST_HOME, listedFolder } from '../state/projectFolders'
 import { askText } from '../state/dialogs'
 import { Icon } from './icons'
 
@@ -63,7 +63,11 @@ export function ProjectForm({
   }
   async function browse() {
     setError(null)
-    if (!local) return setBrowsing(open => !open)
+    // Asked at the click, not only as the form opened: a name that points back here takes a lookup (desktop issue 763).
+    const here = await window.conduit.hostIsThisComputer().catch(() => false)
+    if (!alive.current) return
+    setLocal(here)
+    if (!here) return setBrowsing(open => !open)
     const spellings = await window.conduit.pickLocalFolder().catch(() => null)
     if (!spellings || !alive.current) return
     const seen = await firstListed(spellings, path => gateway.http('GET', fsListPath(path, profile)).then(parseListing))
@@ -127,7 +131,7 @@ export function ProjectForm({
  * Folder. A listing that answers after a later one was asked for is dropped.
  */
 export function HostFolders({ profile, start, onPick }: { profile?: string | null; start: string; onPick: (path: string) => void }) {
-  const [path, setPath] = useState(start)
+  const [path, setPath] = useState(start || HOST_HOME)
   const [folders, setFolders] = useState<WorkspaceEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const asked = useRef(0)
@@ -139,8 +143,9 @@ export function HostFolders({ profile, start, onPick }: { profile?: string | nul
       const listing = parseListing(await gateway.http('GET', fsListPath(at, profile)))
       if (ticket !== asked.current) return
       setFolders(listing.entries.filter(entry => entry.isDirectory).sort((a, b) => a.name.localeCompare(b.name)))
-      // Hermes names the folder it listed when it was asked for its default one.
-      if (!at && listing.entries[0]) setPath(parentPath(listing.entries[0].path))
+      // Hermes names the home folder it listed through its entries' paths.
+      const shown = listedFolder(at, listing.entries.map(entry => entry.path), parentPath)
+      if (shown !== at) setPath(shown)
     } catch (e) {
       if (ticket !== asked.current) return
       setFolders([])
@@ -152,9 +157,11 @@ export function HostFolders({ profile, start, onPick }: { profile?: string | nul
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the folder shown as it changes
   }, [path])
   const up = parentPath(path)
+  // `~` until Hermes names the home folder's path: a project keeps a real path.
+  const settled = !!path && path !== HOST_HOME
   const makeFolder = async () => {
     const name = (await askText(t('New folder name')))?.trim()
-    if (!name || !path) return
+    if (!name || !settled) return
     if (!validName(name)) return setError(t('That name can’t be used.'))
     try {
       await gateway.http('POST', changePath('mkdir', profile), { root: path, path, name })
@@ -184,10 +191,10 @@ export function HostFolders({ profile, start, onPick }: { profile?: string | nul
       </div>
       {error ? <div className="meta project-error">{error}</div> : null}
       <div className="project-form-actions">
-        <button type="button" className="secondary" disabled={!path} onClick={() => void makeFolder()}>
+        <button type="button" className="secondary" disabled={!settled} onClick={() => void makeFolder()}>
           {t('New Folder')}
         </button>
-        <button type="button" className="primary" disabled={!path} onClick={() => onPick(path)}>
+        <button type="button" className="primary" disabled={!settled} onClick={() => onPick(path)}>
           {t('Use This Folder')}
         </button>
       </div>
