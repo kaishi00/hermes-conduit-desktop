@@ -13,6 +13,17 @@ let calls: Call[] = []
 
 const job = (id: string, profile: string) => ({ id, name: id, enabled: true, profile })
 function answer(host: string | null, path: string): Outcome {
+  if (/^\/api\/cron\/jobs\/[^/?]+\/runs/.test(path)) {
+    return {
+      ok: true,
+      result: {
+        runs: [
+          { id: 'local-1', source: 'cron', title: 'Morning brief', started_at: 1795830764 },
+          { id: 'cron_output:own-1:2026-11-28_10-10-45', source: 'cron_output', title: 'COMPLETED', preview: 'Collected 3 alerts', started_at: 1795831845 }
+        ]
+      }
+    }
+  }
   if (path.startsWith('/api/cron/jobs')) {
     const profile = new URLSearchParams(path.split('?')[1] ?? '').get('profile')
     const all = host ? [job('far-1', 'nova'), job('far-2', 'atlas')] : [job('own-1', 'default'), job('own-2', 'mira')]
@@ -177,6 +188,31 @@ describe('Scheduled after a change', () => {
     await settle()
     expect(hook.result().jobs?.map(j => j.id)).toEqual(['own-1', 'own-2', 'far-9'])
     hook.unmount()
+  })
+
+  it("a script's run shows its output and only a session run opens (issue 3455)", async () => {
+    const path = '../src/renderer/src/components/ScheduledJobs.tsx'
+    const { ScheduledJobs } = (await import(/* @vite-ignore */ path)) as { ScheduledJobs: unknown }
+    const opened: string[] = []
+    const box = document.createElement('div')
+    document.body.append(box)
+    const root = createRoot(box)
+    act(() =>
+      root.render(createElement(ScheduledJobs as never, { bots: [], connected: true, profile: 'default', onProfile: () => {}, tiles: [], onOpenRun: (run: { id?: string }) => opened.push(run.id ?? ''), segment: null } as never))
+    )
+    await settle()
+    act(() => box.querySelector<HTMLButtonElement>('button.job-row')!.click())
+    await settle()
+    const sessionRows = [...box.querySelectorAll<HTMLButtonElement>('button.job-run')]
+    const outputRows = [...box.querySelectorAll<HTMLDetailsElement>('details.job-run-output')]
+    expect(sessionRows.map(b => b.textContent)).toEqual([expect.stringContaining('Morning brief')])
+    expect(outputRows).toHaveLength(1)
+    expect(outputRows[0].querySelector('.job-run-output-text')!.textContent).toBe('Collected 3 alerts')
+    act(() => sessionRows[0].click())
+    act(() => outputRows[0].querySelector('summary')!.click())
+    expect(opened).toEqual(['local-1'])
+    act(() => root.unmount())
+    box.remove()
   })
 
   it('a kept far pick shows again only while its dashboard lists that profile (desktop#348)', async () => {
