@@ -211,6 +211,7 @@ const api: ConduitApi = {
   endWindowCall: () => ipcRenderer.send(IPC.endWindowCall),
   noteCallWindowChat: storedId => ipcRenderer.send(IPC.callWindowChat, storedId),
   onMenu: listener => listen<MenuAction>(IPC.menu, listener),
+  onNavigateBack: listener => listen<void>(IPC.navigateBack, () => listener()),
   setRailSections: sections => ipcRenderer.send(IPC.setRailSections, [...sections]),
   takeLinkUrl: () => ipcRenderer.invoke(IPC.takeLinkUrl),
   onLinkUrl: listener => listen<string>(IPC.linkUrl, listener),

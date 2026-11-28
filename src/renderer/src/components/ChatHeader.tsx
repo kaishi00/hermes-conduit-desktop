@@ -56,8 +56,11 @@ export function ChatHeader({
   working?: boolean
   /** A workstream's chat: its status beside its title. */
   workItem?: WorkItem
-  /** The line under the title: a button (a workstream's way back to its bot) or words. */
-  subtitle?: { text: string; title?: string; onClick?: () => void }
+  /**
+   * The line under the title: a button (a workstream's way back to its bot) or words. With `back`, the mouse's Back
+   * and Alt+Left press it, as a Back on screen (desktop#755).
+   */
+  subtitle?: { text: string; title?: string; onClick?: () => void; back?: boolean }
   call?: HeaderCall
   newWindow?: HeaderButton
   screen?: HeaderButton
@@ -107,7 +110,7 @@ export function ChatHeader({
         </div>
         {subtitle ? (
           subtitle.onClick ? (
-            <button className="chat-subtitle" title={subtitle.title} onClick={subtitle.onClick}>
+            <button className="chat-subtitle" title={subtitle.title} onClick={subtitle.onClick} data-back={subtitle.back ? '' : undefined}>
               {subtitle.text}
             </button>
           ) : (

@@ -11,6 +11,11 @@ import { cancelFrontDialog } from './dialogs'
  *    drawing the back icon, or marked `data-back`. So a new page with a Back
  *    gets this with nothing more.
  * 3. Otherwise the newest Back a page registered with `useMouseBack`.
+ *
+ * Mouse software can send the Back as something else (desktop#755): Windows'
+ * browser-backward command or a Mac's swipe back reach the page from the main
+ * process (navigateBack.ts), and a Mac's ⌘[ is a Back as in Safari. One press
+ * that arrives both ways goes back once.
  */
 const backs: Array<{ current: () => void }> = []
 
@@ -106,23 +111,60 @@ function answers(): boolean {
   return !!(document.querySelector(MODAL_SELECTOR) || backsOnScreen(document).length || currentBack())
 }
 
+/** How close a press from another path must follow one to be the same press arriving twice. */
+export const SAME_PRESS_MS = 500
+
+/** The paths a Back press arrives by. */
+export type BackSource = 'button' | 'key' | 'window'
+
+/**
+ * Whether a press is the one just answered arriving again by another path: Windows may send a mouse's Back as
+ * button 3 and as the browser-backward command both. Two presses by the same path are two presses.
+ */
+export function samePress(last: { source: BackSource; at: number } | null, source: BackSource, at: number): boolean {
+  return !!last && last.source !== source && last.source !== 'key' && source !== 'key' && at - last.at < SAME_PRESS_MS
+}
+
+/** Text the keyboard edits, where a Mac's Option+Left moves by a word. */
+function editsText(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || target.matches('input, textarea, select'))
+}
+
 let listening = false
 /** Listens for the back button and Alt+Left; main.tsx calls it once per window. */
 export function installMouseBack(): void {
   if (listening || typeof window === 'undefined') return
   listening = true
+  const mac = window.conduit?.platform === 'darwin'
+  let last: { source: BackSource; at: number } | null = null
+  const press = (source: BackSource, near: EventTarget | null): boolean => {
+    const at = performance.now()
+    if (samePress(last, source, at)) return true
+    last = { source, at }
+    return goBack(near)
+  }
+  // Where the pointer last was, for a press from the window, which carries no target.
+  let pointer: EventTarget | null = null
+  window.addEventListener('pointerover', event => (pointer = event.target), { passive: true })
   // Chromium would navigate on mousedown's default; nothing here has history to go back to.
   window.addEventListener('mousedown', event => {
     if (isBackButton(event) && answers()) event.preventDefault()
   })
   window.addEventListener('mouseup', event => {
     if (!isBackButton(event)) return
-    if (goBack(event.target)) event.preventDefault()
+    if (press('button', event.target)) event.preventDefault()
   })
-  // Alt+Left, the keyboard's Back in a browser.
+  // Alt+Left, the keyboard's Back in a browser, and a Mac's ⌘[. On a Mac, Option+Left in text moves by a word.
   window.addEventListener('keydown', event => {
-    if (event.key !== 'ArrowLeft' || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.defaultPrevented) return
-    if (goBack(document.activeElement)) event.preventDefault()
+    if (event.defaultPrevented || event.shiftKey) return
+    const altLeft = event.key === 'ArrowLeft' && event.altKey && !event.ctrlKey && !event.metaKey && !(mac && editsText(event.target))
+    const cmdBracket = mac && event.key === '[' && event.metaKey && !event.altKey && !event.ctrlKey
+    if (!altLeft && !cmdBracket) return
+    if (press('key', document.activeElement)) event.preventDefault()
+  })
+  // Windows' browser-backward command and a Mac's swipe back, from the main process.
+  window.conduit?.onNavigateBack?.(() => {
+    press('window', pointer ?? document.activeElement)
   })
 }
 

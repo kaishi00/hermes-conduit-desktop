@@ -1094,6 +1094,8 @@ function Shell({
   const outputs = useTranscriptValue(transcriptStore, state => state.items.filter(item => item.kind === 'output').length)
   const controlPulse = turnsDone + outputs
   const workBot = roster.bots?.find(bot => bot.name === (selected.profile ?? 'default'))
+  /** The Bot Chat a workstream's chat is going back to, which opens where it was left (desktop#755). */
+  const backToBotChat = useRef<string | null>(null)
   // A bot's chat (its Bot Chat, one not resolved yet, or a workstream's) offers its work once the host answers with some.
   const workHere = !!openBotChat || !!workItem || selected.botChat === true
   const showWork = workOpen && workHere && (!!work.snapshot || !!work.error)
@@ -1335,9 +1337,16 @@ function Shell({
    * opens there while it holds a tab, also once the others have closed. A lone tab keeps none, as before tabs.
    */
   const keepsPlace = useCallback(
-    (chat: string, leaving: boolean) => (!leaving || showsTabStrip(tabs)) && tabs.tabs.some(tab => tab.chat.id === chat),
-    [tabs]
+    (chat: string, leaving: boolean) =>
+      ((!leaving || showsTabStrip(tabs)) && tabs.tabs.some(tab => tab.chat.id === chat)) ||
+      // A Bot Chat left for one of its workstreams, and back from it by its title line or a Back press (desktop#755).
+      (leaving ? !!workItem && chat === workBot?.botChatId : chat === backToBotChat.current),
+    [tabs, workItem, workBot?.botChatId]
   )
+  // Cleared once the chat it names has opened, so the Bot Chat opened any other way opens on its newest rows (desktop#467).
+  useEffect(() => {
+    backToBotChat.current = null
+  }, [selected.id])
   // Ctrl+Tab and Ctrl+Shift+Tab step through the tabs, a Mac's too, as a browser's do.
   const stepTabs = useRef<(by: 1 | -1) => boolean>(() => false)
   stepTabs.current = by => {
@@ -3085,7 +3094,9 @@ function Shell({
                     ? {
                         text: t('{bot}’s work · {ref}', { bot: workBot.title, ref: workItem.ref }),
                         title: t('Back to {bot}', { bot: workBot.title }),
+                        back: !!workBot.botChatId,
                         onClick: () => {
+                          backToBotChat.current = workBot.botChatId ?? null
                           if (workBot.botChatId) openBot(workBot)
                         }
                       }
