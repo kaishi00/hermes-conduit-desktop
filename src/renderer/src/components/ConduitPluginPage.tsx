@@ -273,7 +273,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
         {farHere && farHere.update.phase !== 'idle' ? (
           <UpdateRow
             state={farHere.update}
-            capabilities={null}
+            capabilities={status.state === 'reported' ? status.capabilities : null}
             startedAt={farHere.startedAt}
             showsWait
             onDismiss={() => dismissHostUpdate(own)}
