@@ -274,6 +274,9 @@ export function usePcControl(connected: boolean, host: string, hostName: string,
           } catch (error) {
             result = { ok: false, code: 'failed', message: String(error) }
           }
+          // Left this dashboard while it ran: its result (a capture, typed text, a command's output) never goes
+          // to the one showing now, which the gateway reaches (desktop#744 review).
+          if (!live) return
           await gateway.http('POST', pcPath('/result', profile), { computer: state.id, id: request.id, result }, 30_000).catch(() => undefined)
         }
       }

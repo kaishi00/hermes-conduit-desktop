@@ -19,6 +19,14 @@ vi.mock('../src/renderer/src/gateway', () => ({
   GatewayError: class extends Error {}
 }))
 
+vi.mock('../src/renderer/src/state/voiceSave', async original => ({
+  ...(await original<typeof import('../src/renderer/src/state/voiceSave')>()),
+  saveCall: async (_profile: unknown, callId: string) => {
+    saves.push(callId)
+  }
+}))
+
+const saves: string[] = []
 let sessions = 0
 let peers = 0
 let closedPeers = 0
@@ -28,6 +36,8 @@ let opens = 0
 let liveIds: string[] = []
 let closed: string[] = []
 beforeEach(() => {
+  sessions = 0
+  saves.length = 0
   mints = 0
   opens = 0
   liveIds = []
@@ -119,10 +129,13 @@ describe('a live call in a dev build (desktop#669)', () => {
     // The first mount aborts before it opens anything; exactly one socket stays for the real call.
     expect(liveIds.length - closed.length).toBe(1)
     expect(opens + mints).toBe(liveIds.length)
+    // The first run's teardown saved its empty call; the real call saves once more when it ends.
+    const before = saves.length
     act(() => root.unmount())
     await settle()
     // Teardown closes the surviving socket, too.
     expect(closed).toEqual(liveIds)
+    expect(saves.length).toBe(before + 1)
   })
 
   // Desktop issue 736: GPT-Live starts through WebRTC and a host session, not the relay socket.
@@ -137,8 +150,10 @@ describe('a live call in a dev build (desktop#669)', () => {
     // One host session and one live peer for the real call.
     expect(sessions).toBe(1)
     expect(peers - closedPeers).toBe(1)
+    const before = saves.length
     act(() => root.unmount())
     await settle()
     expect(closedPeers).toBe(peers)
+    expect(saves.length).toBe(before + 1)
   })
 })
