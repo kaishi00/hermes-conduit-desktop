@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import type { PluginRelease } from '@shared/ipc'
 import {
@@ -114,6 +114,10 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   const [, tick] = useState(0)
   // A row from another dashboard, or a held scan whose job moved on, goes (desktop#289, #318).
   const current = useUpdateRow()
+  // A run started from another dashboard's page goes on once this is the one on screen: it stays this page's.
+  const own = dashboardHost()
+  const farHere = useHostPluginRows().get(own)
+  const farRunning = farHere?.update.phase === 'updating'
 
   const refresh = useCallback(async () => {
     setChecking(true)
@@ -132,6 +136,11 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
     const timer = setInterval(() => tick(n => n + 1), 1000)
     return () => clearInterval(timer)
   }, [current.phase])
+  const farRan = useRef(false)
+  useEffect(() => {
+    if (farRan.current && !farRunning) void refresh()
+    farRan.current = farRunning
+  }, [farRunning, refresh])
   useEffect(() => {
     // No plugin, or an update the host couldn't run: the steps open by themselves.
     if (status.state === 'missing' || current.phase === 'failed') setShowsCommands(true)
@@ -145,7 +154,7 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
   const notes =
     available && latest ? releaseNotes(parseChangelog(release.changelog), running ?? (status.state === 'reported' ? status.version : null), latest) : null
   const canUpdate = canUpdateHere(status)
-  const showsAction = current.phase !== 'updating' && (available || restart)
+  const showsAction = current.phase !== 'updating' && !farRunning && (available || restart)
 
   const statusText = (() => {
     if (status.state === 'unknown')
@@ -259,11 +268,21 @@ export function ConduitPluginPage({ onBack }: { onBack: () => void }) {
           onDismiss={() => setUpdate({ phase: 'idle' })}
           onAcceptScan={canUpdate ? () => void runUpdate(() => void refresh(), true, latest) : null}
         />
+        {farHere && farHere.update.phase !== 'idle' ? (
+          <UpdateRow
+            state={farHere.update}
+            capabilities={null}
+            startedAt={farHere.startedAt}
+            showsWait={false}
+            onDismiss={() => dismissHostUpdate(own)}
+            onAcceptScan={canUpdate ? () => void runHostUpdate(own, true, latest) : null}
+          />
+        ) : null}
       </section>
 
       <OtherDashboards
         latest={latest}
-        thisNeedsUpdate={canUpdate && current.phase !== 'updating' && current.phase !== 'scanHeld' && (available || restart)}
+        thisNeedsUpdate={canUpdate && current.phase !== 'updating' && !farRunning && current.phase !== 'scanHeld' && (available || restart)}
         onUpdateThis={() => void runUpdate(() => void refresh(), false, latest)}
       />
 
@@ -497,6 +516,10 @@ function OtherDashboardRow({ host, row, latest }: { host: KeptHost; row: HostPlu
   const running = runningVersion(status)
   const canUpdate = host.state === 'live' && canUpdateHere(status)
   const showsAction = update.phase !== 'updating' && update.phase !== 'scanHeld' && (available || restart)
+  // Update All may start its run: a confirmation left open doesn't come back after it.
+  useEffect(() => {
+    if (!showsAction) setConfirming(false)
+  }, [showsAction])
   const line = (() => {
     if (host.state !== 'live') return keptStateLabel(host.state)
     if (status.state === 'unknown') return row?.checking ? t("Checking this dashboard's notifier…") : t("Couldn't reach this dashboard's notifier.")
