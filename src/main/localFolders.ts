@@ -44,12 +44,16 @@ export type ThisComputerDeps = {
 // A name's addresses, as the system resolves them (MagicDNS included), given up after a short wait.
 const RESOLVE_WAIT_MS = 2000
 const resolved = new Map<string, { at: number; addresses: string[] }>()
+const asking = new Map<string, Promise<string[]>>()
 
 /**
  * A name's addresses, kept a minute. Only the system's answer is kept: a
  * lookup that outlasts the wait counts as elsewhere this time, and its answer,
  * when it comes, is kept for the next ask, so one slow lookup doesn't hide
- * Finder for a minute. A name the system says doesn't exist is kept as none.
+ * Finder for a minute. A lookup still out is shared by the asks that come
+ * meanwhile. A name the system says doesn't exist is kept as none; another
+ * failure (a resolver that didn't answer) is kept as nothing, for the next ask
+ * to try again.
  */
 export async function resolveHost(
   host: string,
@@ -58,17 +62,24 @@ export async function resolveHost(
   const now = deps.now ?? Date.now
   const kept = resolved.get(host)
   if (kept && now() - kept.at < 60_000) return kept.addresses
-  const ask = deps.lookup ?? (name => lookup(name, { all: true }).then(found => found.map(entry => entry.address)))
-  const asked = ask(host).then(
-    addresses => {
-      resolved.set(host, { at: now(), addresses })
-      return addresses
-    },
-    () => {
-      resolved.set(host, { at: now(), addresses: [] })
-      return [] as string[]
-    }
-  )
+  let asked = asking.get(host)
+  if (!asked) {
+    const ask = deps.lookup ?? (name => lookup(name, { all: true }).then(found => found.map(entry => entry.address)))
+    asked = ask(host)
+      .then(
+        addresses => {
+          resolved.set(host, { at: now(), addresses })
+          return addresses
+        },
+        (error: unknown) => {
+          const code = (error as { code?: unknown } | null)?.code
+          if (code === 'ENOTFOUND' || code === 'ENODATA') resolved.set(host, { at: now(), addresses: [] })
+          return [] as string[]
+        }
+      )
+      .finally(() => asking.delete(host))
+    asking.set(host, asked)
+  }
   let timer: ReturnType<typeof setTimeout> | undefined
   const gaveUp = new Promise<string[]>(done => (timer = setTimeout(() => done([]), deps.waitMs ?? RESOLVE_WAIT_MS)))
   try {
@@ -81,6 +92,7 @@ export async function resolveHost(
 /** Forgets the kept answers, for tests. */
 export function forgetResolvedHosts(): void {
   resolved.clear()
+  asking.clear()
 }
 
 function ownAddresses(): string[] {

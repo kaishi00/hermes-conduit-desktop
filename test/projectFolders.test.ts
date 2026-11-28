@@ -55,16 +55,20 @@ describe('a project’s folder from this computer (desktop#605)', () => {
       return new Promise<string[]>(done => (answer = done))
     }
     expect(await resolveHost('mac.tail1234.ts.net', { lookup: slow, waitMs: 5 })).toEqual([])
+    expect(await resolveHost('mac.tail1234.ts.net', { lookup: slow, waitMs: 5 })).toEqual([])
+    expect(asks).toBe(1)
     answer(['100.101.102.103'])
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(await resolveHost('mac.tail1234.ts.net', { lookup: slow, waitMs: 5 })).toEqual(['100.101.102.103'])
     expect(asks).toBe(1)
-    const missing = async () => {
-      throw new Error('ENOTFOUND')
+    const failing = (code: string) => async () => {
+      throw Object.assign(new Error(code), { code })
     }
-    expect(await resolveHost('gone.example.com', { lookup: missing, waitMs: 5 })).toEqual([])
+    expect(await resolveHost('gone.example.com', { lookup: failing('ENOTFOUND'), waitMs: 5 })).toEqual([])
     expect(await resolveHost('gone.example.com', { lookup: slow, waitMs: 5 })).toEqual([])
     expect(asks).toBe(1)
+    expect(await resolveHost('flaky.example.com', { lookup: failing('EAI_AGAIN'), waitMs: 5 })).toEqual([])
+    expect(await resolveHost('flaky.example.com', { lookup: async () => ['100.101.102.103'], waitMs: 5 })).toEqual(['100.101.102.103'])
     forgetResolvedHosts()
   })
 
