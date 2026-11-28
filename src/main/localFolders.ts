@@ -1,18 +1,19 @@
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 import { hostname as osHostname, networkInterfaces } from 'node:os'
 import { isLoopbackHost } from '../shared/browserAddress'
 
 /**
  * Whether the dashboard at `url` runs on this computer (desktop#605): its
  * address is loopback, this computer's own name (with or without `.local`),
- * or one of this computer's network addresses. Only then is a folder picked
- * in Finder or Explorer a folder Hermes can open; a project's folder is a
- * path on the Hermes host (desktop#393), so any other host gets the host's
- * own folders instead.
+ * one of this computer's network addresses, or a name that resolves to one of
+ * them, such as a Tailscale name or a DNS name pointing back here (desktop
+ * issue 763). Only then is a folder picked in Finder or Explorer a folder
+ * Hermes can open; a project's folder is a path on the Hermes host
+ * (desktop#393), so any other host gets the host's own folders instead. A
+ * name that doesn't resolve within the lookup's wait counts as elsewhere.
  */
-export function isThisComputer(
-  url: string | undefined,
-  deps: { hostname?: () => string; addresses?: () => string[] } = {}
-): boolean {
+export async function isThisComputer(url: string | undefined, deps: ThisComputerDeps = {}): Promise<boolean> {
   if (!url) return false
   let host: string
   try {
@@ -24,7 +25,39 @@ export function isThisComputer(
   if (isLoopbackHost(host)) return true
   const own = (deps.hostname ?? osHostname)().toLowerCase().replace(/\.local$/, '')
   if (own && (host === own || host === `${own}.local`)) return true
-  return (deps.addresses ?? ownAddresses)().some(address => address.toLowerCase() === host)
+  const mine = new Set((deps.addresses ?? ownAddresses)().map(address => address.toLowerCase()))
+  if (mine.has(host) || isIP(host)) return mine.has(host)
+  const resolved = await (deps.resolve ?? resolveHost)(host).catch(() => [] as string[])
+  return resolved.some(address => {
+    const plain = address.toLowerCase().replace(/%.*$/, '')
+    return isLoopbackHost(plain) || mine.has(plain)
+  })
+}
+
+export type ThisComputerDeps = {
+  hostname?: () => string
+  addresses?: () => string[]
+  /** The addresses a host name resolves to. */
+  resolve?: (host: string) => Promise<string[]>
+}
+
+// A name's addresses, as the system resolves them (MagicDNS included), given up after a short wait.
+const RESOLVE_WAIT_MS = 2000
+const resolved = new Map<string, { at: number; addresses: string[] }>()
+
+async function resolveHost(host: string): Promise<string[]> {
+  const kept = resolved.get(host)
+  if (kept && Date.now() - kept.at < 60_000) return kept.addresses
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const gaveUp = new Promise<string[]>(done => (timer = setTimeout(() => done([]), RESOLVE_WAIT_MS)))
+  const asked = lookup(host, { all: true }).then(found => found.map(entry => entry.address))
+  try {
+    const addresses = await Promise.race([asked, gaveUp])
+    resolved.set(host, { at: Date.now(), addresses })
+    return addresses
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 function ownAddresses(): string[] {

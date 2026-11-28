@@ -7,9 +7,25 @@
  */
 import type { Project } from './projects'
 
-/** Where the host's folders open: the chat's folder, else Home's, else wherever Hermes lists by default. */
+/**
+ * The Hermes host's home folder as Hermes' listing takes it: `~`, which it
+ * expands on the host (an SSH profile's machine included). The picker shows
+ * the folder it names once the listing answers (desktop issue 763).
+ */
+export const HOST_HOME = '~'
+
+/**
+ * Where the host's folders open: the chat's folder, else Home's, else the
+ * host's home folder. Hermes refuses a listing with no path ("Path is
+ * required"), so there is always one (desktop issue 763).
+ */
 export function folderStart(cwd: string | undefined, projects: readonly Project[] | null | undefined): string {
-  return cwd?.trim() || projects?.find(p => p.isHome)?.path?.trim() || ''
+  return cwd?.trim() || projects?.find(p => p.isHome)?.path?.trim() || HOST_HOME
+}
+
+/** The folder a listing of `asked` showed: the home folder's own path once Hermes names an entry in it, else `asked`. */
+export function listedFolder(asked: string, entryPaths: readonly string[], parent: (path: string) => string): string {
+  return asked === HOST_HOME && entryPaths[0] ? parent(entryPaths[0]) || asked : asked
 }
 
 /**
