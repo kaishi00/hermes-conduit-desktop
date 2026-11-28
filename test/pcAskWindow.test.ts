@@ -98,10 +98,10 @@ vi.mock('../src/main/pcExecutor', () => ({
 }))
 vi.mock('../src/main/settings', () => ({
   choosePcControl: vi.fn(() => true),
-  pcControlSettings: () => ({ on: true, name: '', bots: ['default'], id: 'computer-1' })
+  pcControlSettings: () => ({ on: true, name: '', bots: ['https://a.example\ndefault'], id: 'computer-1' })
 }))
 
-import { askPage, askPc, closePcAsk, runPcRequest, setPcControl, stopControl } from '../src/main/pcControl'
+import { askPage, askPc, barPage, closePcAsk, pcControlState, runPcRequest, setPcControl, stopControl } from '../src/main/pcControl'
 import type { PcRequest } from '../src/shared/ipc'
 
 const request = (session: string, extra: Partial<PcRequest> = {}): PcRequest => ({
@@ -113,6 +113,8 @@ const request = (session: string, extra: Partial<PcRequest> = {}): PcRequest => 
   needs_ok: true,
   bot: 'Furina',
   profile: 'default',
+  host: 'https://a.example',
+  hostName: 'Home',
   ...extra
 })
 
@@ -236,7 +238,7 @@ describe('more than one ask', () => {
     const b = askPc(request('s18', { profile: 'zhongli' }))
     const c = askPc(request('s19'))
     await tick()
-    setPcControl({ bots: ['default'] })
+    setPcControl({ bots: ['https://a.example\ndefault'] })
     await expect(b).resolves.toBe('closed')
     expect(windows[2].destroyed).toBe(false)
     windows[2].navigate('conduit-ask://deny')
@@ -314,5 +316,39 @@ describe('askPage', () => {
     expect(page).not.toContain('<my>')
     // Don't Allow has the focus, so Enter is a no.
     expect(page).toMatch(/href="conduit-ask:\/\/deny" autofocus/)
+  })
+
+  // Desktop issue 729: two dashboards' same-named bots ask with different pages.
+  it('names the dashboard asking, so a same-named bot elsewhere reads differently', () => {
+    const home = askPage(request('s8'))
+    const office = askPage(request('s8', { host: 'https://b.example', hostName: 'Office <2>' }))
+    expect(home).toContain('Hermes: Home')
+    expect(office).toContain('Hermes: Office &lt;2&gt;')
+    expect(home).not.toEqual(office)
+  })
+})
+
+describe('askPc after Stop', () => {
+  it('shows no card for an action fetched before the latest Stop (desktop issue 735)', async () => {
+    const gen = pcControlState().stops
+    stopControl(false)
+    await expect(askPc(request('s31', { gen }))).resolves.toBe('closed')
+    expect(windows).toHaveLength(0)
+  })
+})
+
+describe('barPage', () => {
+  it('names the bot’s dashboard beside its chat', () => {
+    const page = barPage('Furina', 'Office', 'Tidy <up>', false)
+    expect(page).toContain('Office · Tidy &lt;up&gt;')
+    expect(page).not.toContain('<up>')
+  })
+})
+
+describe('the allow list, per dashboard', () => {
+  it('runs nothing for a same-named bot on a dashboard it wasn’t ticked on', async () => {
+    drive.path = '/driver'
+    await expect(runPcRequest(request('s30', { needs_ok: false, host: 'https://b.example' }))).resolves.toEqual({ ok: false, code: 'off' })
+    expect(drive.runs).toHaveLength(0)
   })
 })

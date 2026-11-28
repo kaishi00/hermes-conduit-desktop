@@ -42,12 +42,14 @@ export const ARTIFACTS: Record<string, Artifact> = {
   'darwin-arm64': {
     file: `cua-driver-rs-${DRIVER_VERSION}-darwin-universal.tar.gz`,
     sha256: '19e5e652db83cc0324e7a3898ee875b87b265ad7e1c09fd862ef78869480f61d',
-    binary: 'CuaDriver.app/Contents/MacOS/cua-driver'
+    // The Mac archive holds one top-level folder (desktop issue 725); the Windows zips don't.
+    binary: `cua-driver-rs-${DRIVER_VERSION}-darwin-universal/CuaDriver.app/Contents/MacOS/cua-driver`
   },
   'darwin-x64': {
     file: `cua-driver-rs-${DRIVER_VERSION}-darwin-universal.tar.gz`,
     sha256: '19e5e652db83cc0324e7a3898ee875b87b265ad7e1c09fd862ef78869480f61d',
-    binary: 'CuaDriver.app/Contents/MacOS/cua-driver'
+    // The Mac archive holds one top-level folder (desktop issue 725); the Windows zips don't.
+    binary: `cua-driver-rs-${DRIVER_VERSION}-darwin-universal/CuaDriver.app/Contents/MacOS/cua-driver`
   }
 }
 

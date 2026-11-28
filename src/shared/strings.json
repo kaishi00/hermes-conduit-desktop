@@ -49183,5 +49183,35 @@
     "tr": "Dosya Yöneticisinde Göster",
     "zh-Hans": "在文件管理器中显示",
     "zh-Hant": "在檔案管理員中顯示"
+  },
+  "Hermes: {host}": {
+    "de": "Hermes: {host}",
+    "es": "Hermes: {host}",
+    "fr": "Hermes : {host}",
+    "id": "Hermes: {host}",
+    "it": "Hermes: {host}",
+    "ja": "Hermes: {host}",
+    "ko": "Hermes: {host}",
+    "pl": "Hermes: {host}",
+    "pt-BR": "Hermes: {host}",
+    "ru": "Hermes: {host}",
+    "tr": "Hermes: {host}",
+    "zh-Hans": "Hermes：{host}",
+    "zh-Hant": "Hermes：{host}"
+  },
+  "Ticks count on this dashboard only.": {
+    "de": "Häkchen gelten nur für dieses Dashboard.",
+    "es": "Las marcas solo cuentan en este panel.",
+    "fr": "Les cases cochées ne valent que pour ce tableau de bord.",
+    "id": "Centang hanya berlaku di dasbor ini.",
+    "it": "Le spunte valgono solo per questa dashboard.",
+    "ja": "チェックはこのダッシュボードにだけ適用されます。",
+    "ko": "체크는 이 대시보드에만 적용됩니다.",
+    "pl": "Zaznaczenia dotyczą tylko tego pulpitu.",
+    "pt-BR": "As marcações valem só para este painel.",
+    "ru": "Отметки действуют только на этой панели.",
+    "tr": "İşaretler yalnızca bu panoda geçerlidir.",
+    "zh-Hans": "勾选仅对此仪表板有效。",
+    "zh-Hant": "勾選僅對此儀表板有效。"
   }
 }

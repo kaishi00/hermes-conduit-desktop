@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { PcControlState, PcRequest } from '../../../shared/ipc'
 import { gateway } from '../gateway'
 import { STATUS_PATH, askPluginStatus, serves } from './plugin'
+import { hasBareBots, pcAllowed } from '../../../shared/pcControl'
 
 export const PC_CAPABILITY = 'pc-control'
 const BASE = '/api/plugins/conduit_push/pc'
@@ -32,8 +33,8 @@ export const pcPath = (path: string, profile: string, query: Record<string, stri
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
 
-/** The actions in a /pc/next answer, with the bot named for the ask and the bar. */
-export function requestsFrom(body: unknown, profile: string, bot: string): PcRequest[] {
+/** The actions in a /pc/next answer, with the bot and its dashboard named for the ask and the bar. */
+export function requestsFrom(body: unknown, profile: string, bot: string, host: string, hostName: string): PcRequest[] {
   const raw = ((body ?? {}) as { requests?: unknown }).requests
   return (Array.isArray(raw) ? raw : []).flatMap((item): PcRequest[] => {
     const r = (item ?? {}) as Record<string, unknown>
@@ -49,7 +50,9 @@ export function requestsFrom(body: unknown, profile: string, bot: string): PcReq
         ...(str(r.takes_over) ? { takes_over: str(r.takes_over) } : {}),
         ...(str(r.ask) ? { ask: str(r.ask) } : {}),
         bot,
-        profile
+        profile,
+        host,
+        hostName
       }
     ]
   })
@@ -73,22 +76,40 @@ export interface AskSide {
   wait: (ms: number) => Promise<void>
 }
 
+/** The longest wait between reads of the phone's copy while they keep failing. */
+const ASK_POLL_MAX_MS = 8_000
+
+/** How long to wait before the next read of the phone's copy: doubled for each failure in a row. */
+export const askPollDelay = (failures: number) => Math.min(ASK_POLL_MAX_MS, ASK_POLL_MS * 2 ** Math.max(0, failures))
+
 /**
  * Whether the request's chat may drive this computer: the dialog here, and
  * the phone's copy of the ask when the plugin made one. Whichever answers
  * first counts: the phone's answer closes the dialog, and the dialog's goes
  * to the plugin, which says whether the phone got there first. An ask that
- * ran out or was taken back is a no.
+ * ran out or was taken back is a no. A dialog taken away here (Stop, the
+ * feature turned off, the bot unticked) is `stopped`, which the bot hears as
+ * Stop rather than as the user's no (desktop issue 735).
  */
-export async function askEverywhere(request: PcRequest, side: AskSide): Promise<boolean> {
+export async function askEverywhere(request: PcRequest, side: AskSide): Promise<'allowed' | 'denied' | 'stopped'> {
+  const fromHere = (answer: 'allowed' | 'denied' | 'closed') => (answer === 'closed' ? 'stopped' : answer)
   const local = side.local(request)
-  if (!request.ask) return (await local) === 'allowed'
+  if (!request.ask) return fromHere(await local)
   let settled = false
   const phone = (async (): Promise<AskAnswer> => {
+    let failures = 0
     while (!settled) {
-      await side.wait(ASK_POLL_MS)
+      await side.wait(askPollDelay(failures))
       if (settled) break
-      const now = await side.read(request).catch((): AskAnswer => 'waiting')
+      let now: AskAnswer
+      try {
+        now = await side.read(request)
+        failures = 0
+      } catch {
+        // A dashboard that's down for a moment: read again, less often while it stays down.
+        failures++
+        continue
+      }
       // An older plugin without the route, or one that forgot the ask: the dialog alone decides.
       if (now === 'gone') return new Promise<AskAnswer>(() => undefined)
       if (now !== 'waiting') return now
@@ -99,16 +120,45 @@ export async function askEverywhere(request: PcRequest, side: AskSide): Promise<
   settled = true
   if (first.from === 'phone') {
     side.close(request.session)
-    return first.answer === 'allowed'
+    return first.answer === 'allowed' ? 'allowed' : 'denied'
   }
-  if (first.answer === 'closed') return false
+  if (first.answer === 'closed') return 'stopped'
   const stands = await side.settle(request, first.answer).catch((): AskAnswer => first.answer)
-  return stands === 'gone' || stands === 'waiting' ? first.answer === 'allowed' : stands === 'allowed'
+  return (stands === 'gone' || stands === 'waiting' ? first.answer === 'allowed' : stands === 'allowed') ? 'allowed' : 'denied'
 }
 
-/** The bots that may ask: picked in Settings, and still bots on this dashboard. */
-export const askingProfiles = (state: PcControlState | null, bots: readonly { name: string }[]) =>
-  state?.on && state.driver === 'ready' ? state.bots.filter(name => bots.some(bot => bot.name === name)) : []
+/**
+ * Whether a batch's action still goes ahead, from the stop count read now:
+ * `stopped` when Stop was pressed since the batch came in, `unknown` when the
+ * count couldn't be read (then nothing is asked or run: main would refuse it
+ * anyway), else `go`.
+ */
+export function batchStill(request: PcRequest, stops: number | undefined): 'go' | 'stopped' | 'unknown' {
+  if (typeof request.gen !== 'number') return 'go'
+  if (typeof stops !== 'number') return 'unknown'
+  return stops === request.gen ? 'go' : 'stopped'
+}
+
+/** The phone's copy of an ask from a GET /pc/ask, where a plugin without the route (404) is `gone`. */
+export async function readAsk(get: () => Promise<unknown>): Promise<AskAnswer> {
+  try {
+    return askAnswer(await get())
+  } catch (error) {
+    // A plugin without the route: the dialog alone decides, with no more reads.
+    if ((error as { code?: unknown })?.code === 404) return 'gone'
+    throw error
+  }
+}
+
+/** The bots that may ask: this dashboard's bots picked in Settings on this dashboard. */
+export const askingProfiles = (state: PcControlState | null, bots: readonly { name: string }[], host: string) =>
+  state?.on && state.driver === 'ready' ? bots.filter(bot => pcAllowed(state.bots, host, bot.name)).map(bot => bot.name) : []
+
+/** The profiles told about Stop: this dashboard's allowed bots, and any it asked for work since. */
+export function stopProfiles(bots: readonly string[], host: string, offered: Iterable<string>): string[] {
+  const prefix = `${host}\n`
+  return [...new Set([...bots.filter(bot => bot.startsWith(prefix)).map(bot => bot.slice(prefix.length)), ...offered])]
+}
 
 export function usePcControlState(): PcControlState | null {
   const [state, setState] = useState<PcControlState | null>(null)
@@ -127,26 +177,26 @@ export function usePcControlState(): PcControlState | null {
 const askSide = (profile: string, computer: string): AskSide => ({
   local: request => window.conduit.pcControl.ask(request),
   close: session => window.conduit.pcControl.closeAsk(session),
-  read: async request => {
-    try {
-      return askAnswer(await gateway.http('GET', pcPath('/ask', profile, { computer, id: request.ask ?? '' }), undefined, 10_000))
-    } catch (error) {
-      // A plugin without the route: the dialog alone decides, with no more reads.
-      if ((error as { code?: unknown })?.code === 404) return 'gone'
-      throw error
-    }
-  },
+  read: request => readAsk(() => gateway.http('GET', pcPath('/ask', profile, { computer, id: request.ask ?? '' }), undefined, 10_000)),
   settle: async (request, answer) => askAnswer(await gateway.http('POST', pcPath('/ask', profile), { computer, id: request.ask, answer }, 10_000)),
   wait: ms => new Promise(resolve => setTimeout(resolve, ms))
 })
 
 /** Asks each allowed bot's plugin for work while connected. */
-export function usePcControl(connected: boolean, bots: readonly { name: string; title: string }[], state: PcControlState | null) {
-  const profiles = askingProfiles(state, bots)
+export function usePcControl(connected: boolean, host: string, hostName: string, bots: readonly { name: string; title: string }[], state: PcControlState | null) {
+  const profiles = askingProfiles(state, bots, host)
   const key = profiles.join('\n')
   const titles = useRef(new Map<string, string>())
   titles.current = new Map(bots.map(bot => [bot.name, bot.title || bot.name]))
   const offered = useRef(new Set<string>())
+  const shownHost = useRef(hostName)
+  shownHost.current = hostName
+
+  // A list saved before it was kept per dashboard goes to the one showing now (shared/pcControl.ts).
+  const bare = !!state && hasBareBots(state.bots)
+  useEffect(() => {
+    if (connected && host && bare) void window.conduit.pcControl.set({ adopt: host }).catch(() => undefined)
+  }, [connected, host, bare])
 
   useEffect(() => {
     if (!connected || !state || !key) return
@@ -165,7 +215,7 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
             undefined,
             (PC_WAIT_S + 10) * 1000
           )
-          requests = requestsFrom(body, profile, titles.current.get(profile) ?? profile)
+          requests = requestsFrom(body, profile, titles.current.get(profile) ?? profile, host, shownHost.current)
           // Stop pressed elsewhere (the phone): the bar goes before anything new runs.
           if ((body as { stopped?: unknown } | null)?.stopped === true) window.conduit.pcControl.stoppedElsewhere()
           // Stop pressed from here on stops the whole batch, not just the action running then.
@@ -181,10 +231,17 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
           try {
             // Stopped since this batch came in: answer stopped without asking first.
             const stops = typeof request.gen === 'number' ? (await window.conduit.pcControl.state().catch(() => null))?.stops : undefined
-            if (stops !== undefined && stops !== request.gen) result = { ok: false, code: 'stopped' }
+            const still = batchStill(request, stops)
+            if (still === 'stopped') result = { ok: false, code: 'stopped' }
+            else if (still === 'unknown') result = { ok: false, code: 'failed', message: 'Conduit couldn’t read whether Stop was pressed.' }
             else {
-              const allowed = !request.needs_ok || (await askEverywhere(request, askSide(profile, state.id)))
-              result = allowed ? await window.conduit.pcControl.run(request) : { ok: false, grant: 'denied' }
+              const answer = request.needs_ok ? await askEverywhere(request, askSide(profile, state.id)) : 'allowed'
+              result =
+                answer === 'allowed'
+                  ? await window.conduit.pcControl.run(request)
+                  : answer === 'stopped'
+                    ? { ok: false, code: 'stopped' }
+                    : { ok: false, grant: 'denied' }
             }
           } catch (error) {
             result = { ok: false, code: 'failed', message: String(error) }
@@ -197,15 +254,16 @@ export function usePcControl(connected: boolean, bots: readonly { name: string; 
       live = false
       void Promise.allSettled(loops)
     }
-  }, [connected, key, state?.id, state?.shownName, state?.platform])
+  }, [connected, host, key, state?.id, state?.shownName, state?.platform])
 
-  // Stop (the bar, the hotkey, Settings): every allowed bot's plugin hears it.
+  // Stop (the bar, the hotkey, Settings): every allowed bot's plugin on this dashboard hears it.
   useEffect(() => {
-    if (!state?.id) return
+    if (!state?.id || !host) return
     return window.conduit.pcControl.onStopped(() => {
-      for (const profile of state.bots) void gateway.http('POST', pcPath('/stop', profile), { computer: state.id }, 10_000).catch(() => undefined)
+      for (const profile of stopProfiles(state.bots, host, offered.current))
+        void gateway.http('POST', pcPath('/stop', profile), { computer: state.id }, 10_000).catch(() => undefined)
     })
-  }, [state?.id, state?.bots.join('\n')])
+  }, [state?.id, host, state?.bots.join('\n')])
 
   // A bot taken off the list, or control turned off: its plugin stops listing this computer.
   useEffect(() => {

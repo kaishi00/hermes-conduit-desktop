@@ -1,5 +1,6 @@
 import { t } from '@shared/i18n'
 import type { PcControlState } from '@shared/ipc'
+import { pcAllowed } from '@shared/pcControl'
 
 /**
  * Settings › Control from Hermes: bots drive this computer from wherever
@@ -8,10 +9,13 @@ import type { PcControlState } from '@shared/ipc'
  * bots ticked here can ask; each chat asks first; Stop is on the bar and
  * here. Turning it off can delete the driver too.
  */
-export function PcControlSetting({ state, bots }: { state: PcControlState | null; bots: readonly { name: string; title: string }[] }) {
+export function PcControlSetting({ state, bots, host }: { state: PcControlState | null; bots: readonly { name: string; title: string }[]; host: string }) {
   if (!state || state.driver === 'unsupported') return null
-  const set = (change: Partial<PcControlState> & { bot?: { name: string; on: boolean } }) => void window.conduit.pcControl.set(change).catch(() => undefined)
-  const toggleBot = (name: string, on: boolean) => set({ bot: { name, on } })
+  const set = (change: Partial<PcControlState> & { bot?: { name: string; host: string; on: boolean } }) =>
+    void window.conduit.pcControl.set(change).catch(() => undefined)
+  // Ticks are kept per dashboard (desktop issue 729): this dashboard's bots, not same-named ones elsewhere.
+  const toggleBot = (name: string, on: boolean) => host && set({ bot: { name, host, on } })
+  const ticked = bots.filter(bot => pcAllowed(state.bots, host, bot.name))
   return (
     <section className="settings-group">
       <h2>{t('Control from Hermes')}</h2>
@@ -36,7 +40,8 @@ export function PcControlSetting({ state, bots }: { state: PcControlState | null
           )}
           {state.active && (
             <p className="meta">
-              {t('{bot} is controlling this computer', { bot: state.active.bot })} <button onClick={() => window.conduit.pcControl.stop()}>{t('Stop')}</button>
+              {t('{bot} is controlling this computer', { bot: state.active.bot })}
+              {state.active.host ? ` · ${state.active.host}` : ''} <button onClick={() => window.conduit.pcControl.stop()}>{t('Stop')}</button>
             </p>
           )}
         </dd>
@@ -58,11 +63,12 @@ export function PcControlSetting({ state, bots }: { state: PcControlState | null
             <dd>
               {bots.map(bot => (
                 <label key={bot.name} className="toggle">
-                  <input type="checkbox" checked={state.bots.includes(bot.name)} onChange={e => toggleBot(bot.name, e.target.checked)} />
+                  <input type="checkbox" checked={pcAllowed(state.bots, host, bot.name)} onChange={e => toggleBot(bot.name, e.target.checked)} />
                   {bot.title || bot.name}
                 </label>
               ))}
-              {!state.bots.length && <p className="meta">{t('No bot can ask until you tick one.')}</p>}
+              {!ticked.length && <p className="meta">{t('No bot can ask until you tick one.')}</p>}
+              <p className="meta">{t('Ticks count on this dashboard only.')}</p>
             </dd>
           </>
         )}

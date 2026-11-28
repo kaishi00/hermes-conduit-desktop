@@ -20,6 +20,7 @@ import type { PcControlSettings, PcControlState, PcRequest } from '../shared/ipc
 import { artifactFor, deleteDriver, driver, driverPath, installDriver, stopDriver } from './pcDriver'
 import { Executor, OWN_TITLES } from './pcExecutor'
 import { choosePcControl, pcControlSettings } from './settings'
+import { adoptBareBots, pcAllowKey, pcAllowed } from '../shared/pcControl'
 
 import { STOP_KEYS, claimStopKeys, releaseStopKeys } from './pcControlKeys'
 
@@ -34,14 +35,14 @@ let notify: Notify = () => undefined
 let onStopped: () => void = () => undefined
 let downloading: { progress: number } | null = null
 let failed = false
-let active: { bot: string; chat: string } | null = null
+let active: { bot: string; host: string; chat: string } | null = null
 let executor: Executor | null = null
 let bar: BrowserWindow | null = null
 let barTimer: ReturnType<typeof setTimeout> | null = null
 /** Whether the bar holds the Stop keys, so hiding it never drops another shortcut's. */
 let ownKeys = false
 /** Asks already on screen, by chat, so a burst of actions asks once, and how to take each away. */
-const asking = new Map<string, { shown: Promise<'allowed' | 'denied' | 'closed'>; close: AbortController; profile: string; pos: number }>()
+const asking = new Map<string, { shown: Promise<'allowed' | 'denied' | 'closed'>; close: AbortController; allowKey: string; pos: number }>()
 /** Bumped by Stop (and turning it off), so an action that waited through one doesn't run after it. */
 let stops = 0
 /** Actions running on the driver now, and who waits for none to be (an ask about to show). */
@@ -85,12 +86,14 @@ export function initPcControl(listeners: { notify: Notify; stopped: () => void }
   onStopped = listeners.stopped
 }
 
-export function setPcControl(change: Partial<PcControlSettings> & { bot?: unknown }): PcControlState {
+export function setPcControl(change: Partial<PcControlSettings> & { bot?: unknown; adopt?: unknown }): PcControlState {
   const clean: Partial<PcControlSettings> = {}
-  const bot = change.bot as { name?: unknown; on?: unknown } | undefined
-  if (bot && typeof bot.name === 'string' && typeof bot.on === 'boolean') {
-    const now = pcControlSettings().bots
-    clean.bots = (bot.on ? [...new Set([...now, bot.name])] : now.filter(name => name !== bot.name)).slice(0, 64)
+  if (typeof change.adopt === 'string' && change.adopt) clean.bots = adoptBareBots(pcControlSettings().bots, change.adopt).slice(0, 64)
+  const bot = change.bot as { name?: unknown; host?: unknown; on?: unknown } | undefined
+  if (bot && typeof bot.name === 'string' && typeof bot.host === 'string' && bot.host && typeof bot.on === 'boolean') {
+    const key = pcAllowKey(bot.host, bot.name)
+    const now = clean.bots ?? pcControlSettings().bots
+    clean.bots = (bot.on ? [...new Set([...now, key])] : now.filter(entry => entry !== key)).slice(0, 64)
   }
   if (typeof change.on === 'boolean') clean.on = change.on
   if (typeof change.name === 'string') clean.name = change.name.slice(0, 64)
@@ -98,7 +101,7 @@ export function setPcControl(change: Partial<PcControlSettings> & { bot?: unknow
   choosePcControl(clean)
   if (clean.bots) {
     const allowed = new Set(clean.bots)
-    closeAsks(profile => allowed.has(profile))
+    closeAsks(key => allowed.has(key))
   }
   if (clean.on === false) stopControl(false)
   if (clean.on === true && !driverPath()) void installPcDriver()
@@ -156,10 +159,12 @@ const ASK_CASCADE = 24
 export function askPc(request: PcRequest): Promise<'allowed' | 'denied' | 'closed'> {
   const key = request?.session
   if (typeof key !== 'string' || !key) return Promise.resolve('denied')
+  // Stop pressed since the renderer fetched it, even between its check and this ask: no card (desktop issue 735).
+  if (typeof request.gen === 'number' && request.gen !== stops) return Promise.resolve('closed')
   const open = asking.get(key)
   if (open) return open.shown
   const close = new AbortController()
-  const entry = { shown: Promise.resolve<'allowed' | 'denied' | 'closed'>('closed'), close, profile: request.profile, pos: -1 }
+  const entry = { shown: Promise.resolve<'allowed' | 'denied' | 'closed'>('closed'), close, allowKey: pcAllowKey(request.host, request.profile), pos: -1 }
   const shown = new Promise<'allowed' | 'denied' | 'closed'>(resolve => {
     let answered = false
     let win: BrowserWindow | null = null
@@ -249,6 +254,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;
 export function askPage(request: PcRequest): string {
   const initial = esc((request.bot.trim()[0] ?? '?').toUpperCase())
   const lines = [
+    request.hostName ? `<p class="chat">${esc(t('Hermes: {host}', { host: request.hostName }))}</p>` : '',
     request.chat ? `<p class="chat">${esc(t('Chat: {chat}', { chat: request.chat }))}</p>` : '',
     request.takes_over ? `<p>${esc(t('This takes over from “{chat}”.', { chat: request.takes_over }))}</p>` : '',
     `<p>${esc(t('It can see your screen, click and type until you press Stop ({keys}).', { keys: stopLabel() }))}</p>`
@@ -275,8 +281,8 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 }
 
 /** Takes away the asks of bots that may no longer ask (all of them once it's off or stopped). */
-function closeAsks(keep: (profile: string) => boolean = () => false) {
-  for (const entry of asking.values()) if (!keep(entry.profile)) entry.close.abort()
+function closeAsks(keep: (allowKey: string) => boolean = () => false) {
+  for (const entry of asking.values()) if (!keep(entry.allowKey)) entry.close.abort()
 }
 
 /** The phone answered a chat's ask first: its dialog goes. */
@@ -297,14 +303,15 @@ export async function runPcRequest(request: PcRequest): Promise<Record<string, u
   // Stop pressed while it waited: it doesn't run after it.
   if (stops !== stopsAtStart) return { ok: false, code: 'stopped' }
   const settings = pcControlSettings()
-  if (!settings.on || !settings.bots.includes(request.profile)) return { ok: false, code: 'off' }
+  // Allowed on the dashboard that asked, not a bot of the same name on another one (desktop issue 729).
+  if (!settings.on || !pcAllowed(settings.bots, request.host, request.profile)) return { ok: false, code: 'off' }
   if (!driverPath()) return { ok: false, code: 'unavailable', message: 'The driver isn’t downloaded on this computer yet.' }
   const grant: 'allowed' | undefined = request.needs_ok ? 'allowed' : undefined
   // Counted from here, with no wait since the asks were checked, so no ask shows mid-action.
   running++
   try {
     try {
-      showBar(request.bot, request.chat)
+      showBar(request.bot, request.hostName, request.chat)
     } catch {
       // The bar couldn't be drawn (the app is quitting): not a driver failure, so the driver stays.
       return { ok: false, ...(grant ? { grant } : {}), code: 'failed', message: 'Conduit couldn’t show its control bar.' }
@@ -345,18 +352,19 @@ export function stopControl(tell = true) {
   changed()
 }
 
-function barPage(botName: string, chat: string, hotkey: boolean): string {
+export function barPage(botName: string, host: string, chat: string, hotkey: boolean): string {
+  const where = [host, chat].filter(Boolean).map(esc).join(' · ')
   const line = esc(t('{bot} is controlling this computer', { bot: botName }))
   return `<!doctype html><meta charset="utf-8"><title>${OWN_TITLES[0]}</title><style>
 html,body{margin:0;height:100%;background:transparent;font:13px system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none}
 div{display:flex;align-items:center;gap:10px;height:100%;box-sizing:border-box;padding:0 6px 0 14px;border-radius:12px;background:#b3261e;color:#fff}
 span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}small{opacity:.8}
 a{color:#b3261e;background:#fff;border-radius:8px;padding:5px 12px;font-weight:600;text-decoration:none}
-</style><div><span>${line}${chat ? ` <small>· ${esc(chat)}</small>` : ''}</span><a href="${STOP_URL}">${esc(t('Stop'))}${hotkey ? ` <small>${esc(stopLabel())}</small>` : ''}</a></div>`
+</style><div><span>${line}${where ? ` <small>· ${where}</small>` : ''}</span><a href="${STOP_URL}">${esc(t('Stop'))}${hotkey ? ` <small>${esc(stopLabel())}</small>` : ''}</a></div>`
 }
 
-function showBar(botName: string, chat: string) {
-  active = { bot: botName, chat }
+function showBar(botName: string, host: string, chat: string) {
+  active = { bot: botName, host, chat }
   if (barTimer) clearTimeout(barTimer)
   barTimer = null
   if (!bar || bar.isDestroyed()) {
@@ -394,7 +402,7 @@ function showBar(botName: string, chat: string) {
   // Only keys the bar registered itself: the same keys set for Quick Ask or a call stay theirs.
   ownKeys = claimStopKeys(globalShortcut, ownKeys, () => stopControl())
   const hotkey = ownKeys
-  void bar.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(barPage(botName, chat, hotkey))).catch(() => undefined)
+  void bar.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(barPage(botName, host, chat, hotkey))).catch(() => undefined)
   bar.showInactive()
   changed()
 }

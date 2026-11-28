@@ -2601,7 +2601,7 @@ function Shell({
   const rings = useRings(connected, profiles)
   // Control from Hermes: allowed bots' actions run on this computer.
   const pcState = usePcControlState()
-  usePcControl(connected, roster.bots ?? [], pcState)
+  usePcControl(connected, status.url ?? '', status.url ? hostName(status.url) : '', roster.bots ?? [], pcState)
   const ring = rings.ringing.at(-1)
   // The wake phrase: heard offline while Conduit is connected and showing, never during a call or a ring.
   const [wakeRevision, setWakeRevision] = useState(0)
@@ -4226,7 +4226,7 @@ function Settings({
           <UpdatesSetting />
         </dl>
       </section>
-      <PcControlSetting state={pcControlState} bots={bots} />
+      <PcControlSetting state={pcControlState} bots={bots} host={status.url ?? ''} />
       <section className="settings-group">
         <h2>{t('Support')}</h2>
         <dl className="settings-card">

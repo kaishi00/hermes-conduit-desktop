@@ -273,8 +273,11 @@ export interface ConduitApi {
   /** Control from Hermes (main/pcControl.ts): bots drive this computer. */
   pcControl: {
     state(): Promise<PcControlState>
-    /** `bot` ticks or unticks one bot against the list main holds, so two quick ticks both count. */
-    set(change: Partial<PcControlSettings> & { bot?: { name: string; on: boolean } }): Promise<PcControlState>
+    /**
+     * `bot` ticks or unticks one dashboard's bot against the list main holds, so two quick ticks
+     * both count; `adopt` gives a list saved before it was kept per dashboard to that dashboard.
+     */
+    set(change: Partial<PcControlSettings> & { bot?: { name: string; host: string; on: boolean }; adopt?: string }): Promise<PcControlState>
     /** Downloads the driver; resolves with the state once it's there (or failed). */
     install(): Promise<PcControlState>
     /** Deletes the downloaded driver. */
@@ -775,7 +778,7 @@ export interface PcControlSettings {
   on: boolean
   /** The name bots know this computer by. Empty: the computer's own. */
   name: string
-  /** The bots (profile ids) allowed to ask. */
+  /** The bots allowed to ask, each a dashboard's address and a profile id (shared/pcControl.ts pcAllowKey). */
   bots: string[]
 }
 
@@ -788,8 +791,8 @@ export interface PcControlState extends PcControlSettings {
   /** `missing` until downloaded; `unsupported` where cua-driver has no build. */
   driver: 'ready' | 'missing' | 'downloading' | 'failed' | 'unsupported'
   progress: number
-  /** A bot is driving now: its name and chat. */
-  active: { bot: string; chat: string } | null
+  /** A bot is driving now: its name, its dashboard's name and its chat. */
+  active: { bot: string; host: string; chat: string } | null
   stopKeys: string
   /** How many times Stop was pressed since launch: an action fetched before the latest Stop doesn't run. */
   stops: number
@@ -808,6 +811,10 @@ export interface PcRequest {
   ask?: string
   bot: string
   profile: string
+  /** The dashboard asked for the work (its address), which the allow list is kept by. */
+  host: string
+  /** That dashboard's name, for the ask and the bar. */
+  hostName: string
   /** `stops` when the renderer fetched it, so Stop pressed after that stops it too. */
   gen?: number
 }
