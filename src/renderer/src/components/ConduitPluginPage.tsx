@@ -514,6 +514,13 @@ function OtherDashboardRow({ host, row, latest }: { host: KeptHost; row: HostPlu
         <span className={available || restart ? 'plugin-version attention' : 'plugin-version meta'}>{running ?? '—'}</span>
       </div>
       <p className="meta">{line}</p>
+      {status.state === 'reported'
+        ? status.degraded.map(code => (
+            <p key={code} className="plugin-degraded">
+              ⚠ {degradedText(code)}
+            </p>
+          ))
+        : null}
       {showsAction ? (
         confirming ? (
           <div className="plugin-confirm">
